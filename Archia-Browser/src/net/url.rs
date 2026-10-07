@@ -68,14 +68,21 @@ impl Url {
             .rsplit_once('@')
             .map_or(self.authority.as_str(), |(_, host)| host);
         if authority.starts_with('[') {
-            authority.find(']').map_or(authority, |end| &authority[1..end])
+            authority
+                .find(']')
+                .map_or(authority, |end| &authority[1..end])
         } else {
-            authority.split_once(':').map_or(authority, |(host, _)| host)
+            authority
+                .split_once(':')
+                .map_or(authority, |(host, _)| host)
         }
     }
 
     pub fn port(&self) -> Option<u16> {
-        let authority = self.authority.rsplit_once('@').map_or(self.authority.as_str(), |(_, host)| host);
+        let authority = self
+            .authority
+            .rsplit_once('@')
+            .map_or(self.authority.as_str(), |(_, host)| host);
         if authority.starts_with('[') {
             let end = authority.find(']')?;
             return authority.get(end + 1..)?.strip_prefix(':')?.parse().ok();
