@@ -39,8 +39,11 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
     }
 
     while let Some(node) = stack.pop() {
-        if let Some(parent) = stack.last_mut() { parent.append(node); }
-        else { root.append(node); }
+        if let Some(parent) = stack.last_mut() {
+            parent.append(node);
+        } else {
+            root.append(node);
+        }
     }
 
     root

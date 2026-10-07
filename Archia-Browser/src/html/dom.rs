@@ -3,7 +3,10 @@ use std::collections::BTreeMap;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NodeKind {
     Document,
-    Element { name: String, attributes: BTreeMap<String, String> },
+    Element {
+        name: String,
+        attributes: BTreeMap<String, String>,
+    },
     Text(String),
     Comment(String),
 }
@@ -16,22 +19,34 @@ pub struct Node {
 
 impl Node {
     pub fn document() -> Self {
-        Self { kind: NodeKind::Document, children: Vec::new() }
+        Self {
+            kind: NodeKind::Document,
+            children: Vec::new(),
+        }
     }
 
     pub fn element(name: impl Into<String>) -> Self {
         Self {
-            kind: NodeKind::Element { name: name.into(), attributes: BTreeMap::new() },
+            kind: NodeKind::Element {
+                name: name.into(),
+                attributes: BTreeMap::new(),
+            },
             children: Vec::new(),
         }
     }
 
     pub fn text(value: impl Into<String>) -> Self {
-        Self { kind: NodeKind::Text(value.into()), children: Vec::new() }
+        Self {
+            kind: NodeKind::Text(value.into()),
+            children: Vec::new(),
+        }
     }
 
     pub fn comment(value: impl Into<String>) -> Self {
-        Self { kind: NodeKind::Comment(value.into()), children: Vec::new() }
+        Self {
+            kind: NodeKind::Comment(value.into()),
+            children: Vec::new(),
+        }
     }
 
     pub fn append(&mut self, child: Node) {

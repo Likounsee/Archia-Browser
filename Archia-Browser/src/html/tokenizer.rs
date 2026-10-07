@@ -3,7 +3,11 @@ use std::collections::BTreeMap;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HtmlToken {
     Doctype(String),
-    StartTag { name: String, attributes: BTreeMap<String, String>, self_closing: bool },
+    StartTag {
+        name: String,
+        attributes: BTreeMap<String, String>,
+        self_closing: bool,
+    },
     EndTag(String),
     Text(String),
     Comment(String),
@@ -20,9 +24,13 @@ impl HtmlTokenizer {
 
         while cursor < bytes.len() {
             if bytes[cursor] != b'<' {
-                let end = input[cursor..].find('<').map_or(input.len(), |offset| cursor + offset);
+                let end = input[cursor..]
+                    .find('<')
+                    .map_or(input.len(), |offset| cursor + offset);
                 let text = &input[cursor..end];
-                if !text.is_empty() { tokens.push(HtmlToken::Text(text.to_owned())); }
+                if !text.is_empty() {
+                    tokens.push(HtmlToken::Text(text.to_owned()));
+                }
                 cursor = end;
                 continue;
             }
@@ -43,12 +51,19 @@ impl HtmlTokenizer {
             let end = cursor + offset;
             let inside = input[cursor + 1..end].trim();
 
-            if let Some(doctype) = inside.strip_prefix("!DOCTYPE").or_else(|| inside.strip_prefix("!doctype")) {
+            if let Some(doctype) = inside
+                .strip_prefix("!DOCTYPE")
+                .or_else(|| inside.strip_prefix("!doctype"))
+            {
                 tokens.push(HtmlToken::Doctype(doctype.trim().to_owned()));
             } else if let Some(name) = inside.strip_prefix('/') {
                 tokens.push(HtmlToken::EndTag(name.trim().to_ascii_lowercase()));
             } else if let Some((name, attributes, self_closing)) = parse_start_tag(inside) {
-                tokens.push(HtmlToken::StartTag { name, attributes, self_closing });
+                tokens.push(HtmlToken::StartTag {
+                    name,
+                    attributes,
+                    self_closing,
+                });
             }
             cursor = end + 1;
         }
@@ -73,27 +88,39 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
     let mut chars = input.chars().peekable();
     let mut name = String::new();
     while let Some(&ch) = chars.peek() {
-        if ch.is_whitespace() || ch == '/' { break; }
+        if ch.is_whitespace() || ch == '/' {
+            break;
+        }
         name.push(ch.to_ascii_lowercase());
         chars.next();
     }
-    if name.is_empty() { return None; }
+    if name.is_empty() {
+        return None;
+    }
 
     let mut attributes = BTreeMap::new();
     let mut self_closing = false;
     loop {
-        while chars.peek().is_some_and(|c| c.is_whitespace()) { chars.next(); }
-        if chars.peek().is_none() { break; }
+        while chars.peek().is_some_and(|c| c.is_whitespace()) {
+            chars.next();
+        }
+        if chars.peek().is_none() {
+            break;
+        }
         if chars.peek() == Some(&'/') {
             chars.next();
             self_closing = true;
-            while chars.peek().is_some_and(|c| c.is_whitespace()) { chars.next(); }
+            while chars.peek().is_some_and(|c| c.is_whitespace()) {
+                chars.next();
+            }
             break;
         }
 
         let mut attr_name = String::new();
         while let Some(&ch) = chars.peek() {
-            if ch.is_whitespace() || matches!(ch, '=' | '/') { break; }
+            if ch.is_whitespace() || matches!(ch, '=' | '/') {
+                break;
+            }
             attr_name.push(ch.to_ascii_lowercase());
             chars.next();
         }
@@ -101,23 +128,31 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
             chars.next();
             continue;
         }
-        while chars.peek().is_some_and(|c| c.is_whitespace()) { chars.next(); }
+        while chars.peek().is_some_and(|c| c.is_whitespace()) {
+            chars.next();
+        }
 
         let mut value = String::new();
         if chars.peek() == Some(&'=') {
             chars.next();
-            while chars.peek().is_some_and(|c| c.is_whitespace()) { chars.next(); }
+            while chars.peek().is_some_and(|c| c.is_whitespace()) {
+                chars.next();
+            }
             let quote = chars.peek().copied().filter(|c| *c == '\'' || *c == '"');
             if let Some(q) = quote {
                 chars.next();
                 while let Some(&ch) = chars.peek() {
                     chars.next();
-                    if ch == q { break; }
+                    if ch == q {
+                        break;
+                    }
                     value.push(ch);
                 }
             } else {
                 while let Some(&ch) = chars.peek() {
-                    if ch.is_whitespace() || ch == '/' { break; }
+                    if ch.is_whitespace() || ch == '/' {
+                        break;
+                    }
                     value.push(ch);
                     chars.next();
                 }
@@ -135,19 +170,33 @@ mod tests {
     #[test]
     fn tokenizes_basic_document() {
         let tokens = HtmlTokenizer::tokenize("<html><body>Hello</body></html>");
-        assert_eq!(tokens, vec![
-            HtmlToken::StartTag { name: "html".into(), attributes: BTreeMap::new(), self_closing: false },
-            HtmlToken::StartTag { name: "body".into(), attributes: BTreeMap::new(), self_closing: false },
-            HtmlToken::Text("Hello".into()),
-            HtmlToken::EndTag("body".into()),
-            HtmlToken::EndTag("html".into()),
-        ]);
+        assert_eq!(
+            tokens,
+            vec![
+                HtmlToken::StartTag {
+                    name: "html".into(),
+                    attributes: BTreeMap::new(),
+                    self_closing: false
+                },
+                HtmlToken::StartTag {
+                    name: "body".into(),
+                    attributes: BTreeMap::new(),
+                    self_closing: false
+                },
+                HtmlToken::Text("Hello".into()),
+                HtmlToken::EndTag("body".into()),
+                HtmlToken::EndTag("html".into()),
+            ]
+        );
     }
 
     #[test]
     fn tokenizes_attributes_and_quoted_gt() {
-        let tokens = HtmlTokenizer::tokenize(r#"<div id="main" class='card active' title="a > b">x</div>"#);
-        let HtmlToken::StartTag { attributes, .. } = &tokens[0] else { panic!("expected start tag"); };
+        let tokens =
+            HtmlTokenizer::tokenize(r#"<div id="main" class='card active' title="a > b">x</div>"#);
+        let HtmlToken::StartTag { attributes, .. } = &tokens[0] else {
+            panic!("expected start tag");
+        };
         assert_eq!(attributes.get("id"), Some(&"main".to_string()));
         assert_eq!(attributes.get("class"), Some(&"card active".to_string()));
         assert_eq!(attributes.get("title"), Some(&"a > b".to_string()));
