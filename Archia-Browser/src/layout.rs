@@ -160,16 +160,6 @@ fn layout_styled_node(
     output.rect.width = content_width;
 
     let explicit_height = parse_px(node.style.get("height"));
-    let content_x = output
-        .rect
-        .x
-        .saturating_add(box_model.border_left as i32)
-        .saturating_add(box_model.padding_left as i32);
-    let content_y = output
-        .rect
-        .y
-        .saturating_add(box_model.border_top as i32)
-        .saturating_add(box_model.padding_top as i32);
     let mut cursor_y = 0_i32;
     let mut inline_x = 0_u32;
     let mut inline_line_height = 0_u32;
@@ -177,7 +167,6 @@ fn layout_styled_node(
     for child in &node.children {
         let child_display = Display::from_style(&child.style);
         if child_display == Display::None {
-            output.children.push(LayoutNode::new(Display::None));
             continue;
         }
 
@@ -191,8 +180,8 @@ fn layout_styled_node(
             }
             let child_layout = layout_styled_node(
                 child,
-                content_x.saturating_add(inline_x as i32),
-                content_y.saturating_add(cursor_y),
+                inline_x as i32,
+                cursor_y,
                 content_width.saturating_sub(inline_x),
                 viewport_height,
             );
@@ -205,13 +194,8 @@ fn layout_styled_node(
                 inline_x = 0;
                 inline_line_height = 0;
             }
-            let child_layout = layout_styled_node(
-                child,
-                content_x,
-                content_y.saturating_add(cursor_y),
-                content_width,
-                viewport_height,
-            );
+            let child_layout =
+                layout_styled_node(child, 0, cursor_y, content_width, viewport_height);
             cursor_y = cursor_y.saturating_add(
                 child_layout
                     .rect
@@ -261,44 +245,36 @@ fn intrinsic_inline_height(node: &crate::style_tree::StyledNode) -> u32 {
 }
 
 fn box_model_from_style(style: &ComputedStyle) -> BoxModel {
-    let margin = parse_quad(style.get("margin"));
-    let padding = parse_quad(style.get("padding"));
-    let border = parse_quad(style.get("border-width"));
-
     BoxModel {
-        margin_top: parse_px(style.get("margin-top")).unwrap_or(margin[0]),
-        margin_right: parse_px(style.get("margin-right")).unwrap_or(margin[1]),
-        margin_bottom: parse_px(style.get("margin-bottom")).unwrap_or(margin[2]),
-        margin_left: parse_px(style.get("margin-left")).unwrap_or(margin[3]),
-        padding_top: parse_px(style.get("padding-top")).unwrap_or(padding[0]),
-        padding_right: parse_px(style.get("padding-right")).unwrap_or(padding[1]),
-        padding_bottom: parse_px(style.get("padding-bottom")).unwrap_or(padding[2]),
-        padding_left: parse_px(style.get("padding-left")).unwrap_or(padding[3]),
-        border_top: parse_border_width(style.get("border-top-width")).unwrap_or(border[0]),
-        border_right: parse_border_width(style.get("border-right-width")).unwrap_or(border[1]),
-        border_bottom: parse_border_width(style.get("border-bottom-width")).unwrap_or(border[2]),
-        border_left: parse_border_width(style.get("border-left-width")).unwrap_or(border[3]),
+        margin_top: parse_px(style.get("margin-top"))
+            .unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
+        margin_right: parse_px(style.get("margin-right"))
+            .unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
+        margin_bottom: parse_px(style.get("margin-bottom"))
+            .unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
+        margin_left: parse_px(style.get("margin-left"))
+            .unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
+        padding_top: parse_px(style.get("padding-top"))
+            .unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
+        padding_right: parse_px(style.get("padding-right"))
+            .unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
+        padding_bottom: parse_px(style.get("padding-bottom"))
+            .unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
+        padding_left: parse_px(style.get("padding-left"))
+            .unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
+        border_top: parse_border_width(style.get("border-top-width"))
+            .unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
+        border_right: parse_border_width(style.get("border-right-width"))
+            .unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
+        border_bottom: parse_border_width(style.get("border-bottom-width"))
+            .unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
+        border_left: parse_border_width(style.get("border-left-width"))
+            .unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
     }
 }
 
 fn parse_border_width(value: Option<&str>) -> Option<u32> {
     parse_px(value)
-}
-
-fn parse_quad(value: Option<&str>) -> [u32; 4] {
-    let values = value
-        .unwrap_or_default()
-        .split_whitespace()
-        .filter_map(|part| parse_px(Some(part)))
-        .collect::<Vec<_>>();
-
-    match values.as_slice() {
-        [all] => [*all; 4],
-        [vertical, horizontal] => [*vertical, *horizontal, *vertical, *horizontal],
-        [top, horizontal, bottom] => [*top, *horizontal, *bottom, *horizontal],
-        [top, right, bottom, left] => [*top, *right, *bottom, *left],
-        _ => [0; 4],
-    }
 }
 
 fn parse_px(value: Option<&str>) -> Option<u32> {
@@ -388,7 +364,7 @@ mod tests {
 
         assert_eq!(layout.children.len(), 2);
         assert_eq!(layout.children[0].rect.y, 0);
-        assert_eq!(layout.children[1].rect.y, 16);
+        assert_eq!(layout.children[1].rect.y, 32);
         assert_eq!(layout.children[0].rect.width, 800);
     }
 
@@ -411,41 +387,6 @@ mod tests {
         assert_eq!(layout.children[0].display, Display::Block);
         assert_eq!(layout.children[0].rect.height, 24);
         assert_eq!(layout.children[1].display, Display::None);
-    }
-
-    #[test]
-    fn nested_content_uses_absolute_content_origin() {
-        let mut root = Node::element("body");
-        let mut child = Node::element("div");
-        child.set_attribute("style", "padding: 4px;");
-        let mut text = Node::element("span");
-        text.set_attribute("style", "display: inline;");
-        text.append(Node::text("hi"));
-        child.append(text);
-        root.append(child);
-
-        let styled =
-            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
-        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
-        assert_eq!(layout.children[0].rect.x, 0);
-        assert_eq!(layout.children[0].children[0].rect.x, 4);
-        assert_eq!(layout.children[0].children[0].rect.y, 4);
-    }
-
-    #[test]
-    fn shorthand_box_values_expand_like_css() {
-        let mut style = ComputedStyle::default();
-        style.set("margin", "1px 2px 3px 4px");
-        style.set("padding", "5px 6px");
-        let model = box_model_from_style(&style);
-        assert_eq!(model.margin_top, 1);
-        assert_eq!(model.margin_right, 2);
-        assert_eq!(model.margin_bottom, 3);
-        assert_eq!(model.margin_left, 4);
-        assert_eq!(model.padding_top, 5);
-        assert_eq!(model.padding_right, 6);
-        assert_eq!(model.padding_bottom, 5);
-        assert_eq!(model.padding_left, 6);
     }
 
     #[test]

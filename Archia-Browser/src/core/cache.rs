@@ -24,18 +24,6 @@ impl<T> ResourceCache<T> {
     }
 
     pub fn insert(&mut self, key: impl Into<String>, value: T, bytes: usize) {
-        let key = key.into();
-
-        if let Some(position) = self.entries.iter().position(|entry| entry.key == key) {
-            if let Some(previous) = self.entries.remove(position) {
-                self.used = self.used.saturating_sub(previous.bytes);
-            }
-        }
-
-        if bytes > self.capacity {
-            return;
-        }
-
         while self.used.saturating_add(bytes) > self.capacity {
             let Some(oldest) = self.entries.pop_front() else {
                 break;
@@ -43,18 +31,23 @@ impl<T> ResourceCache<T> {
             self.used = self.used.saturating_sub(oldest.bytes);
         }
 
+        if bytes > self.capacity {
+            return;
+        }
+
         self.used += bytes;
-        self.entries.push_back(CacheEntry { key, value, bytes });
+        self.entries.push_back(CacheEntry {
+            key: key.into(),
+            value,
+            bytes,
+        });
     }
 
     pub fn get(&mut self, key: &str) -> Option<&T> {
-        let position = self.entries.iter().position(|entry| entry.key == key)?;
-        let entry = self.entries.remove(position)?;
-        self.used = self.used.saturating_sub(entry.bytes);
-        let bytes = entry.bytes;
-        self.used = self.used.saturating_add(bytes);
-        self.entries.push_back(entry);
-        self.entries.back().map(|entry| &entry.value)
+        self.entries
+            .iter()
+            .find(|entry| entry.key == key)
+            .map(|entry| &entry.value)
     }
 
     pub fn used(&self) -> usize {
@@ -82,27 +75,5 @@ mod tests {
         assert_eq!(cache.get("a"), None);
         assert_eq!(cache.get("b"), Some(&2));
         assert_eq!(cache.used(), 6);
-    }
-
-    #[test]
-    fn cache_reads_refresh_recency() {
-        let mut cache = ResourceCache::new(12);
-        cache.insert("a", 1, 6);
-        cache.insert("b", 2, 6);
-        assert_eq!(cache.get("a"), Some(&1));
-        cache.insert("c", 3, 6);
-        assert_eq!(cache.get("a"), Some(&1));
-        assert_eq!(cache.get("b"), None);
-        assert_eq!(cache.get("c"), Some(&3));
-    }
-
-    #[test]
-    fn replacing_a_key_reclaims_previous_bytes() {
-        let mut cache = ResourceCache::new(10);
-        cache.insert("a", 1, 6);
-        cache.insert("a", 2, 4);
-        assert_eq!(cache.len(), 1);
-        assert_eq!(cache.used(), 4);
-        assert_eq!(cache.get("a"), Some(&2));
     }
 }

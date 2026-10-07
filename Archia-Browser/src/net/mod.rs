@@ -121,6 +121,12 @@ impl Response {
         self.body = body.into();
         self
     }
+
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .get(&name.to_ascii_lowercase())
+            .map(String::as_str)
+    }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransportError {

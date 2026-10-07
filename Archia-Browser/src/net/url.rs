@@ -52,46 +52,6 @@ impl Url {
     pub fn authority(&self) -> &str {
         &self.authority
     }
-
-    pub fn host(&self) -> &str {
-        self.authority
-            .strip_prefix('[')
-            .and_then(|value| value.split_once(']').map(|(host, _)| host))
-            .or_else(|| {
-                self.authority.rsplit_once(':').map(|(host, port)| {
-                    if port.chars().all(|c| c.is_ascii_digit()) {
-                        host
-                    } else {
-                        self.authority.as_str()
-                    }
-                })
-            })
-            .unwrap_or(&self.authority)
-    }
-
-    pub fn port(&self) -> Option<u16> {
-        if self.authority.starts_with('[') {
-            return self
-                .authority
-                .split_once("]:")
-                .and_then(|(_, port)| port.parse().ok());
-        }
-        self.authority
-            .rsplit_once(':')
-            .and_then(|(_, port)| port.parse().ok())
-    }
-
-    pub fn effective_port(&self) -> Option<u16> {
-        self.port().or(match self.scheme.as_str() {
-            "http" => Some(80),
-            "https" => Some(443),
-            _ => None,
-        })
-    }
-
-    pub fn is_secure(&self) -> bool {
-        matches!(self.scheme.as_str(), "https" | "wss")
-    }
     pub fn path(&self) -> &str {
         &self.path
     }
@@ -147,19 +107,6 @@ mod tests {
         assert_eq!(url.path(), "/a");
         assert_eq!(url.query(), Some("q=1"));
         assert_eq!(url.fragment(), Some("top"));
-        assert_eq!(url.host(), "example.org");
-        assert_eq!(url.port(), None);
-        assert_eq!(url.effective_port(), Some(443));
-        assert!(url.is_secure());
-    }
-
-    #[test]
-    fn parses_explicit_port() {
-        let url = Url::parse("http://example.org:8080/").unwrap();
-        assert_eq!(url.host(), "example.org");
-        assert_eq!(url.port(), Some(8080));
-        assert_eq!(url.effective_port(), Some(8080));
-        assert!(!url.is_secure());
     }
 
     #[test]

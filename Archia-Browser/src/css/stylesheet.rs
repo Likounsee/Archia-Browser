@@ -93,11 +93,7 @@ impl StyleSheet {
                 }
             }
             for (name, value) in local.iter() {
-                if local.is_important(name) {
-                    computed.set_important(name, value);
-                } else {
-                    computed.set(name, value);
-                }
+                computed.set(name, value);
             }
             inherited = computed;
         }
