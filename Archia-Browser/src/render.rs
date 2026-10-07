@@ -92,7 +92,8 @@ fn paint_styled_node(node: &StyledNode, layout: &LayoutNode, list: &mut DisplayL
             list.push(PaintCommand::FillRect {
                 rect: layout.rect,
                 color,
-            });
+                });
+            }
         }
     }
 
@@ -123,7 +124,8 @@ fn paint_node(node: &Node, layout: &LayoutNode, style: &ComputedStyle, list: &mu
             list.push(PaintCommand::FillRect {
                 rect: layout.rect,
                 color,
-            });
+                });
+            }
         }
     }
 
