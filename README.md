@@ -105,9 +105,11 @@ Current milestone:
 - [x] Core memory budget and RAII resource tracking
 - [x] Memory pressure state foundation
 - [x] Reclaimable resource cache foundation
+- [x] LRU-style resource cache eviction and key replacement
 - [x] Core event loop foundation
 - [x] HTML tokenizer (initial)
 - [x] HTML parser / tree builder (initial)
+- [x] HTML void-element handling, paragraph/list auto-closing and comment preservation
 - [x] DOM node model (initial)
 - [x] CSS tokenizer (initial)
 - [x] CSS declaration parser (initial)
@@ -117,12 +119,17 @@ Current milestone:
 - [x] Style resolution for matching DOM nodes
 - [x] Attribute selector operators
 - [x] `!important` handling and inline style precedence (initial)
+- [x] CSS-wide value handling (`initial`, `inherit`, `unset`) and box shorthand expansion
 - [x] First block-flow layout engine foundation
 - [ ] Standards-compliant layout engine
 - [x] Software renderer foundation
 - [x] URL parsing and HTTP request/response primitives (initial)
 - [x] Native request filtering / ad-blocking foundation
 - [x] Native HTTP/1.1 transport foundation (HTTP; HTTPS/TLS pending)
+- [x] Bounded response/header memory limits
+- [x] Document redirect handling with a bounded redirect count
+- [x] Cookie persistence across document redirects
+- [x] First-party/third-party filtering context
 - [ ] JavaScript runtime
 - [ ] Browser UI
 - [x] Same-origin foundation
@@ -174,7 +181,8 @@ Current milestone:
 - [x] Add request filtering foundation for native ad/tracker blocking.
 - [x] Implement initial HTTP transport.
 - [ ] Add HTTPS/TLS transport.
-- [ ] Add redirects, cookies and caching.
+- [x] Add initial redirects, cookie persistence and resource caching foundations.
+- [ ] Add standards-compliant redirects, cookie attributes and HTTP caching.
 - [ ] Add forms and navigation.
 - [ ] Expand browser security boundaries.
 
@@ -228,5 +236,6 @@ License to be defined.
 3. Build asynchronous HTTP/HTTPS transport behind request policy, starting from the current HTTP/1.1 foundation.
 4. Expand HTML parsing toward standards-compliant tree construction.
 5. Expand CSS selectors, cascade, inheritance and computed values.
-6. Keep ad/tracker blocking before transport so blocked resources are not downloaded when policy allows.
-7. Keep every subsystem independently testable through GitHub Actions.
+6. Extend first-party/third-party filtering into a complete filter-list and permission model.
+7. Keep ad/tracker blocking before transport so blocked resources are not downloaded when policy allows.
+8. Keep every subsystem independently testable through GitHub Actions.
