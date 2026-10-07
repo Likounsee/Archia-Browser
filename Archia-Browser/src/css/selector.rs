@@ -384,6 +384,32 @@ fn matches_simple(simple: &SimpleSelector, node: &Node) -> bool {
     })
 }
 
+
+#[cfg(test)]
+mod sibling_tests {
+    use super::*;
+    use crate::html::Node;
+
+    #[test]
+    fn matches_adjacent_sibling() {
+        let a = Node::element("div");
+        let b = Node::element("span");
+        let path = [&a, &b];
+        let selector = Selector::parse("div + span").unwrap();
+        assert!(selector.matches_path(&path));
+    }
+
+    #[test]
+    fn matches_general_sibling() {
+        let a = Node::element("div");
+        let middle = Node::element("i");
+        let b = Node::element("span");
+        let path = [&a, &middle, &b];
+        let selector = Selector::parse("div ~ span").unwrap();
+        assert!(selector.matches_path(&path));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
