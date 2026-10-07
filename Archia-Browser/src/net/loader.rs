@@ -99,8 +99,7 @@ fn is_redirect(status: u16) -> bool {
 }
 
 fn should_switch_to_get(method: HttpMethod, status: u16) -> bool {
-    matches!(status, 301 | 302 | 303)
-        && !matches!(method, HttpMethod::Get | HttpMethod::Head)
+    matches!(status, 301 | 302 | 303) && !matches!(method, HttpMethod::Get | HttpMethod::Head)
 }
 
 fn is_html_response(response: &Response) -> bool {
@@ -208,7 +207,8 @@ mod tests {
     #[test]
     fn rejects_redirect_without_location() {
         let response = Response::new(302);
-        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), MockTransport { response });
+        let loader =
+            DocumentLoader::new(NetworkPipeline::new(AllowAll), MockTransport { response });
         let request = Request::new(Url::parse("https://example.org/").unwrap());
         assert_eq!(
             loader.load(&request, LayoutViewport::new(320, 200)),
@@ -219,8 +219,9 @@ mod tests {
     #[test]
     fn enforces_redirect_limit() {
         let response = Response::new(302).with_header("location", "/loop");
-        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), MockTransport { response })
-            .with_max_redirects(1);
+        let loader =
+            DocumentLoader::new(NetworkPipeline::new(AllowAll), MockTransport { response })
+                .with_max_redirects(1);
         let request = Request::new(Url::parse("https://example.org/").unwrap());
         assert_eq!(
             loader.load(&request, LayoutViewport::new(320, 200)),
