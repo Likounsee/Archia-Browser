@@ -2,7 +2,7 @@ name: Archia Browser CI
 
 on:
   push:
-    branches: ["main"]
+    branches: ["Archia-Browser"]
   pull_request:
 
 jobs:
