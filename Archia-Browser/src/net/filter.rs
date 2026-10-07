@@ -45,6 +45,7 @@ impl FilterRule {
             pattern: pattern.into(),
             decision: FilterDecision::Allow,
             resource: None,
+            party: None,
         }
     }
 
@@ -161,7 +162,6 @@ mod tests {
         );
     }
 
-    #[test]
     #[test]
     fn party_specific_rules_distinguish_origins() {
         let mut filter = RequestFilter::default();
