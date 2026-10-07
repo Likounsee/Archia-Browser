@@ -1,4 +1,4 @@
-use super::{Request, ResourceKind, Response, Transport, TransportError};
+use super::{Request, Response, Transport, TransportError};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RequestPolicy {
