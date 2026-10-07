@@ -106,10 +106,8 @@ mod tests {
     #[test]
     fn rejects_non_html_content() {
         let response = Response::new(200).with_header("content-type", "image/png");
-        let loader = DocumentLoader::new(
-            NetworkPipeline::new(AllowAll),
-            MockTransport { response },
-        );
+        let loader =
+            DocumentLoader::new(NetworkPipeline::new(AllowAll), MockTransport { response });
         let request = Request::new(Url::parse("https://example.org/image.png").unwrap());
 
         assert_eq!(
