@@ -9,15 +9,10 @@ pub struct Origin {
 
 impl Origin {
     pub fn from_url(url: &Url) -> Self {
-        let authority = url.authority();
-        let (host, port) = authority
-            .rsplit_once(':')
-            .and_then(|(host, port)| port.parse::<u16>().ok().map(|port| (host, Some(port))))
-            .unwrap_or((authority, None));
         Self {
             scheme: url.scheme().to_ascii_lowercase(),
-            host: host.to_ascii_lowercase(),
-            port,
+            host: url.host().to_ascii_lowercase(),
+            port: url.port(),
         }
     }
 
@@ -56,7 +51,9 @@ mod tests {
         let a = Origin::from_url(&Url::parse("https://example.org/a").unwrap());
         let b = Origin::from_url(&Url::parse("https://example.org/b").unwrap());
         let c = Origin::from_url(&Url::parse("http://example.org/b").unwrap());
+        let explicit = Origin::from_url(&Url::parse("https://example.org:443/b").unwrap());
         assert!(a.same_origin(&b));
         assert!(!a.same_origin(&c));
+        assert!(a.same_origin(&explicit));
     }
 }
