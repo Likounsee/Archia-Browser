@@ -153,8 +153,7 @@ impl SoftwareSurface {
         let index = ((y * self.surface.width + x) * 4) as usize;
         let alpha = u16::from(color.3);
         if alpha == 255 {
-            self.pixels[index..index + 4]
-                .copy_from_slice(&[color.0, color.1, color.2, color.3]);
+            self.pixels[index..index + 4].copy_from_slice(&[color.0, color.1, color.2, color.3]);
             return;
         }
         if alpha == 0 {
