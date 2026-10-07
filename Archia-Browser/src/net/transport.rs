@@ -60,7 +60,11 @@ impl HttpTransport {
         Ok(stream)
     }
 
-    fn write_request(&self, stream: &mut TcpStream, request: &Request) -> Result<(), TransportError> {
+    fn write_request(
+        &self,
+        stream: &mut TcpStream,
+        request: &Request,
+    ) -> Result<(), TransportError> {
         validate_request(request)?;
         let mut head = String::new();
         head.push_str(request.method.as_str());
@@ -126,16 +130,28 @@ impl Transport for HttpTransport {
 }
 
 fn validate_request(request: &Request) -> Result<(), TransportError> {
-    if request.url.path().bytes().any(|byte| byte.is_ascii_control() || byte == b' ')
-        || request.url.query().is_some_and(|query| query.bytes().any(|byte| byte.is_ascii_control() || byte == b' '))
+    if request
+        .url
+        .path()
+        .bytes()
+        .any(|byte| byte.is_ascii_control() || byte == b' ')
+        || request.url.query().is_some_and(|query| {
+            query
+                .bytes()
+                .any(|byte| byte.is_ascii_control() || byte == b' ')
+        })
     {
         return Err(TransportError::InvalidRequest);
     }
 
     if request.headers.iter().any(|(name, value)| {
         name.is_empty()
-            || name.bytes().any(|byte| byte.is_ascii_control() || matches!(byte, b' ' | b'\t' | b':'))
-            || value.bytes().any(|byte| matches!(byte, b'\r' | b'\n') || byte.is_ascii_control() && byte != b'\t')
+            || name
+                .bytes()
+                .any(|byte| byte.is_ascii_control() || matches!(byte, b' ' | b'\t' | b':'))
+            || value.bytes().any(|byte| {
+                matches!(byte, b'\r' | b'\n') || byte.is_ascii_control() && byte != b'\t'
+            })
     }) {
         return Err(TransportError::InvalidRequest);
     }
@@ -166,7 +182,8 @@ fn parse_http_response(bytes: &[u8]) -> Result<Response, TransportError> {
     let header_bytes = &bytes[..separator];
     let body_bytes = &bytes[separator + 4..];
 
-    let header_text = std::str::from_utf8(header_bytes).map_err(|_| TransportError::ConnectionFailed)?;
+    let header_text =
+        std::str::from_utf8(header_bytes).map_err(|_| TransportError::ConnectionFailed)?;
     let mut lines = header_text.split("\r\n");
     let status_line = lines.next().ok_or(TransportError::ConnectionFailed)?;
     let mut status_parts = status_line.splitn(3, ' ');
@@ -188,10 +205,11 @@ fn parse_http_response(bytes: &[u8]) -> Result<Response, TransportError> {
         response = response.with_header(name.trim(), value.trim());
     }
 
-    let body = if response
-        .header("transfer-encoding")
-        .is_some_and(|value| value.split(',').any(|item| item.trim().eq_ignore_ascii_case("chunked")))
-    {
+    let body = if response.header("transfer-encoding").is_some_and(|value| {
+        value
+            .split(',')
+            .any(|item| item.trim().eq_ignore_ascii_case("chunked"))
+    }) {
         decode_chunked(body_bytes)?
     } else if let Some(length) = response.header("content-length") {
         let length = length
@@ -222,8 +240,8 @@ fn decode_chunked(bytes: &[u8]) -> Result<Vec<u8>, TransportError> {
         let line = std::str::from_utf8(&bytes[cursor..line_end])
             .map_err(|_| TransportError::ConnectionFailed)?;
         let size_text = line.split(';').next().unwrap_or_default().trim();
-        let size = usize::from_str_radix(size_text, 16)
-            .map_err(|_| TransportError::ConnectionFailed)?;
+        let size =
+            usize::from_str_radix(size_text, 16).map_err(|_| TransportError::ConnectionFailed)?;
         cursor = line_end + 2;
 
         if size == 0 {
@@ -257,7 +275,10 @@ mod tests {
         .unwrap();
 
         assert_eq!(response.status, 200);
-        assert_eq!(response.content_type.as_deref(), Some("text/html; charset=utf-8"));
+        assert_eq!(
+            response.content_type.as_deref(),
+            Some("text/html; charset=utf-8")
+        );
         assert_eq!(response.body, b"Hello");
     }
 
@@ -280,7 +301,10 @@ mod tests {
     fn rejects_non_http_schemes_before_connecting() {
         let transport = HttpTransport::new();
         let request = Request::new(Url::parse("ftp://example.org/file").unwrap());
-        assert_eq!(transport.send(&request), Err(TransportError::UnsupportedScheme));
+        assert_eq!(
+            transport.send(&request),
+            Err(TransportError::UnsupportedScheme)
+        );
     }
 
     #[test]
@@ -288,7 +312,10 @@ mod tests {
         let transport = HttpTransport::new();
         let request = Request::new(Url::parse("http://example.org/").unwrap())
             .with_header("x-test", "safe\r\nX-Injected: yes");
-        assert_eq!(transport.send(&request), Err(TransportError::InvalidRequest));
+        assert_eq!(
+            transport.send(&request),
+            Err(TransportError::InvalidRequest)
+        );
     }
 
     #[test]
