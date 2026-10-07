@@ -205,14 +205,13 @@ fn layout_styled_node(
                 inline_x = 0;
                 inline_line_height = 0;
             }
-            let child_layout =
-                layout_styled_node(
-                    child,
-                    content_x,
-                    content_y.saturating_add(cursor_y),
-                    content_width,
-                    viewport_height,
-                );
+            let child_layout = layout_styled_node(
+                child,
+                content_x,
+                content_y.saturating_add(cursor_y),
+                content_width,
+                viewport_height,
+            );
             cursor_y = cursor_y.saturating_add(
                 child_layout
                     .rect
