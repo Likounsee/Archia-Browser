@@ -111,7 +111,10 @@ Current milestone:
 - [x] DOM node model (initial)
 - [x] CSS tokenizer (initial)
 - [x] CSS declaration parser (initial)
-- [x] Style system foundation
+- [x] CSS selector parsing and specificity foundation
+- [x] CSS stylesheet rules and basic cascade
+- [x] HTML attribute parsing and DOM preservation
+- [x] Style resolution for matching DOM nodes
 - [ ] Layout engine
 - [ ] Software renderer
 - [x] URL parsing and request primitives (initial)
@@ -142,13 +145,18 @@ Current milestone:
 - [x] Build the first DOM node model.
 - [ ] Add standards-compliant HTML parsing and error recovery.
 - [ ] Add document traversal and mutation APIs.
-- [ ] Add attributes, namespaces and text normalization.
+- [x] Add initial HTML attributes and preserve them in the DOM.
+- [ ] Add namespaces, text normalization and standards-compliant attribute semantics.
 
 ### Phase 3 — CSS and style
-- Implement CSS tokenization.
-- Implement CSS parsing.
-- Implement selectors and cascade.
-- Compute styles for DOM nodes.
+- [x] Implement initial CSS tokenization.
+- [x] Implement initial CSS declaration parsing.
+- [x] Implement selector parsing and specificity.
+- [x] Implement stylesheet rules and basic cascade.
+- [x] Compute styles for matching DOM nodes.
+- [ ] Add selector sibling combinators and full selector semantics.
+- [ ] Implement inheritance, !important and CSS origins.
+- [ ] Expand CSS syntax toward standards compliance.
 
 ### Phase 4 — Layout and rendering
 - Implement box generation.
@@ -213,6 +221,6 @@ License to be defined.
 1. Complete the memory/resource model and reclaimable cache architecture.
 2. Build a real asynchronous network stack behind request policy.
 3. Expand HTML parsing toward standards-compliant tree construction.
-4. Build CSS tokens, parser, selectors and computed style.
+4. Expand CSS tokens, selectors, cascade, inheritance and computed style.
 5. Keep ad/tracker blocking before transport so blocked resources are not downloaded when policy allows.
 6. Keep every subsystem independently testable through GitHub Actions.
