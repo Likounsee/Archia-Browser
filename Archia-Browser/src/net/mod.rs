@@ -190,6 +190,9 @@ mod response_cookie_tests {
             .with_header("set-cookie", "a=1; Path=/")
             .with_header("set-cookie", "b=2; Path=/");
 
-        assert_eq!(response.set_cookie_headers(), &["a=1; Path=/", "b=2; Path=/"]);
+        assert_eq!(
+            response.set_cookie_headers(),
+            &["a=1; Path=/", "b=2; Path=/"]
+        );
     }
 }
