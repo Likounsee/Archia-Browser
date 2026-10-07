@@ -3,3 +3,6 @@ resolver = "2"
 members = [
     "Archia-Browser",
 ]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("archiaos"))'] }
