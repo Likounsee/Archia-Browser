@@ -134,6 +134,7 @@ impl Response {
 pub enum TransportError {
     UnsupportedScheme,
     InvalidUrl(UrlError),
+    InvalidRequest,
     ConnectionFailed,
     Timeout,
     TlsFailed,
