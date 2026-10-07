@@ -19,12 +19,7 @@ impl Color {
             "transparent" => Some(Self(0, 0, 0, 0)),
             value if value.len() == 7 && value.starts_with('#') => {
                 let rgb = u32::from_str_radix(&value[1..], 16).ok()?;
-                Some(Self(
-                    (rgb >> 16) as u8,
-                    (rgb >> 8) as u8,
-                    rgb as u8,
-                    255,
-                ))
+                Some(Self((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8, 255))
             }
             _ => None,
         }
@@ -86,7 +81,9 @@ impl SoftwareSurface {
     pub fn fill_rect(&mut self, x: i32, y: i32, width: u32, height: u32, color: Color) {
         let x0 = x.max(0) as u32;
         let y0 = y.max(0) as u32;
-        let x1 = (x.max(0) as u32).saturating_add(width).min(self.surface.width);
+        let x1 = (x.max(0) as u32)
+            .saturating_add(width)
+            .min(self.surface.width);
         let y1 = (y.max(0) as u32)
             .saturating_add(height)
             .min(self.surface.height);
@@ -101,11 +98,7 @@ impl SoftwareSurface {
     }
 }
 
-pub fn paint_background(
-    surface: &mut SoftwareSurface,
-    node: &Node,
-    color: Color,
-) {
+pub fn paint_background(surface: &mut SoftwareSurface, node: &Node, color: Color) {
     if matches!(node.kind, NodeKind::Element { .. }) {
         surface.fill_rect(0, 0, surface.width(), surface.height(), color);
     }
