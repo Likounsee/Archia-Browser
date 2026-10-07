@@ -140,8 +140,8 @@ fn read_response(stream: &mut TcpStream, max_size: usize) -> Result<Response, Tr
 
     let (header_bytes, body_start) = raw.split_at(header_end);
     let body_start = &body_start[4..];
-    let header_text = std::str::from_utf8(header_bytes)
-        .map_err(|_| TransportError::InvalidResponse)?;
+    let header_text =
+        std::str::from_utf8(header_bytes).map_err(|_| TransportError::InvalidResponse)?;
     let mut lines = header_text.split("\r\n");
     let status_line = lines.next().ok_or(TransportError::InvalidResponse)?;
     let mut status_parts = status_line.splitn(3, ' ');
@@ -212,7 +212,11 @@ fn read_response(stream: &mut TcpStream, max_size: usize) -> Result<Response, Tr
     Ok(response)
 }
 
-fn read_more(stream: &mut TcpStream, body: &mut Vec<u8>, limit: usize) -> Result<(), TransportError> {
+fn read_more(
+    stream: &mut TcpStream,
+    body: &mut Vec<u8>,
+    limit: usize,
+) -> Result<(), TransportError> {
     if body.len() >= limit {
         return Err(TransportError::ResponseTooLarge);
     }
@@ -267,14 +271,19 @@ fn chunked_message_complete(body: &[u8]) -> bool {
             return false;
         };
         cursor = line_end + 2;
-        let Some(end) = cursor.checked_add(size).and_then(|value| value.checked_add(2)) else {
+        let Some(end) = cursor
+            .checked_add(size)
+            .and_then(|value| value.checked_add(2))
+        else {
             return false;
         };
         if end > body.len() {
             return false;
         }
         if size == 0 {
-            return body[cursor + 2..].windows(2).any(|window| window == b"\r\n");
+            return body[cursor + 2..]
+                .windows(2)
+                .any(|window| window == b"\r\n");
         }
         cursor = end;
     }
@@ -288,8 +297,8 @@ fn decode_chunked(body: &[u8], max_size: usize) -> Result<Vec<u8>, TransportErro
         let line = std::str::from_utf8(&body[cursor..line_end])
             .map_err(|_| TransportError::InvalidResponse)?;
         let size_text = line.split(';').next().unwrap_or_default().trim();
-        let size = usize::from_str_radix(size_text, 16)
-            .map_err(|_| TransportError::InvalidResponse)?;
+        let size =
+            usize::from_str_radix(size_text, 16).map_err(|_| TransportError::InvalidResponse)?;
         cursor = line_end + 2;
         if size == 0 {
             if cursor + 2 > body.len() {
@@ -368,8 +377,8 @@ mod tests {
             raw.extend_from_slice(&chunk[..read]);
             if let Some(header_end) = find_header_end(&raw) {
                 let (header_bytes, body_start) = raw.split_at(header_end);
-                let header_text =
-                    std::str::from_utf8(header_bytes).map_err(|_| TransportError::InvalidResponse)?;
+                let header_text = std::str::from_utf8(header_bytes)
+                    .map_err(|_| TransportError::InvalidResponse)?;
                 let mut lines = header_text.split("\r\n");
                 let status_line = lines.next().ok_or(TransportError::InvalidResponse)?;
                 let status = status_line
