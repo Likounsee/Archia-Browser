@@ -57,15 +57,24 @@ impl Url {
         self.authority
             .strip_prefix('[')
             .and_then(|value| value.split_once(']').map(|(host, _)| host))
-            .or_else(|| self.authority.rsplit_once(':').map(|(host, port)| {
-                if port.chars().all(|c| c.is_ascii_digit()) { host } else { self.authority.as_str() }
-            }))
+            .or_else(|| {
+                self.authority.rsplit_once(':').map(|(host, port)| {
+                    if port.chars().all(|c| c.is_ascii_digit()) {
+                        host
+                    } else {
+                        self.authority.as_str()
+                    }
+                })
+            })
             .unwrap_or(&self.authority)
     }
 
     pub fn port(&self) -> Option<u16> {
         if self.authority.starts_with('[') {
-            return self.authority.split_once("]:").and_then(|(_, port)| port.parse().ok());
+            return self
+                .authority
+                .split_once("]:")
+                .and_then(|(_, port)| port.parse().ok());
         }
         self.authority.rsplit_once(':').and_then(|(_, port)| port.parse().ok())
     }
