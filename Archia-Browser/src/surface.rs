@@ -122,11 +122,11 @@ impl SoftwareSurface {
             for (row, bits) in glyph.iter().enumerate() {
                 for column in 0..5 {
                     if bits & (1 << (4 - column)) != 0 {
-                        self.blend_pixel(
-                            cursor_x.saturating_add(column),
-                            y.saturating_add(row as i32),
-                            color,
-                        );
+                        let px = cursor_x.saturating_add(column);
+                        let py = y.saturating_add(row as i32);
+                        if px >= 0 && py >= 0 {
+                            self.blend_pixel(px as u32, py as u32, color);
+                        }
                     }
                 }
             }
@@ -257,7 +257,6 @@ mod tests {
         assert_eq!(&surface.pixels()[offset..offset + 4], &[255, 0, 0, 255]);
     }
 
-    #[test]
     #[test]
     fn rasterizes_text_into_pixels() {
         let mut surface = SoftwareSurface::new(8, 8);

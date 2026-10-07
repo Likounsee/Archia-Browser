@@ -4,7 +4,7 @@ use crate::html::{Node, NodeKind};
 use crate::style_tree::StyledNode;
 use crate::surface::{Color, SoftwareSurface};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PaintCommand {
     FillRect {
         rect: super::layout::Rect,
@@ -52,7 +52,7 @@ impl SoftwareRenderer {
 
     pub fn rasterize(list: &DisplayList, surface: &mut SoftwareSurface) {
         for command in list.commands() {
-            match *command {
+            match command {
                 PaintCommand::FillRect { rect, color } => {
                     let color = Color(
                         ((color >> 24) & 0xff) as u8,
