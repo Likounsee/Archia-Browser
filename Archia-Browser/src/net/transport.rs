@@ -61,6 +61,7 @@ impl HttpTransport {
     }
 
     fn write_request(&self, stream: &mut TcpStream, request: &Request) -> Result<(), TransportError> {
+        validate_request(request)?;
         let mut head = String::new();
         head.push_str(request.method.as_str());
         head.push(' ');
@@ -122,6 +123,24 @@ impl Transport for HttpTransport {
         self.write_request(&mut stream, request)?;
         self.read_response(&mut stream)
     }
+}
+
+fn validate_request(request: &Request) -> Result<(), TransportError> {
+    if request.url.path().bytes().any(|byte| byte.is_ascii_control() || byte == b' ')
+        || request.url.query().is_some_and(|query| query.bytes().any(|byte| byte.is_ascii_control() || byte == b' '))
+    {
+        return Err(TransportError::InvalidRequest);
+    }
+
+    if request.headers.iter().any(|(name, value)| {
+        name.is_empty()
+            || name.bytes().any(|byte| byte.is_ascii_control() || matches!(byte, b' ' | b'\\t' | b':'))
+            || value.bytes().any(|byte| matches!(byte, b'\\r' | b'\\n') || byte.is_ascii_control() && byte != b'\\t')
+    }) {
+        return Err(TransportError::InvalidRequest);
+    }
+
+    Ok(())
 }
 
 fn host_header(request: &Request) -> String {
@@ -262,6 +281,15 @@ mod tests {
         let transport = HttpTransport::new();
         let request = Request::new(Url::parse("ftp://example.org/file").unwrap());
         assert_eq!(transport.send(&request), Err(TransportError::UnsupportedScheme));
+    }
+
+    #[test]
+    #[test]
+    fn rejects_header_injection() {
+        let transport = HttpTransport::new();
+        let request = Request::new(Url::parse("http://example.org/").unwrap())
+            .with_header("x-test", "safe\\r\\nX-Injected: yes");
+        assert_eq!(transport.send(&request), Err(TransportError::InvalidRequest));
     }
 
     #[test]
