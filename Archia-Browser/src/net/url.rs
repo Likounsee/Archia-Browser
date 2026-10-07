@@ -12,10 +12,14 @@ pub struct Url {
 impl Url {
     pub fn parse(input: &str) -> Result<Self, UrlError> {
         let (scheme, remainder) = input.split_once("://").ok_or(UrlError::MissingScheme)?;
-        if scheme.is_empty()
-            || !scheme
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+        let mut scheme_chars = scheme.chars();
+        let valid_first = scheme_chars
+            .next()
+            .is_some_and(|character| character.is_ascii_alphabetic());
+        if !valid_first
+            || !scheme_chars.all(|character| {
+                character.is_ascii_alphanumeric() || matches!(character, '+' | '-' | '.')
+            })
         {
             return Err(UrlError::InvalidScheme);
         }
@@ -146,6 +150,12 @@ mod tests {
         assert_eq!(url.path(), "/a");
         assert_eq!(url.query(), Some("q=1"));
         assert_eq!(url.fragment(), Some("top"));
+    }
+
+    #[test]
+    fn rejects_non_alpha_scheme_start() {
+        assert_eq!(Url::parse("1http://example.org").unwrap_err(), UrlError::InvalidScheme);
+        assert_eq!(Url::parse("http+custom://example.org").unwrap().scheme(), "http+custom");
     }
 
     #[test]
