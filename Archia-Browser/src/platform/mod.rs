@@ -14,11 +14,11 @@ pub fn current() -> Platform {
     {
         Platform::Linux
     }
-    #[cfg(target_os = "archiaos")]
+    #[cfg(any(target_os = "archiaos", target_os = "none"))]
     {
         Platform::ArchiaOs
     }
-    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "archiaos")))]
+    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "archiaos", target_os = "none")))]
     {
         Platform::Linux
     }

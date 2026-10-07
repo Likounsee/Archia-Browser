@@ -61,45 +61,6 @@ impl Url {
     pub fn fragment(&self) -> Option<&str> {
         self.fragment.as_deref()
     }
-
-    pub fn host(&self) -> &str {
-        let authority = self
-            .authority
-            .rsplit_once('@')
-            .map_or(self.authority.as_str(), |(_, host)| host);
-        if authority.starts_with('[') {
-            authority
-                .find(']')
-                .map_or(authority, |end| &authority[1..end])
-        } else {
-            authority
-                .split_once(':')
-                .map_or(authority, |(host, _)| host)
-        }
-    }
-
-    pub fn port(&self) -> Option<u16> {
-        let authority = self
-            .authority
-            .rsplit_once('@')
-            .map_or(self.authority.as_str(), |(_, host)| host);
-        if authority.starts_with('[') {
-            let end = authority.find(']')?;
-            return authority.get(end + 1..)?.strip_prefix(':')?.parse().ok();
-        }
-        authority
-            .rsplit_once(':')
-            .and_then(|(_, port)| port.parse().ok())
-    }
-
-    pub fn effective_port(&self) -> u16 {
-        self.port()
-            .unwrap_or(if self.is_secure() { 443 } else { 80 })
-    }
-
-    pub fn is_secure(&self) -> bool {
-        self.scheme == "https"
-    }
 }
 
 impl fmt::Display for Url {
@@ -146,20 +107,6 @@ mod tests {
         assert_eq!(url.path(), "/a");
         assert_eq!(url.query(), Some("q=1"));
         assert_eq!(url.fragment(), Some("top"));
-    }
-
-    #[test]
-    fn exposes_transport_authority() {
-        let url = Url::parse("https://user:pass@example.org:8443/").unwrap();
-        assert_eq!(url.host(), "example.org");
-        assert_eq!(url.port(), Some(8443));
-        assert_eq!(url.effective_port(), 8443);
-        assert!(url.is_secure());
-
-        let http = Url::parse("http://example.org/").unwrap();
-        assert_eq!(http.port(), None);
-        assert_eq!(http.effective_port(), 80);
-        assert!(!http.is_secure());
     }
 
     #[test]
