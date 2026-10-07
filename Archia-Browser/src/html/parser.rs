@@ -16,8 +16,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
             } => {
                 let mut node = Node::element(name.clone());
                 if let super::dom::NodeKind::Element {
-                    attributes: target,
-                    ..
+                    attributes: target, ..
                 } = &mut node.kind
                 {
                     *target = attributes.clone();
