@@ -101,7 +101,6 @@ impl SoftwareSurface {
         self.fill_rect(x, y, width, 1, color);
     }
 
-
     pub fn clear(&mut self, color: Color) {
         for pixel in self.pixels.chunks_exact_mut(4) {
             pixel.copy_from_slice(&[color.0, color.1, color.2, color.3]);
