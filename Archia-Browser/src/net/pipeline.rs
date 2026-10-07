@@ -5,6 +5,7 @@ pub struct RequestPolicy {
     pub priority: RequestPriority,
     pub resource_kind: ResourceKind,
     pub referrer: Option<super::Url>,
+    pub first_party: Option<super::Url>,
 }
 
 impl Default for RequestPolicy {
@@ -13,6 +14,7 @@ impl Default for RequestPolicy {
             priority: RequestPriority::Normal,
             resource_kind: ResourceKind::Other,
             referrer: None,
+            first_party: None,
         }
     }
 }
@@ -91,7 +93,11 @@ mod tests {
                 ResourceKind::Other => ResourceType::Other,
             };
 
-            match self.0.decide(&request.url.to_string(), Some(kind)) {
+            match self.0.decide_with_party(
+                &request.url.to_string(),
+                Some(kind),
+                request.policy.first_party.as_ref(),
+            ) {
                 FilterDecision::Allow => PolicyDecision::Allow,
                 FilterDecision::Block => PolicyDecision::Block,
             }
