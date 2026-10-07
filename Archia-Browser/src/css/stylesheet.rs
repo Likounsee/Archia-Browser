@@ -169,7 +169,10 @@ fn initial_value(name: &str) -> &'static str {
         "width" | "height" => "auto",
         "margin-top" | "margin-right" | "margin-bottom" | "margin-left" => "0",
         "padding-top" | "padding-right" | "padding-bottom" | "padding-left" => "0",
-        "border-width" | "border-top-width" | "border-right-width" | "border-bottom-width"
+        "border-width"
+        | "border-top-width"
+        | "border-right-width"
+        | "border-bottom-width"
         | "border-left-width" => "0",
         "font-size" => "16px",
         "font-style" => "normal",
@@ -190,9 +193,24 @@ fn expand_box_shorthand(name: &str, value: &str) -> Option<[String; 4]> {
         return None;
     }
     let expanded = match values.len() {
-        1 => [values[0].clone(), values[0].clone(), values[0].clone(), values[0].clone()],
-        2 => [values[0].clone(), values[1].clone(), values[0].clone(), values[1].clone()],
-        3 => [values[0].clone(), values[1].clone(), values[2].clone(), values[1].clone()],
+        1 => [
+            values[0].clone(),
+            values[0].clone(),
+            values[0].clone(),
+            values[0].clone(),
+        ],
+        2 => [
+            values[0].clone(),
+            values[1].clone(),
+            values[0].clone(),
+            values[1].clone(),
+        ],
+        3 => [
+            values[0].clone(),
+            values[1].clone(),
+            values[2].clone(),
+            values[1].clone(),
+        ],
         4 => [
             values[0].clone(),
             values[1].clone(),
