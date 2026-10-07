@@ -5,6 +5,12 @@ pub enum FilterDecision {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PartyContext {
+    FirstParty,
+    ThirdParty,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResourceType {
     Document,
     Script,
@@ -21,6 +27,7 @@ pub struct FilterRule {
     pattern: String,
     decision: FilterDecision,
     resource: Option<ResourceType>,
+    party: Option<PartyContext>,
 }
 
 impl FilterRule {
@@ -29,6 +36,7 @@ impl FilterRule {
             pattern: pattern.into(),
             decision: FilterDecision::Block,
             resource: None,
+            party: None,
         }
     }
 
@@ -45,11 +53,28 @@ impl FilterRule {
         self
     }
 
+    pub fn for_party(mut self, party: PartyContext) -> Self {
+        self.party = Some(party);
+        self
+    }
+
     pub fn matches(&self, url: &str, resource: Option<ResourceType>) -> bool {
+        self.matches_with_party(url, resource, None)
+    }
+
+    pub fn matches_with_party(
+        &self,
+        url: &str,
+        resource: Option<ResourceType>,
+        first_party: Option<&crate::net::Url>,
+    ) -> bool {
         self.pattern_matches(url)
             && self
                 .resource
                 .is_none_or(|expected| Some(expected) == resource)
+            && self
+                .party
+                .is_none_or(|expected| Some(expected) == party_context(url, first_party))
     }
 
     fn pattern_matches(&self, url: &str) -> bool {
@@ -74,10 +99,19 @@ impl RequestFilter {
     }
 
     pub fn decide(&self, url: &str, resource: Option<ResourceType>) -> FilterDecision {
+        self.decide_with_party(url, resource, None)
+    }
+
+    pub fn decide_with_party(
+        &self,
+        url: &str,
+        resource: Option<ResourceType>,
+        first_party: Option<&crate::net::Url>,
+    ) -> FilterDecision {
         let mut blocked = false;
 
         for rule in &self.rules {
-            if !rule.matches(url, resource) {
+            if !rule.matches_with_party(url, resource, first_party) {
                 continue;
             }
             match rule.decision() {
@@ -124,6 +158,32 @@ mod tests {
         assert_eq!(
             filter.decide("https://ads.example/banner.js", Some(ResourceType::Script)),
             FilterDecision::Block
+        );
+    }
+
+    #[test]
+    #[test]
+    fn party_specific_rules_distinguish_origins() {
+        let mut filter = RequestFilter::default();
+        filter.add_rule(FilterRule::block("tracker.example").for_party(PartyContext::ThirdParty));
+
+        let first_party = crate::net::Url::parse("https://site.example/").unwrap();
+        assert_eq!(
+            filter.decide_with_party(
+                "https://tracker.example/pixel",
+                Some(ResourceType::Image),
+                Some(&first_party)
+            ),
+            FilterDecision::Block
+        );
+        let tracker = crate::net::Url::parse("https://tracker.example/").unwrap();
+        assert_eq!(
+            filter.decide_with_party(
+                "https://tracker.example/pixel",
+                Some(ResourceType::Image),
+                Some(&tracker)
+            ),
+            FilterDecision::Allow
         );
     }
 
