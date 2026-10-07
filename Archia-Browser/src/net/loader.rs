@@ -1,8 +1,5 @@
 use super::{pipeline::NetworkPipeline, Request, Response, Transport, TransportError};
-use crate::{
-    document::Page,
-    layout::LayoutViewport,
-};
+use crate::{document::Page, layout::LayoutViewport};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DocumentLoadError {
@@ -67,8 +64,7 @@ mod tests {
     use super::*;
     use crate::net::{
         pipeline::{PolicyDecision, RequestPolicyEngine},
-        Response,
-        Url,
+        Response, Url,
     };
 
     #[derive(Debug, Default)]
@@ -96,10 +92,8 @@ mod tests {
         let response = Response::new(200)
             .with_header("content-type", "text/html; charset=utf-8")
             .with_body(b"<body><h1>Hello</h1></body>".to_vec());
-        let loader = DocumentLoader::new(
-            NetworkPipeline::new(AllowAll),
-            MockTransport { response },
-        );
+        let loader =
+            DocumentLoader::new(NetworkPipeline::new(AllowAll), MockTransport { response });
         let request = Request::new(Url::parse("https://example.org/").unwrap());
         let page = loader
             .load(&request, LayoutViewport::new(320, 200))

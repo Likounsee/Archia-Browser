@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 pub mod cookies;
-pub mod loader;
 pub mod filter;
+pub mod loader;
 pub mod pipeline;
 pub mod pool;
 pub mod url;
