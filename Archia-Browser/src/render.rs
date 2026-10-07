@@ -44,10 +44,7 @@ impl DisplayList {
 pub struct SoftwareRenderer;
 
 impl SoftwareRenderer {
-    pub fn build_display_list_styled(
-        root: &StyledNode,
-        layout: &LayoutNode,
-    ) -> DisplayList {
+    pub fn build_display_list_styled(root: &StyledNode, layout: &LayoutNode) -> DisplayList {
         let mut list = DisplayList::new();
         paint_styled_node(root, layout, &mut list);
         list
@@ -104,8 +101,7 @@ fn paint_styled_node(node: &StyledNode, layout: &LayoutNode, list: &mut DisplayL
             x: layout.rect.x,
             y: layout.rect.y,
             text_len: text.chars().count() as u32,
-            color: parse_color(node.style.get("color").unwrap_or("black"))
-                .unwrap_or(0x000000ff),
+            color: parse_color(node.style.get("color").unwrap_or("black")).unwrap_or(0x000000ff),
         });
     }
 

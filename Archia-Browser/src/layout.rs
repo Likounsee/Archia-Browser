@@ -379,10 +379,8 @@ mod tests {
         root.append(first);
         root.append(hidden);
 
-        let styled = crate::style_tree::StyleEngine::style(
-            &root,
-            &crate::css::StyleSheet::default(),
-        );
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(800, 600));
 
         assert_eq!(layout.children.len(), 2);
