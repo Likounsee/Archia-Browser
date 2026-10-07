@@ -67,13 +67,13 @@ impl Request {
             .insert(name.into().to_ascii_lowercase(), value.into());
         self
     }
-    pub fn set_cookie_headers(&self) -> &[String] {
-        &self.set_cookies
-    }
-
     pub fn with_body(mut self, body: impl Into<Vec<u8>>) -> Self {
         self.body = body.into();
         self
+    }
+
+    pub fn set_cookie_headers(&self) -> &[String] {
+        &self.set_cookies
     }
 
     pub fn header(&self, name: &str) -> Option<&str> {
