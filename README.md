@@ -119,10 +119,10 @@ Current milestone:
 - [x] `!important` handling and inline style precedence (initial)
 - [x] First block-flow layout engine foundation
 - [ ] Standards-compliant layout engine
-- [ ] Software renderer
+- [x] Software renderer foundation
 - [x] URL parsing and HTTP request/response primitives (initial)
 - [x] Native request filtering / ad-blocking foundation
-- [ ] Networking transport
+- [x] Native HTTP/1.1 transport foundation (HTTP; HTTPS/TLS pending)
 - [ ] JavaScript runtime
 - [ ] Browser UI
 - [x] Same-origin foundation
@@ -172,7 +172,8 @@ Current milestone:
 ### Phase 5 — Web platform
 - [x] Add structured URL parsing foundation.
 - [x] Add request filtering foundation for native ad/tracker blocking.
-- [ ] Implement HTTP/HTTPS integration.
+- [x] Implement initial HTTP transport.
+- [ ] Add HTTPS/TLS transport.
 - [ ] Add redirects, cookies and caching.
 - [ ] Add forms and navigation.
 - [ ] Expand browser security boundaries.
@@ -224,7 +225,7 @@ License to be defined.
 
 1. Turn the layout foundation into a real block/inline layout engine.
 2. Build a platform-neutral software display list and renderer.
-3. Build a real asynchronous HTTP/HTTPS transport behind request policy.
+3. Build asynchronous HTTP/HTTPS transport behind request policy, starting from the current HTTP/1.1 foundation.
 4. Expand HTML parsing toward standards-compliant tree construction.
 5. Expand CSS selectors, cascade, inheritance and computed values.
 6. Keep ad/tracker blocking before transport so blocked resources are not downloaded when policy allows.
