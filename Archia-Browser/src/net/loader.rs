@@ -115,8 +115,6 @@ fn is_html_response(response: &Response) -> bool {
     matches!(media_type, "text/html" | "application/xhtml+xml")
 }
 
-trait Pipe: Sized { fn pipe<T>(self, f: impl FnOnce(Self) -> T) -> T { f(self) } }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -175,7 +173,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn follows_relative_redirects() {
         let first = Response::new(302).with_header("location", "/next");
         let final_response = Response::new(200)
@@ -189,11 +186,7 @@ mod tests {
 
         impl Transport for SequenceTransport {
             fn send(&self, _: &Request) -> Result<Response, TransportError> {
-                self.responses
-                    .lock()
-                    .unwrap()
-                    .remove(0)
-                    .pipe(Ok)
+                Ok(self.responses.lock().unwrap().remove(0))
             }
         }
 
@@ -233,6 +226,7 @@ mod tests {
         );
     }
 
+    #[test]
     fn rejects_non_html_content() {
         let response = Response::new(200).with_header("content-type", "image/png");
         let loader =
