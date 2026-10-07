@@ -235,7 +235,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn blends_transparent_pixels() {
         let mut surface = SoftwareSurface::new(1, 1);
         surface.clear(Color::WHITE);

@@ -250,7 +250,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn rasterizes_fill_rect_commands() {
         let mut list = DisplayList::new();
         list.push(PaintCommand::FillRect {
