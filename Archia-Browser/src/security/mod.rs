@@ -1,3 +1,7 @@
+pub mod origin;
+
+pub use origin::Origin;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SecurityOrigin {
     Opaque,
