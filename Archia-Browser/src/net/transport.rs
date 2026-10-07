@@ -13,6 +13,8 @@ use super::{Request, Response, Transport, TransportError};
 pub struct HttpTransport {
     connect_timeout: Duration,
     read_timeout: Duration,
+    max_response_size: usize,
+    max_header_size: usize,
 }
 
 impl Default for HttpTransport {
@@ -26,6 +28,8 @@ impl HttpTransport {
         Self {
             connect_timeout: Duration::from_secs(10),
             read_timeout: Duration::from_secs(20),
+            max_response_size: 8 * 1024 * 1024,
+            max_header_size: 64 * 1024,
         }
     }
 
@@ -33,7 +37,15 @@ impl HttpTransport {
         Self {
             connect_timeout,
             read_timeout,
+            max_response_size: 8 * 1024 * 1024,
+            max_header_size: 64 * 1024,
         }
+    }
+
+    pub const fn with_limits(mut self, max_response_size: usize, max_header_size: usize) -> Self {
+        self.max_response_size = max_response_size;
+        self.max_header_size = max_header_size;
+        self
     }
 
     fn connect(&self, request: &Request) -> Result<TcpStream, TransportError> {
@@ -107,18 +119,39 @@ impl HttpTransport {
     fn read_response(&self, stream: &mut TcpStream) -> Result<Response, TransportError> {
         let mut bytes = Vec::new();
         let mut buffer = [0_u8; 16 * 1024];
+        let mut header_end = None;
+
         loop {
             match stream.read(&mut buffer) {
                 Ok(0) => break,
-                Ok(count) => bytes.extend_from_slice(&buffer[..count]),
+                Ok(count) => {
+                    bytes.extend_from_slice(&buffer[..count]);
+                    if header_end.is_none() {
+                        header_end = bytes
+                            .windows(4)
+                            .position(|window| window == b"\\r\\n\\r\\n")
+                            .map(|position| position + 4);
+                        if header_end.is_none() && bytes.len() > self.max_header_size {
+                            return Err(TransportError::ResponseTooLarge);
+                        }
+                    }
+                    if bytes.len() > self.max_response_size {
+                        return Err(TransportError::ResponseTooLarge);
+                    }
+                }
                 Err(error) if error.kind() == std::io::ErrorKind::TimedOut => {
                     return Err(TransportError::Timeout)
                 }
                 Err(_) => return Err(TransportError::ConnectionFailed),
             }
         }
-        parse_http_response(&bytes)
+
+        if bytes.len() > self.max_response_size {
+            return Err(TransportError::ResponseTooLarge);
+        }
+        parse_http_response(&bytes, self.max_response_size, self.max_header_size)
     }
+}
 }
 
 impl Transport for HttpTransport {
@@ -174,12 +207,19 @@ fn host_header(request: &Request) -> String {
     }
 }
 
-fn parse_http_response(bytes: &[u8]) -> Result<Response, TransportError> {
+fn parse_http_response(
+    bytes: &[u8],
+    max_response_size: usize,
+    max_header_size: usize,
+) -> Result<Response, TransportError> {
     let separator = bytes
         .windows(4)
         .position(|window| window == b"\r\n\r\n")
         .ok_or(TransportError::ConnectionFailed)?;
     let header_bytes = &bytes[..separator];
+    if header_bytes.len() > max_header_size {
+        return Err(TransportError::ResponseTooLarge);
+    }
     let body_bytes = &bytes[separator + 4..];
 
     let header_text =
@@ -210,7 +250,7 @@ fn parse_http_response(bytes: &[u8]) -> Result<Response, TransportError> {
             .split(',')
             .any(|item| item.trim().eq_ignore_ascii_case("chunked"))
     }) {
-        decode_chunked(body_bytes)?
+        decode_chunked(body_bytes, max_response_size)?
     } else if let Some(length) = response.header("content-length") {
         let length = length
             .trim()
@@ -224,10 +264,14 @@ fn parse_http_response(bytes: &[u8]) -> Result<Response, TransportError> {
         body_bytes.to_vec()
     };
 
+    if body.len() > max_response_size {
+        return Err(TransportError::ResponseTooLarge);
+    }
+
     Ok(response.with_body(body))
 }
 
-fn decode_chunked(bytes: &[u8]) -> Result<Vec<u8>, TransportError> {
+fn decode_chunked(bytes: &[u8], max_response_size: usize) -> Result<Vec<u8>, TransportError> {
     let mut output = Vec::new();
     let mut cursor = 0;
 
@@ -251,6 +295,9 @@ fn decode_chunked(bytes: &[u8]) -> Result<Vec<u8>, TransportError> {
         let end = cursor
             .checked_add(size)
             .ok_or(TransportError::ConnectionFailed)?;
+        if output.len().saturating_add(size) > max_response_size {
+            return Err(TransportError::ResponseTooLarge);
+        }
         output.extend_from_slice(
             bytes
                 .get(cursor..end)
@@ -329,5 +376,30 @@ mod tests {
 
         let request = Request::new(Url::parse("http://[::1]:8080/").unwrap());
         assert_eq!(host_header(&request), "[::1]:8080");
+    }
+}
+
+#[cfg(test)]
+mod limit_tests {
+    use super::*;
+
+    #[test]
+    fn rejects_oversized_content_length() {
+        let result = parse_http_response(
+            b"HTTP/1.1 200 OK\\r\\nContent-Length: 5\\r\\n\\r\\nHello",
+            4,
+            1024,
+        );
+        assert_eq!(result, Err(TransportError::ResponseTooLarge));
+    }
+
+    #[test]
+    fn rejects_oversized_chunked_body() {
+        let result = parse_http_response(
+            b"HTTP/1.1 200 OK\\r\\nTransfer-Encoding: chunked\\r\\n\\r\\n5\\r\\nHello\\r\\n0\\r\\n\\r\\n",
+            4,
+            1024,
+        );
+        assert_eq!(result, Err(TransportError::ResponseTooLarge));
     }
 }
