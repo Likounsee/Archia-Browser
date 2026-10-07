@@ -4,7 +4,7 @@ use crate::html::{Node, NodeKind};
 use crate::style_tree::StyledNode;
 use crate::surface::{Color, SoftwareSurface};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PaintCommand {
     FillRect {
         rect: super::layout::Rect,
@@ -69,7 +69,7 @@ impl SoftwareRenderer {
                         ((color >> 8) & 0xff) as u8,
                         (color & 0xff) as u8,
                     );
-                    draw_text(surface, x, y, &text, color);
+                    draw_text(surface, *x, *y, text, color);
                 }
             }
         }
