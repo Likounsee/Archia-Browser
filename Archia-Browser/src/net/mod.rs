@@ -72,10 +72,6 @@ impl Request {
         self
     }
 
-    pub fn set_cookie_headers(&self) -> &[String] {
-        &self.set_cookies
-    }
-
     pub fn header(&self, name: &str) -> Option<&str> {
         self.headers
             .get(&name.to_ascii_lowercase())
@@ -131,6 +127,10 @@ impl Response {
     pub fn with_body(mut self, body: impl Into<Vec<u8>>) -> Self {
         self.body = body.into();
         self
+    }
+
+    pub fn set_cookie_headers(&self) -> &[String] {
+        &self.set_cookies
     }
 
     pub fn header(&self, name: &str) -> Option<&str> {
