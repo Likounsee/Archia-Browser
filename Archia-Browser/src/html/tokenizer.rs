@@ -67,13 +67,9 @@ impl HtmlTokenizer {
                 });
 
                 if is_raw_text && !self_closing {
-                    if let Some((text_end, close_end)) =
-                        find_raw_text_end(input, end + 1, &name)
-                    {
+                    if let Some((text_end, close_end)) = find_raw_text_end(input, end + 1, &name) {
                         if text_end > end + 1 {
-                            tokens.push(HtmlToken::Text(
-                                input[end + 1..text_end].to_owned(),
-                            ));
+                            tokens.push(HtmlToken::Text(input[end + 1..text_end].to_owned()));
                         }
                         cursor = close_end;
                         continue;
@@ -263,10 +259,9 @@ fn decode_character_references(input: &str) -> String {
                     .ok()
                     .and_then(char::from_u32)
             }
-            _ if reference.starts_with('#') => reference[1..]
-                .parse::<u32>()
-                .ok()
-                .and_then(char::from_u32),
+            _ if reference.starts_with('#') => {
+                reference[1..].parse::<u32>().ok().and_then(char::from_u32)
+            }
             _ => None,
         };
 
