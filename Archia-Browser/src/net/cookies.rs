@@ -129,7 +129,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn rejects_unrelated_cookie_domains() {
         let url = Url::parse("https://example.org/").unwrap();
         let mut jar = CookieJar::new();
