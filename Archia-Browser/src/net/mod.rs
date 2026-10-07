@@ -2,12 +2,14 @@ use std::collections::BTreeMap;
 
 pub mod cookies;
 pub mod filter;
+pub mod http;
 pub mod loader;
 pub mod pipeline;
 pub mod pool;
 pub mod url;
 
 pub use cookies::{Cookie, CookieJar};
+pub use http::HttpTransport;
 pub use loader::{DocumentLoadError, DocumentLoader};
 pub use url::{Url, UrlError};
 
@@ -46,6 +48,7 @@ pub struct Request {
     pub body: Vec<u8>,
     pub policy: pipeline::RequestPolicy,
 }
+
 impl Request {
     pub fn new(url: Url) -> Self {
         Self {
@@ -56,15 +59,18 @@ impl Request {
             policy: pipeline::RequestPolicy::default(),
         }
     }
+
     pub fn with_method(mut self, method: HttpMethod) -> Self {
         self.method = method;
         self
     }
+
     pub fn with_header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers
             .insert(name.into().to_ascii_lowercase(), value.into());
         self
     }
+
     pub fn with_body(mut self, body: impl Into<Vec<u8>>) -> Self {
         self.body = body.into();
         self
@@ -86,6 +92,7 @@ impl Request {
         }
         self
     }
+
     pub fn with_policy(mut self, policy: pipeline::RequestPolicy) -> Self {
         self.policy = policy;
         self
@@ -99,6 +106,7 @@ pub struct Response {
     pub body: Vec<u8>,
     pub content_type: Option<String>,
 }
+
 impl Response {
     pub fn new(status: u16) -> Self {
         Self {
@@ -108,6 +116,7 @@ impl Response {
             content_type: None,
         }
     }
+
     pub fn with_header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         let name = name.into().to_ascii_lowercase();
         let value = value.into();
@@ -117,6 +126,7 @@ impl Response {
         self.headers.insert(name, value);
         self
     }
+
     pub fn with_body(mut self, body: impl Into<Vec<u8>>) -> Self {
         self.body = body.into();
         self
@@ -128,6 +138,7 @@ impl Response {
             .map(String::as_str)
     }
 }
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransportError {
     UnsupportedScheme,
@@ -135,7 +146,10 @@ pub enum TransportError {
     ConnectionFailed,
     Timeout,
     TlsFailed,
+    InvalidResponse,
+    ResponseTooLarge,
 }
+
 pub trait Transport {
     fn send(&self, request: &Request) -> Result<Response, TransportError>;
 }
@@ -143,6 +157,7 @@ pub trait Transport {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn builds_http_request() {
         let request = Request::new(Url::parse("https://example.org/").unwrap())
@@ -156,6 +171,7 @@ mod tests {
         );
         assert_eq!(request.body, b"hello");
     }
+
     #[test]
     fn headers_are_case_insensitive() {
         let request = Request::new(Url::parse("https://example.org/").unwrap())
