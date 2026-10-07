@@ -4,6 +4,7 @@ use crate::{document::Page, layout::LayoutViewport};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DocumentLoadError {
     Network(TransportError),
+    HttpStatus(u16),
     UnsupportedContentType,
 }
 
@@ -35,6 +36,10 @@ where
             .pipeline
             .execute(&self.transport, request)
             .map_err(DocumentLoadError::Network)?;
+
+        if !(200..300).contains(&response.status) {
+            return Err(DocumentLoadError::HttpStatus(response.status));
+        }
 
         if !is_html_response(&response) {
             return Err(DocumentLoadError::UnsupportedContentType);
@@ -101,6 +106,19 @@ mod tests {
 
         assert_eq!(page.document.text_content(), "Hello");
         assert!(!page.display_list.commands().is_empty());
+    }
+
+    #[test]
+    fn rejects_unexpected_http_status() {
+        let response = Response::new(302).with_header("location", "https://example.org/next");
+        let loader =
+            DocumentLoader::new(NetworkPipeline::new(AllowAll), MockTransport { response });
+        let request = Request::new(Url::parse("https://example.org/").unwrap());
+
+        assert!(matches!(
+            loader.load(&request, LayoutViewport::new(320, 200)),
+            Err(DocumentLoadError::HttpStatus(302))
+        ));
     }
 
     #[test]
