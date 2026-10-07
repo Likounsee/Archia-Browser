@@ -181,7 +181,8 @@ mod tests {
         let root = parse(&tokens);
         assert_eq!(root.children.len(), 1);
         assert_eq!(root.children[0].tag_name(), Some("html"));
-        assert_eq!(root.children[0].children[0].tag_name(), Some("body"));
+        assert_eq!(root.children[0].children[0].tag_name(), Some("head"));
+        assert_eq!(root.children[0].children[1].tag_name(), Some("body"));
     }
 
     #[test]
