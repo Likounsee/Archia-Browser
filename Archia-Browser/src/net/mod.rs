@@ -138,6 +138,7 @@ pub enum TransportError {
     ConnectionFailed,
     Timeout,
     TlsFailed,
+    ResponseTooLarge,
 }
 pub trait Transport {
     fn send(&self, request: &Request) -> Result<Response, TransportError>;
