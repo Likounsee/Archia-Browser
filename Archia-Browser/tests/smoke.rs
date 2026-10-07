@@ -1,4 +1,11 @@
-use archia_browser::{css::{parse_declarations, CssTokenizer, StyleSheet}, html::{parse, HtmlTokenizer, NodeKind}, net::{filter::{FilterDecision, FilterRule, RequestFilter, ResourceType}, Url}};
+use archia_browser::{
+    css::{parse_declarations, CssTokenizer, StyleSheet},
+    html::{parse, HtmlTokenizer, NodeKind},
+    net::{
+        filter::{FilterDecision, FilterRule, RequestFilter, ResourceType},
+        Url,
+    },
+};
 
 #[test]
 fn browser_stack_foundations_work_together() {
@@ -11,7 +18,9 @@ fn browser_stack_foundations_work_together() {
 
     let html = HtmlTokenizer::tokenize(r#"<div id="app" class="card">Hello</div>"#);
     let document = parse(&html);
-    let NodeKind::Element { attributes, .. } = &document.children[0].kind else { panic!("expected element"); };
+    let NodeKind::Element { attributes, .. } = &document.children[0].kind else {
+        panic!("expected element");
+    };
     assert_eq!(attributes.get("id"), Some(&"app".to_string()));
 
     let sheet = StyleSheet::parse("#app { color: red; } .card { padding: 8px; }");
