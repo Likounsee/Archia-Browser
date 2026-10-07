@@ -76,7 +76,9 @@ impl Url {
                 .split_once("]:")
                 .and_then(|(_, port)| port.parse().ok());
         }
-        self.authority.rsplit_once(':').and_then(|(_, port)| port.parse().ok())
+        self.authority
+            .rsplit_once(':')
+            .and_then(|(_, port)| port.parse().ok())
     }
 
     pub fn effective_port(&self) -> Option<u16> {
@@ -151,7 +153,6 @@ mod tests {
         assert!(url.is_secure());
     }
 
-    #[test]
     #[test]
     fn parses_explicit_port() {
         let url = Url::parse("http://example.org:8080/").unwrap();
