@@ -112,7 +112,7 @@ impl SoftwareSurface {
             return;
         }
         let index = ((y * self.width() + x) * 4) as usize;
-        let source_alpha = color.3 as u16;
+        let source_alpha = color.3 as u64;
         if source_alpha == 255 {
             self.pixels[index..index + 4].copy_from_slice(&[color.0, color.1, color.2, color.3]);
             return;
@@ -121,16 +121,16 @@ impl SoftwareSurface {
             return;
         }
 
-        let destination_alpha = self.pixels[index + 3] as u16;
-        let inverse = 255 - source_alpha;
+        let destination_alpha = self.pixels[index + 3] as u64;
+        let inverse = 255_u64 - source_alpha;
         let output_alpha = source_alpha + destination_alpha * inverse / 255;
         if output_alpha == 0 {
             return;
         }
 
         for channel in 0..3 {
-            let source = [color.0, color.1, color.2][channel] as u16;
-            let destination = self.pixels[index + channel] as u16;
+            let source = [color.0, color.1, color.2][channel] as u64;
+            let destination = self.pixels[index + channel] as u64;
             let value = (source * source_alpha * 255 + destination * destination_alpha * inverse)
                 / (output_alpha * 255);
             self.pixels[index + channel] = value.min(255) as u8;
