@@ -51,15 +51,30 @@ impl StyleSheet {
     }
 
     pub fn compute_style_path(&self, path: &[&Node]) -> super::ComputedStyle {
-        let mut matched = self.matching_rules_path(path);
-        matched.sort_by_key(|(_, specificity)| *specificity);
-        let mut style = super::ComputedStyle::default();
-        for (rule, _) in matched {
-            for declaration in &rule.declarations {
-                style.set(declaration.name.to_ascii_lowercase(), declaration.value.clone());
+        let mut inherited = super::ComputedStyle::default();
+        for index in 0..path.len() {
+            let mut matched = self.matching_rules_path(&path[..=index]);
+            matched.sort_by_key(|(_, specificity)| *specificity);
+
+            let mut local = super::ComputedStyle::default();
+            for (rule, _) in matched {
+                for declaration in &rule.declarations {
+                    local.set(declaration.name.to_ascii_lowercase(), declaration.value.clone());
+                }
             }
+
+            let mut computed = super::ComputedStyle::default();
+            for (name, value) in inherited.iter() {
+                if is_inherited_property(name) {
+                    computed.set(name, value);
+                }
+            }
+            for (name, value) in local.iter() {
+                computed.set(name, value);
+            }
+            inherited = computed;
         }
-        style
+        inherited
     }
 }
 
@@ -79,4 +94,27 @@ mod tests {
         assert_eq!(style.get("color"), Some("blue"));
         assert_eq!(style.get("padding"), Some("4px"));
     }
+}
+
+
+fn is_inherited_property(name: &str) -> bool {
+    matches!(
+        name,
+        "color"
+            | "font"
+            | "font-family"
+            | "font-size"
+            | "font-style"
+            | "font-variant"
+            | "font-weight"
+            | "line-height"
+            | "letter-spacing"
+            | "word-spacing"
+            | "text-align"
+            | "text-indent"
+            | "text-transform"
+            | "visibility"
+            | "white-space"
+            | "cursor"
+    )
 }

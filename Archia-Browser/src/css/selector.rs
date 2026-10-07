@@ -166,7 +166,7 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
                 if i < chars.len() && chars[i] == '=' {
                     i += 1;
                     while i < chars.len() && chars[i].is_whitespace() { i += 1; }
-                    let quote = chars.get(i).copied().filter(|c| *c == ''' || *c == '"');
+                    let quote = chars.get(i).copied().filter(|c| *c == '\'' || *c == '"');
                     if quote.is_some() { i += 1; }
                     let start_value = i;
                     while i < chars.len() && chars[i] != ']' && quote.map_or(true, |q| chars[i] != q) { i += 1; }

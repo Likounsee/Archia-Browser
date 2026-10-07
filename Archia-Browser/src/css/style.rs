@@ -21,4 +21,8 @@ impl ComputedStyle {
     }
 
     pub fn len(&self) -> usize { self.properties.len() }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.properties.iter().map(|(name, value)| (name.as_str(), value.as_str()))
+    }
 }
