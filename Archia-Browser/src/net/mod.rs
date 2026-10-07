@@ -5,10 +5,12 @@ pub mod filter;
 pub mod loader;
 pub mod pipeline;
 pub mod pool;
+pub mod transport;
 pub mod url;
 
 pub use cookies::{Cookie, CookieJar};
 pub use loader::{DocumentLoadError, DocumentLoader};
+pub use transport::HttpTransport;
 pub use url::{Url, UrlError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
