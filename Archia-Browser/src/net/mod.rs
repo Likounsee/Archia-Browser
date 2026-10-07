@@ -159,5 +159,4 @@ mod tests {
         let response = Response::new(200).with_header("Content-Type", "text/html");
         assert_eq!(response.header("content-type"), Some("text/html"));
     }
-
 }
