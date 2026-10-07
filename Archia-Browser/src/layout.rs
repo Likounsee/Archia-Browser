@@ -270,7 +270,8 @@ fn box_model_from_style(style: &ComputedStyle) -> BoxModel {
             .unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
         border_left: parse_border_width(style.get("border-left-width"))
             .unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
-    }}
+    }
+}
 
 fn parse_border_width(value: Option<&str>) -> Option<u32> {
     parse_px(value)
