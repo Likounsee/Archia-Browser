@@ -129,6 +129,19 @@ impl RequestFilter {
     }
 }
 
+fn party_context(url: &str, first_party: Option<&crate::net::Url>) -> Option<PartyContext> {
+    let first_party = first_party?;
+    let requested = crate::net::Url::parse(url).ok()?;
+    let same_origin = requested.scheme() == first_party.scheme()
+        && requested.host().eq_ignore_ascii_case(first_party.host())
+        && requested.effective_port() == first_party.effective_port();
+    Some(if same_origin {
+        PartyContext::FirstParty
+    } else {
+        PartyContext::ThirdParty
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
