@@ -136,7 +136,10 @@ impl Url {
         let resolved_path = if path.starts_with('/') {
             normalize_path(path)
         } else {
-            let base = self.path.rsplit_once('/').map_or("/", |(directory, _)| directory);
+            let base = self
+                .path
+                .rsplit_once('/')
+                .map_or("/", |(directory, _)| directory);
             normalize_path(&format!("{base}/{path}"))
         };
 
@@ -149,7 +152,6 @@ impl Url {
         })
     }
 }
-
 
 fn normalize_path(path: &str) -> String {
     let mut segments = Vec::new();
@@ -250,7 +252,9 @@ mod tests {
             "https://example.org/docs/index.html?old=1#section"
         );
         assert_eq!(
-            base.resolve("//cdn.example.org/app.js").unwrap().to_string(),
+            base.resolve("//cdn.example.org/app.js")
+                .unwrap()
+                .to_string(),
             "https://cdn.example.org/app.js"
         );
     }
