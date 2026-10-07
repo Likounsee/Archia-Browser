@@ -29,7 +29,7 @@ impl HtmlTokenizer {
                     .map_or(input.len(), |offset| cursor + offset);
                 let text = &input[cursor..end];
                 if !text.is_empty() {
-                    tokens.push(HtmlToken::Text(text.to_owned()));
+                    tokens.push(HtmlToken::Text(decode_character_references(text)));
                 }
                 cursor = end;
                 continue;
@@ -42,6 +42,9 @@ impl HtmlTokenizer {
                     cursor = end + 3;
                     continue;
                 }
+
+                tokens.push(HtmlToken::Comment(input[cursor + 4..].to_owned()));
+                break;
             }
 
             let Some(offset) = find_tag_end(&input[cursor..]) else {
@@ -51,19 +54,31 @@ impl HtmlTokenizer {
             let end = cursor + offset;
             let inside = input[cursor + 1..end].trim();
 
-            if let Some(doctype) = inside
-                .strip_prefix("!DOCTYPE")
-                .or_else(|| inside.strip_prefix("!doctype"))
-            {
-                tokens.push(HtmlToken::Doctype(doctype.trim().to_owned()));
+            if inside.len() >= 9 && inside[..9].eq_ignore_ascii_case("!doctype") {
+                tokens.push(HtmlToken::Doctype(inside[9..].trim().to_owned()));
             } else if let Some(name) = inside.strip_prefix('/') {
                 tokens.push(HtmlToken::EndTag(name.trim().to_ascii_lowercase()));
             } else if let Some((name, attributes, self_closing)) = parse_start_tag(inside) {
+                let is_raw_text = matches!(name.as_str(), "script" | "style");
                 tokens.push(HtmlToken::StartTag {
-                    name,
+                    name: name.clone(),
                     attributes,
                     self_closing,
                 });
+
+                if is_raw_text && !self_closing {
+                    if let Some((text_end, close_end)) =
+                        find_raw_text_end(input, end + 1, &name)
+                    {
+                        if text_end > end + 1 {
+                            tokens.push(HtmlToken::Text(
+                                input[end + 1..text_end].to_owned(),
+                            ));
+                        }
+                        cursor = close_end;
+                        continue;
+                    }
+                }
             }
             cursor = end + 1;
         }
@@ -158,7 +173,7 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
                 }
             }
         }
-        attributes.insert(attr_name, value);
+        attributes.insert(attr_name, decode_character_references(&value));
     }
     Some((name, attributes, self_closing))
 }
@@ -207,5 +222,90 @@ mod tests {
         let tokens = HtmlTokenizer::tokenize("<!DOCTYPE html><!--x-->");
         assert_eq!(tokens[0], HtmlToken::Doctype("html".into()));
         assert_eq!(tokens[1], HtmlToken::Comment("x".into()));
+    }
+}
+
+fn find_raw_text_end(input: &str, start: usize, tag_name: &str) -> Option<(usize, usize)> {
+    let lower = input[start..].to_ascii_lowercase();
+    let marker = format!("</{tag_name}");
+    let relative = lower.find(&marker)?;
+    let text_end = start + relative;
+    let after_name = text_end + marker.len();
+    let close_end = input[after_name..]
+        .find('>')
+        .map(|offset| after_name + offset + 1)?;
+    Some((text_end, close_end))
+}
+
+fn decode_character_references(input: &str) -> String {
+    let mut output = String::with_capacity(input.len());
+    let mut cursor = 0;
+
+    while let Some(relative) = input[cursor..].find('&') {
+        let start = cursor + relative;
+        output.push_str(&input[cursor..start]);
+
+        let Some(end_relative) = input[start + 1..].find(';') else {
+            output.push_str(&input[start..]);
+            return output;
+        };
+        let end = start + 1 + end_relative;
+        let reference = &input[start + 1..end];
+
+        let decoded = match reference {
+            "amp" => Some('&'),
+            "lt" => Some('<'),
+            "gt" => Some('>'),
+            "quot" => Some('"'),
+            "apos" => Some('''),
+            _ if reference.starts_with("#x") || reference.starts_with("#X") => {
+                u32::from_str_radix(&reference[2..], 16)
+                    .ok()
+                    .and_then(char::from_u32)
+            }
+            _ if reference.starts_with('#') => reference[1..]
+                .parse::<u32>()
+                .ok()
+                .and_then(char::from_u32),
+            _ => None,
+        };
+
+        if let Some(character) = decoded {
+            output.push(character);
+            cursor = end + 1;
+        } else {
+            output.push_str(&input[start..=end]);
+            cursor = end + 1;
+        }
+    }
+
+    output.push_str(&input[cursor..]);
+    output
+}
+
+#[cfg(test)]
+mod character_reference_tests {
+    use super::*;
+
+    #[test]
+    fn decodes_basic_character_references() {
+        assert_eq!(
+            decode_character_references("&lt;div&gt; &amp; &#65; &#x1f600;"),
+            "<div> & A 😀"
+        );
+    }
+
+    #[test]
+    fn leaves_unknown_references_untouched() {
+        assert_eq!(decode_character_references("&unknown;"), "&unknown;");
+    }
+
+    #[test]
+    fn preserves_raw_script_text() {
+        let tokens = HtmlTokenizer::tokenize("<script>if (a < b) { c++; }</script>");
+        assert!(matches!(
+            tokens.get(1),
+            Some(HtmlToken::Text(value)) if value.contains("a < b")
+        ));
     }
 }
