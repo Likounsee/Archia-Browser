@@ -1,5 +1,6 @@
 use super::{pipeline::NetworkPipeline, HttpMethod, Request, Response, Transport, TransportError};
 use crate::{document::Page, layout::LayoutViewport};
+use std::sync::Mutex;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DocumentLoadError {
@@ -16,6 +17,7 @@ pub struct DocumentLoader<P, T> {
     pipeline: NetworkPipeline<P>,
     transport: T,
     max_redirects: usize,
+    cookies: Mutex<super::CookieJar>,
 }
 
 impl<P, T> DocumentLoader<P, T> {
@@ -24,6 +26,7 @@ impl<P, T> DocumentLoader<P, T> {
             pipeline,
             transport,
             max_redirects: MAX_REDIRECTS,
+            cookies: Mutex::new(super::CookieJar::new()),
         }
     }
 
@@ -43,13 +46,20 @@ where
         request: &Request,
         viewport: LayoutViewport,
     ) -> Result<Page, DocumentLoadError> {
-        let mut current = request.clone();
+        let mut current = request.clone().with_cookies(&self.cookies.lock().expect("cookie jar poisoned"));
 
         for redirect_count in 0..=self.max_redirects {
             let response = self
                 .pipeline
                 .execute(&self.transport, &current)
                 .map_err(DocumentLoadError::Network)?;
+
+            for set_cookie in response.set_cookie_headers() {
+                self.cookies
+                    .lock()
+                    .expect("cookie jar poisoned")
+                    .store(&current.url, set_cookie);
+            }
 
             if is_redirect(response.status) {
                 if redirect_count == self.max_redirects {
@@ -67,6 +77,10 @@ where
 
                 let mut next = current.clone();
                 next.url = url;
+                next.headers.remove("cookie");
+                if let Some(cookie) = self.cookies.lock().expect("cookie jar poisoned").header_for(&next.url) {
+                    next.headers.insert("cookie".into(), cookie);
+                }
 
                 if should_switch_to_get(current.method, response.status) {
                     next.method = HttpMethod::Get;
