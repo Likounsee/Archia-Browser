@@ -74,6 +74,7 @@ impl StyleSheet {
             matched.sort_by_key(|(_, specificity)| *specificity);
 
             let mut local = ComputedStyle::default();
+            apply_user_agent_defaults(&mut local, path[index]);
             for (rule, _) in matched {
                 for declaration in &rule.declarations {
                     apply_declaration(&mut local, declaration);
@@ -114,6 +115,17 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
         style.set_important(name, value);
     } else {
         style.set_if_unimportant(name, value);
+    }
+}
+
+fn apply_user_agent_defaults(style: &mut ComputedStyle, node: &Node) {
+    if let Some(name) = node.tag_name() {
+        if matches!(
+            name,
+            "base" | "head" | "link" | "meta" | "noscript" | "script" | "style" | "template" | "title"
+        ) {
+            style.set("display", "none");
+        }
     }
 }
 
@@ -194,6 +206,22 @@ mod tests {
         assert_eq!(style.get("color"), Some("blue"));
         assert_eq!(style.get("padding"), Some("8px"));
         assert!(style.is_important("padding"));
+    }
+
+    #[test]
+    fn user_agent_hides_non_rendered_elements() {
+        let sheet = StyleSheet::default();
+        let node = Node::element("style");
+        let style = sheet.compute_style(&node);
+        assert_eq!(style.get("display"), Some("none"));
+    }
+
+    #[test]
+    fn author_style_can_override_user_agent_default() {
+        let sheet = StyleSheet::parse("style { display: block; }");
+        let node = Node::element("style");
+        let style = sheet.compute_style(&node);
+        assert_eq!(style.get("display"), Some("block"));
     }
 
     #[test]
