@@ -116,9 +116,9 @@ mod tests {
             Request::new(super::super::Url::parse("https://ads.example/script.js").unwrap())
                 .with_method(HttpMethod::Get)
                 .with_policy(RequestPolicy {
-            resource_kind: ResourceKind::Script,
-            ..Default::default()
-        });
+                    resource_kind: ResourceKind::Script,
+                    ..Default::default()
+                });
 
         let transport = MockTransport;
         let pipeline = NetworkPipeline::new(FilterPolicy(filter));
