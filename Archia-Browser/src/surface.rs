@@ -6,6 +6,7 @@ pub struct Color(pub u8, pub u8, pub u8, pub u8);
 impl Color {
     pub const BLACK: Self = Self(0, 0, 0, 255);
     pub const WHITE: Self = Self(255, 255, 255, 255);
+    pub const RED: Self = Self(255, 0, 0, 255);
 
     pub fn parse(value: &str) -> Option<Self> {
         let value = value.trim().to_ascii_lowercase();
