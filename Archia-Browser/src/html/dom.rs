@@ -117,10 +117,10 @@ mod tests {
         let mut document = Node::document();
         let mut body = Node::element("body");
         body.append(Node::text("Hello"));
+        assert_eq!(body.tag_name(), Some("body"));
         document.append(body);
         assert_eq!(document.children.len(), 1);
         assert_eq!(document.children[0].children()[0].text_content(), "Hello");
-        assert_eq!(body.tag_name(), Some("body"));
     }
 
     #[test]
