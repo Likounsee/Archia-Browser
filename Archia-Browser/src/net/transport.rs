@@ -129,7 +129,7 @@ impl HttpTransport {
                     if header_end.is_none() {
                         header_end = bytes
                             .windows(4)
-                            .position(|window| window == b"\\r\\n\\r\\n")
+                            .position(|window| window == b"\r\n\r\n")
                             .map(|position| position + 4);
                         if header_end.is_none() && bytes.len() > self.max_header_size {
                             return Err(TransportError::ResponseTooLarge);
@@ -151,7 +151,6 @@ impl HttpTransport {
         }
         parse_http_response(&bytes, self.max_response_size, self.max_header_size)
     }
-}
 }
 
 impl Transport for HttpTransport {
@@ -319,6 +318,8 @@ mod tests {
     fn parses_content_length_response() {
         let response = parse_http_response(
             b"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 5\r\n\r\nHello",
+            1024,
+            1024,
         )
         .unwrap();
 
@@ -334,6 +335,8 @@ mod tests {
     fn decodes_chunked_response() {
         let response = parse_http_response(
             b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nHello\r\n0\r\n\r\n",
+            1024,
+            1024,
         )
         .unwrap();
 
@@ -342,7 +345,7 @@ mod tests {
 
     #[test]
     fn rejects_malformed_status() {
-        assert!(parse_http_response(b"not-http\r\n\r\nbody").is_err());
+        assert!(parse_http_response(b"not-http\r\n\r\nbody", 1024, 1024).is_err());
     }
 
     #[test]
@@ -386,7 +389,7 @@ mod limit_tests {
     #[test]
     fn rejects_oversized_content_length() {
         let result = parse_http_response(
-            b"HTTP/1.1 200 OK\\r\\nContent-Length: 5\\r\\n\\r\\nHello",
+            b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nHello",
             4,
             1024,
         );
@@ -396,7 +399,7 @@ mod limit_tests {
     #[test]
     fn rejects_oversized_chunked_body() {
         let result = parse_http_response(
-            b"HTTP/1.1 200 OK\\r\\nTransfer-Encoding: chunked\\r\\n\\r\\n5\\r\\nHello\\r\\n0\\r\\n\\r\\n",
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nHello\r\n0\r\n\r\n",
             4,
             1024,
         );
