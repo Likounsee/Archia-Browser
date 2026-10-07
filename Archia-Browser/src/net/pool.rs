@@ -6,7 +6,7 @@ pub trait Connection: Send + Sync {
     fn send(&self, request: &Request) -> Result<Response, TransportError>;
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct ConnectionPool {
     connections: Mutex<Vec<Arc<dyn Connection>>>,
 }

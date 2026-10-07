@@ -1,65 +1,38 @@
-use std::collections::VecDeque;
+use super::{Request, Response, ResourceKind, Transport, TransportError};
 
-use super::{Request, Response, Transport, TransportError};
-
-#[derive(Debug, Default)]
-pub struct MockTransport {
-    responses: VecDeque<Result<Response, TransportError>>,
-    requests: std::sync::Mutex<Vec<Request>>,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RequestPolicy {
+    pub priority: RequestPriority,
+    pub resource_kind: ResourceKind,
+    pub referrer: Option<super::Url>,
 }
 
-impl MockTransport {
-    pub fn push_response(&mut self, response: Result<Response, TransportError>) {
-        self.responses.push_back(response);
-    }
-
-    pub fn requests(&self) -> Vec<Request> {
-        self.requests.lock().expect("request log poisoned").clone()
-    }
-}
-
-impl Transport for MockTransport {
-    fn send(&self, request: &Request) -> Result<Response, TransportError> {
-        self.requests
-            .lock()
-            .expect("request log poisoned")
-            .push(request.clone());
-        Err(TransportError::ConnectionFailed)
+impl Default for RequestPolicy {
+    fn default() -> Self {
+        Self { priority: RequestPriority::Normal, resource_kind: ResourceKind::Other, referrer: None }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PolicyDecision {
-    Allow,
-    Block,
-}
+pub enum RequestPriority { High, Normal, Low }
 
-pub trait RequestPolicyEngine {
-    fn decide(&self, request: &Request) -> PolicyDecision;
-}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResourceKind { Document, Stylesheet, Script, Image, Font, Media, Fetch, Other }
 
-#[derive(Debug, Default)]
-pub struct NetworkPipeline<P> {
-    policy: P,
-}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PolicyDecision { Allow, Block }
 
-impl<P> NetworkPipeline<P>
-where
-    P: RequestPolicyEngine,
-{
-    pub fn new(policy: P) -> Self {
-        Self { policy }
-    }
+pub trait RequestPolicyEngine { fn decide(&self, request: &Request) -> PolicyDecision; }
 
-    pub fn execute<T: Transport>(
-        &self,
-        transport: &T,
-        request: &Request,
-    ) -> Result<Response, TransportError> {
+#[derive(Debug)]
+pub struct NetworkPipeline<P> { policy: P }
+
+impl<P: RequestPolicyEngine> NetworkPipeline<P> {
+    pub fn new(policy: P) -> Self { Self { policy } }
+    pub fn execute<T: Transport>(&self, transport: &T, request: &Request) -> Result<Response, TransportError> {
         if self.policy.decide(request) == PolicyDecision::Block {
             return Err(TransportError::ConnectionFailed);
         }
-
         transport.send(request)
     }
 }
@@ -67,43 +40,40 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::net::{
-        filter::{FilterDecision, RequestFilter, ResourceType},
-        Url,
-    };
+    use crate::net::{filter::{FilterDecision, FilterRule, RequestFilter, ResourceType}, HttpMethod};
 
     struct FilterPolicy(RequestFilter);
-
     impl RequestPolicyEngine for FilterPolicy {
         fn decide(&self, request: &Request) -> PolicyDecision {
-            match self.0.decide(
-                &request.url.to_string(),
-                Some(match request.policy.resource_kind {
-                    ResourceKind::Document => ResourceType::Document,
-                    ResourceKind::Stylesheet => ResourceType::Style,
-                    ResourceKind::Script => ResourceType::Script,
-                    ResourceKind::Image => ResourceType::Image,
-                    ResourceKind::Font => ResourceType::Font,
-                    ResourceKind::Media => ResourceType::Media,
-                    ResourceKind::Fetch => ResourceType::Xhr,
-                    ResourceKind::Other => ResourceType::Other,
-                }),
-            ) {
-                FilterDecision::Allow => PolicyDecision::Allow,
-                FilterDecision::Block => PolicyDecision::Block,
+            let kind = match request.policy.resource_kind {
+                ResourceKind::Document => ResourceType::Document, ResourceKind::Stylesheet => ResourceType::Style,
+                ResourceKind::Script => ResourceType::Script, ResourceKind::Image => ResourceType::Image,
+                ResourceKind::Font => ResourceType::Font, ResourceKind::Media => ResourceType::Media,
+                ResourceKind::Fetch => ResourceType::Xhr, ResourceKind::Other => ResourceType::Other,
+            };
+            match self.0.decide(&request.url.to_string(), Some(kind)) {
+                FilterDecision::Allow => PolicyDecision::Allow, FilterDecision::Block => PolicyDecision::Block,
             }
         }
     }
 
     #[test]
     fn pipeline_blocks_before_transport() {
-        let request = Request::new(Url::parse("https://ads.example/script.js").unwrap());
-        let mut transport = MockTransport::default();
-        transport.push_response(Ok(Response::new(200)));
+        let mut filter = RequestFilter::default();
+        filter.add_rule(FilterRule::block("ads.example").for_resource(ResourceType::Script));
+        let request = Request::new(super::super::Url::parse("https://ads.example/script.js").unwrap())
+            .with_method(HttpMethod::Get)
+            .with_policy(RequestPolicy { resource_kind: ResourceKind::Script, ..Default::default() });
+        let transport = crate::net::pipeline::MockTransport::default();
+        let pipeline = NetworkPipeline::new(FilterPolicy(filter));
+        assert!(matches!(pipeline.execute(&transport, &request), Err(TransportError::ConnectionFailed)));
+    }
 
-        let pipeline = NetworkPipeline::new(FilterPolicy(RequestFilter::default()));
-        let result = pipeline.execute(&transport, &request);
-
-        assert!(matches!(result, Err(TransportError::ConnectionFailed)));
+    #[derive(Debug, Default)]
+    struct MockTransport {
+        _marker: (),
+    }
+    impl Transport for MockTransport {
+        fn send(&self, _: &Request) -> Result<Response, TransportError> { Ok(Response::new(200)) }
     }
 }
