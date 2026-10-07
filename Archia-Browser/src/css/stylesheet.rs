@@ -143,7 +143,8 @@ fn normalize_declaration_value(value: &str) -> (String, bool) {
         .collect::<String>();
     let suffix = "!important";
 
-    if compact.len() >= suffix.len() && compact[compact.len() - suffix.len()..].eq_ignore_ascii_case(suffix)
+    if compact.len() >= suffix.len()
+        && compact[compact.len() - suffix.len()..].eq_ignore_ascii_case(suffix)
     {
         let bang = trimmed.rfind('!').unwrap_or(trimmed.len());
         (trimmed[..bang].trim_end().to_owned(), true)
