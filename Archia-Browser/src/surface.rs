@@ -107,6 +107,39 @@ impl SoftwareSurface {
         }
     }
 
+    pub fn blend_pixel(&mut self, x: u32, y: u32, color: Color) {
+        if x >= self.width() || y >= self.height() {
+            return;
+        }
+        let index = ((y * self.width() + x) * 4) as usize;
+        let source_alpha = color.3 as u16;
+        if source_alpha == 255 {
+            self.pixels[index..index + 4]
+                .copy_from_slice(&[color.0, color.1, color.2, color.3]);
+            return;
+        }
+        if source_alpha == 0 {
+            return;
+        }
+
+        let destination_alpha = self.pixels[index + 3] as u16;
+        let inverse = 255 - source_alpha;
+        let output_alpha = source_alpha + destination_alpha * inverse / 255;
+        if output_alpha == 0 {
+            return;
+        }
+
+        for channel in 0..3 {
+            let source = [color.0, color.1, color.2][channel] as u16;
+            let destination = self.pixels[index + channel] as u16;
+            let value = (source * source_alpha * 255
+                + destination * destination_alpha * inverse)
+                / (output_alpha * 255);
+            self.pixels[index + channel] = value.min(255) as u8;
+        }
+        self.pixels[index + 3] = output_alpha.min(255) as u8;
+    }
+
     pub fn fill_rect(&mut self, x: i32, y: i32, width: u32, height: u32, color: Color) {
         let x0 = x.max(0) as u32;
         let y0 = y.max(0) as u32;
@@ -119,9 +152,7 @@ impl SoftwareSurface {
 
         for py in y0..y1 {
             for px in x0..x1 {
-                let index = ((py * self.surface.width + px) * 4) as usize;
-                self.pixels[index..index + 4]
-                    .copy_from_slice(&[color.0, color.1, color.2, color.3]);
+                self.blend_pixel(px, py, color);
             }
         }
     }
@@ -149,6 +180,17 @@ mod tests {
         surface.fill_rect(1, 1, 2, 2, Color::RED);
         let offset = ((1 * 4 + 1) * 4) as usize;
         assert_eq!(&surface.pixels()[offset..offset + 4], &[255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn blends_transparent_pixels_source_over() {
+        let mut surface = SoftwareSurface::new(1, 1);
+        surface.clear(Color::WHITE);
+        surface.blend_pixel(0, 0, Color(255, 0, 0, 128));
+        let pixel = surface.pixel(0, 0).unwrap();
+        assert!(pixel.0 > 200);
+        assert!(pixel.1 > 100 && pixel.1 < 200);
+        assert_eq!(pixel.3, 255);
     }
 
     #[test]
