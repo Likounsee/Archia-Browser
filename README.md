@@ -101,15 +101,19 @@ Current milestone:
 - [x] Project created
 - [x] Project vision defined
 - [x] Homegrown engine requirement defined
-- [ ] Core project structure
-- [ ] HTML tokenizer
-- [ ] HTML parser
-- [ ] DOM
+- [x] Core project structure
+- [x] Core memory budget and RAII resource tracking
+- [x] Core event loop foundation
+- [x] HTML tokenizer (initial)
+- [x] HTML parser / tree builder (initial)
+- [x] DOM node model (initial)
 - [ ] CSS tokenizer/parser
 - [ ] Style system
 - [ ] Layout engine
 - [ ] Software renderer
-- [ ] Networking
+- [x] URL parsing and request primitives (initial)
+- [x] Native request filtering / ad-blocking foundation
+- [ ] Networking transport
 - [ ] JavaScript runtime
 - [ ] Browser UI
 - [ ] Security model
@@ -120,17 +124,21 @@ Current milestone:
 ## Roadmap
 
 ### Phase 1 — Foundation
-- Establish the project architecture.
-- Add the cross-platform build system.
-- Add GitHub Actions CI.
-- Define core data structures and error handling.
-- Create the first executable entry point.
+- [x] Establish the project architecture.
+- [x] Add the cross-platform build system.
+- [x] Add GitHub Actions CI.
+- [x] Define core data structures and error handling.
+- [x] Create the first executable entry point.
+- [x] Add the first memory-budget and resource-ownership layer.
+- [x] Add the first deterministic event-loop layer.
 
 ### Phase 2 — HTML and DOM
-- Implement HTML tokenization.
-- Implement tree construction.
-- Build the DOM.
-- Add document traversal and mutation APIs.
+- [x] Implement the first HTML tokenizer.
+- [x] Implement initial tree construction.
+- [x] Build the first DOM node model.
+- [ ] Add standards-compliant HTML parsing and error recovery.
+- [ ] Add document traversal and mutation APIs.
+- [ ] Add attributes, namespaces and text normalization.
 
 ### Phase 3 — CSS and style
 - Implement CSS tokenization.
@@ -146,10 +154,12 @@ Current milestone:
 - Add scrolling and basic viewport handling.
 
 ### Phase 5 — Web platform
-- Implement HTTP/HTTPS integration.
-- Add URLs, redirects, cookies and caching.
-- Add forms and navigation.
-- Start implementing browser security boundaries.
+- [x] Add structured URL parsing foundation.
+- [x] Add request filtering foundation for native ad/tracker blocking.
+- [ ] Implement HTTP/HTTPS integration.
+- [ ] Add redirects, cookies and caching.
+- [ ] Add forms and navigation.
+- [ ] Expand browser security boundaries.
 
 ### Phase 6 — JavaScript
 - Implement the JavaScript language/runtime progressively.
@@ -193,3 +203,12 @@ Contributions should preserve the project's independence, modularity, security a
 ## License
 
 License to be defined.
+
+## Current engineering priorities
+
+1. Complete the memory/resource model and reclaimable cache architecture.
+2. Build a real asynchronous network stack behind request policy.
+3. Expand HTML parsing toward standards-compliant tree construction.
+4. Build CSS tokens, parser, selectors and computed style.
+5. Keep ad/tracker blocking before transport so blocked resources are not downloaded when policy allows.
+6. Keep every subsystem independently testable through GitHub Actions.
