@@ -119,7 +119,7 @@ mod tests {
         body.append(Node::text("Hello"));
         document.append(body);
         assert_eq!(document.children.len(), 1);
-        assert_eq!(body.children()[0].text_content(), "Hello");
+        assert_eq!(document.children[0].children()[0].text_content(), "Hello");
         assert_eq!(body.tag_name(), Some("body"));
     }
 
