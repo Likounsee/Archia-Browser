@@ -70,6 +70,16 @@ impl Request {
         self
     }
 
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .get(&name.to_ascii_lowercase())
+            .map(String::as_str)
+    }
+
+    pub fn has_body(&self) -> bool {
+        !self.body.is_empty()
+    }
+
     pub fn with_cookies(mut self, jar: &CookieJar) -> Self {
         if let Some(value) = jar.header_for(&self.url) {
             self = self.with_header("cookie", value);
@@ -140,4 +150,14 @@ mod tests {
         );
         assert_eq!(request.body, b"hello");
     }
+    #[test]
+    fn headers_are_case_insensitive() {
+        let request = Request::new(Url::parse("https://example.org/").unwrap())
+            .with_header("Content-Type", "text/plain");
+        assert_eq!(request.header("CONTENT-TYPE"), Some("text/plain"));
+
+        let response = Response::new(200).with_header("Content-Type", "text/html");
+        assert_eq!(response.header("content-type"), Some("text/html"));
+    }
+
 }
