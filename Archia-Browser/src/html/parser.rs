@@ -12,8 +12,11 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 if let Some(parent) = stack.last_mut() { parent.append(node); }
                 else { root.append(node); }
             }
-            HtmlToken::StartTag { name, self_closing } => {
-                let node = Node::element(name.clone());
+            HtmlToken::StartTag { name, attributes, self_closing } => {
+                let mut node = Node::element(name.clone());
+                if let super::dom::NodeKind::Element { attributes: target, .. } = &mut node.kind {
+                    *target = attributes.clone();
+                }
                 if *self_closing {
                     if let Some(parent) = stack.last_mut() { parent.append(node); }
                     else { root.append(node); }
