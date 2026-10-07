@@ -1,6 +1,6 @@
 pub mod core;
-pub mod document;
 pub mod css;
+pub mod document;
 pub mod html;
 pub mod layout;
 pub mod net;

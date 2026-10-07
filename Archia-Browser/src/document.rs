@@ -13,11 +13,7 @@ pub struct Page {
 }
 
 impl Page {
-    pub fn from_html(
-        html: &str,
-        css: &str,
-        viewport: LayoutViewport,
-    ) -> Self {
+    pub fn from_html(html: &str, css: &str, viewport: LayoutViewport) -> Self {
         let tokens = HtmlTokenizer::tokenize(html);
         let document = parse(&tokens);
         let stylesheet = StyleSheet::parse(css);
@@ -33,10 +29,7 @@ impl Page {
         }
     }
 
-    pub fn render_into(
-        &self,
-        surface: &mut crate::surface::SoftwareSurface,
-    ) {
+    pub fn render_into(&self, surface: &mut crate::surface::SoftwareSurface) {
         SoftwareRenderer::rasterize(&self.display_list, surface);
     }
 }
