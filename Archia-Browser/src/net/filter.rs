@@ -74,10 +74,23 @@ impl RequestFilter {
     }
 
     pub fn decide(&self, url: &str, resource: Option<ResourceType>) -> FilterDecision {
-        self.rules
-            .iter()
-            .find(|rule| rule.matches(url, resource))
-            .map_or(FilterDecision::Allow, FilterRule::decision)
+        let mut blocked = false;
+
+        for rule in &self.rules {
+            if !rule.matches(url, resource) {
+                continue;
+            }
+            match rule.decision() {
+                FilterDecision::Allow => return FilterDecision::Allow,
+                FilterDecision::Block => blocked = true,
+            }
+        }
+
+        if blocked {
+            FilterDecision::Block
+        } else {
+            FilterDecision::Allow
+        }
     }
 }
 
@@ -96,6 +109,21 @@ mod tests {
         assert_eq!(
             filter.decide("https://example.org/app.js", Some(ResourceType::Script)),
             FilterDecision::Allow
+        );
+    }
+
+    #[test]
+    fn allow_rule_overrides_a_matching_block() {
+        let mut filter = RequestFilter::default();
+        filter.add_rule(FilterRule::block("ads.example"));
+        filter.add_rule(FilterRule::allow("ads.example/allowed"));
+        assert_eq!(
+            filter.decide("https://ads.example/allowed.js", Some(ResourceType::Script)),
+            FilterDecision::Allow
+        );
+        assert_eq!(
+            filter.decide("https://ads.example/banner.js", Some(ResourceType::Script)),
+            FilterDecision::Block
         );
     }
 
