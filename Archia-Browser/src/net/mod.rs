@@ -67,6 +67,10 @@ impl Request {
             .insert(name.into().to_ascii_lowercase(), value.into());
         self
     }
+    pub fn set_cookie_headers(&self) -> &[String] {
+        &self.set_cookies
+    }
+
     pub fn with_body(mut self, body: impl Into<Vec<u8>>) -> Self {
         self.body = body.into();
         self
@@ -100,6 +104,7 @@ pub struct Response {
     pub headers: BTreeMap<String, String>,
     pub body: Vec<u8>,
     pub content_type: Option<String>,
+    set_cookies: Vec<String>,
 }
 impl Response {
     pub fn new(status: u16) -> Self {
@@ -108,6 +113,7 @@ impl Response {
             headers: BTreeMap::new(),
             body: Vec::new(),
             content_type: None,
+            set_cookies: Vec::new(),
         }
     }
     pub fn with_header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
@@ -115,6 +121,9 @@ impl Response {
         let value = value.into();
         if name == "content-type" {
             self.content_type = Some(value.clone());
+        }
+        if name == "set-cookie" {
+            self.set_cookies.push(value.clone());
         }
         self.headers.insert(name, value);
         self
@@ -168,5 +177,19 @@ mod tests {
 
         let response = Response::new(200).with_header("Content-Type", "text/html");
         assert_eq!(response.header("content-type"), Some("text/html"));
+    }
+}
+
+#[cfg(test)]
+mod response_cookie_tests {
+    use super::*;
+
+    #[test]
+    fn preserves_multiple_set_cookie_headers() {
+        let response = Response::new(200)
+            .with_header("set-cookie", "a=1; Path=/")
+            .with_header("set-cookie", "b=2; Path=/");
+
+        assert_eq!(response.set_cookie_headers(), &["a=1; Path=/", "b=2; Path=/"]);
     }
 }
