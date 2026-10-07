@@ -64,7 +64,7 @@ mod tests {
         let request = Request::new(super::super::Url::parse("https://ads.example/script.js").unwrap())
             .with_method(HttpMethod::Get)
             .with_policy(RequestPolicy { resource_kind: ResourceKind::Script, ..Default::default() });
-        let transport = crate::net::pipeline::MockTransport::default();
+        let transport = MockTransport::default();
         let pipeline = NetworkPipeline::new(FilterPolicy(filter));
         assert!(matches!(pipeline.execute(&transport, &request), Err(TransportError::ConnectionFailed)));
     }
