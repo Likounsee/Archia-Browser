@@ -1,14 +1,36 @@
 use super::{dom::Node, tokenizer::HtmlToken};
 
 const VOID_ELEMENTS: &[&str] = &[
-    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param",
-    "source", "track", "wbr",
+    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source",
+    "track", "wbr",
 ];
 
 const BLOCK_CLOSES_P: &[&str] = &[
-    "address", "article", "aside", "blockquote", "div", "dl", "fieldset", "footer", "form",
-    "h1", "h2", "h3", "h4", "h5", "h6", "header", "hr", "menu", "nav", "ol", "p", "pre",
-    "section", "table", "ul",
+    "address",
+    "article",
+    "aside",
+    "blockquote",
+    "div",
+    "dl",
+    "fieldset",
+    "footer",
+    "form",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "header",
+    "hr",
+    "menu",
+    "nav",
+    "ol",
+    "p",
+    "pre",
+    "section",
+    "table",
+    "ul",
 ];
 
 pub fn parse(tokens: &[HtmlToken]) -> Node {
@@ -18,7 +40,9 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
     for token in tokens {
         match token {
             HtmlToken::Doctype(_) => {}
-            HtmlToken::Comment(comment) => append_node(&mut root, &mut stack, Node::comment(comment)),
+            HtmlToken::Comment(comment) => {
+                append_node(&mut root, &mut stack, Node::comment(comment));
+            }
             HtmlToken::Text(text) => {
                 if text.is_empty() {
                     continue;
@@ -79,10 +103,7 @@ fn is_block_closing_p(name: &str) -> bool {
 }
 
 fn close_element(root: &mut Node, stack: &mut Vec<Node>, name: &str) {
-    let Some(position) = stack
-        .iter()
-        .rposition(|node| node.tag_name() == Some(name))
-    else {
+    let Some(position) = stack.iter().rposition(|node| node.tag_name() == Some(name)) else {
         return;
     };
 
@@ -139,7 +160,11 @@ fn normalize_document_structure(mut root: Node) -> Node {
         html.children.insert(0, head);
     }
 
-    if !html.children.iter().any(|node| node.tag_name() == Some("body")) {
+    if !html
+        .children
+        .iter()
+        .any(|node| node.tag_name() == Some("body"))
+    {
         html.children.push(Node::element("body"));
     }
     root
