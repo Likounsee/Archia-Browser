@@ -224,10 +224,10 @@ mod tests {
         let loader =
             DocumentLoader::new(NetworkPipeline::new(AllowAll), MockTransport { response });
         let request = Request::new(Url::parse("https://example.org/").unwrap());
-        assert_eq!(
+        assert!(matches!(
             loader.load(&request, LayoutViewport::new(320, 200)),
             Err(DocumentLoadError::InvalidRedirect)
-        );
+        ));
     }
 
     #[test]
@@ -237,10 +237,10 @@ mod tests {
             DocumentLoader::new(NetworkPipeline::new(AllowAll), MockTransport { response })
                 .with_max_redirects(1);
         let request = Request::new(Url::parse("https://example.org/").unwrap());
-        assert_eq!(
+        assert!(matches!(
             loader.load(&request, LayoutViewport::new(320, 200)),
             Err(DocumentLoadError::RedirectLimitExceeded)
-        );
+        ));
     }
 
     #[test]
