@@ -93,13 +93,7 @@ impl SoftwareSurface {
         ))
     }
 
-    pub fn draw_text_placeholder(
-        &mut self,
-        x: i32,
-        y: i32,
-        text_len: u32,
-        color: Color,
-    ) {
+    pub fn draw_text_placeholder(&mut self, x: i32, y: i32, text_len: u32, color: Color) {
         let width = text_len.saturating_mul(6);
         if width == 0 {
             return;

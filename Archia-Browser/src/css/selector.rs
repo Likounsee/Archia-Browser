@@ -181,8 +181,9 @@ impl Selector {
             Combinator::Descendant => (0..node_index)
                 .rev()
                 .any(|ancestor| self.matches_at(selector_index - 1, ancestor, path)),
-            Combinator::AdjacentSibling => node_index > 0
-                && self.matches_at(selector_index - 1, node_index - 1, path),
+            Combinator::AdjacentSibling => {
+                node_index > 0 && self.matches_at(selector_index - 1, node_index - 1, path)
+            }
             Combinator::GeneralSibling => (0..node_index)
                 .rev()
                 .any(|sibling| self.matches_at(selector_index - 1, sibling, path)),
@@ -383,7 +384,6 @@ fn matches_simple(simple: &SimpleSelector, node: &Node) -> bool {
         }
     })
 }
-
 
 #[cfg(test)]
 mod sibling_tests {
