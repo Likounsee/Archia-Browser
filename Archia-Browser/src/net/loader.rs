@@ -1,4 +1,4 @@
-use super::{pipeline::NetworkPipeline, Request, Response, Transport, TransportError};
+use super::{pipeline::NetworkPipeline, HttpMethod, Request, Response, Transport, TransportError};
 use crate::{document::Page, layout::LayoutViewport};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -6,11 +6,16 @@ pub enum DocumentLoadError {
     Network(TransportError),
     HttpStatus(u16),
     UnsupportedContentType,
+    RedirectLimitExceeded,
+    InvalidRedirect,
 }
+
+const MAX_REDIRECTS: usize = 10;
 
 pub struct DocumentLoader<P, T> {
     pipeline: NetworkPipeline<P>,
     transport: T,
+    max_redirects: usize,
 }
 
 impl<P, T> DocumentLoader<P, T> {
@@ -18,7 +23,11 @@ impl<P, T> DocumentLoader<P, T> {
         Self {
             pipeline,
             transport,
+            max_redirects: MAX_REDIRECTS,
         }
+    pub const fn with_max_redirects(mut self, max_redirects: usize) -> Self {
+        self.max_redirects = max_redirects;
+        self
     }
 }
 
@@ -32,22 +41,64 @@ where
         request: &Request,
         viewport: LayoutViewport,
     ) -> Result<Page, DocumentLoadError> {
-        let response = self
-            .pipeline
-            .execute(&self.transport, request)
-            .map_err(DocumentLoadError::Network)?;
+        let mut current = request.clone();
 
-        if !(200..300).contains(&response.status) {
-            return Err(DocumentLoadError::HttpStatus(response.status));
+        for redirect_count in 0..=self.max_redirects {
+            let response = self
+                .pipeline
+                .execute(&self.transport, &current)
+                .map_err(DocumentLoadError::Network)?;
+
+            if is_redirect(response.status) {
+                if redirect_count == self.max_redirects {
+                    return Err(DocumentLoadError::RedirectLimitExceeded);
+                }
+
+                let location = response
+                    .header("location")
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or(DocumentLoadError::InvalidRedirect)?;
+                let url = current
+                    .url
+                    .resolve(location)
+                    .map_err(|_| DocumentLoadError::InvalidRedirect)?;
+
+                let mut next = current.clone();
+                next.url = url;
+
+                if should_switch_to_get(current.method, response.status) {
+                    next.method = HttpMethod::Get;
+                    next.body.clear();
+                    next.headers.remove("content-length");
+                    next.headers.remove("content-type");
+                }
+                current = next;
+                continue;
+            }
+
+            if !(200..300).contains(&response.status) {
+                return Err(DocumentLoadError::HttpStatus(response.status));
+            }
+
+            if !is_html_response(&response) {
+                return Err(DocumentLoadError::UnsupportedContentType);
+            }
+
+            let html = String::from_utf8_lossy(&response.body);
+            return Ok(Page::from_html(&html, "", viewport));
         }
 
-        if !is_html_response(&response) {
-            return Err(DocumentLoadError::UnsupportedContentType);
-        }
-
-        let html = String::from_utf8_lossy(&response.body);
-        Ok(Page::from_html(&html, "", viewport))
+        Err(DocumentLoadError::RedirectLimitExceeded)
     }
+}
+
+fn is_redirect(status: u16) -> bool {
+    matches!(status, 301 | 302 | 303 | 307 | 308)
+}
+
+fn should_switch_to_get(method: HttpMethod, status: u16) -> bool {
+    matches!(status, 301 | 302 | 303)
+        && !matches!(method, HttpMethod::Get | HttpMethod::Head)
 }
 
 fn is_html_response(response: &Response) -> bool {
@@ -63,6 +114,8 @@ fn is_html_response(response: &Response) -> bool {
 
     matches!(media_type, "text/html" | "application/xhtml+xml")
 }
+
+trait Pipe: Sized { fn pipe<T>(self, f: impl FnOnce(Self) -> T) -> T { f(self) } }
 
 #[cfg(test)]
 mod tests {
@@ -122,6 +175,64 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn follows_relative_redirects() {
+        let first = Response::new(302).with_header("location", "/next");
+        let final_response = Response::new(200)
+            .with_header("content-type", "text/html")
+            .with_body(b"<body>redirected</body>".to_vec());
+
+        #[derive(Debug)]
+        struct SequenceTransport {
+            responses: std::sync::Mutex<Vec<Response>>,
+        }
+
+        impl Transport for SequenceTransport {
+            fn send(&self, _: &Request) -> Result<Response, TransportError> {
+                self.responses
+                    .lock()
+                    .unwrap()
+                    .remove(0)
+                    .pipe(Ok)
+            }
+        }
+
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            SequenceTransport {
+                responses: std::sync::Mutex::new(vec![first, final_response]),
+            },
+        );
+        let request = Request::new(Url::parse("https://example.org/start").unwrap());
+        let page = loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .unwrap();
+        assert_eq!(page.document.text_content(), "redirected");
+    }
+
+    #[test]
+    fn rejects_redirect_without_location() {
+        let response = Response::new(302);
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), MockTransport { response });
+        let request = Request::new(Url::parse("https://example.org/").unwrap());
+        assert_eq!(
+            loader.load(&request, LayoutViewport::new(320, 200)),
+            Err(DocumentLoadError::InvalidRedirect)
+        );
+    }
+
+    #[test]
+    fn enforces_redirect_limit() {
+        let response = Response::new(302).with_header("location", "/loop");
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), MockTransport { response })
+            .with_max_redirects(1);
+        let request = Request::new(Url::parse("https://example.org/").unwrap());
+        assert_eq!(
+            loader.load(&request, LayoutViewport::new(320, 200)),
+            Err(DocumentLoadError::RedirectLimitExceeded)
+        );
+    }
+
     fn rejects_non_html_content() {
         let response = Response::new(200).with_header("content-type", "image/png");
         let loader =
