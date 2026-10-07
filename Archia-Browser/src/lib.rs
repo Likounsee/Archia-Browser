@@ -4,6 +4,7 @@ pub mod html;
 pub mod layout;
 pub mod net;
 pub mod platform;
+pub mod render;
 pub mod security;
 
 pub struct Browser {
