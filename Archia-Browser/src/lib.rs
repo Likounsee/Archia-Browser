@@ -1,6 +1,7 @@
 pub mod core;
 pub mod css;
 pub mod html;
+pub mod layout;
 pub mod net;
 pub mod platform;
 pub mod security;
@@ -18,10 +19,17 @@ impl Browser {
         }
     }
 
-    pub const fn version(&self) -> &'static str { self.version }
-    pub fn memory(&self) -> &core::memory::MemoryBudget { &self.memory }
+    pub const fn version(&self) -> &'static str {
+        self.version
+    }
+
+    pub fn memory(&self) -> &core::memory::MemoryBudget {
+        &self.memory
+    }
 }
 
 impl Default for Browser {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
