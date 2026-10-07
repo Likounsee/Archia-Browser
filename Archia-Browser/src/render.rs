@@ -13,7 +13,7 @@ pub enum PaintCommand {
     DrawText {
         x: i32,
         y: i32,
-        text_len: u32,
+        text: String,
         color: u32,
     },
 }
@@ -62,7 +62,15 @@ impl SoftwareRenderer {
                     );
                     surface.fill_rect(rect.x, rect.y, rect.width, rect.height, color);
                 }
-                PaintCommand::DrawText { .. } => {}
+                PaintCommand::DrawText { x, y, text, color } => {
+                    let color = Color(
+                        ((color >> 24) & 0xff) as u8,
+                        ((color >> 16) & 0xff) as u8,
+                        ((color >> 8) & 0xff) as u8,
+                        (color & 0xff) as u8,
+                    );
+                    draw_text(surface, x, y, &text, color);
+                }
             }
         }
     }
@@ -100,7 +108,7 @@ fn paint_styled_node(node: &StyledNode, layout: &LayoutNode, list: &mut DisplayL
         list.push(PaintCommand::DrawText {
             x: layout.rect.x,
             y: layout.rect.y,
-            text_len: text.chars().count() as u32,
+            text: text.clone(),
             color: parse_color(node.style.get("color").unwrap_or("black")).unwrap_or(0x000000ff),
         });
     }
@@ -142,18 +150,78 @@ fn paint_node(node: &Node, layout: &LayoutNode, style: &ComputedStyle, list: &mu
 }
 
 fn parse_color(value: &str) -> Option<u32> {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "black" => Some(0x000000ff),
-        "white" => Some(0xffffffff),
-        "red" => Some(0xff0000ff),
-        "green" => Some(0x008000ff),
-        "blue" => Some(0x0000ffff),
-        "transparent" => Some(0x00000000),
-        value if value.starts_with('#') && value.len() == 7 => {
-            let rgb = u32::from_str_radix(&value[1..], 16).ok()?;
-            Some((rgb << 8) | 0xff)
+    let color = Color::parse(value)?;
+    Some(
+        (u32::from(color.0) << 24)
+            | (u32::from(color.1) << 16)
+            | (u32::from(color.2) << 8)
+            | u32::from(color.3),
+    )
+}
+
+fn draw_text(surface: &mut SoftwareSurface, x: i32, y: i32, text: &str, color: Color) {
+    let mut pen_x = x;
+    let mut pen_y = y;
+    for ch in text.chars() {
+        if ch == '\n' {
+            pen_x = x;
+            pen_y += 8;
+            continue;
         }
-        _ => None,
+        let glyph = glyph(ch);
+        for (row, bits) in glyph.iter().enumerate() {
+            for col in 0..5 {
+                if bits & (1 << (4 - col)) != 0 {
+                    surface.fill_rect(pen_x + col, pen_y + row as i32, 1, 1, color);
+                }
+            }
+        }
+        pen_x += 6;
+    }
+}
+
+fn glyph(ch: char) -> [u8; 7] {
+    match ch.to_ascii_uppercase() {
+        'A' => [0x0e, 0x11, 0x11, 0x1f, 0x11, 0x11, 0x11],
+        'B' => [0x1e, 0x11, 0x11, 0x1e, 0x11, 0x11, 0x1e],
+        'C' => [0x0f, 0x10, 0x10, 0x10, 0x10, 0x10, 0x0f],
+        'D' => [0x1e, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1e],
+        'E' => [0x1f, 0x10, 0x10, 0x1e, 0x10, 0x10, 0x1f],
+        'F' => [0x1f, 0x10, 0x10, 0x1e, 0x10, 0x10, 0x10],
+        'G' => [0x0f, 0x10, 0x10, 0x17, 0x11, 0x11, 0x0f],
+        'H' => [0x11, 0x11, 0x11, 0x1f, 0x11, 0x11, 0x11],
+        'I' => [0x1f, 0x04, 0x04, 0x04, 0x04, 0x04, 0x1f],
+        'J' => [0x01, 0x01, 0x01, 0x01, 0x11, 0x11, 0x0e],
+        'K' => [0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11],
+        'L' => [0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1f],
+        'M' => [0x11, 0x1b, 0x15, 0x15, 0x11, 0x11, 0x11],
+        'N' => [0x11, 0x19, 0x15, 0x13, 0x11, 0x11, 0x11],
+        'O' => [0x0e, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0e],
+        'P' => [0x1e, 0x11, 0x11, 0x1e, 0x10, 0x10, 0x10],
+        'Q' => [0x0e, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0d],
+        'R' => [0x1e, 0x11, 0x11, 0x1e, 0x14, 0x12, 0x11],
+        'S' => [0x0f, 0x10, 0x10, 0x0e, 0x01, 0x01, 0x1e],
+        'T' => [0x1f, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04],
+        'U' => [0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0e],
+        'V' => [0x11, 0x11, 0x11, 0x11, 0x11, 0x0a, 0x04],
+        'W' => [0x11, 0x11, 0x11, 0x15, 0x15, 0x1b, 0x11],
+        'X' => [0x11, 0x11, 0x0a, 0x04, 0x0a, 0x11, 0x11],
+        'Y' => [0x11, 0x11, 0x0a, 0x04, 0x04, 0x04, 0x04],
+        'Z' => [0x1f, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1f],
+        '0' => [0x0e, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0e],
+        '1' => [0x04, 0x0c, 0x04, 0x04, 0x04, 0x04, 0x0e],
+        '2' => [0x0e, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1f],
+        '3' => [0x1e, 0x01, 0x01, 0x0e, 0x01, 0x01, 0x1e],
+        '4' => [0x02, 0x06, 0x0a, 0x12, 0x1f, 0x02, 0x02],
+        '5' => [0x1f, 0x10, 0x10, 0x1e, 0x01, 0x01, 0x1e],
+        '6' => [0x0e, 0x10, 0x10, 0x1e, 0x11, 0x11, 0x0e],
+        '7' => [0x1f, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08],
+        '8' => [0x0e, 0x11, 0x11, 0x0e, 0x11, 0x11, 0x0e],
+        '9' => [0x0e, 0x11, 0x11, 0x0f, 0x01, 0x01, 0x0e],
+        ' ' => [0; 7],
+        '.' => [0, 0, 0, 0, 0, 0, 4],
+        '!' => [4, 4, 4, 4, 4, 0, 4],
+        _ => [0x1f, 0x11, 0x0a, 0x04, 0x0a, 0x11, 0x1f],
     }
 }
 
@@ -178,7 +246,7 @@ mod tests {
         assert!(matches!(list.commands()[0], PaintCommand::FillRect { .. }));
         assert!(matches!(
             list.commands()[1],
-            PaintCommand::DrawText { text_len: 5, .. }
+            PaintCommand::DrawText { text, .. } if text == "Hello"
         ));
     }
 
