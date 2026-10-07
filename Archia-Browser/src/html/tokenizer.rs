@@ -54,8 +54,8 @@ impl HtmlTokenizer {
             let end = cursor + offset;
             let inside = input[cursor + 1..end].trim();
 
-            if inside.len() >= 9 && inside[..9].eq_ignore_ascii_case("!doctype") {
-                tokens.push(HtmlToken::Doctype(inside[9..].trim().to_owned()));
+            if inside.len() >= 8 && inside[..8].eq_ignore_ascii_case("!doctype") {
+                tokens.push(HtmlToken::Doctype(inside[8..].trim().to_owned()));
             } else if let Some(name) = inside.strip_prefix('/') {
                 tokens.push(HtmlToken::EndTag(name.trim().to_ascii_lowercase()));
             } else if let Some((name, attributes, self_closing)) = parse_start_tag(inside) {
