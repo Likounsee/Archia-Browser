@@ -29,13 +29,17 @@ impl StyleSheet {
     }
 
     pub fn matching_rules<'a>(&'a self, node: &Node) -> Vec<(&'a StyleRule, Specificity)> {
+        self.matching_rules_path(&[node])
+    }
+
+    pub fn matching_rules_path<'a>(&'a self, path: &[&Node]) -> Vec<(&'a StyleRule, Specificity)> {
         let mut matches = Vec::new();
+        let Some(node) = path.last() else { return matches; };
         for rule in &self.rules {
-            if let Some(specificity) = rule.selectors.iter()
-                .filter(|selector| selector.matches(node))
-                .map(Selector::specificity)
-                .max()
-            {
+            let matching = rule.selectors.iter().filter(|selector| {
+                if selector.parts.len() == 1 { selector.matches(node) } else { selector.matches_path(path) }
+            });
+            if let Some(specificity) = matching.map(Selector::specificity).max() {
                 matches.push((rule, specificity));
             }
         }
@@ -43,7 +47,11 @@ impl StyleSheet {
     }
 
     pub fn compute_style(&self, node: &Node) -> super::ComputedStyle {
-        let mut matched = self.matching_rules(node);
+        self.compute_style_path(&[node])
+    }
+
+    pub fn compute_style_path(&self, path: &[&Node]) -> super::ComputedStyle {
+        let mut matched = self.matching_rules_path(path);
         matched.sort_by_key(|(_, specificity)| *specificity);
         let mut style = super::ComputedStyle::default();
         for (rule, _) in matched {
