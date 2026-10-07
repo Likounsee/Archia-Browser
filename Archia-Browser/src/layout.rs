@@ -107,6 +107,13 @@ impl LayoutViewport {
 pub struct LayoutEngine;
 
 impl LayoutEngine {
+    pub fn layout_styled(
+        root: &crate::style_tree::StyledNode,
+        viewport: LayoutViewport,
+    ) -> LayoutNode {
+        layout_styled_node(root, 0, 0, viewport.width, viewport.height)
+    }
+
     pub fn layout(root: &Node, viewport: LayoutViewport, style: &ComputedStyle) -> LayoutNode {
         let display = Display::from_style(style);
         let mut output = LayoutNode::new(display);
@@ -119,6 +126,144 @@ impl LayoutEngine {
         layout_children(root, &mut output, viewport.width);
         output
     }
+}
+
+fn layout_styled_node(
+    node: &crate::style_tree::StyledNode,
+    x: i32,
+    y: i32,
+    containing_width: u32,
+    viewport_height: u32,
+) -> LayoutNode {
+    let display = Display::from_style(&node.style);
+    let mut output = LayoutNode::new(display);
+    if display == Display::None {
+        return output;
+    }
+
+    let box_model = box_model_from_style(&node.style);
+    let margin_x = box_model.margin_left.saturating_add(box_model.margin_right);
+    let padding_border_x = box_model.padding_left
+        .saturating_add(box_model.padding_right)
+        .saturating_add(box_model.border_left)
+        .saturating_add(box_model.border_right);
+    let content_width = parse_px(node.style.get("width"))
+        .unwrap_or_else(|| containing_width.saturating_sub(margin_x).saturating_sub(padding_border_x));
+
+    output.box_model = box_model;
+    output.rect.x = x.saturating_add(box_model.margin_left as i32);
+    output.rect.y = y.saturating_add(box_model.margin_top as i32);
+    output.rect.width = content_width;
+
+    let explicit_height = parse_px(node.style.get("height"));
+    let mut cursor_y = 0_i32;
+    let mut inline_x = 0_u32;
+    let mut inline_line_height = 0_u32;
+
+    for child in &node.children {
+        let child_display = Display::from_style(&child.style);
+        if child_display == Display::None {
+            continue;
+        }
+
+        if child_display == Display::Inline {
+            let width = intrinsic_inline_width(child);
+            let line_height = intrinsic_inline_height(child).max(16);
+            if inline_x > 0 && inline_x.saturating_add(width) > content_width {
+                cursor_y = cursor_y.saturating_add(inline_line_height as i32);
+                inline_x = 0;
+                inline_line_height = 0;
+            }
+            let child_layout = layout_styled_node(
+                child,
+                inline_x as i32,
+                cursor_y,
+                content_width.saturating_sub(inline_x),
+                viewport_height,
+            );
+            inline_x = inline_x.saturating_add(child_layout.rect.width);
+            inline_line_height = inline_line_height.max(line_height);
+            output.children.push(child_layout);
+        } else {
+            if inline_x > 0 {
+                cursor_y = cursor_y.saturating_add(inline_line_height as i32);
+                inline_x = 0;
+                inline_line_height = 0;
+            }
+            let child_layout = layout_styled_node(
+                child,
+                0,
+                cursor_y,
+                content_width,
+                viewport_height,
+            );
+            cursor_y = cursor_y.saturating_add(
+                child_layout
+                    .rect
+                    .height
+                    .saturating_add(child_layout.box_model.vertical_outer()) as i32,
+            );
+            output.children.push(child_layout);
+        }
+    }
+
+    if inline_x > 0 {
+        cursor_y = cursor_y.saturating_add(inline_line_height as i32);
+    }
+
+    let content_height = explicit_height.unwrap_or(cursor_y.max(0) as u32);
+    output.rect.height = content_height
+        .saturating_add(box_model.padding_top)
+        .saturating_add(box_model.padding_bottom)
+        .saturating_add(box_model.border_top)
+        .saturating_add(box_model.border_bottom)
+        .min(viewport_height.max(content_height));
+    output
+}
+
+fn intrinsic_inline_width(node: &crate::style_tree::StyledNode) -> u32 {
+    match &node.node.kind {
+        NodeKind::Text(text) => text.chars().count().min(u32::MAX as usize) as u32 * 8,
+        _ => node
+            .children
+            .iter()
+            .map(intrinsic_inline_width)
+            .fold(0, u32::saturating_add)
+            .max(parse_px(node.style.get("width")).unwrap_or(0)),
+    }
+}
+
+fn intrinsic_inline_height(node: &crate::style_tree::StyledNode) -> u32 {
+    match &node.node.kind {
+        NodeKind::Text(text) => text.split('\n').count().max(1) as u32 * 16,
+        _ => node.children.iter().map(intrinsic_inline_height).max().unwrap_or(16),
+    }
+}
+
+fn box_model_from_style(style: &ComputedStyle) -> BoxModel {
+    BoxModel {
+        margin_top: parse_px(style.get("margin-top")).unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
+        margin_right: parse_px(style.get("margin-right")).unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
+        margin_bottom: parse_px(style.get("margin-bottom")).unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
+        margin_left: parse_px(style.get("margin-left")).unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
+        padding_top: parse_px(style.get("padding-top")).unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
+        padding_right: parse_px(style.get("padding-right")).unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
+        padding_bottom: parse_px(style.get("padding-bottom")).unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
+        padding_left: parse_px(style.get("padding-left")).unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
+        border_top: parse_border_width(style.get("border-top-width")).unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
+        border_right: parse_border_width(style.get("border-right-width")).unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
+        border_bottom: parse_border_width(style.get("border-bottom-width")).unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
+        border_left: parse_border_width(style.get("border-left-width")).unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
+    }
+}
+
+fn parse_border_width(value: Option<&str>) -> Option<u32> {
+    parse_px(value)
+}
+
+fn parse_px(value: Option<&str>) -> Option<u32> {
+    let value = value?.trim();
+    value.strip_suffix("px")?.trim().parse().ok()
 }
 
 fn layout_children(node: &Node, output: &mut LayoutNode, containing_width: u32) {
