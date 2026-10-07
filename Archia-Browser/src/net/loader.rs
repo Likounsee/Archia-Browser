@@ -46,7 +46,9 @@ where
         request: &Request,
         viewport: LayoutViewport,
     ) -> Result<Page, DocumentLoadError> {
-        let mut current = request.clone().with_cookies(&self.cookies.lock().expect("cookie jar poisoned"));
+        let mut current = request
+            .clone()
+            .with_cookies(&self.cookies.lock().expect("cookie jar poisoned"));
 
         for redirect_count in 0..=self.max_redirects {
             let response = self
@@ -78,7 +80,12 @@ where
                 let mut next = current.clone();
                 next.url = url;
                 next.headers.remove("cookie");
-                if let Some(cookie) = self.cookies.lock().expect("cookie jar poisoned").header_for(&next.url) {
+                if let Some(cookie) = self
+                    .cookies
+                    .lock()
+                    .expect("cookie jar poisoned")
+                    .header_for(&next.url)
+                {
                     next.headers.insert("cookie".into(), cookie);
                 }
 
