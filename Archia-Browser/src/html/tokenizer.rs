@@ -257,7 +257,7 @@ fn decode_character_references(input: &str) -> String {
             "lt" => Some('<'),
             "gt" => Some('>'),
             "quot" => Some('"'),
-            "apos" => Some('''),
+            "apos" => Some('\''),
             _ if reference.starts_with("#x") || reference.starts_with("#X") => {
                 u32::from_str_radix(&reference[2..], 16)
                     .ok()
