@@ -183,7 +183,7 @@ mod tests {
 
     #[test]
     fn rejects_unexpected_http_status() {
-        let response = Response::new(302).with_header("location", "https://example.org/next");
+        let response = Response::new(500);
         let loader =
             DocumentLoader::new(NetworkPipeline::new(AllowAll), MockTransport { response });
         let request = Request::new(Url::parse("https://example.org/").unwrap());
