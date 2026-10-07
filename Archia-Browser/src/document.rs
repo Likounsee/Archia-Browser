@@ -84,14 +84,10 @@ mod tests {
         );
 
         assert_eq!(page.styled.children[1].style.get("color"), Some("red"));
-        assert!(page
-            .display_list
-            .commands()
-            .iter()
-            .all(|command| !matches!(
-                command,
-                crate::render::PaintCommand::DrawText { text, .. } if text == ".hero { color: red; }"
-            )));
+        assert!(page.display_list.commands().iter().all(|command| !matches!(
+            command,
+            crate::render::PaintCommand::DrawText { text, .. } if text == ".hero { color: red; }"
+        )));
     }
 
     #[test]

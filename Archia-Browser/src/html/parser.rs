@@ -68,10 +68,6 @@ fn append_node(root: &mut Node, stack: &mut Vec<Node>, node: Node) {
 }
 
 fn close_optional_elements(root: &mut Node, stack: &mut Vec<Node>, incoming: &str) {
-    if !is_optional_end_tag(incoming) {
-        return;
-    }
-
     let should_close = stack.last().and_then(|node| node.tag_name());
     if should_close.is_some_and(|name| optional_end_tag_conflicts(name, incoming)) {
         if let Some(node) = stack.pop() {
@@ -82,7 +78,7 @@ fn close_optional_elements(root: &mut Node, stack: &mut Vec<Node>, incoming: &st
 
 fn optional_end_tag_conflicts(open: &str, incoming: &str) -> bool {
     match incoming {
-        "p" => open == "p" || is_p_closing_block(open),
+        "p" => open == "p",
 
         "li" => open == "li",
         "dt" | "dd" => matches!(open, "dt" | "dd"),
@@ -90,6 +86,7 @@ fn optional_end_tag_conflicts(open: &str, incoming: &str) -> bool {
         "th" | "td" => matches!(open, "th" | "td"),
         "option" => open == "option",
         "thead" | "tbody" | "tfoot" => matches!(open, "thead" | "tbody" | "tfoot"),
+        _ if is_p_closing_block(incoming) => open == "p",
         _ => false,
     }
 }
