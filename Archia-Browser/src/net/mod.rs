@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+pub mod cookies;
 pub mod filter;
 pub mod pipeline;
 pub mod pool;
