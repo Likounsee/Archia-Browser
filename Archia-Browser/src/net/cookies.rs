@@ -67,11 +67,18 @@ impl CookieJar {
         let host = url.host().to_ascii_lowercase();
         let path = url.path();
         let secure = url.is_secure();
-        let values = self.cookies.iter().filter(|cookie| {
-            let domain_matches = host == cookie.domain || host.ends_with(&format!(".{}", cookie.domain));
-            let path_matches = path == cookie.path || path.starts_with(&(cookie.path.trim_end_matches('/').to_owned() + "/"));
-            domain_matches && path_matches && (!cookie.secure || secure)
-        }).map(|cookie| format!("{}={}", cookie.name, cookie.value)).collect::<Vec<_>>();
+        let values = self
+            .cookies
+            .iter()
+            .filter(|cookie| {
+                let domain_matches =
+                    host == cookie.domain || host.ends_with(&format!(".{}", cookie.domain));
+                let path_matches = path == cookie.path
+                    || path.starts_with(&(cookie.path.trim_end_matches('/').to_owned() + "/"));
+                domain_matches && path_matches && (!cookie.secure || secure)
+            })
+            .map(|cookie| format!("{}={}", cookie.name, cookie.value))
+            .collect::<Vec<_>>();
         (!values.is_empty()).then(|| values.join("; "))
     }
 
@@ -94,8 +101,14 @@ mod tests {
         let mut jar = CookieJar::new();
         jar.store(&url, "sid=abc; Path=/account; Secure");
         assert_eq!(jar.header_for(&url).as_deref(), Some("sid=abc"));
-        assert_eq!(jar.header_for(&Url::parse("https://example.org/other").unwrap()), None);
-        assert_eq!(jar.header_for(&Url::parse("http://example.org/account").unwrap()), None);
+        assert_eq!(
+            jar.header_for(&Url::parse("https://example.org/other").unwrap()),
+            None
+        );
+        assert_eq!(
+            jar.header_for(&Url::parse("http://example.org/account").unwrap()),
+            None
+        );
     }
 
     #[test]
