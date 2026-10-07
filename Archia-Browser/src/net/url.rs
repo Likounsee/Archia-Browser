@@ -165,6 +165,14 @@ mod tests {
     }
 
     #[test]
+    fn parses_userinfo_and_ipv6_authority() {
+        let url = Url::parse("https://user:pass@[2001:db8::1]:9443/").unwrap();
+        assert_eq!(url.host(), "2001:db8::1");
+        assert_eq!(url.port(), Some(9443));
+        assert!(url.is_secure());
+    }
+
+    #[test]
     fn defaults_empty_path() {
         assert_eq!(
             Url::parse("https://example.org").unwrap().to_string(),
