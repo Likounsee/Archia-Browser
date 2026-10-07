@@ -7,11 +7,19 @@ pub enum Platform {
 
 pub fn current() -> Platform {
     #[cfg(target_os = "windows")]
-    { Platform::Windows }
+    {
+        Platform::Windows
+    }
     #[cfg(target_os = "linux")]
-    { Platform::Linux }
+    {
+        Platform::Linux
+    }
     #[cfg(target_os = "archiaos")]
-    { Platform::ArchiaOs }
+    {
+        Platform::ArchiaOs
+    }
     #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "archiaos")))]
-    { Platform::Linux }
+    {
+        Platform::Linux
+    }
 }

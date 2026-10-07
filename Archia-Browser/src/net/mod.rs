@@ -9,7 +9,9 @@ pub struct Request {
 }
 
 impl Request {
-    pub fn new(url: Url) -> Self { Self { url } }
+    pub fn new(url: Url) -> Self {
+        Self { url }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,6 +22,9 @@ pub struct Response {
 
 impl Response {
     pub const fn new(status: u16) -> Self {
-        Self { status, content_type: None }
+        Self {
+            status,
+            content_type: None,
+        }
     }
 }

@@ -10,18 +10,31 @@ pub struct Origin {
 impl Origin {
     pub fn from_url(url: &Url) -> Self {
         let authority = url.authority();
-        let (host, port) = authority.rsplit_once(':')
+        let (host, port) = authority
+            .rsplit_once(':')
             .and_then(|(host, port)| port.parse::<u16>().ok().map(|port| (host, Some(port))))
             .unwrap_or((authority, None));
-        Self { scheme: url.scheme().to_ascii_lowercase(), host: host.to_ascii_lowercase(), port }
+        Self {
+            scheme: url.scheme().to_ascii_lowercase(),
+            host: host.to_ascii_lowercase(),
+            port,
+        }
     }
 
-    pub fn scheme(&self) -> &str { &self.scheme }
-    pub fn host(&self) -> &str { &self.host }
-    pub fn port(&self) -> Option<u16> { self.port }
+    pub fn scheme(&self) -> &str {
+        &self.scheme
+    }
+    pub fn host(&self) -> &str {
+        &self.host
+    }
+    pub fn port(&self) -> Option<u16> {
+        self.port
+    }
 
     pub fn same_origin(&self, other: &Self) -> bool {
-        self.scheme == other.scheme && self.host == other.host && self.effective_port() == other.effective_port()
+        self.scheme == other.scheme
+            && self.host == other.host
+            && self.effective_port() == other.effective_port()
     }
 
     fn effective_port(&self) -> u16 {
