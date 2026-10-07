@@ -167,6 +167,7 @@ fn layout_styled_node(
     for child in &node.children {
         let child_display = Display::from_style(&child.style);
         if child_display == Display::None {
+            output.children.push(LayoutNode::new(Display::None));
             continue;
         }
 
