@@ -93,10 +93,11 @@ impl StyleSheet {
                 }
             }
             for (name, value) in local.iter() {
+                let resolved = resolve_css_wide_value(name, value, &inherited);
                 if local.is_important(name) {
-                    computed.set_important(name, value);
+                    computed.set_important(name, resolved);
                 } else {
-                    computed.set(name, value);
+                    computed.set(name, resolved);
                 }
             }
             inherited = computed;
@@ -110,11 +111,97 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
     let (value, important) = normalize_declaration_value(&declaration.value);
     let name = declaration.name.to_ascii_lowercase();
 
-    if important {
-        style.set_important(name, value);
-    } else {
-        style.set_if_unimportant(name, value);
+    let mut apply = |property: String, property_value: String| {
+        if important {
+            style.set_important(property, property_value);
+        } else {
+            style.set_if_unimportant(property, property_value);
+        }
+    };
+
+    match name.as_str() {
+        "margin" | "padding" => {
+            if let Some(values) = expand_box_shorthand(&name, &value) {
+                let prefix = name.as_str();
+                for (property, property_value) in [
+                    (format!("{prefix}-top"), values[0].clone()),
+                    (format!("{prefix}-right"), values[1].clone()),
+                    (format!("{prefix}-bottom"), values[2].clone()),
+                    (format!("{prefix}-left"), values[3].clone()),
+                ] {
+                    apply(property, property_value);
+                }
+                return;
+            }
+        }
+        _ => {}
     }
+
+    apply(name, value);
+}
+
+fn resolve_css_wide_value(name: &str, value: &str, inherited: &ComputedStyle) -> String {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "inherit" => inherited
+            .get(name)
+            .map(str::to_owned)
+            .unwrap_or_else(|| initial_value(name).to_owned()),
+        "initial" => initial_value(name).to_owned(),
+        "unset" => {
+            if is_inherited_property(name) {
+                inherited
+                    .get(name)
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| initial_value(name).to_owned())
+            } else {
+                initial_value(name).to_owned()
+            }
+        }
+        _ => value.to_owned(),
+    }
+}
+
+fn initial_value(name: &str) -> &'static str {
+    match name {
+        "display" => "inline",
+        "color" => "black",
+        "background-color" => "transparent",
+        "width" | "height" => "auto",
+        "margin-top" | "margin-right" | "margin-bottom" | "margin-left" => "0",
+        "padding-top" | "padding-right" | "padding-bottom" | "padding-left" => "0",
+        "border-width" | "border-top-width" | "border-right-width" | "border-bottom-width"
+        | "border-left-width" => "0",
+        "font-size" => "16px",
+        "font-style" => "normal",
+        "font-weight" => "normal",
+        "line-height" => "normal",
+        "text-align" => "start",
+        "visibility" => "visible",
+        _ => "initial",
+    }
+}
+
+fn expand_box_shorthand(name: &str, value: &str) -> Option<[String; 4]> {
+    let values = value
+        .split_whitespace()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    if values.is_empty() || values.len() > 4 {
+        return None;
+    }
+    let expanded = match values.len() {
+        1 => [values[0].clone(), values[0].clone(), values[0].clone(), values[0].clone()],
+        2 => [values[0].clone(), values[1].clone(), values[0].clone(), values[1].clone()],
+        3 => [values[0].clone(), values[1].clone(), values[2].clone(), values[1].clone()],
+        4 => [
+            values[0].clone(),
+            values[1].clone(),
+            values[2].clone(),
+            values[3].clone(),
+        ],
+        _ => return None,
+    };
+    Some(expanded)
 }
 
 fn is_inherited_property(name: &str) -> bool {
@@ -194,6 +281,38 @@ mod tests {
         assert_eq!(style.get("color"), Some("blue"));
         assert_eq!(style.get("padding"), Some("8px"));
         assert!(style.is_important("padding"));
+    }
+
+    #[test]
+    #[test]
+    fn css_wide_values_resolve_against_inheritance_and_initials() {
+        let sheet = StyleSheet::parse(
+            "body { color: green; margin: 10px; } span { color: inherit; margin: initial; padding: unset; }",
+        );
+        let body = Node::element("body");
+        let span = Node::element("span");
+        let path = [&body, &span];
+
+        let style = sheet.compute_style_path(&path);
+        assert_eq!(style.get("color"), Some("green"));
+        assert_eq!(style.get("margin-top"), Some("0"));
+        assert_eq!(style.get("padding-top"), Some("0"));
+    }
+
+    #[test]
+    fn expands_box_shorthands() {
+        let sheet = StyleSheet::parse("div { margin: 1px 2px 3px 4px; padding: 5px 6px; }");
+        let node = Node::element("div");
+        let style = sheet.compute_style(&node);
+
+        assert_eq!(style.get("margin-top"), Some("1px"));
+        assert_eq!(style.get("margin-right"), Some("2px"));
+        assert_eq!(style.get("margin-bottom"), Some("3px"));
+        assert_eq!(style.get("margin-left"), Some("4px"));
+        assert_eq!(style.get("padding-top"), Some("5px"));
+        assert_eq!(style.get("padding-right"), Some("6px"));
+        assert_eq!(style.get("padding-bottom"), Some("5px"));
+        assert_eq!(style.get("padding-left"), Some("6px"));
     }
 
     #[test]
