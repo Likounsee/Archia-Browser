@@ -17,9 +17,31 @@ impl Color {
             "green" => Some(Self(0, 128, 0, 255)),
             "blue" => Some(Self(0, 0, 255, 255)),
             "transparent" => Some(Self(0, 0, 0, 0)),
-            value if value.len() == 7 && value.starts_with('#') => {
+            value if value.starts_with('#') && value.len() == 4 => {
+                let digits = value.as_bytes();
+                let expand = |digit: u8| -> Option<u8> {
+                    let hex = char::from(digit).to_digit(16)? as u8;
+                    Some(hex * 17)
+                };
+                Some(Self(
+                    expand(digits[1])?,
+                    expand(digits[2])?,
+                    expand(digits[3])?,
+                    255,
+                ))
+            }
+            value if value.starts_with('#') && value.len() == 7 => {
                 let rgb = u32::from_str_radix(&value[1..], 16).ok()?;
                 Some(Self((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8, 255))
+            }
+            value if value.starts_with('#') && value.len() == 9 => {
+                let rgba = u32::from_str_radix(&value[1..], 16).ok()?;
+                Some(Self(
+                    (rgba >> 24) as u8,
+                    (rgba >> 16) as u8,
+                    (rgba >> 8) as u8,
+                    rgba as u8,
+                ))
             }
             _ => None,
         }
@@ -178,6 +200,12 @@ mod tests {
         surface.fill_rect(1, 1, 2, 2, Color::RED);
         let offset = ((1 * 4 + 1) * 4) as usize;
         assert_eq!(&surface.pixels()[offset..offset + 4], &[255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn parses_short_and_alpha_hex_colors() {
+        assert_eq!(Color::parse("#abc"), Some(Color(170, 187, 204, 255)));
+        assert_eq!(Color::parse("#10203080"), Some(Color(16, 32, 48, 128)));
     }
 
     #[test]
