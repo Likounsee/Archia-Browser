@@ -52,7 +52,7 @@ impl SoftwareRenderer {
 
     pub fn rasterize(list: &DisplayList, surface: &mut SoftwareSurface) {
         for command in list.commands() {
-            match *command {
+            match command {
                 PaintCommand::FillRect { rect, color } => {
                     let color = Color(
                         ((color >> 24) & 0xff) as u8,
@@ -139,7 +139,7 @@ fn paint_node(node: &Node, layout: &LayoutNode, style: &ComputedStyle, list: &mu
         list.push(PaintCommand::DrawText {
             x: layout.rect.x,
             y: layout.rect.y,
-            text_len: text.chars().count() as u32,
+            text: text.clone(),
             color: parse_color(style.get("color").unwrap_or("black")).unwrap_or(0x000000ff),
         });
     }
@@ -245,7 +245,7 @@ mod tests {
         assert!(list.len() >= 2);
         assert!(matches!(list.commands()[0], PaintCommand::FillRect { .. }));
         assert!(matches!(
-            list.commands()[1],
+            &list.commands()[1],
             PaintCommand::DrawText { text, .. } if text == "Hello"
         ));
     }
