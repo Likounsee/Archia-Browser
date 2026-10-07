@@ -14,7 +14,11 @@ pub struct MemoryPressureState {
 }
 
 impl MemoryPressureState {
-    pub const fn new() -> Self { Self { level: AtomicU8::new(MemoryPressure::Normal as u8) } }
+    pub const fn new() -> Self {
+        Self {
+            level: AtomicU8::new(MemoryPressure::Normal as u8),
+        }
+    }
 
     pub fn set(&self, pressure: MemoryPressure) {
         self.level.store(pressure as u8, Ordering::Release);

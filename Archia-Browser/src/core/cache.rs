@@ -16,12 +16,18 @@ pub struct ResourceCache<T> {
 
 impl<T> ResourceCache<T> {
     pub fn new(capacity: usize) -> Self {
-        Self { capacity, used: 0, entries: VecDeque::new() }
+        Self {
+            capacity,
+            used: 0,
+            entries: VecDeque::new(),
+        }
     }
 
     pub fn insert(&mut self, key: impl Into<String>, value: T, bytes: usize) {
         while self.used.saturating_add(bytes) > self.capacity {
-            let Some(oldest) = self.entries.pop_front() else { break };
+            let Some(oldest) = self.entries.pop_front() else {
+                break;
+            };
             self.used = self.used.saturating_sub(oldest.bytes);
         }
 
@@ -30,15 +36,26 @@ impl<T> ResourceCache<T> {
         }
 
         self.used += bytes;
-        self.entries.push_back(CacheEntry { key: key.into(), value, bytes });
+        self.entries.push_back(CacheEntry {
+            key: key.into(),
+            value,
+            bytes,
+        });
     }
 
     pub fn get(&mut self, key: &str) -> Option<&T> {
-        self.entries.iter().find(|entry| entry.key == key).map(|entry| &entry.value)
+        self.entries
+            .iter()
+            .find(|entry| entry.key == key)
+            .map(|entry| &entry.value)
     }
 
-    pub fn used(&self) -> usize { self.used }
-    pub fn len(&self) -> usize { self.entries.len() }
+    pub fn used(&self) -> usize {
+        self.used
+    }
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
 
     pub fn clear(&mut self) {
         self.entries.clear();

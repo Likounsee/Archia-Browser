@@ -8,7 +8,9 @@ pub struct EventLoop {
 }
 
 impl EventLoop {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     pub fn spawn<F>(&mut self, task: F)
     where
@@ -17,10 +19,14 @@ impl EventLoop {
         self.queue.push_back(Box::new(task));
     }
 
-    pub fn pending(&self) -> usize { self.queue.len() }
+    pub fn pending(&self) -> usize {
+        self.queue.len()
+    }
 
     pub fn run_one(&mut self) -> bool {
-        let Some(task) = self.queue.pop_front() else { return false };
+        let Some(task) = self.queue.pop_front() else {
+            return false;
+        };
         task();
         true
     }

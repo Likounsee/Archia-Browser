@@ -6,8 +6,12 @@ use super::memory::{MemoryBudget, MemoryReservation};
 pub struct ResourceId(u64);
 
 impl ResourceId {
-    pub const fn new(value: u64) -> Self { Self(value) }
-    pub const fn value(self) -> u64 { self.0 }
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+    pub const fn value(self) -> u64 {
+        self.0
+    }
 }
 
 #[derive(Debug)]
@@ -17,8 +21,12 @@ pub struct Resource {
 }
 
 impl Resource {
-    pub fn id(&self) -> ResourceId { self.id }
-    pub fn bytes(&self) -> usize { self.reservation.bytes() }
+    pub fn id(&self) -> ResourceId {
+        self.id
+    }
+    pub fn bytes(&self) -> usize {
+        self.reservation.bytes()
+    }
 }
 
 #[derive(Debug)]
@@ -29,7 +37,10 @@ pub struct ResourceManager {
 
 impl ResourceManager {
     pub fn new(limit: usize) -> Self {
-        Self { budget: Arc::new(MemoryBudget::new(limit)), next_id: 1 }
+        Self {
+            budget: Arc::new(MemoryBudget::new(limit)),
+            next_id: 1,
+        }
     }
 
     pub fn allocate(&mut self, bytes: usize) -> Option<Resource> {
@@ -39,7 +50,9 @@ impl ResourceManager {
         Some(Resource { id, reservation })
     }
 
-    pub fn memory(&self) -> &MemoryBudget { &self.budget }
+    pub fn memory(&self) -> &MemoryBudget {
+        &self.budget
+    }
 }
 
 #[cfg(test)]
