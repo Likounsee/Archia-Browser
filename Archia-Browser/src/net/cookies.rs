@@ -49,7 +49,14 @@ impl CookieJar {
             match key.as_str() {
                 "domain" => {
                     if let Some(value) = pieces.next() {
-                        cookie.domain = value.trim().trim_start_matches('.').to_ascii_lowercase();
+                        let domain = value.trim().trim_start_matches('.').to_ascii_lowercase();
+                        let host = url.host().to_ascii_lowercase();
+                        if domain.is_empty()
+                            || !(host == domain || host.ends_with(&format!(".{domain}")))
+                        {
+                            return;
+                        }
+                        cookie.domain = domain;
                     }
                 }
                 "path" => {
@@ -119,6 +126,23 @@ mod tests {
             jar.header_for(&Url::parse("http://example.org/account").unwrap()),
             None
         );
+    }
+
+    #[test]
+    #[test]
+    fn rejects_unrelated_cookie_domains() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&url, "sid=abc; Domain=evil.example");
+        assert!(jar.is_empty());
+    }
+
+    #[test]
+    fn accepts_parent_cookie_domains() {
+        let url = Url::parse("https://sub.example.org/").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&url, "sid=abc; Domain=example.org");
+        assert_eq!(jar.header_for(&url).as_deref(), Some("sid=abc"));
     }
 
     #[test]
