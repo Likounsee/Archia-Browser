@@ -23,7 +23,9 @@ impl CookieJar {
         let mut parts = set_cookie.split(';').map(str::trim);
         let Some(pair) = parts.next() else { return };
         let Some((name, value)) = pair.split_once('=') else { return };
-        if name.trim().is_empty() { return; }
+        if name.trim().is_empty() {
+            return;
+        }
 
         let mut cookie = Cookie {
             name: name.trim().to_owned(),
@@ -35,7 +37,11 @@ impl CookieJar {
 
         for attribute in parts {
             let mut pieces = attribute.splitn(2, '=');
-            let key = pieces.next().unwrap_or_default().trim().to_ascii_lowercase();
+            let key = pieces
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase();
             match key.as_str() {
                 "domain" => {
                     if let Some(value) = pieces.next() {

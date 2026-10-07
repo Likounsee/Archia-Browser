@@ -6,8 +6,8 @@ pub mod pipeline;
 pub mod pool;
 pub mod url;
 
-pub use url::{Url, UrlError};
 pub use cookies::{Cookie, CookieJar};
+pub use url::{Url, UrlError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HttpMethod {
