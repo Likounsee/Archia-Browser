@@ -92,6 +92,20 @@ impl Node {
         }
     }
 
+    pub fn has_attribute(&self, name: &str) -> bool {
+        match &self.kind {
+            NodeKind::Element { attributes, .. } => attributes.contains_key(&name.to_ascii_lowercase()),
+            _ => false,
+        }
+    }
+
+    pub fn attributes(&self) -> Option<&BTreeMap<String, String>> {
+        match &self.kind {
+            NodeKind::Element { attributes, .. } => Some(attributes),
+            _ => None,
+        }
+    }
+
     pub fn text_content(&self) -> String {
         let mut output = String::new();
         self.append_text_content(&mut output);
