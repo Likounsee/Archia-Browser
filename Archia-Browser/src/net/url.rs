@@ -149,6 +149,20 @@ mod tests {
     }
 
     #[test]
+    fn exposes_transport_authority() {
+        let url = Url::parse("https://user:pass@example.org:8443/").unwrap();
+        assert_eq!(url.host(), "example.org");
+        assert_eq!(url.port(), Some(8443));
+        assert_eq!(url.effective_port(), 8443);
+        assert!(url.is_secure());
+
+        let http = Url::parse("http://example.org/").unwrap();
+        assert_eq!(http.port(), None);
+        assert_eq!(http.effective_port(), 80);
+        assert!(!http.is_secure());
+    }
+
+    #[test]
     fn defaults_empty_path() {
         assert_eq!(
             Url::parse("https://example.org").unwrap().to_string(),
