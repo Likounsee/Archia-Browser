@@ -42,7 +42,11 @@ impl DisplayList {
 pub struct SoftwareRenderer;
 
 impl SoftwareRenderer {
-    pub fn build_display_list(root: &Node, layout: &LayoutNode, style: &ComputedStyle) -> DisplayList {
+    pub fn build_display_list(
+        root: &Node,
+        layout: &LayoutNode,
+        style: &ComputedStyle,
+    ) -> DisplayList {
         let mut list = DisplayList::new();
         paint_node(root, layout, style, &mut list);
         list
@@ -54,7 +58,10 @@ fn paint_node(node: &Node, layout: &LayoutNode, style: &ComputedStyle, list: &mu
         return;
     }
 
-    if let Some(background) = style.get("background-color").or_else(|| style.get("background")) {
+    if let Some(background) = style
+        .get("background-color")
+        .or_else(|| style.get("background"))
+    {
         if let Some(color) = parse_color(background) {
             list.push(PaintCommand::FillRect {
                 rect: layout.rect,
@@ -112,7 +119,10 @@ mod tests {
 
         assert_eq!(list.len(), 2);
         assert!(matches!(list.commands()[0], PaintCommand::FillRect { .. }));
-        assert!(matches!(list.commands()[1], PaintCommand::DrawText { text_len: 5, .. }));
+        assert!(matches!(
+            list.commands()[1],
+            PaintCommand::DrawText { text_len: 5, .. }
+        ));
     }
 
     #[test]
