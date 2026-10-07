@@ -154,8 +154,14 @@ mod tests {
 
     #[test]
     fn rejects_non_alpha_scheme_start() {
-        assert_eq!(Url::parse("1http://example.org").unwrap_err(), UrlError::InvalidScheme);
-        assert_eq!(Url::parse("http+custom://example.org").unwrap().scheme(), "http+custom");
+        assert_eq!(
+            Url::parse("1http://example.org").unwrap_err(),
+            UrlError::InvalidScheme
+        );
+        assert_eq!(
+            Url::parse("http+custom://example.org").unwrap().scheme(),
+            "http+custom"
+        );
     }
 
     #[test]
