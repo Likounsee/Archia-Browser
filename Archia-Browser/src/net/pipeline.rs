@@ -76,7 +76,19 @@ mod tests {
 
     impl RequestPolicyEngine for FilterPolicy {
         fn decide(&self, request: &Request) -> PolicyDecision {
-            match self.0.decide(&request.url.to_string(), Some(match request.policy.resource_kind { ResourceKind::Document => ResourceType::Document, ResourceKind::Stylesheet => ResourceType::Style, ResourceKind::Script => ResourceType::Script, ResourceKind::Image => ResourceType::Image, ResourceKind::Font => ResourceType::Font, ResourceKind::Media => ResourceType::Media, ResourceKind::Fetch => ResourceType::Xhr, ResourceKind::Other => ResourceType::Other })) {
+            match self.0.decide(
+                &request.url.to_string(),
+                Some(match request.policy.resource_kind {
+                    ResourceKind::Document => ResourceType::Document,
+                    ResourceKind::Stylesheet => ResourceType::Style,
+                    ResourceKind::Script => ResourceType::Script,
+                    ResourceKind::Image => ResourceType::Image,
+                    ResourceKind::Font => ResourceType::Font,
+                    ResourceKind::Media => ResourceType::Media,
+                    ResourceKind::Fetch => ResourceType::Xhr,
+                    ResourceKind::Other => ResourceType::Other,
+                }),
+            ) {
                 FilterDecision::Allow => PolicyDecision::Allow,
                 FilterDecision::Block => PolicyDecision::Block,
             }
