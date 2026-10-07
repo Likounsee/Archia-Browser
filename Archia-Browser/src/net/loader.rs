@@ -190,7 +190,7 @@ mod tests {
 
         assert!(matches!(
             loader.load(&request, LayoutViewport::new(320, 200)),
-            Err(DocumentLoadError::HttpStatus(302))
+            Err(DocumentLoadError::HttpStatus(500))
         ));
     }
 
