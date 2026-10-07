@@ -25,6 +25,8 @@ impl<P, T> DocumentLoader<P, T> {
             transport,
             max_redirects: MAX_REDIRECTS,
         }
+    }
+
     pub const fn with_max_redirects(mut self, max_redirects: usize) -> Self {
         self.max_redirects = max_redirects;
         self
