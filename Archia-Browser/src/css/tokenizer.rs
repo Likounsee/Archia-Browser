@@ -43,18 +43,24 @@ impl CssTokenizer {
                     let quote = ch;
                     let mut value = String::new();
                     while let Some(next) = chars.next() {
-                        if next == quote { break; }
+                        if next == quote {
+                            break;
+                        }
                         value.push(next);
                     }
                     tokens.push(CssToken::String(value));
                 }
-                c if c.is_ascii_digit() || c == '.' && chars.peek().is_some_and(|n| n.is_ascii_digit()) => {
+                c if c.is_ascii_digit()
+                    || c == '.' && chars.peek().is_some_and(|n| n.is_ascii_digit()) =>
+                {
                     let mut value = String::from(c);
                     while let Some(next) = chars.peek().copied() {
                         if next.is_ascii_digit() || next == '.' || next == '-' {
                             value.push(next);
                             chars.next();
-                        } else { break; }
+                        } else {
+                            break;
+                        }
                     }
                     tokens.push(CssToken::Number(value));
                 }
@@ -81,7 +87,9 @@ fn consume_ident(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String
         if next == '_' || next == '-' || next.is_ascii_alphanumeric() || !next.is_ascii() {
             value.push(next);
             chars.next();
-        } else { break; }
+        } else {
+            break;
+        }
     }
     value
 }
@@ -93,12 +101,15 @@ mod tests {
     #[test]
     fn tokenizes_declaration() {
         let tokens = CssTokenizer::tokenize("color: #fff;");
-        assert_eq!(tokens, vec![
-            CssToken::Ident("color".into()),
-            CssToken::Colon,
-            CssToken::Whitespace,
-            CssToken::Hash("fff".into()),
-            CssToken::Semicolon,
-        ]);
+        assert_eq!(
+            tokens,
+            vec![
+                CssToken::Ident("color".into()),
+                CssToken::Colon,
+                CssToken::Whitespace,
+                CssToken::Hash("fff".into()),
+                CssToken::Semicolon,
+            ]
+        );
     }
 }

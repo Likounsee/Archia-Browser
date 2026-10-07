@@ -9,7 +9,11 @@ pub struct Specificity {
 
 impl Specificity {
     pub const fn new(ids: u32, classes: u32, types: u32) -> Self {
-        Self { ids, classes, types }
+        Self {
+            ids,
+            classes,
+            types,
+        }
     }
 }
 
@@ -118,7 +122,9 @@ impl Selector {
                     '\'' | '"' if bracket > 0 => quote = Some(c),
                     '[' => bracket += 1,
                     ']' if bracket > 0 => bracket -= 1,
-                    c if bracket == 0 && (c.is_whitespace() || matches!(c, '>' | '+' | '~')) => break,
+                    c if bracket == 0 && (c.is_whitespace() || matches!(c, '>' | '+' | '~')) => {
+                        break
+                    }
                     _ => {}
                 }
                 i += 1;
@@ -236,7 +242,10 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
                 if start == i {
                     return None;
                 }
-                let name: String = chars[start..i].iter().collect::<String>().to_ascii_lowercase();
+                let name: String = chars[start..i]
+                    .iter()
+                    .collect::<String>()
+                    .to_ascii_lowercase();
 
                 while i < chars.len() && chars[i].is_whitespace() {
                     i += 1;
@@ -272,10 +281,7 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
                         i += 1;
                     }
 
-                    let quote = chars
-                        .get(i)
-                        .copied()
-                        .filter(|c| *c == '\'' || *c == '"');
+                    let quote = chars.get(i).copied().filter(|c| *c == '\'' || *c == '"');
                     if quote.is_some() {
                         i += 1;
                     }
@@ -406,9 +412,15 @@ mod tests {
         let leaf = Node::element("span");
         let path = [&root, &child, &leaf];
 
-        assert!(Selector::parse("section .card span").unwrap().matches_path(&path));
-        assert!(Selector::parse("section > div").unwrap().matches_path(&path[..2]));
-        assert!(!Selector::parse("section > span").unwrap().matches_path(&path));
+        assert!(Selector::parse("section .card span")
+            .unwrap()
+            .matches_path(&path));
+        assert!(Selector::parse("section > div")
+            .unwrap()
+            .matches_path(&path[..2]));
+        assert!(!Selector::parse("section > span")
+            .unwrap()
+            .matches_path(&path));
     }
 
     #[test]
@@ -424,7 +436,11 @@ mod tests {
         ];
 
         for (source, expected) in cases {
-            assert_eq!(Selector::parse(source).unwrap().matches(&node()), expected, "{source}");
+            assert_eq!(
+                Selector::parse(source).unwrap().matches(&node()),
+                expected,
+                "{source}"
+            );
         }
     }
 

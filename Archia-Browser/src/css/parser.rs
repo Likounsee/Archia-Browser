@@ -1,12 +1,15 @@
-use super::tokenizer::CssToken;
 use super::style::Property;
+use super::tokenizer::CssToken;
 
 pub fn parse_declarations(tokens: &[CssToken]) -> Vec<Property> {
     let mut properties = Vec::new();
     let mut index = 0;
 
     while index < tokens.len() {
-        while matches!(tokens.get(index), Some(CssToken::Whitespace | CssToken::Semicolon)) {
+        while matches!(
+            tokens.get(index),
+            Some(CssToken::Whitespace | CssToken::Semicolon)
+        ) {
             index += 1;
         }
 
@@ -17,17 +20,26 @@ pub fn parse_declarations(tokens: &[CssToken]) -> Vec<Property> {
         let name = name.clone();
         index += 1;
 
-        while matches!(tokens.get(index), Some(CssToken::Whitespace)) { index += 1; }
-        if !matches!(tokens.get(index), Some(CssToken::Colon)) { continue; }
+        while matches!(tokens.get(index), Some(CssToken::Whitespace)) {
+            index += 1;
+        }
+        if !matches!(tokens.get(index), Some(CssToken::Colon)) {
+            continue;
+        }
         index += 1;
 
         let mut value = String::new();
         while index < tokens.len() && !matches!(tokens.get(index), Some(CssToken::Semicolon)) {
             match &tokens[index] {
                 CssToken::Whitespace => {
-                    if !value.ends_with(' ') { value.push(' '); }
+                    if !value.ends_with(' ') {
+                        value.push(' ');
+                    }
                 }
-                CssToken::Ident(v) | CssToken::Hash(v) | CssToken::Number(v) | CssToken::String(v) => value.push_str(v),
+                CssToken::Ident(v)
+                | CssToken::Hash(v)
+                | CssToken::Number(v)
+                | CssToken::String(v) => value.push_str(v),
                 CssToken::Delim(c) => value.push(*c),
                 CssToken::Colon => value.push(':'),
                 CssToken::LeftParen => value.push('('),
@@ -37,8 +49,13 @@ pub fn parse_declarations(tokens: &[CssToken]) -> Vec<Property> {
             index += 1;
         }
 
-        properties.push(Property { name, value: value.trim().to_owned() });
-        if matches!(tokens.get(index), Some(CssToken::Semicolon)) { index += 1; }
+        properties.push(Property {
+            name,
+            value: value.trim().to_owned(),
+        });
+        if matches!(tokens.get(index), Some(CssToken::Semicolon)) {
+            index += 1;
+        }
     }
 
     properties

@@ -81,9 +81,7 @@ impl StyleSheet {
             }
 
             if let Some(inline_style) = path[index].attribute("style") {
-                for declaration in
-                    parse_declarations(&CssTokenizer::tokenize(inline_style))
-                {
+                for declaration in parse_declarations(&CssTokenizer::tokenize(inline_style)) {
                     apply_declaration(&mut local, &declaration);
                 }
             }
@@ -141,8 +139,7 @@ fn normalize_declaration_value(value: &str) -> (String, bool) {
     let trimmed = value.trim();
     let suffix = "!important";
     if trimmed.len() >= suffix.len()
-        && trimmed[trimmed.len() - suffix.len()..]
-            .eq_ignore_ascii_case(suffix)
+        && trimmed[trimmed.len() - suffix.len()..].eq_ignore_ascii_case(suffix)
     {
         (
             trimmed[..trimmed.len() - suffix.len()]
@@ -161,8 +158,7 @@ mod tests {
 
     #[test]
     fn parses_rules_and_applies_cascade_order() {
-        let sheet =
-            StyleSheet::parse("div { color: red; } .card { color: blue; padding: 4px; }");
+        let sheet = StyleSheet::parse("div { color: red; } .card { color: blue; padding: 4px; }");
         let mut node = Node::element("div");
         node.set_attribute("class", "card");
 
@@ -173,8 +169,7 @@ mod tests {
 
     #[test]
     fn important_beats_later_non_important_declaration() {
-        let sheet =
-            StyleSheet::parse(".card { color: red !important; } .card { color: blue; }");
+        let sheet = StyleSheet::parse(".card { color: red !important; } .card { color: blue; }");
         let mut node = Node::element("div");
         node.set_attribute("class", "card");
 
