@@ -1,4 +1,5 @@
 pub mod core;
+pub mod document;
 pub mod css;
 pub mod html;
 pub mod layout;
