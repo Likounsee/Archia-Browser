@@ -110,9 +110,9 @@ mod tests {
             DocumentLoader::new(NetworkPipeline::new(AllowAll), MockTransport { response });
         let request = Request::new(Url::parse("https://example.org/image.png").unwrap());
 
-        assert_eq!(
+        assert!(matches!(
             loader.load(&request, LayoutViewport::new(320, 200)),
             Err(DocumentLoadError::UnsupportedContentType)
-        );
+        ));
     }
 }
