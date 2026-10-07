@@ -1,6 +1,4 @@
-//! Converts policy-approved document responses into renderable pages.
-
-use crate::net::{pipeline::NetworkPipeline, Request, Response, Transport, TransportError};
+use super::{pipeline::NetworkPipeline, Request, Response, Transport, TransportError};
 use crate::{document::Page, layout::LayoutViewport};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
