@@ -21,7 +21,9 @@ impl CookieJar {
 
     pub fn store(&mut self, url: &Url, set_cookie: &str) {
         let mut parts = set_cookie.split(';').map(str::trim);
-        let Some(pair) = parts.next() else { return };
+        let Some(pair) = parts.next() else {
+            return;
+        };
         let Some((name, value)) = pair.split_once('=') else {
             return;
         };
