@@ -1,6 +1,8 @@
 use super::layout::{Display, LayoutNode};
 use crate::css::ComputedStyle;
 use crate::html::{Node, NodeKind};
+use crate::style_tree::StyledNode;
+use crate::surface::{Color, SoftwareSurface};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PaintCommand {
@@ -42,6 +44,32 @@ impl DisplayList {
 pub struct SoftwareRenderer;
 
 impl SoftwareRenderer {
+    pub fn build_display_list_styled(
+        root: &StyledNode,
+        layout: &LayoutNode,
+    ) -> DisplayList {
+        let mut list = DisplayList::new();
+        paint_styled_node(root, layout, &mut list);
+        list
+    }
+
+    pub fn rasterize(list: &DisplayList, surface: &mut SoftwareSurface) {
+        for command in list.commands() {
+            match *command {
+                PaintCommand::FillRect { rect, color } => {
+                    let color = Color(
+                        ((color >> 24) & 0xff) as u8,
+                        ((color >> 16) & 0xff) as u8,
+                        ((color >> 8) & 0xff) as u8,
+                        (color & 0xff) as u8,
+                    );
+                    surface.fill_rect(rect.x, rect.y, rect.width, rect.height, color);
+                }
+                PaintCommand::DrawText { .. } => {}
+            }
+        }
+    }
+
     pub fn build_display_list(
         root: &Node,
         layout: &LayoutNode,
@@ -50,6 +78,39 @@ impl SoftwareRenderer {
         let mut list = DisplayList::new();
         paint_node(root, layout, style, &mut list);
         list
+    }
+}
+
+fn paint_styled_node(node: &StyledNode, layout: &LayoutNode, list: &mut DisplayList) {
+    if layout.display == Display::None {
+        return;
+    }
+
+    if let Some(background) = node
+        .style
+        .get("background-color")
+        .or_else(|| node.style.get("background"))
+    {
+        if let Some(color) = parse_color(background) {
+            list.push(PaintCommand::FillRect {
+                rect: layout.rect,
+                color,
+            });
+        }
+    }
+
+    if let NodeKind::Text(text) = &node.node.kind {
+        list.push(PaintCommand::DrawText {
+            x: layout.rect.x,
+            y: layout.rect.y,
+            text_len: text.chars().count() as u32,
+            color: parse_color(node.style.get("color").unwrap_or("black"))
+                .unwrap_or(0x000000ff),
+        });
+    }
+
+    for (child, child_layout) in node.children.iter().zip(&layout.children) {
+        paint_styled_node(child, child_layout, list);
     }
 }
 
