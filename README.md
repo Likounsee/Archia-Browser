@@ -103,12 +103,15 @@ Current milestone:
 - [x] Homegrown engine requirement defined
 - [x] Core project structure
 - [x] Core memory budget and RAII resource tracking
+- [x] Memory pressure state foundation
+- [x] Reclaimable resource cache foundation
 - [x] Core event loop foundation
 - [x] HTML tokenizer (initial)
 - [x] HTML parser / tree builder (initial)
 - [x] DOM node model (initial)
-- [ ] CSS tokenizer/parser
-- [ ] Style system
+- [x] CSS tokenizer (initial)
+- [x] CSS declaration parser (initial)
+- [x] Style system foundation
 - [ ] Layout engine
 - [ ] Software renderer
 - [x] URL parsing and request primitives (initial)
