@@ -68,6 +68,14 @@ impl SoftwareSurface {
         self.surface
     }
 
+    pub fn width(&self) -> u32 {
+        self.surface.width()
+    }
+
+    pub fn height(&self) -> u32 {
+        self.surface.height()
+    }
+
     pub fn pixels(&self) -> &[u8] {
         &self.pixels
     }
