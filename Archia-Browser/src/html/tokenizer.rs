@@ -61,7 +61,7 @@ fn find_tag_end(input: &str) -> Option<usize> {
     for (index, ch) in input.char_indices() {
         match (quote, ch) {
             (Some(q), c) if c == q => quote = None,
-            (None, '\\'' | '"') => quote = Some(ch),
+            (None, '\'' | '"') => quote = Some(ch),
             (None, '>') => return Some(index),
             _ => {}
         }
@@ -107,7 +107,7 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
         if chars.peek() == Some(&'=') {
             chars.next();
             while chars.peek().is_some_and(|c| c.is_whitespace()) { chars.next(); }
-            let quote = chars.peek().copied().filter(|c| *c == '\\'' || *c == '"');
+            let quote = chars.peek().copied().filter(|c| *c == '\'' || *c == '"');
             if let Some(q) = quote {
                 chars.next();
                 while let Some(&ch) = chars.peek() {
