@@ -51,7 +51,11 @@ impl Transport for HttpTransport {
 
         let host = request.url.host();
         let port = request.url.effective_port();
-        let address = format!("{host}:{port}");
+        let address = if host.contains(':') {
+            format!("[{host}]:{port}")
+        } else {
+            format!("{host}:{port}")
+        };
         let mut addresses = address
             .to_socket_addrs()
             .map_err(|_| TransportError::ConnectionFailed)?;
