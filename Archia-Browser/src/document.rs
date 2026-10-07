@@ -30,6 +30,7 @@ impl Page {
     }
 
     pub fn render_into(&self, surface: &mut crate::surface::SoftwareSurface) {
+        surface.clear(crate::surface::Color::WHITE);
         SoftwareRenderer::rasterize(&self.display_list, surface);
     }
 }
@@ -49,6 +50,22 @@ mod tests {
         assert_eq!(page.document.text_content(), "Hello");
         assert!(!page.display_list.commands().is_empty());
         assert_eq!(page.layout.rect.width, 320);
+    }
+
+    #[test]
+    #[test]
+    fn render_into_produces_pixels() {
+        let page = Page::from_html(
+            r#"<body><div style="background-color: red">Hello</div></body>"#,
+            "",
+            LayoutViewport::new(32, 32),
+        );
+        let mut surface = crate::surface::SoftwareSurface::new(32, 32);
+        page.render_into(&mut surface);
+        assert!(surface
+            .pixels()
+            .chunks_exact(4)
+            .any(|pixel| pixel == [255, 0, 0, 255]));
     }
 
     #[test]
