@@ -122,6 +122,7 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
     match name.as_str() {
         "margin" | "padding" => {
             if let Some(values) = expand_box_shorthand(&name, &value) {
+                apply(name.clone(), value.clone());
                 let prefix = name.as_str();
                 for (property, property_value) in [
                     (format!("{prefix}-top"), values[0].clone()),
