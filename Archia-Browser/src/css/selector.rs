@@ -111,18 +111,27 @@ impl Selector {
     }
 
     pub fn matches(&self, node: &Node) -> bool {
-        self.matches_from(self.parts.len().saturating_sub(1), node)
+        self.parts.len() == 1 && matches_simple(&self.parts[0].1, node)
     }
 
-    fn matches_from(&self, index: usize, node: &Node) -> bool {
-        let Some((combinator, simple)) = self.parts.get(index) else { return false; };
-        if !matches_simple(simple, node) { return false; }
-        if index == 0 { return true; }
+    pub fn matches_path(&self, path: &[&Node]) -> bool {
+        if path.is_empty() || path.len() < self.parts.len() { return false; }
+        self.matches_at(self.parts.len() - 1, path.len() - 1, path)
+    }
+
+    fn matches_at(&self, selector_index: usize, node_index: usize, path: &[&Node]) -> bool {
+        let Some((combinator, simple)) = self.parts.get(selector_index) else { return false; };
+        if !matches_simple(simple, path[node_index]) { return false; }
+        if selector_index == 0 { return true; }
 
         match combinator.as_ref().unwrap_or(&Combinator::Descendant) {
-            Combinator::Child => false,
+            Combinator::Child => {
+                node_index > 0 && self.matches_at(selector_index - 1, node_index - 1, path)
+            }
+            Combinator::Descendant => {
+                (0..node_index).rev().any(|ancestor| self.matches_at(selector_index - 1, ancestor, path))
+            }
             Combinator::AdjacentSibling | Combinator::GeneralSibling => false,
-            Combinator::Descendant => false,
         }
     }
 }
@@ -209,6 +218,20 @@ mod tests {
         let selector = Selector::parse("div#main.card[role=main]").unwrap();
         assert!(selector.matches(&node()));
         assert_eq!(selector.specificity(), Specificity::new(1, 2, 1));
+    }
+
+    #[test]
+    fn matches_descendant_and_child_paths() {
+        let root = Node::element("section");
+        let mut child = Node::element("div");
+        if let NodeKind::Element { attributes, .. } = &mut child.kind {
+            attributes.insert("class".into(), "card".into());
+        }
+        let leaf = Node::element("span");
+        let path = [&root, &child, &leaf];
+        assert!(Selector::parse("section .card span").unwrap().matches_path(&path));
+        assert!(Selector::parse("section > div").unwrap().matches_path(&path[..2]));
+        assert!(!Selector::parse("section > span").unwrap().matches_path(&path));
     }
 
     #[test]
