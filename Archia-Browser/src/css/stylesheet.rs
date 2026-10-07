@@ -284,7 +284,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn css_wide_values_resolve_against_inheritance_and_initials() {
         let sheet = StyleSheet::parse(
             "body { color: green; margin: 10px; } span { color: inherit; margin: initial; padding: unset; }",
