@@ -122,7 +122,15 @@ fn apply_user_agent_defaults(style: &mut ComputedStyle, node: &Node) {
     if let Some(name) = node.tag_name() {
         if matches!(
             name,
-            "base" | "head" | "link" | "meta" | "noscript" | "script" | "style" | "template" | "title"
+            "base"
+                | "head"
+                | "link"
+                | "meta"
+                | "noscript"
+                | "script"
+                | "style"
+                | "template"
+                | "title"
         ) {
             style.set("display", "none");
         }
