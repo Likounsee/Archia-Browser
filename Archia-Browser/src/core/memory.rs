@@ -48,7 +48,7 @@ impl MemoryBudget {
     pub fn release(&self, bytes: usize) {
         let _ = self
             .used
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |used| {
                 Some(used.saturating_sub(bytes))
             });
     }

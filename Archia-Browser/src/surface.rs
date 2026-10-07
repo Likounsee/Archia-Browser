@@ -72,6 +72,14 @@ impl SoftwareSurface {
         &self.pixels
     }
 
+    pub fn width(&self) -> u32 {
+        self.surface.width()
+    }
+
+    pub fn height(&self) -> u32 {
+        self.surface.height()
+    }
+
     pub fn clear(&mut self, color: Color) {
         for pixel in self.pixels.chunks_exact_mut(4) {
             pixel.copy_from_slice(&[color.0, color.1, color.2, color.3]);
@@ -100,7 +108,8 @@ impl SoftwareSurface {
 
 pub fn paint_background(surface: &mut SoftwareSurface, node: &Node, color: Color) {
     if matches!(node.kind, NodeKind::Element { .. }) {
-        surface.fill_rect(0, 0, surface.width(), surface.height(), color);
+        let (width, height) = (surface.width(), surface.height());
+        surface.fill_rect(0, 0, width, height, color);
     }
 }
 
