@@ -123,7 +123,10 @@ mod tests {
             .with_body(b"<html></html>".to_vec());
 
         assert_eq!(response.status, 200);
-        assert_eq!(response.headers.get("content-type"), Some(&"text/html".into()));
+        assert_eq!(
+            response.headers.get("content-type"),
+            Some(&"text/html".into())
+        );
         assert_eq!(response.body, b"<html></html>");
     }
 }
