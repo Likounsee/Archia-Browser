@@ -80,6 +80,34 @@ impl SoftwareSurface {
         &self.pixels
     }
 
+    pub fn pixel(&self, x: u32, y: u32) -> Option<Color> {
+        if x >= self.width() || y >= self.height() {
+            return None;
+        }
+        let index = ((y * self.width() + x) * 4) as usize;
+        Some(Color(
+            self.pixels[index],
+            self.pixels[index + 1],
+            self.pixels[index + 2],
+            self.pixels[index + 3],
+        ))
+    }
+
+    pub fn draw_text_placeholder(
+        &mut self,
+        x: i32,
+        y: i32,
+        text_len: u32,
+        color: Color,
+    ) {
+        let width = text_len.saturating_mul(6);
+        if width == 0 {
+            return;
+        }
+        self.fill_rect(x, y, width, 1, color);
+    }
+
+
     pub fn clear(&mut self, color: Color) {
         for pixel in self.pixels.chunks_exact_mut(4) {
             pixel.copy_from_slice(&[color.0, color.1, color.2, color.3]);
