@@ -10,7 +10,11 @@ pub struct StyledNode {
 
 impl StyledNode {
     pub fn new(node: Node, style: ComputedStyle) -> Self {
-        Self { node, style, children: Vec::new() }
+        Self {
+            node,
+            style,
+            children: Vec::new(),
+        }
     }
 
     pub fn text_content(&self) -> String {
@@ -27,11 +31,7 @@ impl StyleEngine {
     }
 }
 
-fn style_node<'a>(
-    node: &'a Node,
-    sheet: &StyleSheet,
-    path: &mut Vec<&'a Node>,
-) -> StyledNode {
+fn style_node<'a>(node: &'a Node, sheet: &StyleSheet, path: &mut Vec<&'a Node>) -> StyledNode {
     path.push(node);
     let style = sheet.compute_style_path(path);
     let children = node

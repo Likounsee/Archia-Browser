@@ -6,8 +6,8 @@ pub mod net;
 pub mod platform;
 pub mod render;
 pub mod security;
-pub mod surface;
 pub mod style_tree;
+pub mod surface;
 
 pub struct Browser {
     version: &'static str,

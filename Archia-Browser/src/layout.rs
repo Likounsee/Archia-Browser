@@ -143,12 +143,16 @@ fn layout_styled_node(
 
     let box_model = box_model_from_style(&node.style);
     let margin_x = box_model.margin_left.saturating_add(box_model.margin_right);
-    let padding_border_x = box_model.padding_left
+    let padding_border_x = box_model
+        .padding_left
         .saturating_add(box_model.padding_right)
         .saturating_add(box_model.border_left)
         .saturating_add(box_model.border_right);
-    let content_width = parse_px(node.style.get("width"))
-        .unwrap_or_else(|| containing_width.saturating_sub(margin_x).saturating_sub(padding_border_x));
+    let content_width = parse_px(node.style.get("width")).unwrap_or_else(|| {
+        containing_width
+            .saturating_sub(margin_x)
+            .saturating_sub(padding_border_x)
+    });
 
     output.box_model = box_model;
     output.rect.x = x.saturating_add(box_model.margin_left as i32);
@@ -190,13 +194,8 @@ fn layout_styled_node(
                 inline_x = 0;
                 inline_line_height = 0;
             }
-            let child_layout = layout_styled_node(
-                child,
-                0,
-                cursor_y,
-                content_width,
-                viewport_height,
-            );
+            let child_layout =
+                layout_styled_node(child, 0, cursor_y, content_width, viewport_height);
             cursor_y = cursor_y.saturating_add(
                 child_layout
                     .rect
@@ -236,26 +235,42 @@ fn intrinsic_inline_width(node: &crate::style_tree::StyledNode) -> u32 {
 fn intrinsic_inline_height(node: &crate::style_tree::StyledNode) -> u32 {
     match &node.node.kind {
         NodeKind::Text(text) => text.split('\n').count().max(1) as u32 * 16,
-        _ => node.children.iter().map(intrinsic_inline_height).max().unwrap_or(16),
+        _ => node
+            .children
+            .iter()
+            .map(intrinsic_inline_height)
+            .max()
+            .unwrap_or(16),
     }
 }
 
 fn box_model_from_style(style: &ComputedStyle) -> BoxModel {
     BoxModel {
-        margin_top: parse_px(style.get("margin-top")).unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
-        margin_right: parse_px(style.get("margin-right")).unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
-        margin_bottom: parse_px(style.get("margin-bottom")).unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
-        margin_left: parse_px(style.get("margin-left")).unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
-        padding_top: parse_px(style.get("padding-top")).unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
-        padding_right: parse_px(style.get("padding-right")).unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
-        padding_bottom: parse_px(style.get("padding-bottom")).unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
-        padding_left: parse_px(style.get("padding-left")).unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
-        border_top: parse_border_width(style.get("border-top-width")).unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
-        border_right: parse_border_width(style.get("border-right-width")).unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
-        border_bottom: parse_border_width(style.get("border-bottom-width")).unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
-        border_left: parse_border_width(style.get("border-left-width")).unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
-    }
-}
+        margin_top: parse_px(style.get("margin-top"))
+            .unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
+        margin_right: parse_px(style.get("margin-right"))
+            .unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
+        margin_bottom: parse_px(style.get("margin-bottom"))
+            .unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
+        margin_left: parse_px(style.get("margin-left"))
+            .unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
+        padding_top: parse_px(style.get("padding-top"))
+            .unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
+        padding_right: parse_px(style.get("padding-right"))
+            .unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
+        padding_bottom: parse_px(style.get("padding-bottom"))
+            .unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
+        padding_left: parse_px(style.get("padding-left"))
+            .unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
+        border_top: parse_border_width(style.get("border-top-width"))
+            .unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
+        border_right: parse_border_width(style.get("border-right-width"))
+            .unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
+        border_bottom: parse_border_width(style.get("border-bottom-width"))
+            .unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
+        border_left: parse_border_width(style.get("border-left-width"))
+            .unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
+    }}
 
 fn parse_border_width(value: Option<&str>) -> Option<u32> {
     parse_px(value)
