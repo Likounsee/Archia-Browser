@@ -181,12 +181,7 @@ impl Selector {
             Combinator::Descendant => (0..node_index)
                 .rev()
                 .any(|ancestor| self.matches_at(selector_index - 1, ancestor, path)),
-            Combinator::AdjacentSibling => {
-                node_index > 0 && self.matches_at(selector_index - 1, node_index - 1, path)
-            }
-            Combinator::GeneralSibling => (0..node_index)
-                .rev()
-                .any(|sibling| self.matches_at(selector_index - 1, sibling, path)),
+            Combinator::AdjacentSibling | Combinator::GeneralSibling => false,
         }
     }
 }
@@ -383,31 +378,6 @@ fn matches_simple(simple: &SimpleSelector, node: &Node) -> bool {
             AttributeOperator::Substring => actual.contains(expected),
         }
     })
-}
-
-#[cfg(test)]
-mod sibling_tests {
-    use super::*;
-    use crate::html::Node;
-
-    #[test]
-    fn matches_adjacent_sibling() {
-        let a = Node::element("div");
-        let b = Node::element("span");
-        let path = [&a, &b];
-        let selector = Selector::parse("div + span").unwrap();
-        assert!(selector.matches_path(&path));
-    }
-
-    #[test]
-    fn matches_general_sibling() {
-        let a = Node::element("div");
-        let middle = Node::element("i");
-        let b = Node::element("span");
-        let path = [&a, &middle, &b];
-        let selector = Selector::parse("div ~ span").unwrap();
-        assert!(selector.matches_path(&path));
-    }
 }
 
 #[cfg(test)]

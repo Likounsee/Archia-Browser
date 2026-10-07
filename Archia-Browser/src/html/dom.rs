@@ -94,7 +94,9 @@ impl Node {
 
     pub fn has_attribute(&self, name: &str) -> bool {
         match &self.kind {
-            NodeKind::Element { attributes, .. } => attributes.contains_key(&name.to_ascii_lowercase()),
+            NodeKind::Element { attributes, .. } => {
+                attributes.contains_key(&name.to_ascii_lowercase())
+            }
             _ => false,
         }
     }
