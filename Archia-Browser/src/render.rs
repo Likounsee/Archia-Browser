@@ -250,6 +250,20 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn rasterizes_fill_rect_commands() {
+        let mut list = DisplayList::new();
+        list.push(PaintCommand::FillRect {
+            rect: crate::layout::Rect::new(0, 0, 4, 4),
+            color: 0xff0000ff,
+        });
+        let mut surface = SoftwareSurface::new(8, 8);
+        surface.clear(Color::WHITE);
+        SoftwareRenderer::rasterize(&list, &mut surface);
+        assert_eq!(surface.pixel(0, 0), Some(Color::RED));
+    }
+
+    #[test]
     fn ignores_none_nodes() {
         let root = Node::element("div");
         let mut style = ComputedStyle::default();

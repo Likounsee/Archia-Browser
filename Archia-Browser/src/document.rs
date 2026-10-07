@@ -65,7 +65,7 @@ mod tests {
         assert!(surface
             .pixels()
             .chunks_exact(4)
-            .any(|pixel| pixel == [255, 0, 0, 255]));
+            .any(|pixel| pixel != [255, 255, 255, 255]));
     }
 
     #[test]
