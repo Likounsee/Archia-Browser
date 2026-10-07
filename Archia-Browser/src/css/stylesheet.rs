@@ -118,3 +118,14 @@ fn is_inherited_property(name: &str) -> bool {
             | "cursor"
     )
 }
+
+
+fn normalize_declaration_value(value: &str) -> (String, bool) {
+    let trimmed = value.trim();
+    let suffix = "!important";
+    if trimmed.len() >= suffix.len() && trimmed[trimmed.len() - suffix.len()..].eq_ignore_ascii_case(suffix) {
+        (trimmed[..trimmed.len() - suffix.len()].trim_end().to_owned(), true)
+    } else {
+        (trimmed.to_owned(), false)
+    }
+}

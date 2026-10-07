@@ -44,7 +44,19 @@ pub struct SimpleSelector {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AttributeSelector {
     pub name: String,
+    pub operator: AttributeOperator,
     pub value: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AttributeOperator {
+    Exists,
+    Equals,
+    Includes,
+    DashMatch,
+    Prefix,
+    Suffix,
+    Substring,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -162,9 +174,192 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
                 if start == i { return None; }
                 let name: String = chars[start..i].iter().collect::<String>().to_ascii_lowercase();
                 while i < chars.len() && chars[i].is_whitespace() { i += 1; }
+                let mut operator = AttributeOperator::Exists;
                 let mut value = None;
-                if i < chars.len() && chars[i] == '=' {
-                    i += 1;
+                if i < chars.len() {
+                    operator = match chars[i] {
+                        '=' => { i += 1; AttributeOperator::Equals }
+                        '~' | '|' | '^' | '
+                    while i < chars.len() && chars[i].is_whitespace() { i += 1; }
+                    let quote = chars.get(i).copied().filter(|c| *c == '\'' || *c == '"');
+                    if quote.is_some() { i += 1; }
+                    let start_value = i;
+                    while i < chars.len() && chars[i] != ']' && quote.map_or(true, |q| chars[i] != q) { i += 1; }
+                    value = Some(chars[start_value..i].iter().collect());
+                    if quote.is_some() && i < chars.len() { i += 1; }
+                }
+                while i < chars.len() && chars[i].is_whitespace() { i += 1; }
+                if i >= chars.len() || chars[i] != ']' { return None; }
+                i += 1;
+                simple.attributes.push(AttributeSelector { name, operator, value });
+            }
+            _ => return None,
+        }
+    }
+    Some(simple)
+}
+
+fn is_name_char(c: char) -> bool {
+    c == '_' || c == '-' || c.is_ascii_alphanumeric() || !c.is_ascii()
+}
+
+fn matches_simple(simple: &SimpleSelector, node: &Node) -> bool {
+    let NodeKind::Element { name, attributes } = &node.kind else { return false; };
+    if let Some(tag) = &simple.tag && !name.eq_ignore_ascii_case(tag) { return false; }
+    if let Some(id) = &simple.id && attributes.get("id") != Some(id) { return false; }
+    let classes = attributes.get("class").map(|v| v.split_whitespace().collect::<Vec<_>>()).unwrap_or_default();
+    if simple.classes.iter().any(|class| !classes.contains(&class.as_str())) { return false; }
+    simple.attributes.iter().all(|attr| {
+        let Some(actual) = attributes.get(&attr.name) else { return false; };
+        let Some(expected) = attr.value.as_deref() else { return true; };
+        match attr.operator {
+            AttributeOperator::Exists => true,
+            AttributeOperator::Equals => actual == expected,
+            AttributeOperator::Includes => actual.split_whitespace().any(|part| part == expected),
+            AttributeOperator::DashMatch => actual == expected || actual.starts_with(&format!("{expected}-")),
+            AttributeOperator::Prefix => actual.starts_with(expected),
+            AttributeOperator::Suffix => actual.ends_with(expected),
+            AttributeOperator::Substring => actual.contains(expected),
+        }
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn node() -> Node {
+        let mut node = Node::element("div");
+        if let NodeKind::Element { attributes, .. } = &mut node.kind {
+            attributes.insert("id".into(), "main".into());
+            attributes.insert("class".into(), "card active".into());
+            attributes.insert("role".into(), "main".into());
+        }
+        node
+    }
+
+    #[test]
+    fn parses_and_matches_simple_selector() {
+        let selector = Selector::parse("div#main.card[role=main]").unwrap();
+        assert!(selector.matches(&node()));
+        assert_eq!(selector.specificity(), Specificity::new(1, 2, 1));
+    }
+
+    #[test]
+    fn matches_descendant_and_child_paths() {
+        let root = Node::element("section");
+        let mut child = Node::element("div");
+        if let NodeKind::Element { attributes, .. } = &mut child.kind {
+            attributes.insert("class".into(), "card".into());
+        }
+        let leaf = Node::element("span");
+        let path = [&root, &child, &leaf];
+        assert!(Selector::parse("section .card span").unwrap().matches_path(&path));
+        assert!(Selector::parse("section > div").unwrap().matches_path(&path[..2]));
+        assert!(!Selector::parse("section > span").unwrap().matches_path(&path));
+    }
+
+    #[test]
+    fn parses_type_and_class() {
+        let selector = Selector::parse(".card").unwrap();
+        assert!(selector.matches(&node()));
+        assert!(!Selector::parse("span").unwrap().matches(&node()));
+    }
+}
+ | '*' => {
+                            let op = chars[i];
+                            if chars.get(i + 1) != Some(&'=') { return None; }
+                            i += 2;
+                            match op {
+                                '~' => AttributeOperator::Includes,
+                                '|' => AttributeOperator::DashMatch,
+                                '^' => AttributeOperator::Prefix,
+                                '
+                    while i < chars.len() && chars[i].is_whitespace() { i += 1; }
+                    let quote = chars.get(i).copied().filter(|c| *c == '\'' || *c == '"');
+                    if quote.is_some() { i += 1; }
+                    let start_value = i;
+                    while i < chars.len() && chars[i] != ']' && quote.map_or(true, |q| chars[i] != q) { i += 1; }
+                    value = Some(chars[start_value..i].iter().collect());
+                    if quote.is_some() && i < chars.len() { i += 1; }
+                }
+                while i < chars.len() && chars[i].is_whitespace() { i += 1; }
+                if i >= chars.len() || chars[i] != ']' { return None; }
+                i += 1;
+                simple.attributes.push(AttributeSelector { name, value });
+            }
+            _ => return None,
+        }
+    }
+    Some(simple)
+}
+
+fn is_name_char(c: char) -> bool {
+    c == '_' || c == '-' || c.is_ascii_alphanumeric() || !c.is_ascii()
+}
+
+fn matches_simple(simple: &SimpleSelector, node: &Node) -> bool {
+    let NodeKind::Element { name, attributes } = &node.kind else { return false; };
+    if let Some(tag) = &simple.tag && !name.eq_ignore_ascii_case(tag) { return false; }
+    if let Some(id) = &simple.id && attributes.get("id") != Some(id) { return false; }
+    let classes = attributes.get("class").map(|v| v.split_whitespace().collect::<Vec<_>>()).unwrap_or_default();
+    if simple.classes.iter().any(|class| !classes.contains(&class.as_str())) { return false; }
+    simple.attributes.iter().all(|attr| {
+        attributes.get(&attr.name).map_or(false, |actual| attr.value.as_ref().map_or(true, |expected| actual == expected))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn node() -> Node {
+        let mut node = Node::element("div");
+        if let NodeKind::Element { attributes, .. } = &mut node.kind {
+            attributes.insert("id".into(), "main".into());
+            attributes.insert("class".into(), "card active".into());
+            attributes.insert("role".into(), "main".into());
+        }
+        node
+    }
+
+    #[test]
+    fn parses_and_matches_simple_selector() {
+        let selector = Selector::parse("div#main.card[role=main]").unwrap();
+        assert!(selector.matches(&node()));
+        assert_eq!(selector.specificity(), Specificity::new(1, 2, 1));
+    }
+
+    #[test]
+    fn matches_descendant_and_child_paths() {
+        let root = Node::element("section");
+        let mut child = Node::element("div");
+        if let NodeKind::Element { attributes, .. } = &mut child.kind {
+            attributes.insert("class".into(), "card".into());
+        }
+        let leaf = Node::element("span");
+        let path = [&root, &child, &leaf];
+        assert!(Selector::parse("section .card span").unwrap().matches_path(&path));
+        assert!(Selector::parse("section > div").unwrap().matches_path(&path[..2]));
+        assert!(!Selector::parse("section > span").unwrap().matches_path(&path));
+    }
+
+    #[test]
+    fn parses_type_and_class() {
+        let selector = Selector::parse(".card").unwrap();
+        assert!(selector.matches(&node()));
+        assert!(!Selector::parse("span").unwrap().matches(&node()));
+    }
+}
+ => AttributeOperator::Suffix,
+                                '*' => AttributeOperator::Substring,
+                                _ => unreachable!(),
+                            }
+                        }
+                        _ => AttributeOperator::Exists,
+                    };
+                }
+                if !matches!(operator, AttributeOperator::Exists) {
                     while i < chars.len() && chars[i].is_whitespace() { i += 1; }
                     let quote = chars.get(i).copied().filter(|c| *c == '\'' || *c == '"');
                     if quote.is_some() { i += 1; }

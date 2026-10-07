@@ -9,11 +9,27 @@ pub struct Property {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ComputedStyle {
     properties: BTreeMap<String, String>,
+    important: BTreeMap<String, bool>,
 }
 
 impl ComputedStyle {
     pub fn set(&mut self, name: impl Into<String>, value: impl Into<String>) {
-        self.properties.insert(name.into(), value.into());
+        self.set_if_unimportant(name, value);
+    }
+
+    pub fn set_important(&mut self, name: impl Into<String>, value: impl Into<String>) {
+        let name = name.into();
+        self.properties.insert(name.clone(), value.into());
+        self.important.insert(name, true);
+    }
+
+    pub fn set_if_unimportant(&mut self, name: impl Into<String>, value: impl Into<String>) {
+        let name = name.into();
+        if self.important.get(&name).copied().unwrap_or(false) {
+            return;
+        }
+        self.properties.insert(name.clone(), value.into());
+        self.important.entry(name).or_insert(false);
     }
 
     pub fn get(&self, name: &str) -> Option<&str> {
