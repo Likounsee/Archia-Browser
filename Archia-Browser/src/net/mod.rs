@@ -68,7 +68,10 @@ impl Request {
         self
     }
 
-    pub fn cookie_header(self, jar: &CookieJar) -> Self {
+    pub fn with_cookies(mut self, jar: &CookieJar) -> Self {
+        if let Some(value) = jar.header_for(&self.url) {
+            self = self.with_header("cookie", value);
+        }
         self
     }
     pub fn with_policy(mut self, policy: pipeline::RequestPolicy) -> Self {
