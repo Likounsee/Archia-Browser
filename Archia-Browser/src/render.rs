@@ -83,15 +83,16 @@ fn paint_styled_node(node: &StyledNode, layout: &LayoutNode, list: &mut DisplayL
         return;
     }
 
-    if let Some(background) = node
-        .style
-        .get("background-color")
-        .or_else(|| node.style.get("background"))
-    {
-        if let Some(color) = parse_color(background) {
-            list.push(PaintCommand::FillRect {
-                rect: layout.rect,
-                color,
+    if matches!(node.node.kind, NodeKind::Element { .. }) {
+        if let Some(background) = node
+            .style
+            .get("background-color")
+            .or_else(|| node.style.get("background"))
+        {
+            if let Some(color) = parse_color(background) {
+                list.push(PaintCommand::FillRect {
+                    rect: layout.rect,
+                    color,
                 });
             }
         }
@@ -116,14 +117,15 @@ fn paint_node(node: &Node, layout: &LayoutNode, style: &ComputedStyle, list: &mu
         return;
     }
 
-    if let Some(background) = style
-        .get("background-color")
-        .or_else(|| style.get("background"))
-    {
-        if let Some(color) = parse_color(background) {
-            list.push(PaintCommand::FillRect {
-                rect: layout.rect,
-                color,
+    if matches!(node.kind, NodeKind::Element { .. }) {
+        if let Some(background) = style
+            .get("background-color")
+            .or_else(|| style.get("background"))
+        {
+            if let Some(color) = parse_color(background) {
+                list.push(PaintCommand::FillRect {
+                    rect: layout.rect,
+                    color,
                 });
             }
         }
