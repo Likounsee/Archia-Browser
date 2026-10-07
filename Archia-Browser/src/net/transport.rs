@@ -37,8 +37,10 @@ impl HttpTransport {
     }
 
     fn connect(&self, request: &Request) -> Result<TcpStream, TransportError> {
-        if request.url.is_secure() {
-            return Err(TransportError::TlsFailed);
+        match request.url.scheme() {
+            "http" => {}
+            "https" => return Err(TransportError::TlsFailed),
+            _ => return Err(TransportError::UnsupportedScheme),
         }
 
         let address = format!("{}:{}", request.url.host(), request.url.effective_port());
@@ -71,7 +73,7 @@ impl HttpTransport {
 
         if request.header("host").is_none() {
             head.push_str("Host: ");
-            head.push_str(request.url.authority());
+            head.push_str(&host_header(request));
             head.push_str("\\r\\n");
         }
         if request.header("connection").is_none() {
@@ -119,6 +121,21 @@ impl Transport for HttpTransport {
         let mut stream = self.connect(request)?;
         self.write_request(&mut stream, request)?;
         self.read_response(&mut stream)
+    }
+}
+
+fn host_header(request: &Request) -> String {
+    let host = request.url.host();
+    let default_port = request.url.effective_port() == 80 && request.url.scheme() == "http";
+    let host = if host.contains(':') {
+        format!("[{host}]")
+    } else {
+        host.to_owned()
+    };
+    if default_port {
+        host
+    } else {
+        format!("{host}:{}", request.url.effective_port())
     }
 }
 
@@ -238,5 +255,24 @@ mod tests {
     #[test]
     fn rejects_malformed_status() {
         assert!(parse_http_response(b"not-http\\r\\n\\r\\nbody").is_err());
+    }
+
+    #[test]
+    fn rejects_non_http_schemes_before_connecting() {
+        let transport = HttpTransport::new();
+        let request = Request::new(Url::parse("ftp://example.org/file").unwrap());
+        assert_eq!(transport.send(&request), Err(TransportError::UnsupportedScheme));
+    }
+
+    #[test]
+    fn builds_default_and_explicit_host_headers() {
+        let request = Request::new(Url::parse("http://example.org/").unwrap());
+        assert_eq!(host_header(&request), "example.org");
+
+        let request = Request::new(Url::parse("http://example.org:8080/").unwrap());
+        assert_eq!(host_header(&request), "example.org:8080");
+
+        let request = Request::new(Url::parse("http://[::1]:8080/").unwrap());
+        assert_eq!(host_header(&request), "[::1]:8080");
     }
 }
