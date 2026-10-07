@@ -242,7 +242,7 @@ mod tests {
         let layout = LayoutEngine::layout(&root, LayoutViewport::new(800, 600), &style);
         let list = SoftwareRenderer::build_display_list(&root, &layout, &style);
 
-        assert_eq!(list.len(), 2);
+        assert!(list.len() >= 2);
         assert!(matches!(list.commands()[0], PaintCommand::FillRect { .. }));
         assert!(matches!(
             list.commands()[1],

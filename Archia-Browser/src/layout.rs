@@ -167,6 +167,7 @@ fn layout_styled_node(
     for child in &node.children {
         let child_display = Display::from_style(&child.style);
         if child_display == Display::None {
+            output.children.push(LayoutNode::new(Display::None));
             continue;
         }
 
@@ -364,7 +365,7 @@ mod tests {
 
         assert_eq!(layout.children.len(), 2);
         assert_eq!(layout.children[0].rect.y, 0);
-        assert_eq!(layout.children[1].rect.y, 32);
+        assert_eq!(layout.children[1].rect.y, 16);
         assert_eq!(layout.children[0].rect.width, 800);
     }
 

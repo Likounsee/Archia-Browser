@@ -89,11 +89,19 @@ impl StyleSheet {
             let mut computed = ComputedStyle::default();
             for (name, value) in inherited.iter() {
                 if is_inherited_property(name) {
-                    computed.set(name, value);
+                    if inherited.is_important(name) {
+                        computed.set_important(name, value);
+                    } else {
+                        computed.set(name, value);
+                    }
                 }
             }
             for (name, value) in local.iter() {
-                computed.set(name, value);
+                if local.is_important(name) {
+                    computed.set_important(name, value);
+                } else {
+                    computed.set(name, value);
+                }
             }
             inherited = computed;
         }
