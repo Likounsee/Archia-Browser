@@ -53,7 +53,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn render_into_produces_pixels() {
         let page = Page::from_html(
             r#"<body><div style="background-color: red">Hello</div></body>"#,
