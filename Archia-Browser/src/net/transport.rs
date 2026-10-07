@@ -266,6 +266,7 @@ fn decode_chunked(bytes: &[u8]) -> Result<Vec<u8>, TransportError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::net::Url;
 
     #[test]
     fn parses_content_length_response() {
