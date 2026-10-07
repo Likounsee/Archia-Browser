@@ -109,7 +109,10 @@ mod tests {
             .with_body(b"hello".to_vec());
 
         assert_eq!(request.method, HttpMethod::Post);
-        assert_eq!(request.headers.get("content-type"), Some(&"text/plain".into()));
+        assert_eq!(
+            request.headers.get("content-type"),
+            Some(&"text/plain".into())
+        );
         assert_eq!(request.body, b"hello");
     }
 
