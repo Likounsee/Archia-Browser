@@ -73,7 +73,6 @@ mod tests {
     use super::*;
 
     #[test]
-    #[test]
     fn cache_get_promotes_recent_entries() {
         let mut cache = ResourceCache::new(10);
         cache.insert("a", 1, 4);
