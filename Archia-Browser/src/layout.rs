@@ -353,6 +353,26 @@ mod tests {
     }
 
     #[test]
+    fn styled_layout_uses_per_node_display_and_dimensions() {
+        let mut root = Node::element("body");
+        let mut first = Node::element("div");
+        first.set_attribute("style", "height: 20px; margin: 4px; padding: 2px;");
+        first.append(Node::text("hello"));
+        let mut hidden = Node::element("div");
+        hidden.set_attribute("style", "display: none;");
+        root.append(first);
+        root.append(hidden);
+
+        let styled = crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(800, 600));
+
+        assert_eq!(layout.children.len(), 2);
+        assert_eq!(layout.children[0].display, Display::Block);
+        assert_eq!(layout.children[0].rect.height, 24);
+        assert_eq!(layout.children[1].display, Display::None);
+    }
+
+    #[test]
     fn box_model_outer_dimensions_are_summed_safely() {
         let model = BoxModel {
             margin_left: 4,
