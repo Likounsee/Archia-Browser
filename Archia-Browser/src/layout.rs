@@ -160,6 +160,16 @@ fn layout_styled_node(
     output.rect.width = content_width;
 
     let explicit_height = parse_px(node.style.get("height"));
+    let content_x = output
+        .rect
+        .x
+        .saturating_add(box_model.border_left as i32)
+        .saturating_add(box_model.padding_left as i32);
+    let content_y = output
+        .rect
+        .y
+        .saturating_add(box_model.border_top as i32)
+        .saturating_add(box_model.padding_top as i32);
     let mut cursor_y = 0_i32;
     let mut inline_x = 0_u32;
     let mut inline_line_height = 0_u32;
@@ -181,8 +191,8 @@ fn layout_styled_node(
             }
             let child_layout = layout_styled_node(
                 child,
-                inline_x as i32,
-                cursor_y,
+                content_x.saturating_add(inline_x as i32),
+                content_y.saturating_add(cursor_y),
                 content_width.saturating_sub(inline_x),
                 viewport_height,
             );
@@ -196,7 +206,13 @@ fn layout_styled_node(
                 inline_line_height = 0;
             }
             let child_layout =
-                layout_styled_node(child, 0, cursor_y, content_width, viewport_height);
+                layout_styled_node(
+                    child,
+                    content_x,
+                    content_y.saturating_add(cursor_y),
+                    content_width,
+                    viewport_height,
+                );
             cursor_y = cursor_y.saturating_add(
                 child_layout
                     .rect
@@ -396,6 +412,26 @@ mod tests {
         assert_eq!(layout.children[0].display, Display::Block);
         assert_eq!(layout.children[0].rect.height, 24);
         assert_eq!(layout.children[1].display, Display::None);
+    }
+
+    #[test]
+    #[test]
+    fn nested_content_uses_absolute_content_origin() {
+        let mut root = Node::element("body");
+        let mut child = Node::element("div");
+        child.set_attribute("style", "padding: 4px;");
+        let mut text = Node::element("span");
+        text.set_attribute("style", "display: inline;");
+        text.append(Node::text("hi"));
+        child.append(text);
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+        assert_eq!(layout.children[0].rect.x, 0);
+        assert_eq!(layout.children[0].children[0].rect.x, 4);
+        assert_eq!(layout.children[0].children[0].rect.y, 4);
     }
 
     #[test]
