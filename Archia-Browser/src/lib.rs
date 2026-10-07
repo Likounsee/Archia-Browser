@@ -1,4 +1,5 @@
 pub mod core;
+pub mod html;
 pub mod net;
 pub mod platform;
 pub mod security;
