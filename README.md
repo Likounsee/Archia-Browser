@@ -119,7 +119,8 @@ Current milestone:
 - [ ] Networking transport
 - [ ] JavaScript runtime
 - [ ] Browser UI
-- [ ] Security model
+- [x] Same-origin foundation
+- [ ] Full security model
 - [ ] ArchiaOS integration
 - [ ] Windows release
 - [ ] Linux release
