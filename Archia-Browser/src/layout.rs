@@ -246,36 +246,44 @@ fn intrinsic_inline_height(node: &crate::style_tree::StyledNode) -> u32 {
 }
 
 fn box_model_from_style(style: &ComputedStyle) -> BoxModel {
+    let margin = parse_quad(style.get("margin"));
+    let padding = parse_quad(style.get("padding"));
+    let border = parse_quad(style.get("border-width"));
+
     BoxModel {
-        margin_top: parse_px(style.get("margin-top"))
-            .unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
-        margin_right: parse_px(style.get("margin-right"))
-            .unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
-        margin_bottom: parse_px(style.get("margin-bottom"))
-            .unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
-        margin_left: parse_px(style.get("margin-left"))
-            .unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
-        padding_top: parse_px(style.get("padding-top"))
-            .unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
-        padding_right: parse_px(style.get("padding-right"))
-            .unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
-        padding_bottom: parse_px(style.get("padding-bottom"))
-            .unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
-        padding_left: parse_px(style.get("padding-left"))
-            .unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
-        border_top: parse_border_width(style.get("border-top-width"))
-            .unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
-        border_right: parse_border_width(style.get("border-right-width"))
-            .unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
-        border_bottom: parse_border_width(style.get("border-bottom-width"))
-            .unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
-        border_left: parse_border_width(style.get("border-left-width"))
-            .unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
+        margin_top: parse_px(style.get("margin-top")).unwrap_or(margin[0]),
+        margin_right: parse_px(style.get("margin-right")).unwrap_or(margin[1]),
+        margin_bottom: parse_px(style.get("margin-bottom")).unwrap_or(margin[2]),
+        margin_left: parse_px(style.get("margin-left")).unwrap_or(margin[3]),
+        padding_top: parse_px(style.get("padding-top")).unwrap_or(padding[0]),
+        padding_right: parse_px(style.get("padding-right")).unwrap_or(padding[1]),
+        padding_bottom: parse_px(style.get("padding-bottom")).unwrap_or(padding[2]),
+        padding_left: parse_px(style.get("padding-left")).unwrap_or(padding[3]),
+        border_top: parse_border_width(style.get("border-top-width")).unwrap_or(border[0]),
+        border_right: parse_border_width(style.get("border-right-width")).unwrap_or(border[1]),
+        border_bottom: parse_border_width(style.get("border-bottom-width")).unwrap_or(border[2]),
+        border_left: parse_border_width(style.get("border-left-width")).unwrap_or(border[3]),
     }
 }
 
 fn parse_border_width(value: Option<&str>) -> Option<u32> {
     parse_px(value)
+}
+
+fn parse_quad(value: Option<&str>) -> [u32; 4] {
+    let values = value
+        .unwrap_or_default()
+        .split_whitespace()
+        .filter_map(|part| parse_px(Some(part)))
+        .collect::<Vec<_>>();
+
+    match values.as_slice() {
+        [all] => [*all; 4],
+        [vertical, horizontal] => [*vertical, *horizontal, *vertical, *horizontal],
+        [top, horizontal, bottom] => [*top, *horizontal, *bottom, *horizontal],
+        [top, right, bottom, left] => [*top, *right, *bottom, *left],
+        _ => [0; 4],
+    }
 }
 
 fn parse_px(value: Option<&str>) -> Option<u32> {
@@ -388,6 +396,22 @@ mod tests {
         assert_eq!(layout.children[0].display, Display::Block);
         assert_eq!(layout.children[0].rect.height, 24);
         assert_eq!(layout.children[1].display, Display::None);
+    }
+
+    #[test]
+    fn shorthand_box_values_expand_like_css() {
+        let mut style = ComputedStyle::default();
+        style.set("margin", "1px 2px 3px 4px");
+        style.set("padding", "5px 6px");
+        let model = box_model_from_style(&style);
+        assert_eq!(model.margin_top, 1);
+        assert_eq!(model.margin_right, 2);
+        assert_eq!(model.margin_bottom, 3);
+        assert_eq!(model.margin_left, 4);
+        assert_eq!(model.padding_top, 5);
+        assert_eq!(model.padding_right, 6);
+        assert_eq!(model.padding_bottom, 5);
+        assert_eq!(model.padding_left, 6);
     }
 
     #[test]
