@@ -1,56 +1,64 @@
 use std::collections::BTreeMap;
 
-pub mod filter;
-pub mod url;
-
-pub use url::{Url, UrlError};
+use super::url::{Url, UrlError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HttpMethod {
-    Get,
-    Head,
-    Post,
-    Put,
-    Delete,
-    Patch,
-    Options,
-    Connect,
+pub enum RequestPriority {
+    High,
+    Normal,
+    Low,
 }
 
-impl HttpMethod {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Get => "GET",
-            Self::Head => "HEAD",
-            Self::Post => "POST",
-            Self::Put => "PUT",
-            Self::Delete => "DELETE",
-            Self::Patch => "PATCH",
-            Self::Options => "OPTIONS",
-            Self::Connect => "CONNECT",
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResourceKind {
+    Document,
+    Stylesheet,
+    Script,
+    Image,
+    Font,
+    Media,
+    Fetch,
+    Other,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RequestPolicy {
+    pub priority: RequestPriority,
+    pub resource_kind: ResourceKind,
+    pub referrer: Option<Url>,
+}
+
+impl Default for RequestPolicy {
+    fn default() -> Self {
+        Self {
+            priority: RequestPriority::Normal,
+            resource_kind: ResourceKind::Other,
+            referrer: None,
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Request {
-    pub method: HttpMethod,
+    pub method: super::HttpMethod,
     pub url: Url,
     pub headers: BTreeMap<String, String>,
     pub body: Vec<u8>,
+    pub policy: RequestPolicy,
 }
 
 impl Request {
     pub fn new(url: Url) -> Self {
         Self {
-            method: HttpMethod::Get,
+            method: super::HttpMethod::Get,
             url,
             headers: BTreeMap::new(),
             body: Vec::new(),
+            policy: RequestPolicy::default(),
         }
     }
 
-    pub fn with_method(mut self, method: HttpMethod) -> Self {
+    pub fn with_method(mut self, method: super::HttpMethod) -> Self {
         self.method = method;
         self
     }
@@ -63,6 +71,11 @@ impl Request {
 
     pub fn with_body(mut self, body: impl Into<Vec<u8>>) -> Self {
         self.body = body.into();
+        self
+    }
+
+    pub fn with_policy(mut self, policy: RequestPolicy) -> Self {
+        self.policy = policy;
         self
     }
 }
@@ -86,8 +99,12 @@ impl Response {
     }
 
     pub fn with_header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
-        self.headers
-            .insert(name.into().to_ascii_lowercase(), value.into());
+        let name = name.into().to_ascii_lowercase();
+        let value = value.into();
+        if name == "content-type" {
+            self.content_type = Some(value.clone());
+        }
+        self.headers.insert(name, value);
         self
     }
 
@@ -97,36 +114,40 @@ impl Response {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TransportError {
+    UnsupportedScheme,
+    InvalidUrl(UrlError),
+    ConnectionFailed,
+    Timeout,
+    TlsFailed,
+}
+
+pub trait Transport {
+    fn send(&self, request: &Request) -> Result<Response, TransportError>;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn builds_http_request() {
-        let request = Request::new(Url::parse("https://example.org/").unwrap())
-            .with_method(HttpMethod::Post)
-            .with_header("Content-Type", "text/plain")
-            .with_body(b"hello".to_vec());
+    fn request_policy_is_attached_to_request() {
+        let url = Url::parse("https://example.org/app").unwrap();
+        let request = Request::new(url.clone()).with_policy(RequestPolicy {
+            priority: RequestPriority::High,
+            resource_kind: ResourceKind::Document,
+            referrer: Some(url),
+        });
 
-        assert_eq!(request.method, HttpMethod::Post);
-        assert_eq!(
-            request.headers.get("content-type"),
-            Some(&"text/plain".into())
-        );
-        assert_eq!(request.body, b"hello");
+        assert_eq!(request.policy.priority, RequestPriority::High);
+        assert_eq!(request.policy.resource_kind, ResourceKind::Document);
+        assert!(request.policy.referrer.is_some());
     }
 
     #[test]
-    fn builds_http_response() {
-        let response = Response::new(200)
-            .with_header("Content-Type", "text/html")
-            .with_body(b"<html></html>".to_vec());
-
-        assert_eq!(response.status, 200);
-        assert_eq!(
-            response.headers.get("content-type"),
-            Some(&"text/html".into())
-        );
-        assert_eq!(response.body, b"<html></html>");
+    fn response_tracks_content_type() {
+        let response = Response::new(200).with_header("Content-Type", "text/html");
+        assert_eq!(response.content_type.as_deref(), Some("text/html"));
     }
 }
