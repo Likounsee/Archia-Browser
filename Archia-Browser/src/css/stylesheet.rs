@@ -185,7 +185,7 @@ fn initial_value(name: &str) -> &'static str {
     }
 }
 
-fn expand_box_shorthand(name: &str, value: &str) -> Option<[String; 4]> {
+fn expand_box_shorthand(_name: &str, value: &str) -> Option<[String; 4]> {
     let values = value
         .split_whitespace()
         .map(str::to_owned)
