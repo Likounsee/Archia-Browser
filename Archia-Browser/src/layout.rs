@@ -291,15 +291,13 @@ fn layout_children(node: &Node, output: &mut LayoutNode, containing_width: u32) 
         } else {
             Display::Block
         };
-        if child_display == Display::None {
-            continue;
-        }
-
         let height = intrinsic_height(child);
         let mut child_layout = LayoutNode::new(child_display);
         child_layout.rect = Rect::new(0, cursor_y, containing_width, height);
         layout_children(child, &mut child_layout, containing_width);
-        cursor_y = cursor_y.saturating_add(height as i32);
+        if child_display != Display::None {
+            cursor_y = cursor_y.saturating_add(height as i32);
+        }
         output.children.push(child_layout);
     }
 
@@ -320,7 +318,7 @@ fn intrinsic_height(node: &Node) -> u32 {
                 .iter()
                 .map(intrinsic_height)
                 .fold(0_u32, u32::saturating_add);
-            child_height.max(16)
+            child_height.saturating_add(16)
         }
     }
 }

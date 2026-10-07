@@ -137,14 +137,13 @@ fn is_inherited_property(name: &str) -> bool {
 
 fn normalize_declaration_value(value: &str) -> (String, bool) {
     let trimmed = value.trim();
+    let normalized = trimmed.replace(char::is_whitespace, "");
     let suffix = "!important";
-    if trimmed.len() >= suffix.len()
-        && trimmed[trimmed.len() - suffix.len()..].eq_ignore_ascii_case(suffix)
+    if normalized.len() >= suffix.len()
+        && normalized[normalized.len() - suffix.len()..].eq_ignore_ascii_case(suffix)
     {
         (
-            trimmed[..trimmed.len() - suffix.len()]
-                .trim_end()
-                .to_owned(),
+            normalized[..normalized.len() - suffix.len()].to_owned(),
             true,
         )
     } else {
