@@ -32,13 +32,21 @@ impl ComputedStyle {
         self.important.entry(name).or_insert(false);
     }
 
+    pub fn is_important(&self, name: &str) -> bool {
+        self.important.get(name).copied().unwrap_or(false)
+    }
+
     pub fn get(&self, name: &str) -> Option<&str> {
         self.properties.get(name).map(String::as_str)
     }
 
-    pub fn len(&self) -> usize { self.properties.len() }
+    pub fn len(&self) -> usize {
+        self.properties.len()
+    }
 
     pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
-        self.properties.iter().map(|(name, value)| (name.as_str(), value.as_str()))
+        self.properties
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str()))
     }
 }
