@@ -114,8 +114,7 @@ impl SoftwareSurface {
         let index = ((y * self.width() + x) * 4) as usize;
         let source_alpha = color.3 as u16;
         if source_alpha == 255 {
-            self.pixels[index..index + 4]
-                .copy_from_slice(&[color.0, color.1, color.2, color.3]);
+            self.pixels[index..index + 4].copy_from_slice(&[color.0, color.1, color.2, color.3]);
             return;
         }
         if source_alpha == 0 {
