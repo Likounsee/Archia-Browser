@@ -131,8 +131,7 @@ impl SoftwareSurface {
         for channel in 0..3 {
             let source = [color.0, color.1, color.2][channel] as u16;
             let destination = self.pixels[index + channel] as u16;
-            let value = (source * source_alpha * 255
-                + destination * destination_alpha * inverse)
+            let value = (source * source_alpha * 255 + destination * destination_alpha * inverse)
                 / (output_alpha * 255);
             self.pixels[index + channel] = value.min(255) as u8;
         }
