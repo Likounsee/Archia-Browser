@@ -104,6 +104,71 @@ impl Url {
     pub fn is_secure(&self) -> bool {
         self.scheme == "https"
     }
+
+    /// Resolve a navigation reference against this URL.
+    ///
+    /// This intentionally covers the common HTTP navigation forms used by
+    /// redirects and document links while keeping the URL type independent
+    /// from the network layer.
+    pub fn resolve(&self, reference: &str) -> Result<Self, UrlError> {
+        if reference.contains("://") {
+            return Self::parse(reference);
+        }
+
+        if let Some(authority) = reference.strip_prefix("//") {
+            return Self::parse(&format!("{}://{}", self.scheme, authority));
+        }
+
+        let (reference, fragment) = reference
+            .split_once('#')
+            .map_or((reference, None), |(before, after)| (before, Some(after)));
+        let (path, query) = reference
+            .split_once('?')
+            .map_or((reference, None), |(before, after)| (before, Some(after)));
+
+        if path.is_empty() {
+            let mut resolved = self.clone();
+            resolved.query = query.map(str::to_owned).or_else(|| self.query.clone());
+            resolved.fragment = fragment.map(str::to_owned);
+            return Ok(resolved);
+        }
+
+        let resolved_path = if path.starts_with('/') {
+            normalize_path(path)
+        } else {
+            let base = self.path.rsplit_once('/').map_or("/", |(directory, _)| directory);
+            normalize_path(&format!("{base}/{path}"))
+        };
+
+        Ok(Self {
+            scheme: self.scheme.clone(),
+            authority: self.authority.clone(),
+            path: resolved_path,
+            query: query.map(str::to_owned),
+            fragment: fragment.map(str::to_owned),
+        })
+    }
+}
+
+
+fn normalize_path(path: &str) -> String {
+    let mut segments = Vec::new();
+    for segment in path.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => {
+                segments.pop();
+            }
+            value => segments.push(value),
+        }
+    }
+
+    let mut result = String::from("/");
+    result.push_str(&segments.join("/"));
+    if path.ends_with('/') && !result.ends_with('/') {
+        result.push('/');
+    }
+    result
 }
 
 impl fmt::Display for Url {
@@ -161,6 +226,32 @@ mod tests {
         assert_eq!(
             Url::parse("http+custom://example.org").unwrap().scheme(),
             "http+custom"
+        );
+    }
+
+    #[test]
+    fn resolves_relative_navigation_references() {
+        let base = Url::parse("https://example.org/docs/index.html?old=1#top").unwrap();
+
+        assert_eq!(
+            base.resolve("../guide.html").unwrap().to_string(),
+            "https://example.org/guide.html"
+        );
+        assert_eq!(
+            base.resolve("/assets/app.css?v=2").unwrap().to_string(),
+            "https://example.org/assets/app.css?v=2"
+        );
+        assert_eq!(
+            base.resolve("?next=1").unwrap().to_string(),
+            "https://example.org/docs/index.html?next=1"
+        );
+        assert_eq!(
+            base.resolve("#section").unwrap().to_string(),
+            "https://example.org/docs/index.html?old=1#section"
+        );
+        assert_eq!(
+            base.resolve("//cdn.example.org/app.js").unwrap().to_string(),
+            "https://cdn.example.org/app.js"
         );
     }
 
