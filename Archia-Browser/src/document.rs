@@ -48,7 +48,7 @@ mod tests {
     #[test]
     fn builds_static_html_css_pipeline() {
         let page = Page::from_html(
-            "<body><div style="background-color: #102030">Hello</div></body>",
+            r#"<body><div style="background-color: #102030">Hello</div></body>"#,
             "",
             LayoutViewport::new(320, 200),
         );
@@ -61,7 +61,7 @@ mod tests {
     #[test]
     fn css_styles_reach_render_tree() {
         let page = Page::from_html(
-            "<body><div class="hero">Hello</div></body>",
+            r#"<body><div class="hero">Hello</div></body>"#,
             ".hero { background-color: red; }",
             LayoutViewport::new(100, 100),
         );
