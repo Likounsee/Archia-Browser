@@ -63,7 +63,10 @@ impl Url {
     }
 
     pub fn host(&self) -> &str {
-        let authority = self.authority.rsplit_once('@').map_or(self.authority.as_str(), |(_, host)| host);
+        let authority = self
+            .authority
+            .rsplit_once('@')
+            .map_or(self.authority.as_str(), |(_, host)| host);
         if authority.starts_with('[') {
             authority.find(']').map_or(authority, |end| &authority[1..end])
         } else {
@@ -77,11 +80,14 @@ impl Url {
             let end = authority.find(']')?;
             return authority.get(end + 1..)?.strip_prefix(':')?.parse().ok();
         }
-        authority.rsplit_once(':').and_then(|(_, port)| port.parse().ok())
+        authority
+            .rsplit_once(':')
+            .and_then(|(_, port)| port.parse().ok())
     }
 
     pub fn effective_port(&self) -> u16 {
-        self.port().unwrap_or(if self.is_secure() { 443 } else { 80 })
+        self.port()
+            .unwrap_or(if self.is_secure() { 443 } else { 80 })
     }
 
     pub fn is_secure(&self) -> bool {
@@ -142,7 +148,10 @@ mod tests {
         assert_eq!(url.port(), Some(8443));
         assert_eq!(url.effective_port(), 8443);
         assert!(url.is_secure());
-        assert_eq!(Url::parse("http://example.org/").unwrap().effective_port(), 80);
+        assert_eq!(
+            Url::parse("http://example.org/").unwrap().effective_port(),
+            80
+        );
     }
 
     #[test]
