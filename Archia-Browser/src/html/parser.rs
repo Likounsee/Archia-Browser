@@ -82,7 +82,8 @@ fn close_optional_elements(root: &mut Node, stack: &mut Vec<Node>, incoming: &st
 
 fn optional_end_tag_conflicts(open: &str, incoming: &str) -> bool {
     match incoming {
-        "p" => open == "p",
+        "p" => open == "p" || is_p_closing_block(open),
+
         "li" => open == "li",
         "dt" | "dd" => matches!(open, "dt" | "dd"),
         "tr" => open == "tr",
@@ -91,6 +92,38 @@ fn optional_end_tag_conflicts(open: &str, incoming: &str) -> bool {
         "thead" | "tbody" | "tfoot" => matches!(open, "thead" | "tbody" | "tfoot"),
         _ => false,
     }
+}
+
+fn is_p_closing_block(name: &str) -> bool {
+    matches!(
+        name,
+        "address"
+            | "article"
+            | "aside"
+            | "blockquote"
+            | "div"
+            | "dl"
+            | "fieldset"
+            | "footer"
+            | "form"
+            | "h1"
+            | "h2"
+            | "h3"
+            | "h4"
+            | "h5"
+            | "h6"
+            | "header"
+            | "hgroup"
+            | "hr"
+            | "main"
+            | "nav"
+            | "ol"
+            | "p"
+            | "pre"
+            | "section"
+            | "table"
+            | "ul"
+    )
 }
 
 fn is_optional_end_tag(name: &str) -> bool {
@@ -141,6 +174,15 @@ mod tests {
             &root.children[0].children[1].kind,
             NodeKind::Comment(value) if value == " note "
         ));
+    }
+
+    #[test]
+    fn closes_paragraph_before_a_block_element() {
+        let tokens = HtmlTokenizer::tokenize("<p>one<div>two</div>");
+        let root = parse(&tokens);
+        assert_eq!(root.children.len(), 2);
+        assert_eq!(root.children[0].text_content(), "one");
+        assert_eq!(root.children[1].tag_name(), Some("div"));
     }
 
     #[test]
