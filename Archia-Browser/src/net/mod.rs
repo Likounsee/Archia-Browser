@@ -7,6 +7,7 @@ pub mod pool;
 pub mod url;
 
 pub use url::{Url, UrlError};
+pub use cookies::{Cookie, CookieJar};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HttpMethod {
@@ -64,6 +65,10 @@ impl Request {
     }
     pub fn with_body(mut self, body: impl Into<Vec<u8>>) -> Self {
         self.body = body.into();
+        self
+    }
+
+    pub fn cookie_header(self, jar: &CookieJar) -> Self {
         self
     }
     pub fn with_policy(mut self, policy: pipeline::RequestPolicy) -> Self {
