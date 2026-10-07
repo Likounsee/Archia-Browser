@@ -115,9 +115,12 @@ Current milestone:
 - [x] CSS stylesheet rules and basic cascade
 - [x] HTML attribute parsing and DOM preservation
 - [x] Style resolution for matching DOM nodes
-- [ ] Layout engine
+- [x] Attribute selector operators
+- [x] `!important` handling and inline style precedence (initial)
+- [x] First block-flow layout engine foundation
+- [ ] Standards-compliant layout engine
 - [ ] Software renderer
-- [x] URL parsing and request primitives (initial)
+- [x] URL parsing and HTTP request/response primitives (initial)
 - [x] Native request filtering / ad-blocking foundation
 - [ ] Networking transport
 - [ ] JavaScript runtime
@@ -155,7 +158,8 @@ Current milestone:
 - [x] Implement stylesheet rules and basic cascade.
 - [x] Compute styles for matching DOM nodes.
 - [ ] Add selector sibling combinators and full selector semantics.
-- [ ] Implement inheritance, !important and CSS origins.
+- [x] Implement initial inheritance and `!important` handling.
+- [ ] Implement CSS origins and full cascade semantics.
 - [ ] Expand CSS syntax toward standards compliance.
 
 ### Phase 4 — Layout and rendering
@@ -218,9 +222,10 @@ License to be defined.
 
 ## Current engineering priorities
 
-1. Complete the memory/resource model and reclaimable cache architecture.
-2. Build a real asynchronous network stack behind request policy.
-3. Expand HTML parsing toward standards-compliant tree construction.
-4. Expand CSS tokens, selectors, cascade, inheritance and computed style.
-5. Keep ad/tracker blocking before transport so blocked resources are not downloaded when policy allows.
-6. Keep every subsystem independently testable through GitHub Actions.
+1. Turn the layout foundation into a real block/inline layout engine.
+2. Build a platform-neutral software display list and renderer.
+3. Build a real asynchronous HTTP/HTTPS transport behind request policy.
+4. Expand HTML parsing toward standards-compliant tree construction.
+5. Expand CSS selectors, cascade, inheritance and computed values.
+6. Keep ad/tracker blocking before transport so blocked resources are not downloaded when policy allows.
+7. Keep every subsystem independently testable through GitHub Actions.
