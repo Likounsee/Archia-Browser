@@ -112,11 +112,10 @@ mod tests {
         let mut filter = RequestFilter::default();
         filter.add_rule(FilterRule::block("ads.example").for_resource(ResourceType::Script));
 
-        let request = Request::new(
-            super::super::Url::parse("https://ads.example/script.js").unwrap(),
-        )
-        .with_method(HttpMethod::Get)
-        .with_policy(RequestPolicy {
+        let request =
+            Request::new(super::super::Url::parse("https://ads.example/script.js").unwrap())
+                .with_method(HttpMethod::Get)
+                .with_policy(RequestPolicy {
             resource_kind: ResourceKind::Script,
             ..Default::default()
         });
