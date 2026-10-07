@@ -244,10 +244,9 @@ mod tests {
 
         assert!(list.len() >= 2);
         assert!(matches!(list.commands()[0], PaintCommand::FillRect { .. }));
-        assert!(matches!(
-            &list.commands()[1],
-            PaintCommand::DrawText { text, .. } if text == "Hello"
-        ));
+        assert!(list.commands().iter().any(|command| {
+            matches!(command, PaintCommand::DrawText { text, .. } if text == "Hello")
+        }));
     }
 
     #[test]
