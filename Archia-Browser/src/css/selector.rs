@@ -513,15 +513,27 @@ mod tests {
         second.set_attribute("class", "target");
         let third = Node::element("p");
         let siblings_vec = vec![first, second, third];
-        let siblings: [&[Node]; 2] = [&[] as &[Node], siblings_vec.as_slice()];
+        let siblings: [&[Node]; 3] = [
+            &[] as &[Node],
+            siblings_vec.as_slice(),
+            siblings_vec.as_slice(),
+        ];
         let positions = [0, 1];
 
         assert!(Selector::parse("span + p")
             .unwrap()
-            .matches_path_with_siblings(&[&parent, &siblings_vec[1]], &siblings, &positions));
+            .matches_path_with_siblings(
+                &[&parent, &siblings_vec[1]],
+                &siblings[..2],
+                &positions,
+            ));
         assert!(Selector::parse("span ~ p")
             .unwrap()
-            .matches_path_with_siblings(&[&parent, &siblings_vec[1]], &siblings, &positions));
+            .matches_path_with_siblings(
+                &[&parent, &siblings_vec[1]],
+                &siblings[..2],
+                &positions,
+            ));
         assert!(Selector::parse("div > span + p.target")
             .unwrap()
             .matches_path_with_siblings(
