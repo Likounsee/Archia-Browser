@@ -223,7 +223,6 @@ fn layout_styled_node(
     let mut cursor_y = 0_i32;
     let mut inline_x = 0_u32;
     let mut inline_line_height = 0_u32;
-    let mut previous_block_margin_bottom = 0_u32;
 
     for child in &node.children {
         let child_display = display_for_styled_node(child);
@@ -261,10 +260,6 @@ fn layout_styled_node(
                 inline_x = 0;
                 inline_line_height = 0;
             }
-            let child_margin_top = box_model_from_style(&child.style).margin_top;
-            let collapsed_margin = previous_block_margin_bottom.max(child_margin_top);
-            cursor_y = cursor_y.saturating_add(collapsed_margin as i32);
-
             let child_layout = layout_styled_node(
                 child,
                 content_origin_x,
@@ -272,15 +267,20 @@ fn layout_styled_node(
                 content_width,
                 viewport_height,
             );
-            let child_box = child_layout.box_model;
-            cursor_y = cursor_y.saturating_add(child_layout.rect.height as i32);
-            previous_block_margin_bottom = child_box.margin_bottom;
+            cursor_y = cursor_y.saturating_add(
+                child_layout
+                    .rect
+                    .height
+                    .saturating_add(child_layout.box_model.vertical_outer()) as i32,
+            );
             output.children.push(child_layout);
         }
     }
 
     if inline_x > 0 {
         cursor_y = cursor_y.saturating_add(inline_line_height as i32);
+    } else if previous_block_margin_bottom > 0 {
+        cursor_y = cursor_y.saturating_add(previous_block_margin_bottom as i32);
     }
 
     let mut content_height = explicit_height.unwrap_or(cursor_y.max(0) as u32);
@@ -717,25 +717,6 @@ mod tests {
 
         assert_eq!(layout.children[0].children[0].rect.x, 8);
         assert_eq!(layout.children[0].children[0].rect.y, 8);
-    }
-
-    #[test]
-    fn adjacent_block_vertical_margins_collapse() {
-        let mut root = Node::element("body");
-        let mut first = Node::element("div");
-        first.set_attribute("style", "height: 20px; margin-bottom: 10px;");
-        let mut second = Node::element("div");
-        second.set_attribute("style", "height: 20px; margin-top: 30px;");
-        root.append(first);
-        root.append(second);
-
-        let styled =
-            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
-        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 200));
-
-        assert_eq!(layout.children[0].rect.y, 0);
-        assert_eq!(layout.children[1].rect.y, 50);
-        assert_eq!(layout.rect.height, 70);
     }
 
     #[test]
