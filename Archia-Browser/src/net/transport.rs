@@ -365,6 +365,68 @@ fn parse_http_response_for_method(
     max_response_size: usize,
     max_header_size: usize,
 ) -> Result<Response, TransportError> {
+    let mut cursor = 0;
+
+    loop {
+        let (response, body_start) =
+            parse_http_response_head(&bytes[cursor..], max_header_size)?;
+
+        if is_interim_response(response.status) {
+            cursor = cursor
+                .checked_add(body_start)
+                .ok_or(TransportError::ConnectionFailed)?;
+            if cursor >= bytes.len() {
+                return Err(TransportError::ConnectionFailed);
+            }
+            continue;
+        }
+
+        let body_bytes = &bytes[cursor + body_start..];
+        let transfer_encoding = response.header("transfer-encoding");
+        let content_length = response.header("content-length");
+        if transfer_encoding.is_some() && content_length.is_some() {
+            return Err(TransportError::ConnectionFailed);
+        }
+
+        let body_forbidden =
+            matches!(method, crate::net::HttpMethod::Head) || matches!(response.status, 204 | 304);
+
+        let body = if body_forbidden {
+            Vec::new()
+        } else if transfer_encoding.is_some_and(|value| {
+            value
+                .split(',')
+                .any(|item| item.trim().eq_ignore_ascii_case("chunked"))
+        }) {
+            decode_chunked(body_bytes, max_response_size)?
+        } else if let Some(length) = content_length {
+            let length = length
+                .trim()
+                .parse::<usize>()
+                .map_err(|_| TransportError::ConnectionFailed)?;
+            if length > max_response_size {
+                return Err(TransportError::ResponseTooLarge);
+            }
+            body_bytes
+                .get(..length)
+                .ok_or(TransportError::ConnectionFailed)?
+                .to_vec()
+        } else {
+            body_bytes.to_vec()
+        };
+
+        if body.len() > max_response_size {
+            return Err(TransportError::ResponseTooLarge);
+        }
+
+        return Ok(response.with_body(body));
+    }
+}
+
+fn parse_http_response_head(
+    bytes: &[u8],
+    max_header_size: usize,
+) -> Result<(Response, usize), TransportError> {
     let separator = bytes
         .windows(4)
         .position(|window| window == b"\r\n\r\n")
@@ -373,7 +435,6 @@ fn parse_http_response_for_method(
     if header_bytes.len() > max_header_size {
         return Err(TransportError::ResponseTooLarge);
     }
-    let body_bytes = &bytes[separator + 4..];
 
     let header_text =
         std::str::from_utf8(header_bytes).map_err(|_| TransportError::ConnectionFailed)?;
@@ -407,44 +468,11 @@ fn parse_http_response_for_method(
         response = response.with_header(name, value);
     }
 
-    let transfer_encoding = response.header("transfer-encoding");
-    let content_length = response.header("content-length");
-    if transfer_encoding.is_some() && content_length.is_some() {
-        return Err(TransportError::ConnectionFailed);
-    }
+    Ok((response, separator + 4))
+}
 
-    let body_forbidden =
-        matches!(method, crate::net::HttpMethod::Head) || matches!(status, 100..=199 | 204 | 304);
-
-    let body = if body_forbidden {
-        Vec::new()
-    } else if transfer_encoding.is_some_and(|value| {
-        value
-            .split(',')
-            .any(|item| item.trim().eq_ignore_ascii_case("chunked"))
-    }) {
-        decode_chunked(body_bytes, max_response_size)?
-    } else if let Some(length) = content_length {
-        let length = length
-            .trim()
-            .parse::<usize>()
-            .map_err(|_| TransportError::ConnectionFailed)?;
-        if length > max_response_size {
-            return Err(TransportError::ResponseTooLarge);
-        }
-        body_bytes
-            .get(..length)
-            .ok_or(TransportError::ConnectionFailed)?
-            .to_vec()
-    } else {
-        body_bytes.to_vec()
-    };
-
-    if body.len() > max_response_size {
-        return Err(TransportError::ResponseTooLarge);
-    }
-
-    Ok(response.with_body(body))
+fn is_interim_response(status: u16) -> bool {
+    (100..200).contains(&status) && status != 101
 }
 
 fn decode_chunked(bytes: &[u8], max_response_size: usize) -> Result<Vec<u8>, TransportError> {
@@ -583,6 +611,33 @@ mod tests {
             1024,
         );
         assert_eq!(result, Err(TransportError::ConnectionFailed));
+    }
+
+    #[test]
+    fn skips_multiple_informational_responses_before_final_response() {
+        let response = parse_http_response(
+            b"HTTP/1.1 103 Early Hints\r\nLink: </style.css>; rel=preload\r\n\r\nHTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nHello",
+            1024,
+            1024,
+        )
+        .unwrap();
+
+        assert_eq!(response.status, 200);
+        assert_eq!(response.body, b"Hello");
+    }
+
+    #[test]
+    fn keeps_switching_protocols_as_a_final_response() {
+        let response = parse_http_response(
+            b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n\r\n",
+            1024,
+            1024,
+        )
+        .unwrap();
+
+        assert_eq!(response.status, 101);
+        assert_eq!(response.header("upgrade"), Some("websocket"));
+        assert!(response.body.is_empty());
     }
 
     #[test]
