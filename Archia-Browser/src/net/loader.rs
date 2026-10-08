@@ -304,6 +304,7 @@ where
         }
         output
     }
+}
 
 fn collect_stylesheet_links(node: &Node, links: &mut Vec<String>) {
     if node.tag_name() == Some("link")
