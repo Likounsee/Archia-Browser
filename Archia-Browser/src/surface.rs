@@ -240,8 +240,7 @@ impl SoftwareSurface {
                 if let Some((cx, cy, radius_x, radius_y)) = corner {
                     let dx = px - cx;
                     let dy = py - cy;
-                    let lhs = dx * dx * radius_y * radius_y
-                        + dy * dy * radius_x * radius_x;
+                    let lhs = dx * dx * radius_y * radius_y + dy * dy * radius_x * radius_x;
                     let rhs = radius_x * radius_x * radius_y * radius_y;
                     if lhs > rhs {
                         continue;
