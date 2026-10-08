@@ -135,7 +135,7 @@ fn layout_styled_node(
     containing_width: u32,
     viewport_height: u32,
 ) -> LayoutNode {
-    let display = Display::from_style(&node.style);
+    let display = display_for_styled_node(node);
     let mut output = LayoutNode::new(display);
     if display == Display::None {
         return output;
@@ -179,7 +179,7 @@ fn layout_styled_node(
     let mut inline_line_height = 0_u32;
 
     for child in &node.children {
-        let child_display = Display::from_style(&child.style);
+        let child_display = display_for_styled_node(child);
         if child_display == Display::None {
             output.children.push(LayoutNode::new(Display::None));
             continue;
@@ -242,6 +242,24 @@ fn layout_styled_node(
     }
     .min(viewport_height.max(content_height));
     output
+}
+
+fn display_for_styled_node(node: &crate::style_tree::StyledNode) -> Display {
+    if node.style.get("display").is_some() {
+        return Display::from_style(&node.style);
+    }
+    match &node.node.kind {
+        NodeKind::Text(_) => Display::Inline,
+        NodeKind::Element { tag, .. } => match tag.as_str() {
+            "head" | "title" | "meta" | "link" | "base" | "script" | "style" | "template" => {
+                Display::None
+            }
+            "a" | "abbr" | "b" | "bdi" | "bdo" | "br" | "button" | "code" | "em" | "i"
+            | "img" | "input" | "label" | "small" | "span" | "strong" | "sub" | "sup"
+            | "textarea" | "time" | "u" => Display::Inline,
+            _ => Display::Block,
+        },
+    }
 }
 
 fn intrinsic_inline_width(node: &crate::style_tree::StyledNode) -> u32 {
@@ -402,6 +420,27 @@ mod tests {
         assert_eq!(layout.children[0].rect.y, 0);
         assert_eq!(layout.children[1].rect.y, 32);
         assert_eq!(layout.children[0].rect.width, 800);
+    }
+
+    #[test]
+    fn html_defaults_distinguish_block_inline_and_non_rendered_elements() {
+        let mut root = Node::element("body");
+        let mut span = Node::element("span");
+        span.append(Node::text("inline"));
+        let mut div = Node::element("div");
+        div.append(Node::text("block"));
+        let head = Node::element("head");
+        root.append(span);
+        root.append(div);
+        root.append(head);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].display, Display::Inline);
+        assert_eq!(layout.children[1].display, Display::Block);
+        assert_eq!(layout.children[2].display, Display::None);
     }
 
     #[test]
