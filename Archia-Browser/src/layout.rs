@@ -1155,8 +1155,7 @@ fn align_flex_lines(
     let mut cursor = offset;
     for (line_index, line) in lines.iter().enumerate() {
         let current_y = output.children[line[0]].rect.y;
-        let target_y = content_origin_y
-            .saturating_add(cursor as i32);
+        let target_y = content_origin_y.saturating_add(cursor as i32);
         let shift = target_y.saturating_sub(current_y);
         if shift != 0 {
             for index in line {
@@ -2866,7 +2865,9 @@ mod tests {
         assert_eq!(layout.children[2].rect.x, 0);
         assert_eq!(layout.children[1].rect.y, 20);
         assert_eq!(layout.children[2].rect.y, 40);
-    }    #[test]
+    }
+
+    #[test]
     fn flex_wrap_align_content_centers_lines() {
         let mut root = Node::element("div");
         root.set_attribute(
@@ -2886,6 +2887,4 @@ mod tests {
         assert_eq!(layout.children[0].rect.y, 30);
         assert_eq!(layout.children[1].rect.y, 50);
     }
-
-
 }
