@@ -259,6 +259,10 @@ fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayL
 }
 
 fn parse_color(value: &str) -> Option<u32> {
+    let normalized = value.trim().to_ascii_lowercase();
+    if normalized.starts_with("rgb(") || normalized.starts_with("rgba(") {
+        return parse_rgb_function(&normalized);
+    }
     match value.trim().to_ascii_lowercase().as_str() {
         "black" => Some(0x000000ff),
         "white" => Some(0xffffffff),
@@ -281,10 +285,48 @@ fn parse_color(value: &str) -> Option<u32> {
     }
 }
 
+fn parse_rgb_function(value: &str) -> Option<u32> {
+    let is_rgba = value.starts_with("rgba(");
+    let prefix_len = if is_rgba { 5 } else { 4 };
+    let inner = value.strip_suffix(')')?.get(prefix_len..)?;
+    let components = inner.split(',').map(str::trim).collect::<Vec<_>>();
+    if components.len() != if is_rgba { 4 } else { 3 } {
+        return None;
+    }
+
+    let channels = components[..3]
+        .iter()
+        .map(|component| component.parse::<u8>().ok())
+        .collect::<Option<Vec<_>>>()?;
+    let alpha = if is_rgba {
+        let value = components[3].parse::<f32>().ok()?;
+        if !(0.0..=1.0).contains(&value) {
+            return None;
+        }
+        (value * 255.0).round() as u8
+    } else {
+        255
+    };
+
+    Some(
+        ((channels[0] as u32) << 24)
+            | ((channels[1] as u32) << 16)
+            | ((channels[2] as u32) << 8)
+            | alpha as u32,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::layout::{LayoutEngine, LayoutViewport};
+
+    #[test]
+    fn parses_rgb_and_rgba_colors() {
+        assert_eq!(parse_color("rgb(16, 32, 48)"), Some(0x102030ff));
+        assert_eq!(parse_color("rgba(16, 32, 48, 0.5)"), Some(0x10203080));
+        assert_eq!(parse_color("rgba(16, 32, 48, 2)"), None);
+    }
 
     #[test]
     fn builds_background_and_text_commands() {
