@@ -123,7 +123,7 @@ fn paint_styled_node(node: &StyledNode, layout: &LayoutNode, list: &mut DisplayL
                 });
             }
         }
-        paint_borders(&node.style, layout, list);
+        paint_borders(&node.style, layout, list, opacity);
     }
 
     let clips_children = node.style.get("overflow").is_some_and(|value| {
@@ -177,7 +177,7 @@ fn paint_node(node: &Node, layout: &LayoutNode, style: &ComputedStyle, list: &mu
                 });
             }
         }
-        paint_borders(style, layout, list);
+        paint_borders(style, layout, list, opacity);
     }
 
     if let NodeKind::Text(text) = &node.kind {
@@ -263,7 +263,12 @@ fn background_rect(layout: &LayoutNode) -> super::layout::Rect {
     super::layout::Rect::new(x, y, width, height)
 }
 
-fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayList) {
+fn paint_borders(
+    style: &ComputedStyle,
+    layout: &LayoutNode,
+    list: &mut DisplayList,
+    opacity: u8,
+) {
     let border_style = style.get("border-style").map(str::trim).unwrap_or("none");
     if matches!(border_style, "none" | "hidden") {
         return;
@@ -302,7 +307,7 @@ fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayL
     if border.border_top > 0 {
         list.push(PaintCommand::FillRect {
             rect: super::layout::Rect::new(outer_x, outer_y, outer_width, border.border_top),
-            color,
+            color: apply_opacity(color, opacity),
         });
     }
     if border.border_bottom > 0 {
