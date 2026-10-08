@@ -305,7 +305,9 @@ fn layout_styled_node(
         .is_some_and(|value| value.trim().eq_ignore_ascii_case("relative"))
     {
         let offset_x = parse_signed_px(node.style.get("left"))
-            .or_else(|| parse_signed_px(node.style.get("right")).map(|value| value.saturating_neg()))
+            .or_else(|| {
+                parse_signed_px(node.style.get("right")).map(|value| value.saturating_neg())
+            })
             .unwrap_or(0);
         let offset_y = parse_signed_px(node.style.get("top"))
             .or_else(|| parse_signed_px(node.style.get("bottom")).map(|value| value.saturating_neg()))
@@ -787,7 +789,10 @@ mod tests {
     fn relative_position_offsets_box_and_descendants_without_changing_flow() {
         let mut root = Node::element("body");
         let mut first = Node::element("div");
-        first.set_attribute("style", "position: relative; left: 10px; top: 5px; height: 20px;");
+        first.set_attribute(
+            "style",
+            "position: relative; left: 10px; top: 5px; height: 20px;",
+        );
         let mut nested = Node::element("span");
         nested.append(Node::text("child"));
         first.append(nested);
