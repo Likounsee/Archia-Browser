@@ -378,7 +378,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn builds_get_form_submission_from_successful_controls() {
         let page = Page::from_html_at(
             Some(Url::parse("https://example.org/search").unwrap()),
