@@ -724,11 +724,14 @@ fn layout_flex_children(
     abs_height: u32,
 ) -> i32 {
     let flex_flow = node.style.get("flex-flow");
-    let flow_column = flex_flow.is_some_and(|value| {
-        value
-            .split_whitespace()
-            .any(|part| matches!(part, "column" | "column-reverse"))
-    });
+    let flow_parts: Vec<String> = flex_flow
+        .into_iter()
+        .flat_map(|value| value.split_whitespace())
+        .map(|part| part.to_ascii_lowercase())
+        .collect();
+    let flow_column = flow_parts
+        .iter()
+        .any(|part| matches!(part.as_str(), "column" | "column-reverse"));
     let column = node
         .style
         .get("flex-direction")
@@ -739,8 +742,7 @@ fn layout_flex_children(
             value.trim().to_ascii_lowercase().as_str(),
             "wrap" | "wrap-reverse"
         )
-    }) || flex_flow
-        .is_some_and(|value| value.split_whitespace().any(|part| part == "wrap"));
+    }) || flow_parts.iter().any(|part| part == "wrap" || part == "wrap-reverse");
     let gap = parse_length(node.style.get("gap"), content_width).unwrap_or(0);
     let mut main = 0_u32;
     let mut cross = 0_u32;
