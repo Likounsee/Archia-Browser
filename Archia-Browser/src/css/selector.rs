@@ -464,10 +464,16 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
                     let mut parsed_case_insensitive = false;
                     if quote.is_none() {
                         let trimmed = raw_value.trim();
-                        if let Some(value_text) = trimmed.strip_suffix(" i").or_else(|| trimmed.strip_suffix(" I")) {
+                        if let Some(value_text) = trimmed
+                            .strip_suffix(" i")
+                            .or_else(|| trimmed.strip_suffix(" I"))
+                        {
                             value = Some(value_text.trim_end().to_string());
                             parsed_case_insensitive = true;
-                        } else if let Some(value_text) = trimmed.strip_suffix(" s").or_else(|| trimmed.strip_suffix(" S")) {
+                        } else if let Some(value_text) = trimmed
+                            .strip_suffix(" s")
+                            .or_else(|| trimmed.strip_suffix(" S"))
+                        {
                             value = Some(value_text.trim_end().to_string());
                         } else {
                             value = Some(trimmed.to_string());
