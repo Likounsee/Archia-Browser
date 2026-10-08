@@ -727,6 +727,10 @@ fn layout_flex_children(
         .style
         .get("flex-direction")
         .is_some_and(|value| value.trim().eq_ignore_ascii_case("column"));
+    let wrap = node
+        .style
+        .get("flex-wrap")
+        .is_some_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "wrap" | "wrap-reverse"));
     let gap = parse_length(node.style.get("gap"), content_width).unwrap_or(0);
     let mut main = 0_u32;
     let mut cross = 0_u32;
@@ -781,6 +785,11 @@ fn layout_flex_children(
         .saturating_add(
             gap.saturating_mul(bases.iter().flatten().count().saturating_sub(1) as u32),
         );
+    let wrap_limit = if column {
+        parse_length(node.style.get("height"), viewport_height)
+    } else {
+        Some(content_width)
+    };
     let available_main = if column {
         parse_length(node.style.get("height"), viewport_height).unwrap_or(base_main)
     } else {
@@ -853,6 +862,14 @@ fn layout_flex_children(
         } else {
             child_margin.horizontal_outer()
         });
+        let should_wrap = wrap
+            && wrap_limit.is_some_and(|limit| {
+                item_count > 0 && main.saturating_add(gap).saturating_add(target_outer_main) > limit
+            });
+        if should_wrap {
+            main = 0;
+            item_count = 0;
+        }
         let main_position = main.saturating_add(if item_count > 0 { gap } else { 0 });
         let child_x = if column {
             content_origin_x.saturating_add(child_margin.margin_left as i32)
@@ -2714,5 +2731,29 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.y, 20);
         assert_eq!(layout.children[1].rect.y, 0);
+    }    #[test]
+    fn flex_wrap_moves_items_to_next_line() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "display: flex; flex-wrap: wrap; width: 100px;",
+        );
+        for _ in 0..3 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 60px; height: 20px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.x, 0);
+        assert_eq!(layout.children[1].rect.x, 0);
+        assert_eq!(layout.children[2].rect.x, 0);
+        assert_eq!(layout.children[1].rect.y, 20);
+        assert_eq!(layout.children[2].rect.y, 40);
     }
+
+
 }
