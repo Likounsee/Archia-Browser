@@ -135,6 +135,14 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
                 return;
             }
         }
+        "border" => {
+            if let Some((width, style, color)) = expand_border_shorthand(&value) {
+                apply("border-width", width);
+                apply("border-style", style);
+                apply("border-color", color);
+                return;
+            }
+        }
         _ => {}
     }
 
@@ -183,6 +191,50 @@ fn initial_value(name: &str) -> &'static str {
         "visibility" => "visible",
         _ => "initial",
     }
+}
+
+fn expand_border_shorthand(value: &str) -> Option<(String, String, String)> {
+    let mut width = None;
+    let mut style = None;
+    let mut color = None;
+
+    for token in value.split_whitespace() {
+        if width.is_none() && matches!(token, "thin" | "medium" | "thick") {
+            width = Some(token.to_owned());
+        } else if width.is_none() && parse_px_token(token).is_some() {
+            width = Some(token.to_owned());
+        } else if style.is_none()
+            && matches!(
+                token.to_ascii_lowercase().as_str(),
+                "none"
+                    | "hidden"
+                    | "dotted"
+                    | "dashed"
+                    | "solid"
+                    | "double"
+                    | "groove"
+                    | "ridge"
+                    | "inset"
+                    | "outset"
+            )
+        {
+            style = Some(token.to_owned());
+        } else if color.is_none() {
+            color = Some(token.to_owned());
+        } else {
+            return None;
+        }
+    }
+
+    Some((
+        width.unwrap_or_else(|| "medium".to_owned()),
+        style.unwrap_or_else(|| "none".to_owned()),
+        color.unwrap_or_else(|| "currentcolor".to_owned()),
+    ))
+}
+
+fn parse_px_token(value: &str) -> Option<u32> {
+    value.strip_suffix("px")?.trim().parse().ok()
 }
 
 fn expand_box_shorthand(_name: &str, value: &str) -> Option<[String; 4]> {
@@ -331,6 +383,17 @@ mod tests {
         assert_eq!(style.get("padding-right"), Some("6px"));
         assert_eq!(style.get("padding-bottom"), Some("5px"));
         assert_eq!(style.get("padding-left"), Some("6px"));
+    }
+
+    #[test]
+    fn expands_border_shorthand_into_painting_properties() {
+        let sheet = StyleSheet::parse("div { border: 2px solid #102030; }");
+        let node = Node::element("div");
+        let style = sheet.compute_style(&node);
+
+        assert_eq!(style.get("border-width"), Some("2px"));
+        assert_eq!(style.get("border-style"), Some("solid"));
+        assert_eq!(style.get("border-color"), Some("#102030"));
     }
 
     #[test]
