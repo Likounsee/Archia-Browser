@@ -279,8 +279,6 @@ fn layout_styled_node(
 
     if inline_x > 0 {
         cursor_y = cursor_y.saturating_add(inline_line_height as i32);
-    } else if previous_block_margin_bottom > 0 {
-        cursor_y = cursor_y.saturating_add(previous_block_margin_bottom as i32);
     }
 
     let mut content_height = explicit_height.unwrap_or(cursor_y.max(0) as u32);
