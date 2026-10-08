@@ -69,7 +69,7 @@ impl SoftwareRenderer {
                         ((color >> 8) & 0xff) as u8,
                         (color & 0xff) as u8,
                     );
-                    surface.draw_text(x, y, text, color);
+                    surface.draw_text(*x, *y, text, color);
                 }
             }
         }
