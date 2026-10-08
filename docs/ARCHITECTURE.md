@@ -18,7 +18,7 @@ Navigation state is kept separate from transport and document parsing in core::n
 
 ## Web engine
 
-HTML tokenization, tree construction, DOM, CSS, layout and rendering are separate layers. The HTML parser currently handles void elements, basic implied document structure, paragraph/list auto-closing, DOM comments and implicit html/head/body construction. The DOM supports recursive element lookup and explicit extraction of anchor href targets; Page retains its retrieval URL, resolves document references through <base>, and extracts the document title without coupling navigation state to rendering. CSS resolution includes inheritance, CSS-wide keywords and initial box shorthand expansion. No renderer-specific assumptions belong in the HTML parser.
+HTML tokenization, tree construction, DOM, CSS, layout and rendering are separate layers. The HTML parser currently handles void elements, basic implied document structure, paragraph/list auto-closing, DOM comments and implicit html/head/body construction. The DOM supports recursive element lookup and explicit extraction of anchor href targets; Page retains its retrieval URL, resolves document references through <base>, and extracts the document title without coupling navigation state to rendering. Layout currently supports block/inline flow, simple line wrapping, box-model accumulation and an initial border-box interpretation. CSS resolution includes inheritance, CSS-wide keywords and initial box shorthand expansion. No renderer-specific assumptions belong in the HTML parser.
 
 ## Platform
 
