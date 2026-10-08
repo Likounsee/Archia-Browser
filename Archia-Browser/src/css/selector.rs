@@ -893,7 +893,9 @@ mod tests {
 
         assert!(Selector::parse("div:not(.missing)").unwrap().matches(&div));
         assert!(!Selector::parse("div:not(.card)").unwrap().matches(&div));
-        assert!(Selector::parse("div:is(.card, .missing)").unwrap().matches(&div));
+        assert!(Selector::parse("div:is(.card, .missing)")
+            .unwrap()
+            .matches(&div));
         assert!(Selector::parse("div:where(.card)").unwrap().matches(&div));
         assert_eq!(
             Selector::parse("div:not(#main)").unwrap().specificity(),
