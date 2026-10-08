@@ -12,6 +12,10 @@ Memory accounting is a first-class subsystem. Budgets are explicit, resource res
 
 Network requests pass through policy before transport. The policy layer carries resource kind, referrer and first-party context so native ad/tracker blocking can distinguish first-party from third-party requests. The current HTTP transport is bounded by response/header memory limits and rejects HTTPS until a native TLS layer exists. Document loading supports bounded redirects and persists scoped cookies between redirects. Cookie handling validates Domain scope, enforces Secure delivery and supports Max-Age deletion.
 
+## Navigation
+
+Navigation state is kept separate from transport and document parsing in core::navigation. A NavigationHistory owns ordered NavigationEntry values, tracks the current entry, discards forward entries when a new navigation is pushed, and exposes bounded back/forward traversal. The public Browser API delegates navigation, current URL lookup, back, forward and current-title updates to this state machine. This provides a deterministic foundation for later link activation, tabs, session restoration and browser UI without coupling those concerns to the network loader.
+
 ## Web engine
 
 HTML tokenization, tree construction, DOM, CSS, layout and rendering are separate layers. The HTML parser currently handles void elements, basic implied document structure, paragraph/list auto-closing, DOM comments and implicit html/head/body construction. CSS resolution includes inheritance, CSS-wide keywords and initial box shorthand expansion. No renderer-specific assumptions belong in the HTML parser.
