@@ -210,6 +210,16 @@ fn layout_styled_node(
     output.rect.width = content_width;
 
     let explicit_height = parse_px(node.style.get("height"));
+    let content_origin_x = output
+        .rect
+        .x
+        .saturating_add(box_model.border_left as i32)
+        .saturating_add(box_model.padding_left as i32);
+    let content_origin_y = output
+        .rect
+        .y
+        .saturating_add(box_model.border_top as i32)
+        .saturating_add(box_model.padding_top as i32);
     let mut cursor_y = 0_i32;
     let mut inline_x = 0_u32;
     let mut inline_line_height = 0_u32;
@@ -231,8 +241,8 @@ fn layout_styled_node(
             }
             let child_layout = layout_styled_node(
                 child,
-                output.rect.x.saturating_add(inline_x as i32),
-                output.rect.y.saturating_add(cursor_y),
+                content_origin_x.saturating_add(inline_x as i32),
+                content_origin_y.saturating_add(cursor_y),
                 content_width.saturating_sub(inline_x),
                 viewport_height,
             );
@@ -252,8 +262,8 @@ fn layout_styled_node(
             }
             let child_layout = layout_styled_node(
                 child,
-                output.rect.x,
-                output.rect.y.saturating_add(cursor_y),
+                content_origin_x,
+                content_origin_y.saturating_add(cursor_y),
                 content_width,
                 viewport_height,
             );
@@ -687,6 +697,24 @@ mod tests {
         assert_eq!(layout.children[0].rect.width, 100);
         assert_eq!(layout.children[0].box_model.margin_left, 100);
         assert_eq!(layout.children[0].box_model.margin_right, 100);
+    }
+
+    #[test]
+    fn child_content_starts_after_parent_padding_and_border() {
+        let mut root = Node::element("body");
+        let mut parent = Node::element("section");
+        parent.set_attribute("style", "padding: 6px; border: 2px solid;");
+        let mut child = Node::element("div");
+        child.set_attribute("style", "width: 20px; height: 10px;");
+        parent.append(child);
+        root.append(parent);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].children[0].rect.x, 8);
+        assert_eq!(layout.children[0].children[0].rect.y, 8);
     }
 
     #[test]
