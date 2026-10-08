@@ -2948,7 +2948,10 @@ mod tests {
     #[test]
     fn flex_row_reverse_places_items_from_right() {
         let mut root = Node::element("div");
-        root.set_attribute("style", "display: flex; flex-direction: row-reverse; width: 100px;");
+        root.set_attribute(
+            "style",
+            "display: flex; flex-direction: row-reverse; width: 100px;",
+        );
         for _ in 0..2 {
             let mut child = Node::element("div");
             child.set_attribute("style", "width: 20px; height: 10px;");
