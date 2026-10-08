@@ -2589,7 +2589,9 @@ mod tests {
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
 
         assert_eq!(layout.children[0].rect.y, 80);
-    }    #[test]
+    }
+
+    #[test]
     fn flex_order_repositions_items_without_changing_dom_order() {
         let mut root = Node::element("div");
         root.set_attribute("style", "display: flex; width: 200px; gap: 10px;");
@@ -2608,6 +2610,4 @@ mod tests {
         assert_eq!(layout.children[0].rect.x, 50);
         assert_eq!(layout.children[1].rect.x, 0);
     }
-
-
 }
