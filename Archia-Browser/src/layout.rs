@@ -1910,5 +1910,5 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.y, 0);
         assert_eq!(layout.children[1].rect.y, 0);
-    
+    }
 }
