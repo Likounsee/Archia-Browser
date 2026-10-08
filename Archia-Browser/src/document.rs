@@ -90,9 +90,8 @@ impl Page {
     pub fn from_html_at(url: Option<Url>, html: &str, css: &str, viewport: LayoutViewport) -> Self {
         let tokens = HtmlTokenizer::tokenize(html);
         let document = parse(&tokens);
-        let mut stylesheet_input = String::with_capacity(
-            USER_AGENT_STYLESHEET.len() + css.len() + 32,
-        );
+        let mut stylesheet_input =
+            String::with_capacity(USER_AGENT_STYLESHEET.len() + css.len() + 32);
         stylesheet_input.push_str(USER_AGENT_STYLESHEET);
         stylesheet_input.push('\n');
         collect_inline_styles(&document, &mut stylesheet_input);
