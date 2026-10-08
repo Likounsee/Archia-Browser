@@ -99,7 +99,7 @@ impl CookieJar {
         self.cookies.push(cookie);
     }
 
-fn valid_cookie_name(value: &str) -> bool {
+    fn valid_cookie_name(value: &str) -> bool {
     value.bytes().all(|byte| {
         byte.is_ascii_graphic()
             && !matches!(
@@ -124,7 +124,7 @@ fn valid_cookie_name(value: &str) -> bool {
     })
 }
 
-fn valid_cookie_value(value: &str) -> bool {
+    fn valid_cookie_value(value: &str) -> bool {
     !value.bytes().any(|byte| matches!(byte, b'\r' | b'\n' | b';'))
 }
 
