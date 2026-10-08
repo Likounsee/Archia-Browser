@@ -28,11 +28,11 @@ impl CookieJar {
             return;
         };
         let name = name.trim();
-        if name.is_empty() || !valid_cookie_name(name) {
+        if name.is_empty() || !Self::valid_cookie_name(name) {
             return;
         }
         let value = value.trim();
-        if !valid_cookie_value(value) {
+        if !Self::valid_cookie_value(value) {
             return;
         }
 
