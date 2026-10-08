@@ -7,6 +7,7 @@ pub struct Cookie {
     pub domain: String,
     pub path: String,
     pub secure: bool,
+    pub host_only: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -40,8 +41,9 @@ impl CookieJar {
             name: name.to_owned(),
             value: value.to_owned(),
             domain: url.host().to_ascii_lowercase(),
-            path: "/".to_owned(),
+            path: default_cookie_path(url.path()),
             secure: false,
+            host_only: true,
         };
 
         for attribute in parts {
@@ -62,6 +64,7 @@ impl CookieJar {
                             return;
                         }
                         cookie.domain = domain;
+                        cookie.host_only = false;
                     }
                 }
                 "path" => {
@@ -142,8 +145,11 @@ impl CookieJar {
             .cookies
             .iter()
             .filter(|cookie| {
-                let domain_matches =
-                    host == cookie.domain || host.ends_with(&format!(".{}", cookie.domain));
+                let domain_matches = if cookie.host_only {
+                    host == cookie.domain
+                } else {
+                    host == cookie.domain || host.ends_with(&format!(".{}", cookie.domain))
+                };
                 let path_matches = path == cookie.path
                     || path.starts_with(&(cookie.path.trim_end_matches('/').to_owned() + "/"));
                 domain_matches && path_matches && (!cookie.secure || secure)
@@ -160,6 +166,23 @@ impl CookieJar {
     pub fn is_empty(&self) -> bool {
         self.cookies.is_empty()
     }
+}
+
+fn default_cookie_path(request_path: &str) -> String {
+    if !request_path.starts_with('/') || request_path.matches('/').count() <= 1 {
+        return "/".to_owned();
+    }
+
+    request_path
+        .rsplit_once('/')
+        .map(|(directory, _)| {
+            if directory.is_empty() {
+                "/".to_owned()
+            } else {
+                directory.to_owned()
+            }
+        })
+        .unwrap_or_else(|| "/".to_owned())
 }
 
 #[cfg(test)]
@@ -186,6 +209,49 @@ mod tests {
         jar.store(&url, "bad;name=value");
 
         assert!(jar.is_empty());
+    }
+
+    #[test]
+    fn host_only_cookie_does_not_cross_to_subdomains() {
+        let url = Url::parse("https://example.org/account").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&url, "sid=host-only");
+
+        assert_eq!(jar.header_for(&url).as_deref(), Some("sid=host-only"));
+        assert_eq!(
+            jar.header_for(&Url::parse("https://sub.example.org/account").unwrap()),
+            None
+        );
+    }
+
+    #[test]
+    fn explicit_domain_cookie_reaches_subdomains() {
+        let url = Url::parse("https://example.org/account").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&url, "sid=shared; Domain=example.org");
+
+        assert_eq!(
+            jar.header_for(&Url::parse("https://sub.example.org/account").unwrap())
+                .as_deref(),
+            Some("sid=shared")
+        );
+    }
+
+    #[test]
+    fn omitted_path_uses_request_directory() {
+        let url = Url::parse("https://example.org/account/page").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&url, "sid=directory");
+
+        assert_eq!(
+            jar.header_for(&Url::parse("https://example.org/account/next").unwrap())
+                .as_deref(),
+            Some("sid=directory")
+        );
+        assert_eq!(
+            jar.header_for(&Url::parse("https://example.org/other").unwrap()),
+            None
+        );
     }
 
     #[test]
