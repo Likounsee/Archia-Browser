@@ -61,6 +61,7 @@ where
         request: &Request,
         viewport: LayoutViewport,
     ) -> Result<Page, DocumentLoadError> {
+        eprintln!("LOADER checkpoint: start");
         let mut current = request
             .clone()
             .with_cookies(&self.cookies.lock().expect("cookie jar poisoned"));
@@ -70,6 +71,7 @@ where
         }
 
         for redirect_count in 0..=self.max_redirects {
+            eprintln!("LOADER checkpoint: before cache get");
             let response = if let Some(response) = self
                 .cache
                 .lock()
@@ -78,10 +80,12 @@ where
             {
                 response
             } else {
+                eprintln!("LOADER checkpoint: cache miss, before transport");
                 let response = self
                     .pipeline
                     .execute(&self.transport, &current)
                     .map_err(DocumentLoadError::Network)?;
+                eprintln!("LOADER checkpoint: after transport");
                 self.cache
                     .lock()
                     .expect("HTTP cache poisoned")
@@ -89,6 +93,7 @@ where
                 response
             };
 
+            eprintln!("LOADER checkpoint: after cache/transport");
             for set_cookie in response.set_cookie_headers() {
                 self.cookies
                     .lock()
@@ -141,7 +146,9 @@ where
             }
 
             let html = String::from_utf8_lossy(&response.body);
+            eprintln!("LOADER checkpoint: before linked styles");
             let stylesheet = self.load_linked_stylesheets(&current.url, &html);
+            eprintln!("LOADER checkpoint: after linked styles");
             return Ok(Page::from_html_at(
                 Some(current.url.clone()),
                 &html,
