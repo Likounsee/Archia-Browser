@@ -62,7 +62,15 @@ impl SoftwareRenderer {
                     );
                     surface.fill_rect(rect.x, rect.y, rect.width, rect.height, color);
                 }
-                PaintCommand::DrawText { .. } => {}
+                PaintCommand::DrawText { x, y, text_len, color } => {
+                    let color = Color(
+                        ((color >> 24) & 0xff) as u8,
+                        ((color >> 16) & 0xff) as u8,
+                        ((color >> 8) & 0xff) as u8,
+                        (color & 0xff) as u8,
+                    );
+                    surface.draw_text_placeholder(x, y, text_len, color);
+                }
             }
         }
     }
