@@ -405,10 +405,22 @@ fn parse_border_radii(style: &ComputedStyle, width: u32, height: u32) -> CornerR
         return CornerRadii::default();
     };
     CornerRadii {
-        top_left: CornerRadius { x: values[0], y: values[0] },
-        top_right: CornerRadius { x: values[1], y: values[1] },
-        bottom_right: CornerRadius { x: values[2], y: values[2] },
-        bottom_left: CornerRadius { x: values[3], y: values[3] },
+        top_left: CornerRadius {
+            x: values[0],
+            y: values[0],
+        },
+        top_right: CornerRadius {
+            x: values[1],
+            y: values[1],
+        },
+        bottom_right: CornerRadius {
+            x: values[2],
+            y: values[2],
+        },
+        bottom_left: CornerRadius {
+            x: values[3],
+            y: values[3],
+        },
     }
 }
 
@@ -429,12 +441,28 @@ fn parse_border_radius_shorthand(value: &str, width: u32, height: u32) -> Corner
     }
     let horizontal = expand_radius_values(&horizontal);
     let vertical = expand_radius_values(&vertical);
-    scale_corner_radii(CornerRadii {
-        top_left: CornerRadius { x: horizontal[0], y: vertical[0] },
-        top_right: CornerRadius { x: horizontal[1], y: vertical[1] },
-        bottom_right: CornerRadius { x: horizontal[2], y: vertical[2] },
-        bottom_left: CornerRadius { x: horizontal[3], y: vertical[3] },
-    }, width, height)
+    scale_corner_radii(
+        CornerRadii {
+            top_left: CornerRadius {
+                x: horizontal[0],
+                y: vertical[0],
+            },
+            top_right: CornerRadius {
+                x: horizontal[1],
+                y: vertical[1],
+            },
+            bottom_right: CornerRadius {
+                x: horizontal[2],
+                y: vertical[2],
+            },
+            bottom_left: CornerRadius {
+                x: horizontal[3],
+                y: vertical[3],
+            },
+        },
+        width,
+        height,
+    )
 }
 
 fn parse_radius_values(value: &str, reference: u32) -> Option<Vec<u32>> {
