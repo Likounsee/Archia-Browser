@@ -207,16 +207,20 @@ fn collect_form_entries(node: &Node, entries: &mut Vec<(String, String)>) {
                             String::new()
                         }
                     });
-                entries.push((name.to_owned(), value));
+                entries.push((name.to_owned(), normalize_form_newlines(&value)));
             }
             "textarea" => {
                 if node.has_attribute("disabled") {
                     return;
                 }
                 if let Some(name) = node.attribute("name").filter(|name| !name.is_empty()) {
-                    entries.push((name.to_owned(), node.text_content()));
+                    entries.push((
+                        name.to_owned(),
+                        normalize_form_newlines(&node.text_content()),
+                    ));
                 }
             }
+            "select" => collect_select_entries(node, entries),
             _ => {}
         }
     }
@@ -224,6 +228,70 @@ fn collect_form_entries(node: &Node, entries: &mut Vec<(String, String)>) {
     for child in node.children() {
         collect_form_entries(child, entries);
     }
+}
+
+fn collect_select_entries(node: &Node, entries: &mut Vec<(String, String)>) {
+    if node.has_attribute("disabled") {
+        return;
+    }
+    let Some(name) = node.attribute("name").filter(|name| !name.is_empty()) else {
+        return;
+    };
+    let multiple = node.has_attribute("multiple");
+    let mut options = Vec::new();
+    collect_options(node, &mut options);
+    let selected = options.iter().filter(|option| option.selected).count();
+    for option in options {
+        if option.disabled || (!option.selected && (selected > 0 || multiple)) {
+            continue;
+        }
+        entries.push((name.to_owned(), normalize_form_newlines(&option.value)));
+        if !multiple {
+            break;
+        }
+    }
+}
+
+#[derive(Debug)]
+struct FormOption {
+    value: String,
+    selected: bool,
+    disabled: bool,
+}
+
+fn collect_options(node: &Node, options: &mut Vec<FormOption>) {
+    for child in node.children() {
+        if child.tag_name() == Some("option") {
+            options.push(FormOption {
+                value: child
+                    .attribute("value")
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| child.text_content()),
+                selected: child.has_attribute("selected"),
+                disabled: child.has_attribute("disabled"),
+            });
+        } else {
+            collect_options(child, options);
+        }
+    }
+}
+
+fn normalize_form_newlines(value: &str) -> String {
+    let mut output = String::with_capacity(value.len());
+    let mut chars = value.chars().peekable();
+    while let Some(character) = chars.next() {
+        match character {
+            '\r' => {
+                if chars.peek() == Some(&'\n') {
+                    chars.next();
+                }
+                output.push_str("\r\n");
+            }
+            '\n' => output.push_str("\r\n"),
+            _ => output.push(character),
+        }
+    }
+    output
 }
 
 fn encode_form_entries(entries: &[(String, String)]) -> String {
@@ -328,6 +396,24 @@ mod tests {
         );
         assert!(submission.body.is_empty());
         assert_eq!(submission.content_type, None);
+    }
+
+    #[test]
+    fn selects_successful_options_and_normalizes_textarea_newlines() {
+        let page = Page::from_html_at(
+            Some(Url::parse("https://example.org/form").unwrap()),
+            r#"<form method="post"><select name="choice"><option value="a">A</option><option value="b" selected>B</option></select><select name="tags" multiple><option value="one" selected>One</option><option value="two" selected>Two</option></select><textarea name="note">a
+b</textarea></form>"#,
+            "",
+            LayoutViewport::new(320, 200),
+        );
+        let form = page.document.find_first_element("form").unwrap();
+
+        let submission = page.form_submission(form).unwrap();
+        assert_eq!(
+            submission.body,
+            b"choice=b&tags=one&tags=two&note=a%0D%0Ab"
+        );
     }
 
     #[test]
