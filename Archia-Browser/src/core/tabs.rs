@@ -1,4 +1,5 @@
 use super::navigation::NavigationHistory;
+use crate::document::Page;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TabId(u64);
@@ -13,6 +14,7 @@ impl TabId {
 pub struct Tab {
     id: TabId,
     history: NavigationHistory,
+    page: Option<Page>,
 }
 
 impl Tab {
@@ -20,6 +22,7 @@ impl Tab {
         Self {
             id,
             history: NavigationHistory::new(),
+            page: None,
         }
     }
 
@@ -33,6 +36,18 @@ impl Tab {
 
     pub fn history_mut(&mut self) -> &mut NavigationHistory {
         &mut self.history
+    }
+
+    pub fn page(&self) -> Option<&Page> {
+        self.page.as_ref()
+    }
+
+    pub fn set_page(&mut self, page: Page) {
+        self.page = Some(page);
+    }
+
+    pub fn clear_page(&mut self) {
+        self.page = None;
     }
 }
 
@@ -117,6 +132,13 @@ impl TabManager {
 mod tests {
     use super::*;
     use crate::net::Url;
+
+    #[test]
+    fn new_tabs_start_without_a_document() {
+        let mut manager = TabManager::new();
+        manager.open();
+        assert!(manager.active_tab().unwrap().page().is_none());
+    }
 
     #[test]
     fn starts_without_tabs() {
