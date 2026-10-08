@@ -154,8 +154,7 @@ fn paint_styled_node(
                 y: layout.rect.y,
                 text: transform_text(text, node.style.get("text-transform")),
                 color: apply_opacity(
-                    parse_color(node.style.get("color").unwrap_or("black"))
-                        .unwrap_or(0x000000ff),
+                    parse_color(node.style.get("color").unwrap_or("black")).unwrap_or(0x000000ff),
                     opacity,
                 ),
             });
