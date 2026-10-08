@@ -271,7 +271,8 @@ fn display_for_styled_node(node: &crate::style_tree::StyledNode) -> Display {
             | "time" | "u" => Display::Inline,
             _ => Display::Block,
         },
-        NodeKind::Document | NodeKind::Comment(_) => Display::None,
+        NodeKind::Document => Display::Block,
+        NodeKind::Comment(_) => Display::None,
     }
 }
 
