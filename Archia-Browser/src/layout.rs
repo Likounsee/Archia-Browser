@@ -185,8 +185,16 @@ fn layout_styled_node(
         if left_auto || right_auto {
             let fixed_outer = content_width
                 .saturating_add(padding_border_x)
-                .saturating_add(if left_auto { 0 } else { box_model.margin_left })
-                .saturating_add(if right_auto { 0 } else { box_model.margin_right });
+                .saturating_add(if left_auto {
+                    0
+                } else {
+                    box_model.margin_left
+                })
+                .saturating_add(if right_auto {
+                    0
+                } else {
+                    box_model.margin_right
+                });
             let free_space = containing_width.saturating_sub(fixed_outer);
             match (left_auto, right_auto) {
                 (true, true) => {
@@ -639,7 +647,10 @@ mod tests {
     fn auto_horizontal_margins_center_fixed_width_blocks() {
         let mut root = Node::element("body");
         let mut child = Node::element("div");
-        child.set_attribute("style", "width: 100px; margin-left: auto; margin-right: auto;");
+        child.set_attribute(
+            "style",
+            "width: 100px; margin-left: auto; margin-right: auto;",
+        );
         root.append(child);
 
         let styled =
