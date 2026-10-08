@@ -159,7 +159,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn max_age_zero_deletes_cookie() {
         let url = Url::parse("https://example.org/").unwrap();
         let mut jar = CookieJar::new();
