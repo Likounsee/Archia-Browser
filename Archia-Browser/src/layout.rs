@@ -1065,8 +1065,34 @@ fn layout_flex_children(
         ordered_indices.sort_by_key(|(_, child_index)| {
             parse_flex_order(node.children[*child_index].style.get("order"))
         });
-        let mut cursor = 0_u32;
-        for (index, _) in ordered_indices {
+        let (offset, extra) = if column {
+            let free_space = available_main.saturating_sub(main);
+            let count = ordered_indices.len() as u32;
+            match node
+                .style
+                .get("justify-content")
+                .map(|value| value.trim().to_ascii_lowercase())
+                .unwrap_or_else(|| "flex-start".to_owned())
+                .as_str()
+            {
+                "center" => (free_space / 2, 0),
+                "flex-end" | "end" => (free_space, 0),
+                "space-between" if count > 1 => (0, free_space / (count - 1)),
+                "space-around" if count > 0 => {
+                    let distributed = free_space / count;
+                    (distributed / 2, distributed)
+                }
+                "space-evenly" if count > 0 => {
+                    let distributed = free_space / (count + 1);
+                    (distributed, distributed)
+                }
+                _ => (0, 0),
+            }
+        } else {
+            (0, 0)
+        };
+        let mut cursor = offset;
+        for (position, (index, _)) in ordered_indices.into_iter().enumerate() {
             let child = &output.children[index];
             let desired_y = if reverse_main && column {
                 content_origin_y
@@ -1095,7 +1121,8 @@ fn layout_flex_children(
                         .height
                         .saturating_add(output.children[index].box_model.vertical_outer()),
                 )
-                .saturating_add(gap);
+                .saturating_add(if column { extra } else { gap })
+                .saturating_add(if column { 0 } else { extra.saturating_mul(position as u32) });
         }
     }
 
@@ -3096,6 +3123,48 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.x, 80);
         assert_eq!(layout.children[1].rect.x, 60);
+    }
+
+    #[test]
+    fn flex_column_justify_content_centers_items() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "display: flex; flex-direction: column; justify-content: center; width: 100px; height: 100px;",
+        );
+        for _ in 0..2 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 20px; height: 20px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.y, 30);
+        assert_eq!(layout.children[1].rect.y, 50);
+    }
+
+    #[test]
+    fn flex_column_reverse_justify_content_ends_at_top() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "display: flex; flex-direction: column-reverse; justify-content: flex-end; width: 100px; height: 100px;",
+        );
+        for _ in 0..2 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 20px; height: 20px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.y, 20);
+        assert_eq!(layout.children[1].rect.y, 0);
     }
 
     #[test]
