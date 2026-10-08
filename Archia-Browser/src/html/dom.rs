@@ -101,6 +101,14 @@ impl Node {
         }
     }
 
+    /// Return the destination of a normal HTML anchor element.
+    ///
+    /// Navigation policy stays in the browser layer; the DOM only exposes the
+    /// authored href value and does not interpret schemes or resolve it.
+    pub fn link_href(&self) -> Option<&str> {
+        (self.tag_name() == Some("a")).then(|| self.attribute("href")).flatten()
+    }
+
     pub fn attributes(&self) -> Option<&BTreeMap<String, String>> {
         match &self.kind {
             NodeKind::Element { attributes, .. } => Some(attributes),
@@ -175,5 +183,16 @@ mod tests {
             Some("title")
         );
         assert!(document.find_first_element("missing").is_none());
+    }
+
+    #[test]
+    fn exposes_only_anchor_href_values_as_link_targets() {
+        let mut anchor = Node::element("a");
+        anchor.set_attribute("href", " /docs/guide.html ");
+        assert_eq!(anchor.link_href(), Some(" /docs/guide.html "));
+
+        let mut div = Node::element("div");
+        div.set_attribute("href", "/not-a-link");
+        assert_eq!(div.link_href(), None);
     }
 }
