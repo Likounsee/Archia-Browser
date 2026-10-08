@@ -4,7 +4,7 @@ use crate::html::{Node, NodeKind};
 use crate::style_tree::StyledNode;
 use crate::surface::{Color, SoftwareSurface};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct CornerRadii {
     top_left: u32,
     top_right: u32,
