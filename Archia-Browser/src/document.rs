@@ -23,6 +23,11 @@ em, i { font-style: italic; }
 pre { display: block; white-space: pre; }
 code { font-family: monospace; }
 a { color: #0000ee; }
+img { display: inline-block; }
+button, input, select, textarea { display: inline-block; }
+input, select { min-height: 20px; }
+button { padding: 2px 6px; }
+hr { display: block; border-top: 1px; margin-top: 8px; margin-bottom: 8px; }
 "#;
 
 #[derive(Debug, Clone)]
