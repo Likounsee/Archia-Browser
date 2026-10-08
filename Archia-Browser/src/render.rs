@@ -50,7 +50,7 @@ pub struct SoftwareRenderer;
 impl SoftwareRenderer {
     pub fn build_display_list_styled(root: &StyledNode, layout: &LayoutNode) -> DisplayList {
         let mut list = DisplayList::new();
-        paint_styled_node(root, layout, &mut list, 255);
+        paint_styled_node(root, layout, &mut list, 255, false);
         list
     }
 
@@ -105,19 +105,26 @@ fn paint_styled_node(
     layout: &LayoutNode,
     list: &mut DisplayList,
     parent_opacity: u8,
+    parent_visibility_hidden: bool,
 ) {
-    if layout.display == Display::None
-        || node
-            .style
-            .get("visibility")
-            .is_some_and(|value| value.trim() == "hidden")
-    {
+    if layout.display == Display::None {
         return;
     }
 
+    let local_visibility = node
+        .style
+        .get("visibility")
+        .map(str::trim)
+        .map(str::to_ascii_lowercase);
+    let visibility_hidden = match local_visibility.as_deref() {
+        Some("hidden" | "collapse") => true,
+        Some("visible") => false,
+        _ => parent_visibility_hidden,
+    };
+
     let opacity = effective_opacity(parent_opacity, node.style.get("opacity"));
 
-    if matches!(node.node.kind, NodeKind::Element { .. }) {
+    if !visibility_hidden && matches!(node.node.kind, NodeKind::Element { .. }) {
         if let Some(background) = node
             .style
             .get("background-color")
@@ -140,8 +147,9 @@ fn paint_styled_node(
         });
     }
 
-    if let NodeKind::Text(text) = &node.node.kind {
-        list.push(PaintCommand::DrawText {
+    if !visibility_hidden {
+        if let NodeKind::Text(text) = &node.node.kind {
+            list.push(PaintCommand::DrawText {
             x: layout.rect.x,
             y: layout.rect.y,
             text: transform_text(text, node.style.get("text-transform")),
@@ -149,7 +157,8 @@ fn paint_styled_node(
                 parse_color(node.style.get("color").unwrap_or("black")).unwrap_or(0x000000ff),
                 opacity,
             ),
-        });
+            });
+        }
     }
 
     let mut child_indices: Vec<usize> =
@@ -162,6 +171,7 @@ fn paint_styled_node(
             &layout.children[index],
             list,
             opacity,
+            visibility_hidden,
         );
     }
 
