@@ -42,6 +42,19 @@ impl Browser {
             .push(core::navigation::NavigationEntry::new(url, title));
     }
 
+    pub fn navigate_reference(
+        &mut self,
+        reference: &str,
+        title: Option<String>,
+    ) -> Result<&net::Url, net::UrlError> {
+        let base = self
+            .current_url()
+            .ok_or(net::UrlError::MissingAuthority)?;
+        let url = base.resolve(reference)?;
+        self.navigate(url, title);
+        Ok(self.current_url().expect("navigation created an entry"))
+    }
+
     pub fn current_url(&self) -> Option<&net::Url> {
         self.history.current().map(|entry| entry.url())
     }
@@ -92,5 +105,46 @@ mod tests {
             browser.forward().map(ToString::to_string),
             Some("https://example.org/two".to_owned())
         );
+    }
+
+    #[test]
+    fn browser_navigates_relative_references() {
+        let mut browser = Browser::new();
+        browser.navigate(
+            net::Url::parse("https://example.org/docs/index.html").unwrap(),
+            Some("Index".to_owned()),
+        );
+
+        let current = browser
+            .navigate_reference("../guide.html", Some("Guide".to_owned()))
+            .unwrap();
+        assert_eq!(current.to_string(), "https://example.org/guide.html");
+        assert_eq!(browser.history().len(), 2);
+        assert_eq!(browser.history().current().and_then(|entry| entry.title()), Some("Guide"));
+    }
+
+    #[test]
+    fn browser_rejects_reference_without_base_navigation() {
+        let mut browser = Browser::new();
+        assert_eq!(
+            browser.navigate_reference("/home", None),
+            Err(net::UrlError::MissingAuthority)
+        );
+    }
+
+    #[test]
+    fn browser_fragment_navigation_creates_history_entry() {
+        let mut browser = Browser::new();
+        browser.navigate(
+            net::Url::parse("https://example.org/docs/index.html").unwrap(),
+            None,
+        );
+
+        let current = browser.navigate_reference("#features", None).unwrap();
+        assert_eq!(
+            current.to_string(),
+            "https://example.org/docs/index.html#features"
+        );
+        assert!(browser.history().can_go_back());
     }
 }
