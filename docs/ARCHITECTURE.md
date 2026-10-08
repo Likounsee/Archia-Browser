@@ -14,11 +14,11 @@ Network requests pass through policy before transport. The policy layer carries 
 
 ## Navigation
 
-Navigation state is kept separate from transport and document parsing in core::navigation. A NavigationHistory owns ordered NavigationEntry values, tracks the current entry, discards forward entries when a new navigation is pushed, and exposes bounded back/forward traversal. The public Browser API delegates navigation, current URL lookup, back, forward and current-title updates to this state machine. This provides a deterministic foundation for later link activation, tabs, session restoration and browser UI without coupling those concerns to the network loader.
+Navigation state is kept separate from transport and document parsing in core::navigation. A NavigationHistory owns ordered NavigationEntry values, tracks the current entry, discards forward entries when a new navigation is pushed, and exposes bounded back/forward traversal. The public Browser API delegates navigation, current URL lookup, back, forward and current-title updates to this state machine. TabManager owns independent histories and the active-tab invariant, while Browser exposes tab creation, selection and guarded closing. DOM anchors expose their authored href through a small link-target API; Browser link activation validates the element, trims the destination and resolves it against the active document URL before creating a history entry. Non-hierarchical references such as javascript: and mailto: are rejected by URL resolution rather than being treated as relative paths.
 
 ## Web engine
 
-HTML tokenization, tree construction, DOM, CSS, layout and rendering are separate layers. The HTML parser currently handles void elements, basic implied document structure, paragraph/list auto-closing, DOM comments and implicit html/head/body construction. CSS resolution includes inheritance, CSS-wide keywords and initial box shorthand expansion. No renderer-specific assumptions belong in the HTML parser.
+HTML tokenization, tree construction, DOM, CSS, layout and rendering are separate layers. The HTML parser currently handles void elements, basic implied document structure, paragraph/list auto-closing, DOM comments and implicit html/head/body construction. The DOM supports recursive element lookup and explicit extraction of anchor href targets; Page extracts the document title without coupling navigation state to rendering. CSS resolution includes inheritance, CSS-wide keywords and initial box shorthand expansion. No renderer-specific assumptions belong in the HTML parser.
 
 ## Platform
 
