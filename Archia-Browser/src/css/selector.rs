@@ -128,7 +128,8 @@ impl Selector {
                     ')' if bracket == 0 && paren > 0 => paren -= 1,
                     c if bracket == 0
                         && paren == 0
-                        && (c.is_whitespace() || matches!(c, '>' | '+' | '~')) => {
+                        && (c.is_whitespace() || matches!(c, '>' | '+' | '~')) =>
+                    {
                         break
                     }
                     _ => {}
