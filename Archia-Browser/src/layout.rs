@@ -799,8 +799,8 @@ fn layout_flex_children(
     };
     let free_space = available_main.saturating_sub(base_main);
     let deficit = base_main.saturating_sub(available_main);
-    let grow_enabled = free_space > 0 && total_grow > 0.0;
-    let shrink_enabled = deficit > 0 && total_shrink_weight > 0.0;
+    let grow_enabled = !wrap && free_space > 0 && total_grow > 0.0;
+    let shrink_enabled = !wrap && deficit > 0 && total_shrink_weight > 0.0;
 
     for (child_index, child) in node.children.iter().enumerate() {
         let child_display = display_for_styled_node(child);
