@@ -745,14 +745,14 @@ fn normalized_text(text: &str, white_space: Option<&str>) -> String {
     let mut pending_space = false;
     for character in text.chars() {
         if character.is_whitespace() {
-            if mode == "pre-line" && character == '\\n' {
+            if mode == "pre-line" && character == '\n' {
                 pending_space = false;
-                output.push('\\n');
+                output.push('\n');
             } else {
                 pending_space = true;
             }
         } else {
-            if pending_space && !output.is_empty() && !output.ends_with('\\n') {
+            if pending_space && !output.is_empty() && !output.ends_with('\n') {
                 output.push(' ');
             }
             pending_space = false;
@@ -1314,7 +1314,7 @@ mod tests {
             crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
 
-        assert_eq!(layout.children[0].rect.width, 36);
+        assert_eq!(layout.children[0].rect.width, 42);
         assert_eq!(layout.children[0].rect.height, 32);
     }
 
