@@ -53,6 +53,37 @@ impl Node {
         self.children.push(child);
     }
 
+    pub fn insert_child(&mut self, index: usize, child: Node) -> Result<(), Node> {
+        if index > self.children.len() {
+            return Err(child);
+        }
+        self.children.insert(index, child);
+        Ok(())
+    }
+
+    pub fn remove_child(&mut self, index: usize) -> Option<Node> {
+        (index < self.children.len()).then(|| self.children.remove(index))
+    }
+
+    pub fn replace_child(&mut self, index: usize, child: Node) -> Result<Node, Node> {
+        let Some(existing) = self.children.get_mut(index) else {
+            return Err(child);
+        };
+        Ok(std::mem::replace(existing, child))
+    }
+
+    pub fn child(&self, index: usize) -> Option<&Node> {
+        self.children.get(index)
+    }
+
+    pub fn child_mut(&mut self, index: usize) -> Option<&mut Node> {
+        self.children.get_mut(index)
+    }
+
+    pub fn child_count(&self) -> usize {
+        self.children.len()
+    }
+
     pub fn children(&self) -> &[Node] {
         &self.children
     }
@@ -167,6 +198,30 @@ mod tests {
         assert_eq!(node.attribute("class"), Some("card"));
         assert_eq!(node.remove_attribute("class"), Some("card".into()));
         assert_eq!(node.attribute("class"), None);
+    }
+
+    #[test]
+    fn supports_dom_child_mutation_operations() {
+        let mut parent = Node::element("div");
+        parent.append(Node::element("first"));
+        parent.append(Node::element("third"));
+
+        assert!(parent.insert_child(1, Node::element("second")).is_ok());
+        assert_eq!(parent.child_count(), 3);
+        assert_eq!(parent.child(1).and_then(Node::tag_name), Some("second"));
+
+        let replaced = parent.replace_child(1, Node::element("replacement")).unwrap();
+        assert_eq!(replaced.tag_name(), Some("second"));
+        assert_eq!(parent.child(1).and_then(Node::tag_name), Some("replacement"));
+
+        let removed = parent.remove_child(0).unwrap();
+        assert_eq!(removed.tag_name(), Some("first"));
+        assert_eq!(parent.child_count(), 2);
+        assert_eq!(parent.child_mut(0).and_then(|node| node.tag_name()), Some("replacement"));
+
+        assert!(parent.insert_child(99, Node::element("invalid")).is_err());
+        assert!(parent.replace_child(99, Node::element("invalid")).is_err());
+        assert!(parent.remove_child(99).is_none());
     }
 
     #[test]
