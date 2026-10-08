@@ -70,6 +70,13 @@ impl Url {
         self.fragment.as_deref()
     }
 
+    pub fn same_document(&self, other: &Self) -> bool {
+        self.scheme == other.scheme
+            && self.authority == other.authority
+            && self.path == other.path
+            && self.query == other.query
+    }
+
     pub fn host(&self) -> &str {
         let authority = self
             .authority
@@ -281,6 +288,16 @@ mod tests {
             Url::parse("http+custom://example.org").unwrap().scheme(),
             "http+custom"
         );
+    }
+
+    #[test]
+    fn same_document_ignores_only_the_fragment() {
+        let first = Url::parse("https://example.org/docs/index.html#top").unwrap();
+        let second = Url::parse("https://example.org/docs/index.html#features").unwrap();
+        let different_query = Url::parse("https://example.org/docs/index.html?q=1").unwrap();
+
+        assert!(first.same_document(&second));
+        assert!(!first.same_document(&different_query));
     }
 
     #[test]
