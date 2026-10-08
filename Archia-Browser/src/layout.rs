@@ -427,7 +427,11 @@ fn positioned_child_x(
     fixed: bool,
 ) -> i32 {
     let origin_x = if fixed { 0 } else { origin_x };
-    let containing_width = if fixed { viewport_width } else { containing_width };
+    let containing_width = if fixed {
+        viewport_width
+    } else {
+        containing_width
+    };
     let margin_left = parse_length(node.style.get("margin-left"), containing_width).unwrap_or(0);
     let margin_right = parse_length(node.style.get("margin-right"), containing_width).unwrap_or(0);
     if let Some(left) = parse_signed_offset(node.style.get("left"), containing_width) {
