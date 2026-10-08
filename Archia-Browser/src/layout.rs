@@ -1288,7 +1288,11 @@ fn justify_flex_rows(
                 .saturating_add(child.box_model.horizontal_outer());
             let desired_x = if reverse_main {
                 content_origin_x
-                    .saturating_add(content_width.saturating_sub(cursor).saturating_sub(outer_width) as i32)
+                    .saturating_add(
+                        content_width
+                            .saturating_sub(cursor)
+                            .saturating_sub(outer_width) as i32,
+                    )
                     .saturating_add(child.box_model.margin_left as i32)
             } else {
                 content_origin_x
