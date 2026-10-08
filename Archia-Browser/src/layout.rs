@@ -148,11 +148,25 @@ fn layout_styled_node(
         .saturating_add(box_model.padding_right)
         .saturating_add(box_model.border_left)
         .saturating_add(box_model.border_right);
-    let content_width = parse_px(node.style.get("width")).unwrap_or_else(|| {
-        containing_width
-            .saturating_sub(margin_x)
-            .saturating_sub(padding_border_x)
-    });
+    let specified_width = parse_px(node.style.get("width"));
+    let border_box = node
+        .style
+        .get("box-sizing")
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("border-box"));
+    let content_width = specified_width.map_or_else(
+        || {
+            containing_width
+                .saturating_sub(margin_x)
+                .saturating_sub(padding_border_x)
+        },
+        |width| {
+            if border_box {
+                width.saturating_sub(padding_border_x)
+            } else {
+                width
+            }
+        },
+    );
 
     output.box_model = box_model;
     output.rect.x = x.saturating_add(box_model.margin_left as i32);
@@ -212,12 +226,16 @@ fn layout_styled_node(
     }
 
     let content_height = explicit_height.unwrap_or(cursor_y.max(0) as u32);
-    output.rect.height = content_height
-        .saturating_add(box_model.padding_top)
-        .saturating_add(box_model.padding_bottom)
-        .saturating_add(box_model.border_top)
-        .saturating_add(box_model.border_bottom)
-        .min(viewport_height.max(content_height));
+    output.rect.height = if border_box && explicit_height.is_some() {
+        content_height
+    } else {
+        content_height
+            .saturating_add(box_model.padding_top)
+            .saturating_add(box_model.padding_bottom)
+            .saturating_add(box_model.border_top)
+            .saturating_add(box_model.border_bottom)
+    }
+    .min(viewport_height.max(content_height));
     output
 }
 
@@ -386,6 +404,24 @@ mod tests {
         assert_eq!(layout.children[0].display, Display::Block);
         assert_eq!(layout.children[0].rect.height, 24);
         assert_eq!(layout.children[1].display, Display::None);
+    }
+
+    #[test]
+    fn border_box_width_and_height_include_padding_and_border() {
+        let mut root = Node::element("body");
+        let mut child = Node::element("div");
+        child.set_attribute(
+            "style",
+            "box-sizing: border-box; width: 100px; height: 50px; padding: 10px; border-width: 2px;",
+        );
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 200));
+
+        assert_eq!(layout.children[0].rect.width, 76);
+        assert_eq!(layout.children[0].rect.height, 50);
     }
 
     #[test]
