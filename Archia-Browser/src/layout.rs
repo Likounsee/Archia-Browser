@@ -1147,21 +1147,137 @@ fn layout_flex_children(
         }
     }
 
-    if wrap && !column {
-        align_flex_lines(
-            output,
-            &flex_indices,
-            node,
-            content_origin_y,
-            cross,
-            wrap_reverse,
-        );
+    if wrap {
+        if column {
+            align_flex_columns(
+                output,
+                &flex_indices,
+                node,
+                content_origin_x,
+                content_width,
+                cross,
+                wrap_reverse,
+            );
+        } else {
+            align_flex_lines(
+                output,
+                &flex_indices,
+                node,
+                content_origin_y,
+                cross,
+                wrap_reverse,
+            );
+        }
     }
 
     if column {
         main as i32
     } else {
         cross as i32
+    }
+}
+
+fn align_flex_columns(
+    output: &mut LayoutNode,
+    indices: &[(usize, usize)],
+    node: &crate::style_tree::StyledNode,
+    content_origin_x: i32,
+    content_width: u32,
+    line_cross: u32,
+    wrap_reverse: bool,
+) {
+    if indices.len() < 2 {
+        return;
+    }
+
+    let mut columns: Vec<Vec<usize>> = Vec::new();
+    for (index, _) in indices {
+        let x = output.children[*index].rect.x;
+        if let Some(column) = columns
+            .iter_mut()
+            .find(|column| output.children[column[0]].rect.x == x)
+        {
+            column.push(*index);
+        } else {
+            columns.push(vec![*index]);
+        }
+    }
+    if columns.len() < 2 {
+        return;
+    }
+
+    let column_gap = parse_length(node.style.get("column-gap"), line_cross)
+        .or_else(|| parse_length(node.style.get("gap"), line_cross))
+        .unwrap_or(0);
+    let total = columns
+        .iter()
+        .map(|column| {
+            column
+                .iter()
+                .map(|index| {
+                    output.children[*index]
+                        .rect
+                        .width
+                        .saturating_add(output.children[*index].box_model.horizontal_outer())
+                })
+                .max()
+                .unwrap_or(0)
+        })
+        .fold(0_u32, u32::saturating_add)
+        .saturating_add(column_gap.saturating_mul(columns.len().saturating_sub(1) as u32));
+    let available = content_width;
+    let free = available.saturating_sub(total);
+    let alignment = node
+        .style
+        .get("align-content")
+        .map(|value| value.trim().to_ascii_lowercase())
+        .unwrap_or_else(|| "stretch".to_owned());
+    let (offset, extra) = match alignment.as_str() {
+        "center" => (free / 2, 0),
+        "flex-end" | "end" => (free, 0),
+        "space-between" if columns.len() > 1 => {
+            (0, free / (columns.len() - 1) as u32)
+        }
+        "space-around" => {
+            let gap = free / columns.len() as u32;
+            (gap / 2, gap)
+        }
+        "space-evenly" => {
+            let gap = free / (columns.len() + 1) as u32;
+            (gap, gap)
+        }
+        _ => (0, 0),
+    };
+
+    let mut cursor = offset;
+    for column in &columns {
+        let current_x = output.children[column[0]].rect.x;
+        let width = column
+            .iter()
+            .map(|index| {
+                output.children[*index]
+                    .rect
+                    .width
+                    .saturating_add(output.children[*index].box_model.horizontal_outer())
+            })
+            .max()
+            .unwrap_or(0);
+        let target_x = if wrap_reverse {
+            content_origin_x
+                .saturating_add(available.saturating_sub(cursor).saturating_sub(width) as i32)
+        } else {
+            content_origin_x.saturating_add(cursor as i32)
+        };
+        let shift = target_x.saturating_sub(current_x);
+        if shift != 0 {
+            for index in column {
+                shift_layout_tree(&mut output.children[*index], shift, 0);
+            }
+        }
+        cursor = cursor
+            .saturating_add(width)
+            .saturating_add(column_gap)
+            .saturating_add(extra);
     }
 }
 
@@ -3027,6 +3143,31 @@ mod tests {
         assert_eq!(layout.children[1].rect.x, 40);
         assert_eq!(layout.children[1].rect.y, 0);
         assert_eq!(layout.children[2].rect.x, 80);
+        assert_eq!(layout.children[2].rect.y, 0);
+    }
+
+    #[test]
+    fn flex_column_wrap_reverse_places_columns_from_right() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "display: flex; flex-direction: column; flex-wrap: wrap-reverse; width: 120px; height: 100px;",
+        );
+        for _ in 0..3 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 40px; height: 60px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(120, 100));
+
+        assert_eq!(layout.children[0].rect.x, 80);
+        assert_eq!(layout.children[0].rect.y, 0);
+        assert_eq!(layout.children[1].rect.x, 40);
+        assert_eq!(layout.children[1].rect.y, 0);
+        assert_eq!(layout.children[2].rect.x, 0);
         assert_eq!(layout.children[2].rect.y, 0);
     }
 
