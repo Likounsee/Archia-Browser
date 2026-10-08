@@ -974,7 +974,9 @@ mod tests {
         div.set_attribute("class", "Card");
 
         assert!(Selector::parse("div:not(.missing)").unwrap().matches(&div));
-        assert!(Selector::parse("div:is(.Card, .missing)").unwrap().matches(&div));
+        assert!(Selector::parse("div:is(.Card, .missing)")
+            .unwrap()
+            .matches(&div));
         assert!(!Selector::parse("div:not(.Card)").unwrap().matches(&div));
     }
 
