@@ -225,7 +225,9 @@ mod tests {
         let mut link = crate::html::Node::element("a");
         link.set_attribute("href", "../guide.html");
 
-        let current = browser.activate_link(&link, Some("Guide".to_owned())).unwrap();
+        let current = browser
+            .activate_link(&link, Some("Guide".to_owned()))
+            .unwrap();
         assert_eq!(current.to_string(), "https://example.org/guide.html");
         assert_eq!(browser.history().len(), 2);
         assert_eq!(
@@ -237,10 +239,7 @@ mod tests {
     #[test]
     fn browser_rejects_non_anchor_and_unsafe_scheme_links() {
         let mut browser = Browser::new();
-        browser.navigate(
-            net::Url::parse("https://example.org/").unwrap(),
-            None,
-        );
+        browser.navigate(net::Url::parse("https://example.org/").unwrap(), None);
 
         let div = crate::html::Node::element("div");
         assert_eq!(
