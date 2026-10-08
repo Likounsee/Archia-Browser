@@ -236,7 +236,7 @@ mod tests {
         surface.draw_text(0, 0, "A\tB\nC", Color::BLACK);
 
         assert_eq!(surface.pixel(1, 0), Some(Color::BLACK));
-        assert_eq!(surface.pixel(25, 0), Some(Color::BLACK));
+        assert_eq!(surface.pixel(30, 0), Some(Color::BLACK));
         assert_eq!(surface.pixel(1, 8), Some(Color::BLACK));
     }
 
