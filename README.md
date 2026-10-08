@@ -135,6 +135,10 @@ Current milestone:
 - [x] Navigation history state machine and Browser back/forward API
 - [x] Relative navigation-reference resolution through the Browser API
 - [x] Document title extraction
+- [x] Loaded-page URL propagation through redirects
+- [x] HTML <base href> resolution for document links
+- [x] Anchor link activation with non-hierarchical scheme rejection
+- [x] target="_blank" tab creation during link activation
 - [x] Tab manager foundation with per-tab navigation histories
 - [x] Browser tab creation, selection and closing API
 - [ ] JavaScript runtime
@@ -194,7 +198,7 @@ Current milestone:
 - [x] Add the first navigation-history API with back/forward state.
 - [x] Add relative navigation-reference resolution.
 - [x] Add the first tab/session-state foundation with independent tab histories.
-- [ ] Add forms and navigation activation.
+- [x] Add initial link/navigation activation.
 - [ ] Expand browser security boundaries.
 
 ### Phase 6 — JavaScript
@@ -249,7 +253,7 @@ License to be defined.
 4. Expand HTML parsing toward standards-compliant tree construction.
 5. Expand CSS selectors, cascade, inheritance and computed values.
 6. Extend first-party/third-party filtering into a complete filter-list and permission model.
-7. Connect document activation and link handling to tab/session state.
-8. Add form submission and navigation activation.
+7. Connect loaded DocumentLoader pages to browser/session state and link activation.
+8. Add form submission and navigation.
 9. Keep ad/tracker blocking before transport so blocked resources are not downloaded when policy allows.
 10. Keep every subsystem independently testable through GitHub Actions.
