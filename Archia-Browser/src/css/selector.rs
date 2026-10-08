@@ -109,6 +109,7 @@ impl Selector {
 
             let start = i;
             let mut bracket = 0;
+            let mut paren = 0;
             let mut quote = None;
             while i < chars.len() {
                 let c = chars[i];
@@ -123,7 +124,11 @@ impl Selector {
                     '\'' | '"' if bracket > 0 => quote = Some(c),
                     '[' => bracket += 1,
                     ']' if bracket > 0 => bracket -= 1,
-                    c if bracket == 0 && (c.is_whitespace() || matches!(c, '>' | '+' | '~')) => {
+                    '(' if bracket == 0 => paren += 1,
+                    ')' if bracket == 0 && paren > 0 => paren -= 1,
+                    c if bracket == 0
+                        && paren == 0
+                        && (c.is_whitespace() || matches!(c, '>' | '+' | '~')) => {
                         break
                     }
                     _ => {}
