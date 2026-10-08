@@ -60,6 +60,21 @@ impl Browser {
             .history()
     }
 
+    pub fn load_request<P, T>(
+        &mut self,
+        loader: &net::DocumentLoader<P, T>,
+        request: &net::Request,
+        viewport: crate::layout::LayoutViewport,
+    ) -> Result<crate::document::Page, net::DocumentLoadError>
+    where
+        P: net::pipeline::RequestPolicyEngine,
+        T: net::Transport,
+    {
+        let page = loader.load(request, viewport)?;
+        self.commit_page(&page);
+        Ok(page)
+    }
+
     pub fn navigate(&mut self, url: net::Url, title: Option<String>) {
         if let Some(tab) = self.tabs.active_tab_mut() {
             tab.history_mut()
@@ -209,6 +224,54 @@ mod tests {
         let browser = Browser::new();
         assert_eq!(browser.tabs().len(), 1);
         assert!(browser.tabs().active_id().is_some());
+    }
+
+    #[test]
+    fn browser_load_request_commits_loaded_page() {
+        #[derive(Debug, Default)]
+        struct AllowAll;
+
+        impl net::pipeline::RequestPolicyEngine for AllowAll {
+            fn decide(&self, _: &net::Request) -> net::pipeline::PolicyDecision {
+                net::pipeline::PolicyDecision::Allow
+            }
+        }
+
+        #[derive(Debug)]
+        struct MockTransport;
+
+        impl net::Transport for MockTransport {
+            fn send(&self, _: &net::Request) -> Result<net::Response, net::TransportError> {
+                Ok(net::Response::new(200)
+                    .with_header("content-type", "text/html")
+                    .with_body(b"<title>Loaded</title><body>Hello</body>".to_vec()))
+            }
+        }
+
+        let loader = net::DocumentLoader::new(
+            net::pipeline::NetworkPipeline::new(AllowAll),
+            MockTransport,
+        );
+        let request = net::Request::new(net::Url::parse("https://example.org/").unwrap());
+        let mut browser = Browser::new();
+
+        let page = browser
+            .load_request(
+                &loader,
+                &request,
+                crate::layout::LayoutViewport::new(320, 200),
+            )
+            .unwrap();
+
+        assert_eq!(page.title(), Some("Loaded".to_owned()));
+        assert_eq!(
+            browser.current_url().map(ToString::to_string),
+            Some("https://example.org/".to_owned())
+        );
+        assert_eq!(
+            browser.history().current().and_then(|entry| entry.title()),
+            Some("Loaded")
+        );
     }
 
     #[test]
