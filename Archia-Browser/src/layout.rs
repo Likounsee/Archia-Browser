@@ -844,11 +844,18 @@ fn layout_flex_children(
             .get("justify-content")
             .map(|value| value.trim().to_ascii_lowercase())
             .unwrap_or_else(|| "flex-start".to_owned());
+        let count = flex_indices.len() as u32;
         let (offset, extra) = match justify.as_str() {
             "center" => (free_space / 2, 0),
             "flex-end" | "end" => (free_space, 0),
-            "space-between" if flex_indices.len() > 1 => {
-                (0, free_space / (flex_indices.len() as u32 - 1))
+            "space-between" if count > 1 => (0, free_space / (count - 1)),
+            "space-around" if count > 0 => {
+                let gap = free_space / count;
+                (gap / 2, gap)
+            }
+            "space-evenly" if count > 0 => {
+                let gap = free_space / (count + 1);
+                (gap, gap)
             }
             _ => (0, 0),
         };
@@ -1807,6 +1814,24 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.x, 30);
         assert_eq!(layout.children[1].rect.x, 50);
+    }
+
+    #[test]
+    fn flex_space_around_distributes_row_items_evenly() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "display: flex; width: 100px; justify-content: space-around;");
+        for _ in 0..2 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 20px; height: 10px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 50));
+
+        assert_eq!(layout.children[0].rect.x, 15);
+        assert_eq!(layout.children[1].rect.x, 65);
     }
 
     #[test]
