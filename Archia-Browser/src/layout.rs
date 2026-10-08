@@ -299,6 +299,13 @@ fn layout_styled_node(
     }
 
     let mut content_height = explicit_height.unwrap_or(cursor_y.max(0) as u32);
+    if border_box && explicit_height.is_some() {
+        content_height = content_height
+            .saturating_sub(box_model.padding_top)
+            .saturating_sub(box_model.padding_bottom)
+            .saturating_sub(box_model.border_top)
+            .saturating_sub(box_model.border_bottom);
+    }
     if let Some(min_height) = parse_length(node.style.get("min-height"), viewport_height) {
         content_height = content_height.max(min_height);
     }
@@ -889,7 +896,7 @@ mod tests {
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 200));
 
         assert_eq!(layout.children[0].rect.width, 76);
-        assert_eq!(layout.children[0].rect.height, 50);
+        assert_eq!(layout.children[0].rect.height, 26);
     }
 
     #[test]
