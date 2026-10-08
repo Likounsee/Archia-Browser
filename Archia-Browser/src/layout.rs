@@ -232,6 +232,23 @@ fn layout_styled_node(
         }
 
         if child_display == Display::Inline {
+            if is_line_break(child) {
+                let break_height = inline_line_height.max(used_inline_line_height(child));
+                let mut child_layout = layout_styled_node(
+                    child,
+                    content_origin_x.saturating_add(inline_x as i32),
+                    content_origin_y.saturating_add(cursor_y),
+                    content_width.saturating_sub(inline_x),
+                    viewport_height,
+                );
+                child_layout.rect.height = break_height;
+                output.children.push(child_layout);
+                cursor_y = cursor_y.saturating_add(break_height as i32);
+                inline_x = 0;
+                inline_line_height = 0;
+                continue;
+            }
+
             let width = intrinsic_inline_width(child);
             let line_height = used_inline_line_height(child);
             if inline_x > 0 && inline_x.saturating_add(width) > content_width {
@@ -340,6 +357,10 @@ fn display_for_styled_node(node: &crate::style_tree::StyledNode) -> Display {
         NodeKind::Document => Display::Block,
         NodeKind::Comment(_) => Display::None,
     }
+}
+
+fn is_line_break(node: &crate::style_tree::StyledNode) -> bool {
+    matches!(&node.node.kind, NodeKind::Element { name, .. } if name == "br")
 }
 
 fn intrinsic_inline_content_width(node: &crate::style_tree::StyledNode) -> u32 {
@@ -585,6 +606,28 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.width, 12);
         assert_eq!(layout.children[0].box_model.horizontal_outer(), 6);
+    }
+
+    #[test]
+    fn br_forces_a_new_inline_line() {
+        let mut root = Node::element("body");
+        let mut first = Node::element("span");
+        first.append(Node::text("first"));
+        let br = Node::element("br");
+        let mut second = Node::element("span");
+        second.append(Node::text("second"));
+        root.append(first);
+        root.append(br);
+        root.append(second);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.y, 0);
+        assert_eq!(layout.children[1].rect.y, 0);
+        assert_eq!(layout.children[1].rect.height, 16);
+        assert_eq!(layout.children[2].rect.y, 16);
     }
 
     #[test]
