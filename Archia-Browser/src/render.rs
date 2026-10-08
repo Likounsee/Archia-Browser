@@ -152,11 +152,17 @@ fn paint_styled_node(
         });
     }
 
-    let mut child_indices: Vec<usize> = (0..node.children.len().min(layout.children.len())).collect();
+    let mut child_indices: Vec<usize> =
+        (0..node.children.len().min(layout.children.len())).collect();
     child_indices.sort_by_key(|&index| stacking_sort_key(&node.children[index].style));
 
     for index in child_indices {
-        paint_styled_node(&node.children[index], &layout.children[index], list, opacity);
+        paint_styled_node(
+            &node.children[index],
+            &layout.children[index],
+            list,
+            opacity,
+        );
     }
 
     if clips_children {
