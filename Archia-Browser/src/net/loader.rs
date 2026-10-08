@@ -265,4 +265,20 @@ mod tests {
             Err(DocumentLoadError::UnsupportedContentType)
         ));
     }
+
+    #[test]
+    fn post_switches_to_get_for_301_302_and_303() {
+        assert!(should_switch_to_get(HttpMethod::Post, 301));
+        assert!(should_switch_to_get(HttpMethod::Put, 302));
+        assert!(should_switch_to_get(HttpMethod::Patch, 303));
+        assert!(!should_switch_to_get(HttpMethod::Get, 302));
+        assert!(!should_switch_to_get(HttpMethod::Head, 303));
+    }
+
+    #[test]
+    fn non_get_methods_are_preserved_for_307_and_308() {
+        assert!(!should_switch_to_get(HttpMethod::Post, 307));
+        assert!(!should_switch_to_get(HttpMethod::Put, 308));
+        assert!(!should_switch_to_get(HttpMethod::Patch, 307));
+    }
 }
