@@ -1074,7 +1074,7 @@ fn layout_flex_children(
     }
 
     if wrap && !column {
-        align_flex_lines(&mut output, &flex_indices, node, content_origin_y, cross);
+        align_flex_lines(output, &flex_indices, node, content_origin_y, cross);
     }
 
     if column {
