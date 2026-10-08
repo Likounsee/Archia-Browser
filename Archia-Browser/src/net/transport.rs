@@ -348,6 +348,18 @@ mod tests {
     }
 
     #[test]
+    fn decodes_chunked_response_with_trailer() {
+        let response = parse_http_response(
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nHello\r\n0\r\nX-Test: yes\r\n\r\n",
+            1024,
+            1024,
+        )
+        .unwrap();
+
+        assert_eq!(response.body, b"Hello");
+    }
+
+    #[test]
     fn decodes_chunked_response() {
         let response = parse_http_response(
             b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nHello\r\n0\r\n\r\n",
@@ -401,6 +413,16 @@ mod tests {
 #[cfg(test)]
 mod limit_tests {
     use super::*;
+
+    #[test]
+    fn rejects_incomplete_chunk_terminator() {
+        let result = parse_http_response(
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nHello\r\n0\r\n",
+            1024,
+            1024,
+        );
+        assert_eq!(result, Err(TransportError::ConnectionFailed));
+    }
 
     #[test]
     fn rejects_oversized_content_length() {
