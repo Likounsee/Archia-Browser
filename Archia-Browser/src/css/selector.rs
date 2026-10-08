@@ -29,6 +29,14 @@ impl PartialOrd for Specificity {
     }
 }
 
+impl std::ops::AddAssign for Specificity {
+    fn add_assign(&mut self, other: Self) {
+        self.ids += other.ids;
+        self.classes += other.classes;
+        self.types += other.types;
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Combinator {
     Descendant,
@@ -153,12 +161,13 @@ impl Selector {
             }
             result.classes += part.classes.len() as u32 + part.attributes.len() as u32;
             for pseudo in &part.pseudo_classes {
-                if let Some(argument) = pseudo_argument(pseudo, "where") {
-                    let _ = argument;
-                } else if let Some(argument) = pseudo_argument(pseudo, "not") {
-                    result = result.max(pseudo_argument_specificity(argument));
+                if pseudo_argument(pseudo, "where").is_some() {
+                    continue;
+                }
+                if let Some(argument) = pseudo_argument(pseudo, "not") {
+                    result += pseudo_argument_specificity(argument);
                 } else if let Some(argument) = pseudo_argument(pseudo, "is") {
-                    result = result.max(pseudo_argument_specificity(argument));
+                    result += pseudo_argument_specificity(argument);
                 } else {
                     result.classes += 1;
                 }
@@ -515,7 +524,11 @@ fn matches_pseudo_class(
             !pseudo_argument_matches(argument, node, siblings, position)
         }
         _ if pseudo.starts_with("is(") || pseudo.starts_with("where(") => {
-            let name = if pseudo.starts_with("is(") { "is" } else { "where" };
+            let name = if pseudo.starts_with("is(") {
+                "is"
+            } else {
+                "where"
+            };
             let Some(argument) = pseudo_argument(pseudo, name) else {
                 return false;
             };
@@ -531,7 +544,10 @@ fn pseudo_argument<'a>(pseudo: &'a str, name: &str) -> Option<&'a str> {
 }
 
 fn split_pseudo_arguments(argument: &str) -> impl Iterator<Item = &str> {
-    argument.split(',').map(str::trim).filter(|part| !part.is_empty())
+    argument
+        .split(',')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
 }
 
 fn pseudo_argument_matches(
@@ -868,6 +884,25 @@ mod tests {
         assert!(!Selector::parse("p:empty")
             .unwrap()
             .matches_path_with_siblings(&[&body, &siblings[3]], &lists, &[0, 3]));
+    }
+
+    #[test]
+    fn matches_not_is_and_where_pseudo_classes() {
+        let mut div = Node::element("div");
+        div.set_attribute("class", "card");
+
+        assert!(Selector::parse("div:not(.missing)").unwrap().matches(&div));
+        assert!(!Selector::parse("div:not(.card)").unwrap().matches(&div));
+        assert!(Selector::parse("div:is(.card, .missing)").unwrap().matches(&div));
+        assert!(Selector::parse("div:where(.card)").unwrap().matches(&div));
+        assert_eq!(
+            Selector::parse("div:not(#main)").unwrap().specificity(),
+            Specificity::new(1, 0, 1)
+        );
+        assert_eq!(
+            Selector::parse("div:where(#main)").unwrap().specificity(),
+            Specificity::new(0, 0, 1)
+        );
     }
 
     #[test]
