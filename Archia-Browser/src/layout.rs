@@ -3026,8 +3026,8 @@ mod tests {
         assert_eq!(layout.children[0].rect.y, 0);
         assert_eq!(layout.children[1].rect.x, 40);
         assert_eq!(layout.children[1].rect.y, 0);
-        assert_eq!(layout.children[2].rect.x, 40);
-        assert_eq!(layout.children[2].rect.y, 60);
+        assert_eq!(layout.children[2].rect.x, 80);
+        assert_eq!(layout.children[2].rect.y, 0);
     }
 
     #[test]
