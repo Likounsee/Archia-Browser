@@ -315,6 +315,8 @@ fn layout_styled_node(
                     child,
                     content_origin_y,
                     cursor_y,
+                    content_width,
+                    output.rect.height,
                     viewport_height,
                     child_is_fixed,
                 )
@@ -445,38 +447,35 @@ fn positioned_child_x(
     origin_x
 }
 
-fn containing_width_for_height(viewport_height: u32) -> u32 {
-    viewport_height
-}
-
 fn positioned_child_y(
     node: &crate::style_tree::StyledNode,
     origin_y: i32,
     flow_y: i32,
+    containing_width: u32,
+    containing_height: u32,
     viewport_height: u32,
     fixed: bool,
 ) -> i32 {
     let origin_y = if fixed { 0 } else { origin_y };
-    if let Some(top) = parse_signed_offset(node.style.get("top"), viewport_height) {
+    let containing_height = if fixed {
+        viewport_height
+    } else {
+        containing_height
+    };
+    if let Some(top) = parse_signed_offset(node.style.get("top"), containing_height) {
         return origin_y.saturating_add(top);
     }
-    if let Some(bottom) = parse_signed_offset(node.style.get("bottom"), viewport_height) {
-        let height = parse_length(node.style.get("height"), viewport_height).unwrap_or(0);
+    if let Some(bottom) = parse_signed_offset(node.style.get("bottom"), containing_height) {
+        let height = parse_length(node.style.get("height"), containing_height).unwrap_or(0);
+        let margin_top = parse_length(node.style.get("margin-top"), containing_width).unwrap_or(0);
+        let margin_bottom =
+            parse_length(node.style.get("margin-bottom"), containing_width).unwrap_or(0);
         return origin_y
             .saturating_add(
-                viewport_height
+                containing_height
                     .saturating_sub(height)
-                    .saturating_sub(
-                        parse_length(node.style.get("margin-top"), containing_width_for_height(viewport_height))
-                            .unwrap_or(0)
-                            .saturating_add(
-                                parse_length(
-                                    node.style.get("margin-bottom"),
-                                    containing_width_for_height(viewport_height),
-                                )
-                                .unwrap_or(0),
-                            ),
-                    ) as i32,
+                    .saturating_sub(margin_top)
+                    .saturating_sub(margin_bottom) as i32,
             )
             .saturating_sub(bottom);
     }
