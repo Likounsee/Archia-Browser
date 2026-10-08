@@ -812,5 +812,5 @@ mod tests {
             PaintCommand::DrawText { text, color, .. }
                 if text == "Visible" && *color == 0xff0000ff
         )));
-    
+    }
 }
