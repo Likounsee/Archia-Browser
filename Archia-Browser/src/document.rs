@@ -40,6 +40,28 @@ impl Page {
         self.url.as_ref()
     }
 
+    pub fn base_url(&self) -> Option<Url> {
+        let document_url = self.url.clone()?;
+        let href = self
+            .document
+            .find_first_element("base")?
+            .attribute("href")?
+            .trim();
+        if href.is_empty() {
+            return None;
+        }
+
+        document_url.resolve(href).ok()
+    }
+
+    pub fn resolve_reference(&self, reference: &str) -> Result<Url, crate::net::UrlError> {
+        let base = self
+            .base_url()
+            .or_else(|| self.url.clone())
+            .ok_or(crate::net::UrlError::MissingAuthority)?;
+        base.resolve(reference)
+    }
+
     pub fn title(&self) -> Option<String> {
         let title = self.document.find_first_element("title")?.text_content();
         let title = title.trim();
@@ -88,6 +110,41 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn resolves_links_against_document_base_element() {
+        let url = Url::parse("https://example.org/docs/index.html").unwrap();
+        let page = Page::from_html_at(
+            Some(url),
+            "<head><base href="/guide/"></head><body><a href="chapter.html">Next</a></body>",
+            "",
+            LayoutViewport::new(320, 200),
+        );
+
+        assert_eq!(
+            page.base_url().map(|value| value.to_string()),
+            Some("https://example.org/guide/".to_owned())
+        );
+        assert_eq!(
+            page.resolve_reference("chapter.html").unwrap().to_string(),
+            "https://example.org/guide/chapter.html"
+        );
+    }
+
+    #[test]
+    fn invalid_base_href_falls_back_to_document_url() {
+        let page = Page::from_html_at(
+            Some(Url::parse("https://example.org/docs/index.html").unwrap()),
+            "<head><base href="javascript:bad"></head><body>Hello</body>",
+            "",
+            LayoutViewport::new(320, 200),
+        );
+
+        assert_eq!(
+            page.resolve_reference("next.html").unwrap().to_string(),
+            "https://example.org/docs/next.html"
+        );
+    }
+
     #[test]
     fn retains_document_url_when_loaded_at_a_navigation_target() {
         let url = Url::parse("https://example.org/docs/index.html").unwrap();
