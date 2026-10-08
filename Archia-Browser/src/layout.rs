@@ -370,12 +370,31 @@ fn intrinsic_inline_width(node: &crate::style_tree::StyledNode) -> u32 {
 }
 
 fn used_inline_line_height(node: &crate::style_tree::StyledNode) -> u32 {
-    node.style
-        .get("line-height")
-        .and_then(|value| parse_px(Some(value)))
-        .or_else(|| Some(intrinsic_inline_height(node)))
-        .unwrap_or(16)
+    let font_size = parse_px(node.style.get("font-size")).unwrap_or(16);
+    parse_line_height(node.style.get("line-height"), font_size)
+        .unwrap_or_else(|| intrinsic_inline_height(node))
         .max(1)
+}
+
+fn parse_line_height(value: Option<&str>, font_size: u32) -> Option<u32> {
+    let value = value?.trim();
+    if let Some(percent) = value.strip_suffix('%') {
+        let percent = percent.trim().parse::<u32>().ok()?;
+        return Some(
+            font_size
+                .saturating_mul(percent)
+                .checked_div(100)
+                .unwrap_or(0),
+        );
+    }
+    if let Some(px) = value.strip_suffix("px") {
+        return px.trim().parse().ok();
+    }
+    let multiplier = value.parse::<f32>().ok()?;
+    if !multiplier.is_finite() || multiplier < 0.0 {
+        return None;
+    }
+    Some((font_size as f32 * multiplier).round() as u32)
 }
 
 fn intrinsic_inline_height(node: &crate::style_tree::StyledNode) -> u32 {
@@ -667,6 +686,26 @@ mod tests {
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
 
         assert_eq!(layout.children[0].rect.height, 24);
+    }
+
+    #[test]
+    fn unitless_and_percentage_line_height_scale_from_font_size() {
+        let mut root = Node::element("body");
+        let mut unitless = Node::element("span");
+        unitless.set_attribute("style", "font-size: 20px; line-height: 1.5;");
+        unitless.append(Node::text("unitless"));
+        let mut percentage = Node::element("span");
+        percentage.set_attribute("style", "font-size: 20px; line-height: 150%;");
+        percentage.append(Node::text("percentage"));
+        root.append(unitless);
+        root.append(percentage);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.height, 30);
+        assert_eq!(layout.children[1].rect.height, 30);
     }
 
     #[test]
