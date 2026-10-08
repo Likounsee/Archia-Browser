@@ -366,7 +366,7 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
                         .iter()
                         .collect::<String>()
                         .trim()
-                        .to_ascii_lowercase();
+                        .to_string();
                     if argument.is_empty() {
                         return None;
                     }
@@ -966,6 +966,16 @@ mod tests {
         assert!(!Selector::parse("p:empty")
             .unwrap()
             .matches_path_with_siblings(&[&body, &siblings[3]], &lists, &[0, 3]));
+    }
+
+    #[test]
+    fn functional_pseudo_arguments_preserve_case() {
+        let mut div = Node::element("div");
+        div.set_attribute("class", "Card");
+
+        assert!(Selector::parse("div:not(.missing)").unwrap().matches(&div));
+        assert!(Selector::parse("div:is(.Card, .missing)").unwrap().matches(&div));
+        assert!(!Selector::parse("div:not(.Card)").unwrap().matches(&div));
     }
 
     #[test]
