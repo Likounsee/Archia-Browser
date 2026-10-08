@@ -128,31 +128,21 @@ fn normalize_document_structure(mut root: Node) -> Node {
         .position(|node| node.tag_name() == Some("html"))
     else {
         let mut html = Node::element("html");
-        let head = Node::element("head");
+        let mut head = Node::element("head");
         let mut body = Node::element("body");
 
         let children = std::mem::take(&mut root.children);
         for child in children {
             if child.tag_name() == Some("head") {
-                html.append(child);
+                head.append(child);
             } else {
                 body.append(child);
             }
         }
 
-        if !html
-            .children
-            .iter()
-            .any(|node| node.tag_name() == Some("head"))
-        {
-            let mut rebuilt = Node::element("html");
-            rebuilt.append(head);
-            rebuilt.append(body);
-            root.append(rebuilt);
-        } else {
-            html.append(body);
-            root.append(html);
-        }
+        html.append(head);
+        html.append(body);
+        root.append(html);
         return root;
     };
 
@@ -162,44 +152,29 @@ fn normalize_document_structure(mut root: Node) -> Node {
     }
 
     let html = &mut root.children[0];
-    let Some(head_position) = html
-        .children
-        .iter()
-        .position(|node| node.tag_name() == Some("head"))
-    else {
-        let body_position = html
-            .children
-            .iter()
-            .position(|node| node.tag_name() == Some("body"));
-        if let Some(body_position) = body_position {
-            let body = html.children.remove(body_position);
-            html.children.insert(0, Node::element("head"));
-            html.children.push(body);
-        } else {
-            let mut body = Node::element("body");
-            let children = std::mem::take(&mut html.children);
-            for child in children {
-                body.append(child);
-            }
-            html.append(Node::element("head"));
-            html.append(body);
+    let mut head = Node::element("head");
+    let mut body = Node::element("body");
+    let children = std::mem::take(&mut html.children);
+
+    for child in children {
+        match child.tag_name() {
+            Some("head") if !head_has_content(&head) => head = child,
+            Some("body") if !body_has_content(&body) => body = child,
+            _ => body.append(child),
         }
-        return root;
-    };
-
-    if head_position != 0 {
-        let head = html.children.remove(head_position);
-        html.children.insert(0, head);
     }
 
-    if !html
-        .children
-        .iter()
-        .any(|node| node.tag_name() == Some("body"))
-    {
-        html.append(Node::element("body"));
-    }
+    html.append(head);
+    html.append(body);
     root
+}
+
+fn head_has_content(head: &Node) -> bool {
+    !head.children.is_empty()
+}
+
+fn body_has_content(body: &Node) -> bool {
+    !body.children.is_empty()
 }
 
 #[cfg(test)]
@@ -221,7 +196,7 @@ mod tests {
     fn preserves_nested_children_when_closing_parent() {
         let tokens = HtmlTokenizer::tokenize("<div><span>hello</span><b>world</b></div>");
         let root = parse(&tokens);
-        assert_eq!(root.children[0].children.len(), 2);
+        assert_eq!(root.children[0].children[1].children.len(), 2);
         assert_eq!(root.text_content(), "helloworld");
     }
 
@@ -229,7 +204,8 @@ mod tests {
     fn void_elements_do_not_capture_following_text() {
         let tokens = HtmlTokenizer::tokenize("<div><br>after</div>");
         let root = parse(&tokens);
-        let div = &root.children[0];
+        let body = &root.children[0].children[1];
+        let div = &body.children[0];
         assert_eq!(div.children[0].tag_name(), Some("br"));
         assert_eq!(div.children[1].text_content(), "after");
     }
@@ -238,17 +214,20 @@ mod tests {
     fn p_auto_closes_before_block_content() {
         let tokens = HtmlTokenizer::tokenize("<p>one<div>two</div>");
         let root = parse(&tokens);
-        assert_eq!(root.children.len(), 2);
-        assert_eq!(root.children[0].tag_name(), Some("p"));
-        assert_eq!(root.children[1].tag_name(), Some("div"));
+        let body = &root.children[0].children[1];
+        assert_eq!(body.children.len(), 2);
+        assert_eq!(body.children[0].tag_name(), Some("p"));
+        assert_eq!(body.children[1].tag_name(), Some("div"));
     }
 
     #[test]
     fn comments_are_kept_in_the_dom() {
         let tokens = HtmlTokenizer::tokenize("<div><!-- note --></div>");
         let root = parse(&tokens);
+        let body = &root.children[0].children[1];
+        let div = &body.children[0];
         assert!(matches!(
-            root.children[0].children[0].kind,
+            div.children[0].kind,
             super::super::dom::NodeKind::Comment(_)
         ));
     }
