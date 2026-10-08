@@ -193,13 +193,14 @@ fn layout_styled_node(
                 inline_x = 0;
                 inline_line_height = 0;
             }
-            let child_layout = layout_styled_node(
+            let mut child_layout = layout_styled_node(
                 child,
                 inline_x as i32,
                 cursor_y,
                 content_width.saturating_sub(inline_x),
                 viewport_height,
             );
+            translate_layout_tree(&mut child_layout, output.rect.x, output.rect.y);
             inline_x = inline_x.saturating_add(child_layout.rect.width);
             inline_line_height = inline_line_height.max(line_height);
             output.children.push(child_layout);
@@ -209,8 +210,9 @@ fn layout_styled_node(
                 inline_x = 0;
                 inline_line_height = 0;
             }
-            let child_layout =
+            let mut child_layout =
                 layout_styled_node(child, 0, cursor_y, content_width, viewport_height);
+            translate_layout_tree(&mut child_layout, output.rect.x, output.rect.y);
             cursor_y = cursor_y.saturating_add(
                 child_layout
                     .rect
@@ -237,6 +239,14 @@ fn layout_styled_node(
     }
     .min(viewport_height.max(content_height));
     output
+}
+
+fn translate_layout_tree(node: &mut LayoutNode, dx: i32, dy: i32) {
+    node.rect.x = node.rect.x.saturating_add(dx);
+    node.rect.y = node.rect.y.saturating_add(dy);
+    for child in &mut node.children {
+        translate_layout_tree(child, dx, dy);
+    }
 }
 
 fn intrinsic_inline_width(node: &crate::style_tree::StyledNode) -> u32 {
@@ -432,6 +442,24 @@ mod tests {
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 200));
 
         assert_eq!(layout.children[0].rect.width, 100);
+    }
+
+    #[test]
+    fn nested_layout_coordinates_are_absolute() {
+        let mut root = Node::element("body");
+        let mut parent = Node::element("section");
+        parent.set_attribute("style", "margin-left: 12px;");
+        let mut child = Node::element("div");
+        child.set_attribute("style", "margin-left: 8px;");
+        parent.append(child);
+        root.append(parent);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 200));
+
+        assert_eq!(layout.children[0].rect.x, 12);
+        assert_eq!(layout.children[0].children[0].rect.x, 20);
     }
 
     #[test]
