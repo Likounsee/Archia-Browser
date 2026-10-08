@@ -155,9 +155,13 @@ fn layout_styled_node(
         .is_some_and(|value| value.trim().eq_ignore_ascii_case("border-box"));
     let mut content_width = specified_width.map_or_else(
         || {
-            containing_width
-                .saturating_sub(margin_x)
-                .saturating_sub(padding_border_x)
+            if display == Display::Inline {
+                intrinsic_inline_content_width(node)
+            } else {
+                containing_width
+                    .saturating_sub(margin_x)
+                    .saturating_sub(padding_border_x)
+            }
         },
         |width| {
             if border_box {
@@ -273,6 +277,18 @@ fn display_for_styled_node(node: &crate::style_tree::StyledNode) -> Display {
         },
         NodeKind::Document => Display::Block,
         NodeKind::Comment(_) => Display::None,
+    }
+}
+
+fn intrinsic_inline_content_width(node: &crate::style_tree::StyledNode) -> u32 {
+    match &node.node.kind {
+        NodeKind::Text(text) => text.chars().count().min(u32::MAX as usize) as u32 * 6,
+        _ => node
+            .children
+            .iter()
+            .map(intrinsic_inline_content_width)
+            .fold(0, u32::saturating_add)
+            .max(parse_px(node.style.get("width")).unwrap_or(0)),
     }
 }
 
