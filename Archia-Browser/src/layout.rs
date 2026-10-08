@@ -727,10 +727,12 @@ fn layout_flex_children(
         .style
         .get("flex-direction")
         .is_some_and(|value| value.trim().eq_ignore_ascii_case("column"));
-    let wrap = node
-        .style
-        .get("flex-wrap")
-        .is_some_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "wrap" | "wrap-reverse"));
+    let wrap = node.style.get("flex-wrap").is_some_and(|value| {
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "wrap" | "wrap-reverse"
+        )
+    });
     let gap = parse_length(node.style.get("gap"), content_width).unwrap_or(0);
     let mut main = 0_u32;
     let mut cross = 0_u32;
@@ -2731,13 +2733,12 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.y, 20);
         assert_eq!(layout.children[1].rect.y, 0);
-    }    #[test]
+    }
+
+    #[test]
     fn flex_wrap_moves_items_to_next_line() {
         let mut root = Node::element("div");
-        root.set_attribute(
-            "style",
-            "display: flex; flex-wrap: wrap; width: 100px;",
-        );
+        root.set_attribute("style", "display: flex; flex-wrap: wrap; width: 100px;");
         for _ in 0..3 {
             let mut child = Node::element("div");
             child.set_attribute("style", "width: 60px; height: 20px;");
@@ -2754,6 +2755,4 @@ mod tests {
         assert_eq!(layout.children[1].rect.y, 20);
         assert_eq!(layout.children[2].rect.y, 40);
     }
-
-
 }
