@@ -460,7 +460,21 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
                     if start_value == i {
                         return None;
                     }
-                    value = Some(chars[start_value..i].iter().collect());
+                    let raw_value: String = chars[start_value..i].iter().collect();
+                    let mut parsed_case_insensitive = false;
+                    if quote.is_none() {
+                        let trimmed = raw_value.trim();
+                        if let Some(value_text) = trimmed.strip_suffix(" i").or_else(|| trimmed.strip_suffix(" I")) {
+                            value = Some(value_text.trim_end().to_string());
+                            parsed_case_insensitive = true;
+                        } else if let Some(value_text) = trimmed.strip_suffix(" s").or_else(|| trimmed.strip_suffix(" S")) {
+                            value = Some(value_text.trim_end().to_string());
+                        } else {
+                            value = Some(trimmed.to_string());
+                        }
+                    } else {
+                        value = Some(raw_value);
+                    }
 
                     if quote.is_some() {
                         if chars.get(i) != quote.as_ref() {
@@ -473,7 +487,7 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
                 while i < chars.len() && chars[i].is_whitespace() {
                     i += 1;
                 }
-                let mut case_insensitive = false;
+                let mut case_insensitive = parsed_case_insensitive;
                 if i < chars.len() && chars[i] != ']' {
                     match chars[i].to_ascii_lowercase() {
                         'i' => case_insensitive = true,
