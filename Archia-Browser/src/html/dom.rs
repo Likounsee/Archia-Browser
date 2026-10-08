@@ -108,6 +108,16 @@ impl Node {
         }
     }
 
+    pub fn find_first_element(&self, tag_name: &str) -> Option<&Node> {
+        if self.tag_name() == Some(tag_name) {
+            return Some(self);
+        }
+
+        self.children
+            .iter()
+            .find_map(|child| child.find_first_element(tag_name))
+    }
+
     pub fn text_content(&self) -> String {
         let mut output = String::new();
         self.append_text_content(&mut output);
@@ -147,5 +157,21 @@ mod tests {
         assert_eq!(node.attribute("class"), Some("card"));
         assert_eq!(node.remove_attribute("class"), Some("card".into()));
         assert_eq!(node.attribute("class"), None);
+    }
+
+    #[test]
+    fn finds_first_matching_descendant() {
+        let mut document = Node::document();
+        let mut body = Node::element("body");
+        let mut section = Node::element("section");
+        section.append(Node::element("title"));
+        body.append(section);
+        document.append(body);
+
+        assert_eq!(
+            document.find_first_element("title").and_then(Node::tag_name),
+            Some("title")
+        );
+        assert!(document.find_first_element("missing").is_none());
     }
 }
