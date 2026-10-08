@@ -131,6 +131,7 @@ Current milestone:
 - [x] Cookie persistence across document redirects
 - [x] Cookie domain validation, Secure delivery and Max-Age deletion
 - [x] First-party/third-party filtering context
+- [x] Navigation history state machine and Browser back/forward API
 - [ ] JavaScript runtime
 - [ ] Browser UI
 - [x] Same-origin foundation
@@ -184,7 +185,8 @@ Current milestone:
 - [ ] Add HTTPS/TLS transport.
 - [x] Add initial redirects, cookie persistence and resource caching foundations.
 - [ ] Add standards-compliant redirects, cookie attributes and HTTP caching.
-- [ ] Add forms and navigation.
+- [x] Add the first navigation-history API with back/forward state.
+- [ ] Add forms and navigation activation.
 - [ ] Expand browser security boundaries.
 
 ### Phase 6 — JavaScript
@@ -238,5 +240,6 @@ License to be defined.
 4. Expand HTML parsing toward standards-compliant tree construction.
 5. Expand CSS selectors, cascade, inheritance and computed values.
 6. Extend first-party/third-party filtering into a complete filter-list and permission model.
-7. Keep ad/tracker blocking before transport so blocked resources are not downloaded when policy allows.
-8. Keep every subsystem independently testable through GitHub Actions.
+7. Connect navigation history to actual document activation, link handling and session/tab state.
+8. Keep ad/tracker blocking before transport so blocked resources are not downloaded when policy allows.
+9. Keep every subsystem independently testable through GitHub Actions.
