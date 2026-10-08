@@ -478,9 +478,7 @@ fn align_inline_lines(
                         continue;
                     }
                     let extra = remainder.min(offset as u32);
-                    let shift = gap
-                        .saturating_mul(offset as u32)
-                        .saturating_add(extra) as i32;
+                    let shift = gap.saturating_mul(offset as u32).saturating_add(extra) as i32;
                     if shift != 0 {
                         shift_layout_tree(child, shift, 0);
                     }
