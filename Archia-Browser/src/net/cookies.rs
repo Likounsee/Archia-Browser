@@ -100,33 +100,33 @@ impl CookieJar {
     }
 
     fn valid_cookie_name(value: &str) -> bool {
-    value.bytes().all(|byte| {
-        byte.is_ascii_graphic()
-            && !matches!(
-                byte,
-                b'(' | b')'
-                    | b'<'
-                    | b'>'
-                    | b'@'
-                    | b','
-                    | b';'
-                    | b':'
-                    | b'\\'
-                    | b'"'
-                    | b'/'
-                    | b'['
-                    | b']'
-                    | b'?'
-                    | b'='
-                    | b'{'
-                    | b'}'
-            )
-    })
-}
+        value.bytes().all(|byte| {
+            byte.is_ascii_graphic()
+                && !matches!(
+                    byte,
+                    b'(' | b')'
+                        | b'<'
+                        | b'>'
+                        | b'@'
+                        | b','
+                        | b';'
+                        | b':'
+                        | b'\\'
+                        | b'"'
+                        | b'/'
+                        | b'['
+                        | b']'
+                        | b'?'
+                        | b'='
+                        | b'{'
+                        | b'}'
+                )
+        })
+    }
 
     fn valid_cookie_value(value: &str) -> bool {
-    !value.bytes().any(|byte| matches!(byte, b'\r' | b'\n' | b';'))
-}
+        !value.bytes().any(|byte| matches!(byte, b'\r' | b'\n' | b';'))
+    }
 
     pub fn header_for(&self, url: &Url) -> Option<String> {
         let host = url.host().to_ascii_lowercase();
