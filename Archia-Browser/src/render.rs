@@ -52,7 +52,7 @@ impl SoftwareRenderer {
 
     pub fn rasterize(list: &DisplayList, surface: &mut SoftwareSurface) {
         for command in list.commands() {
-            match *command {
+            match command {
                 PaintCommand::FillRect { rect, color } => {
                     let color = Color(
                         ((color >> 24) & 0xff) as u8,
