@@ -6,9 +6,31 @@ const VOID_ELEMENTS: &[&str] = &[
 ];
 
 const BLOCK_CLOSES_P: &[&str] = &[
-    "address", "article", "aside", "blockquote", "div", "dl", "fieldset", "footer", "form", "h1",
-    "h2", "h3", "h4", "h5", "h6", "header", "hr", "menu", "nav", "ol", "p", "pre", "section",
-    "table", "ul",
+    "address",
+    "article",
+    "aside",
+    "blockquote",
+    "div",
+    "dl",
+    "fieldset",
+    "footer",
+    "form",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "header",
+    "hr",
+    "menu",
+    "nav",
+    "ol",
+    "p",
+    "pre",
+    "section",
+    "table",
+    "ul",
 ];
 
 pub fn parse(tokens: &[HtmlToken]) -> Node {
