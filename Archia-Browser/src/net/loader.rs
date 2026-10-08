@@ -26,6 +26,7 @@ pub struct DocumentLoader<P, T> {
     transport: T,
     max_redirects: usize,
     cookies: Mutex<super::CookieJar>,
+    cache: Mutex<super::HttpCache>,
 }
 
 impl<P, T> DocumentLoader<P, T> {
@@ -35,11 +36,17 @@ impl<P, T> DocumentLoader<P, T> {
             transport,
             max_redirects: MAX_REDIRECTS,
             cookies: Mutex::new(super::CookieJar::new()),
+            cache: Mutex::new(super::HttpCache::default()),
         }
     }
 
     pub const fn with_max_redirects(mut self, max_redirects: usize) -> Self {
         self.max_redirects = max_redirects;
+        self
+    }
+
+    pub fn with_cache_capacity(mut self, capacity: usize) -> Self {
+        self.cache = Mutex::new(super::HttpCache::new(capacity));
         self
     }
 }
@@ -63,10 +70,24 @@ where
         }
 
         for redirect_count in 0..=self.max_redirects {
-            let response = self
-                .pipeline
-                .execute(&self.transport, &current)
-                .map_err(DocumentLoadError::Network)?;
+            let response = if let Some(response) = self
+                .cache
+                .lock()
+                .expect("HTTP cache poisoned")
+                .get(&current)
+            {
+                response
+            } else {
+                let response = self
+                    .pipeline
+                    .execute(&self.transport, &current)
+                    .map_err(DocumentLoadError::Network)?;
+                self.cache
+                    .lock()
+                    .expect("HTTP cache poisoned")
+                    .store(&current, &response);
+                response
+            };
 
             for set_cookie in response.set_cookie_headers() {
                 self.cookies
@@ -193,7 +214,23 @@ where
                 request.headers.insert("cookie".into(), cookie);
             }
 
-            let Ok(response) = self.pipeline.execute(&self.transport, &request) else {
+            let Ok(response) = (|| {
+                if let Some(response) = self
+                    .cache
+                    .lock()
+                    .expect("HTTP cache poisoned")
+                    .get(&request)
+                {
+                    return Ok(response);
+                }
+
+                let response = self.pipeline.execute(&self.transport, &request)?;
+                self.cache
+                    .lock()
+                    .expect("HTTP cache poisoned")
+                    .store(&request, &response);
+                Ok(response)
+            })() else {
                 return None;
             };
 

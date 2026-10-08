@@ -62,6 +62,13 @@ impl<T> ResourceCache<T> {
         self.entries.len()
     }
 
+    pub fn remove(&mut self, key: &str) -> Option<T> {
+        let position = self.entries.iter().position(|entry| entry.key == key)?;
+        let entry = self.entries.remove(position)?;
+        self.used = self.used.saturating_sub(entry.bytes);
+        Some(entry.value)
+    }
+
     pub fn clear(&mut self) {
         self.entries.clear();
         self.used = 0;
@@ -93,6 +100,15 @@ mod tests {
 
         assert_eq!(cache.get("a"), Some(&2));
         assert_eq!(cache.used(), 4);
+    }
+
+    #[test]
+    fn removing_a_key_releases_its_bytes() {
+        let mut cache = ResourceCache::new(10);
+        cache.insert("a", 1, 6);
+        assert_eq!(cache.remove("a"), Some(1));
+        assert_eq!(cache.used(), 0);
+        assert_eq!(cache.len(), 0);
     }
 
     #[test]
