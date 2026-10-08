@@ -5,6 +5,7 @@ use crate::html::{Node, NodeKind};
 pub enum Display {
     Block,
     Inline,
+    InlineBlock,
     None,
 }
 
@@ -12,7 +13,8 @@ impl Display {
     pub fn from_style(style: &ComputedStyle) -> Self {
         match style.get("display").map(str::trim) {
             Some("none") => Self::None,
-            Some("inline") | Some("inline-block") => Self::Inline,
+            Some("inline") => Self::Inline,
+            Some("inline-block") => Self::InlineBlock,
             Some("block") | Some("flow-root") => Self::Block,
             _ => Self::Block,
         }
@@ -157,7 +159,7 @@ fn layout_styled_node(
         .is_some_and(|value| value.trim().eq_ignore_ascii_case("border-box"));
     let mut content_width = specified_width.map_or_else(
         || {
-            if display == Display::Inline {
+            if matches!(display, Display::Inline | Display::InlineBlock) {
                 intrinsic_inline_content_width(node)
             } else {
                 containing_width
@@ -248,7 +250,7 @@ fn layout_styled_node(
             continue;
         }
 
-        if child_display == Display::Inline {
+        if matches!(child_display, Display::Inline | Display::InlineBlock) {
             if is_line_break(child) {
                 let break_height = inline_line_height.max(used_inline_line_height(child));
                 let mut child_layout = layout_styled_node(
@@ -433,7 +435,7 @@ fn align_inline_lines(
 
     let mut start = 0;
     while start < output.children.len() {
-        if output.children[start].display != Display::Inline {
+        if !is_inline_level(output.children[start].display) {
             start += 1;
             continue;
         }
@@ -446,7 +448,7 @@ fn align_inline_lines(
             + i64::from(output.children[start].box_model.padding_right)
             + i64::from(output.children[start].box_model.border_right);
         while end + 1 < output.children.len()
-            && output.children[end + 1].display == Display::Inline
+            && is_inline_level(output.children[end + 1].display)
             && output.children[end + 1].rect.y == line_y
         {
             end += 1;
@@ -466,7 +468,7 @@ fn align_inline_lines(
         let free_space = content_width.saturating_sub(line_width);
         let has_later_line = output.children[end + 1..]
             .iter()
-            .any(|child| child.display == Display::Inline && child.rect.y > line_y);
+            .any(|child| is_inline_level(child.display) && child.rect.y > line_y);
         let last_alignment = style
             .get("text-align-last")
             .map(str::trim)
@@ -614,6 +616,10 @@ fn align_inline_vertical_align(
 
         start = end + 1;
     }
+}
+
+fn is_inline_level(display: Display) -> bool {
+    matches!(display, Display::Inline | Display::InlineBlock)
 }
 
 fn is_absolute_positioned(node: &crate::style_tree::StyledNode) -> bool {
@@ -1085,8 +1091,32 @@ mod tests {
             crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
 
-        assert_eq!(layout.children[0].display, Display::Inline);
+        assert_eq!(layout.children[0].display, Display::InlineBlock);
         assert_eq!(layout.children[0].rect.width, 40);
+    }
+
+
+    #[test]
+    fn inline_block_lays_out_block_children_inside_its_box() {
+        let mut root = Node::element("body");
+        let mut child = Node::element("div");
+        child.set_attribute("style", "display: inline-block; width: 50px; padding: 2px;");
+        let mut first = Node::element("div");
+        first.set_attribute("style", "height: 10px;");
+        let mut second = Node::element("div");
+        second.set_attribute("style", "height: 20px;");
+        child.append(first);
+        child.append(second);
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].display, Display::InlineBlock);
+        assert_eq!(layout.children[0].rect.width, 50);
+        assert_eq!(layout.children[0].children[0].rect.y, 2);
+        assert_eq!(layout.children[0].children[1].rect.y, 14);
     }
 
     #[test]
