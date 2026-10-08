@@ -6,6 +6,7 @@ pub enum Display {
     Block,
     Inline,
     InlineBlock,
+    Flex,
     None,
 }
 
@@ -15,6 +16,7 @@ impl Display {
             Some("none") => Self::None,
             Some("inline") => Self::Inline,
             Some("inline-block") => Self::InlineBlock,
+            Some("flex") | Some("inline-flex") => Self::Flex,
             Some("block") | Some("flow-root") => Self::Block,
             _ => Self::Block,
         }
@@ -282,17 +284,62 @@ fn layout_styled_node(
     let mut inline_x = 0_u32;
     let mut inline_line_height = 0_u32;
 
-    for child in &node.children {
-        let child_display = display_for_styled_node(child);
-        if child_display == Display::None {
-            output.children.push(LayoutNode::new(Display::None));
-            continue;
-        }
+    if display == Display::Flex {
+        cursor_y = layout_flex_children(
+            node,
+            &mut output,
+            content_origin_x,
+            content_origin_y,
+            content_width,
+            viewport_width,
+            viewport_height,
+            child_abs_origin_x,
+            child_abs_origin_y,
+            child_abs_width,
+            child_abs_height,
+        );
+    } else {
+        for child in &node.children {
+            let child_display = display_for_styled_node(child);
+            if child_display == Display::None {
+                output.children.push(LayoutNode::new(Display::None));
+                continue;
+            }
 
-        if matches!(child_display, Display::Inline | Display::InlineBlock) {
-            if is_line_break(child) {
-                let break_height = inline_line_height.max(used_inline_line_height(child));
-                let mut child_layout = layout_styled_node(
+            if matches!(child_display, Display::Inline | Display::InlineBlock) {
+                if is_line_break(child) {
+                    let break_height = inline_line_height.max(used_inline_line_height(child));
+                    let mut child_layout = layout_styled_node(
+                        child,
+                        content_origin_x.saturating_add(inline_x as i32),
+                        content_origin_y.saturating_add(cursor_y),
+                        content_width.saturating_sub(inline_x),
+                        viewport_width,
+                        viewport_height,
+                        child_abs_origin_x,
+                        child_abs_origin_y,
+                        child_abs_width,
+                        child_abs_height,
+                    );
+                    child_layout.rect.height = break_height;
+                    output.children.push(child_layout);
+                    cursor_y = cursor_y.saturating_add(break_height as i32);
+                    inline_x = 0;
+                    inline_line_height = 0;
+                    continue;
+                }
+
+                let width = intrinsic_inline_width(child, content_width.saturating_sub(inline_x));
+                let line_height = used_inline_line_height(child);
+                if allows_inline_wrap(child)
+                    && inline_x > 0
+                    && inline_x.saturating_add(width) > content_width
+                {
+                    cursor_y = cursor_y.saturating_add(inline_line_height as i32);
+                    inline_x = 0;
+                    inline_line_height = 0;
+                }
+                let child_layout = layout_styled_node(
                     child,
                     content_origin_x.saturating_add(inline_x as i32),
                     content_origin_y.saturating_add(cursor_y),
@@ -304,120 +351,92 @@ fn layout_styled_node(
                     child_abs_width,
                     child_abs_height,
                 );
-                child_layout.rect.height = break_height;
-                output.children.push(child_layout);
-                cursor_y = cursor_y.saturating_add(break_height as i32);
-                inline_x = 0;
-                inline_line_height = 0;
-                continue;
-            }
-
-            let width = intrinsic_inline_width(child, content_width.saturating_sub(inline_x));
-            let line_height = used_inline_line_height(child);
-            if allows_inline_wrap(child)
-                && inline_x > 0
-                && inline_x.saturating_add(width) > content_width
-            {
-                cursor_y = cursor_y.saturating_add(inline_line_height as i32);
-                inline_x = 0;
-                inline_line_height = 0;
-            }
-            let child_layout = layout_styled_node(
-                child,
-                content_origin_x.saturating_add(inline_x as i32),
-                content_origin_y.saturating_add(cursor_y),
-                content_width.saturating_sub(inline_x),
-                viewport_width,
-                viewport_height,
-                child_abs_origin_x,
-                child_abs_origin_y,
-                child_abs_width,
-                child_abs_height,
-            );
-            inline_x = inline_x.saturating_add(
-                child_layout
-                    .rect
-                    .width
-                    .saturating_add(child_layout.box_model.horizontal_outer()),
-            );
-            inline_line_height = inline_line_height.max(line_height);
-            output.children.push(child_layout);
-        } else {
-            if inline_x > 0 {
-                cursor_y = cursor_y.saturating_add(inline_line_height as i32);
-                inline_x = 0;
-                inline_line_height = 0;
-            }
-
-            let child_is_absolute = is_absolute_positioned(child);
-            let child_is_fixed = is_fixed_positioned(child);
-            let child_x = if child_is_absolute || child_is_fixed {
-                positioned_child_x(
-                    child,
-                    if child_is_fixed {
-                        0
-                    } else {
-                        child_abs_origin_x
-                    },
-                    if child_is_fixed {
-                        viewport_width
-                    } else {
-                        child_abs_width
-                    },
-                    viewport_width,
-                    child_is_fixed,
-                )
-            } else {
-                content_origin_x
-            };
-            let child_y = if child_is_absolute || child_is_fixed {
-                positioned_child_y(
-                    child,
-                    if child_is_fixed {
-                        0
-                    } else {
-                        child_abs_origin_y
-                    },
-                    cursor_y,
-                    if child_is_fixed {
-                        viewport_width
-                    } else {
-                        child_abs_width
-                    },
-                    if child_is_fixed {
-                        viewport_height
-                    } else {
-                        child_abs_height
-                    },
-                    viewport_height,
-                    child_is_fixed,
-                )
-            } else {
-                content_origin_y.saturating_add(cursor_y)
-            };
-            let child_layout = layout_styled_node(
-                child,
-                child_x,
-                child_y,
-                content_width,
-                viewport_width,
-                viewport_height,
-                child_abs_origin_x,
-                child_abs_origin_y,
-                child_abs_width,
-                child_abs_height,
-            );
-            if !child_is_absolute && !child_is_fixed {
-                cursor_y = cursor_y.saturating_add(
+                inline_x = inline_x.saturating_add(
                     child_layout
                         .rect
-                        .height
-                        .saturating_add(child_layout.box_model.vertical_outer())
-                        as i32,
+                        .width
+                        .saturating_add(child_layout.box_model.horizontal_outer()),
                 );
+                inline_line_height = inline_line_height.max(line_height);
+                output.children.push(child_layout);
+            } else {
+                if inline_x > 0 {
+                    cursor_y = cursor_y.saturating_add(inline_line_height as i32);
+                    inline_x = 0;
+                    inline_line_height = 0;
+                }
+
+                let child_is_absolute = is_absolute_positioned(child);
+                let child_is_fixed = is_fixed_positioned(child);
+                let child_x = if child_is_absolute || child_is_fixed {
+                    positioned_child_x(
+                        child,
+                        if child_is_fixed {
+                            0
+                        } else {
+                            child_abs_origin_x
+                        },
+                        if child_is_fixed {
+                            viewport_width
+                        } else {
+                            child_abs_width
+                        },
+                        viewport_width,
+                        child_is_fixed,
+                    )
+                } else {
+                    content_origin_x
+                };
+                let child_y = if child_is_absolute || child_is_fixed {
+                    positioned_child_y(
+                        child,
+                        if child_is_fixed {
+                            0
+                        } else {
+                            child_abs_origin_y
+                        },
+                        cursor_y,
+                        if child_is_fixed {
+                            viewport_width
+                        } else {
+                            child_abs_width
+                        },
+                        if child_is_fixed {
+                            viewport_height
+                        } else {
+                            child_abs_height
+                        },
+                        viewport_height,
+                        child_is_fixed,
+                    )
+                } else {
+                    content_origin_y.saturating_add(cursor_y)
+                };
+                let child_layout = layout_styled_node(
+                    child,
+                    child_x,
+                    child_y,
+                    content_width,
+                    viewport_width,
+                    viewport_height,
+                    child_abs_origin_x,
+                    child_abs_origin_y,
+                    child_abs_width,
+                    child_abs_height,
+                );
+                if !child_is_absolute && !child_is_fixed {
+                    cursor_y = cursor_y.saturating_add(
+                        child_layout
+                            .rect
+                            .height
+                            .saturating_add(child_layout.box_model.vertical_outer())
+                            as i32,
+                    );
+                }
+                output.children.push(child_layout);
             }
-            output.children.push(child_layout);
         }
+
     }
 
     if inline_x > 0 {
@@ -686,6 +705,141 @@ fn align_inline_vertical_align(
         }
 
         start = end + 1;
+    }
+}
+
+fn layout_flex_children(
+    node: &crate::style_tree::StyledNode,
+    output: &mut LayoutNode,
+    content_origin_x: i32,
+    content_origin_y: i32,
+    content_width: u32,
+    viewport_width: u32,
+    viewport_height: u32,
+    abs_origin_x: i32,
+    abs_origin_y: i32,
+    abs_width: u32,
+    abs_height: u32,
+) -> i32 {
+    let column = node.style.get("flex-direction").is_some_and(|value| {
+        value.trim().eq_ignore_ascii_case("column")
+    });
+    let gap = parse_length(node.style.get("gap"), content_width).unwrap_or(0);
+    let mut main = 0_u32;
+    let mut cross = 0_u32;
+    let mut item_count = 0_u32;
+
+    for child in &node.children {
+        let child_display = display_for_styled_node(child);
+        if child_display == Display::None {
+            output.children.push(LayoutNode::new(Display::None));
+            continue;
+        }
+
+        let absolute = is_absolute_positioned(child) || is_fixed_positioned(child);
+        if absolute {
+            let fixed = is_fixed_positioned(child);
+            let child_x = positioned_child_x(
+                child,
+                if fixed { 0 } else { abs_origin_x },
+                if fixed { viewport_width } else { abs_width },
+                viewport_width,
+                fixed,
+            );
+            let child_y = positioned_child_y(
+                child,
+                if fixed { 0 } else { abs_origin_y },
+                main as i32,
+                if fixed { viewport_width } else { abs_width },
+                if fixed { viewport_height } else { abs_height },
+                viewport_height,
+                fixed,
+            );
+            output.children.push(layout_styled_node(
+                child,
+                child_x,
+                child_y,
+                content_width,
+                viewport_width,
+                viewport_height,
+                abs_origin_x,
+                abs_origin_y,
+                abs_width,
+                abs_height,
+            ));
+            continue;
+        }
+
+        let child_margin = box_model_from_style(&child.style, content_width);
+        let base = parse_length(child.style.get("flex-basis"), content_width)
+            .or_else(|| parse_length(child.style.get("width"), content_width))
+            .unwrap_or_else(|| intrinsic_inline_width(child, content_width));
+        let main_position = main.saturating_add(if item_count > 0 { gap } else { 0 });
+        let child_x = if column {
+            content_origin_x.saturating_add(child_margin.margin_left as i32)
+        } else {
+            content_origin_x
+                .saturating_add(main_position as i32)
+                .saturating_add(child_margin.margin_left as i32)
+        };
+        let child_y = if column {
+            content_origin_y
+                .saturating_add(main_position as i32)
+                .saturating_add(child_margin.margin_top as i32)
+        } else {
+            content_origin_y.saturating_add(child_margin.margin_top as i32)
+        };
+        let child_containing_width = if column {
+            content_width
+        } else {
+            base.saturating_sub(child_margin.horizontal_outer())
+        };
+        let child_layout = layout_styled_node(
+            child,
+            child_x,
+            child_y,
+            child_containing_width,
+            viewport_width,
+            viewport_height,
+            abs_origin_x,
+            abs_origin_y,
+            abs_width,
+            abs_height,
+        );
+        let outer_main = if column {
+            child_layout
+                .rect
+                .height
+                .saturating_add(child_layout.box_model.vertical_outer())
+        } else {
+            child_layout
+                .rect
+                .width
+                .saturating_add(child_layout.box_model.horizontal_outer())
+        };
+        let outer_cross = if column {
+            child_layout
+                .rect
+                .width
+                .saturating_add(child_layout.box_model.horizontal_outer())
+        } else {
+            child_layout
+                .rect
+                .height
+                .saturating_add(child_layout.box_model.vertical_outer())
+        };
+        main = main
+            .saturating_add(if item_count > 0 { gap } else { 0 })
+            .saturating_add(outer_main);
+        cross = cross.max(outer_cross);
+        item_count = item_count.saturating_add(1);
+        output.children.push(child_layout);
+    }
+
+    if column {
+        main as i32
+    } else {
+        cross as i32
     }
 }
 
@@ -1547,6 +1701,46 @@ mod tests {
         assert_eq!(layout.children[0].display, Display::Block);
         assert_eq!(layout.children[0].rect.height, 24);
         assert_eq!(layout.children[1].display, Display::None);
+    }
+
+    #[test]
+    fn flex_row_places_children_on_the_main_axis() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "display: flex; gap: 4px; width: 100px;");
+        let mut first = Node::element("div");
+        first.set_attribute("style", "width: 20px; height: 10px;");
+        let mut second = Node::element("div");
+        second.set_attribute("style", "width: 30px; height: 12px;");
+        root.append(first);
+        root.append(second);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.x, 0);
+        assert_eq!(layout.children[1].rect.x, 24);
+        assert_eq!(layout.rect.height, 12);
+    }
+
+    #[test]
+    fn flex_column_stacks_children_with_gap() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "display: flex; flex-direction: column; gap: 3px;");
+        let mut first = Node::element("div");
+        first.set_attribute("style", "height: 10px;");
+        let mut second = Node::element("div");
+        second.set_attribute("style", "height: 8px;");
+        root.append(first);
+        root.append(second);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.y, 0);
+        assert_eq!(layout.children[1].rect.y, 13);
+        assert_eq!(layout.rect.height, 21);
     }
 
     #[test]
