@@ -408,8 +408,7 @@ mod tests {
         let document = Response::new(200)
             .with_header("content-type", "text/html")
             .with_body(
-                br#"<head><link rel="icon" href="/favicon.ico"></head><body>Hello</body>"#
-                    .to_vec(),
+                br#"<head><link rel="icon" href="/favicon.ico"></head><body>Hello</body>"#.to_vec(),
             );
         let loader = DocumentLoader::new(
             NetworkPipeline::new(AllowAll),
