@@ -106,7 +106,9 @@ impl Node {
     /// Navigation policy stays in the browser layer; the DOM only exposes the
     /// authored href value and does not interpret schemes or resolve it.
     pub fn link_href(&self) -> Option<&str> {
-        (self.tag_name() == Some("a")).then(|| self.attribute("href")).flatten()
+        (self.tag_name() == Some("a"))
+            .then(|| self.attribute("href"))
+            .flatten()
     }
 
     pub fn attributes(&self) -> Option<&BTreeMap<String, String>> {
