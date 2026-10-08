@@ -112,7 +112,7 @@ impl LayoutEngine {
         root: &crate::style_tree::StyledNode,
         viewport: LayoutViewport,
     ) -> LayoutNode {
-        layout_styled_node(root, 0, 0, viewport.width, viewport.height)
+        layout_styled_node(root, 0, 0, viewport.width, viewport.width, viewport.height)
     }
 
     pub fn layout(root: &Node, viewport: LayoutViewport, style: &ComputedStyle) -> LayoutNode {
@@ -134,6 +134,7 @@ fn layout_styled_node(
     x: i32,
     y: i32,
     containing_width: u32,
+    viewport_width: u32,
     viewport_height: u32,
 ) -> LayoutNode {
     let display = display_for_styled_node(node);
@@ -255,6 +256,7 @@ fn layout_styled_node(
                     content_origin_x.saturating_add(inline_x as i32),
                     content_origin_y.saturating_add(cursor_y),
                     content_width.saturating_sub(inline_x),
+                    viewport_width,
                     viewport_height,
                 );
                 child_layout.rect.height = break_height;
@@ -277,6 +279,7 @@ fn layout_styled_node(
                 content_origin_x.saturating_add(inline_x as i32),
                 content_origin_y.saturating_add(cursor_y),
                 content_width.saturating_sub(inline_x),
+                viewport_width,
                 viewport_height,
             );
             inline_x = inline_x.saturating_add(
@@ -301,7 +304,7 @@ fn layout_styled_node(
                     child,
                     content_origin_x,
                     content_width,
-                    viewport_height,
+                    viewport_width,
                     child_is_fixed,
                 )
             } else {
@@ -323,6 +326,7 @@ fn layout_styled_node(
                 child_x,
                 child_y,
                 content_width,
+                viewport_width,
                 viewport_height,
             );
             if !child_is_absolute && !child_is_fixed {
@@ -417,10 +421,11 @@ fn positioned_child_x(
     node: &crate::style_tree::StyledNode,
     origin_x: i32,
     containing_width: u32,
-    _viewport_height: u32,
+    viewport_width: u32,
     fixed: bool,
 ) -> i32 {
     let origin_x = if fixed { 0 } else { origin_x };
+    let containing_width = if fixed { viewport_width } else { containing_width };
     let margin_left = parse_length(node.style.get("margin-left"), containing_width).unwrap_or(0);
     let margin_right = parse_length(node.style.get("margin-right"), containing_width).unwrap_or(0);
     if let Some(left) = parse_signed_offset(node.style.get("left"), containing_width) {
@@ -440,6 +445,10 @@ fn positioned_child_x(
     origin_x
 }
 
+fn containing_width_for_height(viewport_height: u32) -> u32 {
+    viewport_height
+}
+
 fn positioned_child_y(
     node: &crate::style_tree::StyledNode,
     origin_y: i32,
@@ -457,7 +466,17 @@ fn positioned_child_y(
             .saturating_add(
                 viewport_height
                     .saturating_sub(height)
-                    .saturating_sub(node.box_model_vertical_outer(viewport_height)) as i32,
+                    .saturating_sub(
+                        parse_length(node.style.get("margin-top"), containing_width_for_height(viewport_height))
+                            .unwrap_or(0)
+                            .saturating_add(
+                                parse_length(
+                                    node.style.get("margin-bottom"),
+                                    containing_width_for_height(viewport_height),
+                                )
+                                .unwrap_or(0),
+                            ),
+                    ) as i32,
             )
             .saturating_sub(bottom);
     }
