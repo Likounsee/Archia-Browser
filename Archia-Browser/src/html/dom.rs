@@ -196,9 +196,9 @@ mod tests {
     fn attributes_can_be_mutated_and_read() {
         let mut node = Node::element("div");
         node.set_attribute("CLASS", "card");
-        assert_eq!(node.attribute("CLASS"), None);
+        assert_eq!(node.attribute("CLASS"), Some("card"));
         assert_eq!(node.attribute("class"), Some("card"));
-        assert_eq!(node.remove_attribute("class"), Some("card".into()));
+        assert_eq!(node.remove_attribute("CLASS"), Some("card".into()));
         assert_eq!(node.attribute("class"), None);
     }
 
