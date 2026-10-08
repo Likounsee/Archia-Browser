@@ -86,6 +86,12 @@ impl Browser {
             .map(|entry| entry.url())
     }
 
+    pub fn set_current_title(&mut self, title: Option<String>) -> bool {
+        self.tabs
+            .active_tab_mut()
+            .is_some_and(|tab| tab.history_mut().set_current_title(title))
+    }
+
     pub fn new_tab(&mut self) -> core::tabs::TabId {
         self.tabs.open()
     }
@@ -212,6 +218,22 @@ mod tests {
         assert_eq!(
             browser.current_url().map(ToString::to_string),
             Some("https://example.org/two".to_owned())
+        );
+    }
+
+    #[test]
+    fn browser_updates_active_tab_title_without_navigation() {
+        let mut browser = Browser::new();
+        browser.navigate(
+            net::Url::parse("https://example.org/").unwrap(),
+            Some("Initial".to_owned()),
+        );
+
+        assert!(browser.set_current_title(Some("Updated".to_owned())));
+        assert_eq!(browser.history().len(), 1);
+        assert_eq!(
+            browser.history().current().and_then(|entry| entry.title()),
+            Some("Updated")
         );
     }
 
