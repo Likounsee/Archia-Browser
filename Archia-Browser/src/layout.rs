@@ -153,7 +153,7 @@ fn layout_styled_node(
         .style
         .get("box-sizing")
         .is_some_and(|value| value.trim().eq_ignore_ascii_case("border-box"));
-    let content_width = specified_width.map_or_else(
+    let mut content_width = specified_width.map_or_else(
         || {
             containing_width
                 .saturating_sub(margin_x)
@@ -167,6 +167,13 @@ fn layout_styled_node(
             }
         },
     );
+
+    if let Some(min_width) = parse_length(node.style.get("min-width"), containing_width) {
+        content_width = content_width.max(min_width);
+    }
+    if let Some(max_width) = parse_length(node.style.get("max-width"), containing_width) {
+        content_width = content_width.min(max_width);
+    }
 
     output.box_model = box_model;
     output.rect.x = x.saturating_add(box_model.margin_left as i32);
@@ -519,6 +526,23 @@ mod tests {
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
 
         assert_eq!(layout.children[0].rect.width, 30);
+    }
+
+    #[test]
+    fn min_and_max_width_constrain_used_content_width() {
+        let mut root = Node::element("body");
+        let mut child = Node::element("div");
+        child.set_attribute(
+            "style",
+            "width: 80%; min-width: 100px; max-width: 120px;",
+        );
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.width, 120);
     }
 
     #[test]
