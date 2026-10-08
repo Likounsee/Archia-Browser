@@ -301,7 +301,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn rejects_non_hierarchical_scheme_references() {
         let base = Url::parse("https://example.org/docs/index.html").unwrap();
 
