@@ -88,7 +88,10 @@ impl SoftwareRenderer {
 
 fn paint_styled_node(node: &StyledNode, layout: &LayoutNode, list: &mut DisplayList) {
     if layout.display == Display::None
-        || node.style.get("visibility").is_some_and(|value| value.trim() == "hidden")
+        || node
+            .style
+            .get("visibility")
+            .is_some_and(|value| value.trim() == "hidden")
     {
         return;
     }
