@@ -464,12 +464,27 @@ fn align_inline_lines(
             - i64::from(output.children[start].box_model.margin_left);
         let line_width = right.saturating_sub(left).max(0) as u32;
         let free_space = content_width.saturating_sub(line_width);
-        if alignment == 3 || alignment == 4 {
+        let has_later_line = output.children[end + 1..]
+            .iter()
+            .any(|child| child.display == Display::Inline && child.rect.y > line_y);
+        let last_alignment = style
+            .get("text-align-last")
+            .map(str::trim)
+            .map(str::to_ascii_lowercase);
+        let effective_alignment = if !has_later_line {
+            match last_alignment.as_deref() {
+                Some("center") => 1,
+                Some("right" | "end") => 2,
+                Some("justify") => 3,
+                Some("left" | "start") => 5,
+                _ => alignment,
+            }
+        } else {
+            alignment
+        };
+        if effective_alignment == 3 || effective_alignment == 4 {
             let child_count = end.saturating_sub(start).saturating_add(1);
-            let has_later_line = output.children[end + 1..]
-                .iter()
-                .any(|child| child.display == Display::Inline && child.rect.y > line_y);
-            if child_count > 1 && (alignment == 4 || has_later_line) {
+            if child_count > 1 && (effective_alignment == 4 || has_later_line) {
                 let gap_count = child_count - 1;
                 let gap = free_space / gap_count as u32;
                 let remainder = free_space % gap_count as u32;
@@ -485,8 +500,10 @@ fn align_inline_lines(
                 }
             }
         } else {
-            let shift = if alignment == 1 {
+            let shift = if effective_alignment == 1 {
                 free_space / 2
+            } else if effective_alignment == 5 {
+                0
             } else {
                 free_space
             } as i32;
@@ -1100,6 +1117,28 @@ mod tests {
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
 
         assert_eq!(layout.children[0].rect.x, 70);
+    }
+
+    #[test]
+    fn text_align_last_centers_final_line() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "width: 80px; text-align: justify; text-align-last: center;",
+        );
+
+        for text in ["one", "two", "three"] {
+            let mut span = Node::element("span");
+            span.set_attribute("style", "display: inline;");
+            span.append(Node::text(text));
+            root.append(span);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(80, 100));
+
+        assert!(layout.children[2].rect.x > layout.children[0].rect.x);
     }
 
     #[test]
