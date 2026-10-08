@@ -69,17 +69,14 @@ impl Browser {
         P: net::pipeline::RequestPolicyEngine,
         T: net::Transport,
     {
-        let url = self.current_url().cloned().ok_or(
-            net::DocumentLoadError::Network(net::TransportError::InvalidUrl(
-                net::UrlError::MissingAuthority,
-            )),
-        )?;
+        let url = self
+            .current_url()
+            .cloned()
+            .ok_or(net::DocumentLoadError::NoCurrentDocument)?;
         let request = net::Request::new(url);
         let page = loader.load(&request, viewport)?;
         let Some(url) = page.url().cloned() else {
-            return Err(net::DocumentLoadError::Network(
-                net::TransportError::InvalidUrl(net::UrlError::MissingAuthority),
-            ));
+            return Err(net::DocumentLoadError::NoCurrentDocument);
         };
 
         let entry = core::navigation::NavigationEntry::new(url, page.title());
