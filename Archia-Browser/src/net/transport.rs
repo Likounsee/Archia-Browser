@@ -271,7 +271,12 @@ fn hex_value(value: u8) -> Option<u8> {
 }
 
 fn content_type_for_path(path: &std::path::Path) -> &'static str {
-    match path.extension().and_then(|value| value.to_str()).map(str::to_ascii_lowercase).as_deref() {
+    match path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
         Some("html" | "htm") => "text/html; charset=utf-8",
         Some("xhtml") => "application/xhtml+xml",
         Some("css") => "text/css",
@@ -600,7 +605,10 @@ mod tests {
         let request = Request::new(super::super::Url::parse(&url).unwrap());
         let response = LocalFileTransport::new().send(&request).unwrap();
         assert_eq!(response.status, 200);
-        assert_eq!(response.content_type.as_deref(), Some("text/html; charset=utf-8"));
+        assert_eq!(
+            response.content_type.as_deref(),
+            Some("text/html; charset=utf-8")
+        );
         assert_eq!(response.body, b"<body>Local</body>");
         std::fs::remove_file(path).unwrap();
     }
