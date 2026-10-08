@@ -288,13 +288,13 @@ fn layout_styled_node(
 
     if inline_x > 0 {
         align_inline_line(
-                    &mut output.children,
-                    inline_line_start,
-                    output.children.len(),
-                    inline_x,
-                    content_width,
-                    node.style.get("text-align"),
-                );
+            &mut output.children,
+            inline_line_start,
+            output.children.len(),
+            inline_x,
+            content_width,
+            node.style.get("text-align"),
+        );
         cursor_y = cursor_y.saturating_add(inline_line_height as i32);
     }
 
