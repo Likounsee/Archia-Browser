@@ -254,9 +254,9 @@ fn display_for_styled_node(node: &crate::style_tree::StyledNode) -> Display {
             "head" | "title" | "meta" | "link" | "base" | "script" | "style" | "template" => {
                 Display::None
             }
-            "a" | "abbr" | "b" | "bdi" | "bdo" | "br" | "button" | "code" | "em" | "i"
-            | "img" | "input" | "label" | "small" | "span" | "strong" | "sub" | "sup"
-            | "textarea" | "time" | "u" => Display::Inline,
+            "a" | "abbr" | "b" | "bdi" | "bdo" | "br" | "button" | "code" | "em" | "i" | "img"
+            | "input" | "label" | "small" | "span" | "strong" | "sub" | "sup" | "textarea"
+            | "time" | "u" => Display::Inline,
             _ => Display::Block,
         },
     }
