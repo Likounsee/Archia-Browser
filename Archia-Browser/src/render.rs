@@ -103,8 +103,8 @@ fn paint_styled_node(node: &StyledNode, layout: &LayoutNode, list: &mut DisplayL
                     color,
                 });
             }
-            paint_borders(node.style.get("border-color"), layout, list);
         }
+        paint_borders(node.style.get("border-color"), layout, list);
     }
 
     if let NodeKind::Text(text) = &node.node.kind {
@@ -137,8 +137,8 @@ fn paint_node(node: &Node, layout: &LayoutNode, style: &ComputedStyle, list: &mu
                     color,
                 });
             }
-            paint_borders(node.style.get("border-color"), layout, list);
         }
+        paint_borders(style.get("border-color"), layout, list);
     }
 
     if let NodeKind::Text(text) = &node.kind {
