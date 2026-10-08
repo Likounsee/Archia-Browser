@@ -39,10 +39,7 @@ fn browser_stack_foundations_work_together() {
     let mut filter = RequestFilter::default();
     filter.add_rule(FilterRule::block("ads.example").for_resource(ResourceType::Script));
     assert_eq!(
-        filter.decide(
-            "https://ads.example/ad.js",
-            Some(ResourceType::Script)
-        ),
+        filter.decide("https://ads.example/ad.js", Some(ResourceType::Script)),
         FilterDecision::Block
     );
 }
