@@ -342,10 +342,7 @@ mod tests {
     #[test]
     fn border_currentcolor_falls_back_to_text_color() {
         let mut node = Node::element("div");
-        node.set_attribute(
-            "style",
-            "color: blue; border: 2px solid;",
-        );
+        node.set_attribute("style", "color: blue; border: 2px solid;");
         let styled =
             crate::style_tree::StyleEngine::style(&node, &crate::css::StyleSheet::default());
         let layout =
