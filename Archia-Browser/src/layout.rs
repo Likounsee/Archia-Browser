@@ -888,11 +888,16 @@ fn intrinsic_inline_content_width(node: &crate::style_tree::StyledNode) -> u32 {
 fn intrinsic_inline_width(node: &crate::style_tree::StyledNode, containing_width: u32) -> u32 {
     match &node.node.kind {
         NodeKind::Text(text) => {
-            normalized_text(text, node.style.get("white-space"))
-                .chars()
-                .count()
-                .min(u32::MAX as usize) as u32
-                * 6
+            let normalized = transform_text_for_layout(
+                &normalized_text(text, node.style.get("white-space")),
+                node.style.get("text-transform"),
+            );
+            let width = normalized
+                .split('\n')
+                .map(|line| line.chars().count())
+                .max()
+                .unwrap_or(0);
+            width.min(u32::MAX as usize) as u32 * 6
         }
         _ => {
             let children_width = node
@@ -906,6 +911,25 @@ fn intrinsic_inline_width(node: &crate::style_tree::StyledNode, containing_width
                 box_model_from_style(&node.style, containing_width).horizontal_outer(),
             )
         }
+    }
+}
+
+#[cfg(test)]
+mod whitespace_layout_tests {
+    use super::*;
+    use crate::dom::Node;
+
+    #[test]
+    fn intrinsic_width_uses_transformed_text_and_longest_pre_line() {
+        let styled = crate::style_tree::StyledNode::new(
+            Node::text("ab\nCDE"),
+            ComputedStyle::default(),
+            Vec::new(),
+        );
+        let mut styled = styled;
+        styled.style.set("white-space", "pre-wrap");
+        styled.style.set("text-transform", "uppercase");
+        assert_eq!(intrinsic_inline_width(&styled, 100), 18);
     }
 }
 
