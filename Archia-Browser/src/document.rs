@@ -5,6 +5,26 @@ use crate::net::Url;
 use crate::render::{DisplayList, SoftwareRenderer};
 use crate::style_tree::{StyleEngine, StyledNode};
 
+const USER_AGENT_STYLESHEET: &str = r#"
+html, body { display: block; }
+body { margin: 8px; }
+h1 { display: block; font-size: 32px; font-weight: bold; margin-top: 21px; margin-bottom: 21px; }
+h2 { display: block; font-size: 24px; font-weight: bold; margin-top: 19px; margin-bottom: 19px; }
+h3 { display: block; font-size: 19px; font-weight: bold; margin-top: 18px; margin-bottom: 18px; }
+h4 { display: block; font-size: 16px; font-weight: bold; margin-top: 21px; margin-bottom: 21px; }
+h5 { display: block; font-size: 13px; font-weight: bold; margin-top: 21px; margin-bottom: 21px; }
+h6 { display: block; font-size: 11px; font-weight: bold; margin-top: 21px; margin-bottom: 21px; }
+p { display: block; margin-top: 16px; margin-bottom: 16px; }
+blockquote { display: block; margin-top: 16px; margin-bottom: 16px; margin-left: 40px; margin-right: 40px; }
+ul, ol { display: block; margin-top: 16px; margin-bottom: 16px; padding-left: 40px; }
+li { display: block; }
+strong, b { font-weight: bold; }
+em, i { font-style: italic; }
+pre { display: block; white-space: pre; }
+code { font-family: monospace; }
+a { color: #0000ee; }
+"#;
+
 #[derive(Debug, Clone)]
 pub struct Page {
     url: Option<Url>,
@@ -70,7 +90,11 @@ impl Page {
     pub fn from_html_at(url: Option<Url>, html: &str, css: &str, viewport: LayoutViewport) -> Self {
         let tokens = HtmlTokenizer::tokenize(html);
         let document = parse(&tokens);
-        let mut stylesheet_input = css.to_owned();
+        let mut stylesheet_input = String::with_capacity(
+            USER_AGENT_STYLESHEET.len() + css.len() + 32,
+        );
+        stylesheet_input.push_str(USER_AGENT_STYLESHEET);
+        stylesheet_input.push('\n');
         collect_inline_styles(&document, &mut stylesheet_input);
         let stylesheet = StyleSheet::parse(&stylesheet_input);
         let styled = StyleEngine::style(&document, &stylesheet);
@@ -370,6 +394,37 @@ mod tests {
         assert_eq!(page.document.text_content(), "Hello");
         assert!(!page.display_list.commands().is_empty());
         assert_eq!(page.layout.rect.width, 320);
+    }
+
+    #[test]
+    fn applies_basic_user_agent_styles_to_local_document_markup() {
+        let page = Page::from_html(
+            "<html><body><h1>Title</h1><p>Text</p></body></html>",
+            "",
+            LayoutViewport::new(320, 200),
+        );
+
+        let body = &page.styled.children[0].children[1];
+        assert_eq!(body.style.get("margin-top"), Some("8px"));
+        let heading = &body.children[0];
+        assert_eq!(heading.style.get("font-size"), Some("32px"));
+        assert_eq!(heading.style.get("font-weight"), Some("bold"));
+        assert_eq!(heading.style.get("margin-top"), Some("21px"));
+    }
+
+    #[test]
+    fn author_styles_override_basic_user_agent_styles() {
+        let page = Page::from_html(
+            "<html><body><h1>Title</h1></body></html>",
+            "body { margin: 0; } h1 { font-size: 20px; margin: 0; }",
+            LayoutViewport::new(320, 200),
+        );
+
+        let body = &page.styled.children[0].children[1];
+        let heading = &body.children[0];
+        assert_eq!(body.style.get("margin-top"), Some("0"));
+        assert_eq!(heading.style.get("font-size"), Some("20px"));
+        assert_eq!(heading.style.get("margin-top"), Some("0"));
     }
 
     #[test]
