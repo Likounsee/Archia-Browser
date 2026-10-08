@@ -519,9 +519,12 @@ fn matches_pseudo_class(
         "only-of-type" => type_count(node, siblings.unwrap_or(&[])) == 1,
         _ if pseudo.starts_with("nth-child(") => nth_matches(pseudo, siblings, position, false),
         _ if pseudo.starts_with("nth-last-child(") => nth_matches(pseudo, siblings, position, true),
-        _ if pseudo.starts_with("nth-of-type(") => nth_type_matches(pseudo, node, siblings, position, false),
-        _ if pseudo.starts_with("nth-last-of-type(") => nth_type_matches(pseudo, node, siblings, position, true),
-        "empty" => false,
+        _ if pseudo.starts_with("nth-of-type(") => {
+            nth_type_matches(pseudo, node, siblings, position, false)
+        }
+        _ if pseudo.starts_with("nth-last-of-type(") => {
+            nth_type_matches(pseudo, node, siblings, position, true)
+        }
         _ if pseudo.starts_with("not(") => {
             let Some(argument) = pseudo_argument(pseudo, "not") else {
                 return false;
