@@ -226,7 +226,14 @@ fn layout_styled_node(
             let width = intrinsic_inline_width(child);
             let line_height = used_inline_line_height(child);
             if inline_x > 0 && inline_x.saturating_add(width) > content_width {
-                align_inline_line(&mut output.children, inline_line_start, output.children.len(), inline_x, content_width, node.style.get("text-align"));
+                align_inline_line(
+                    &mut output.children,
+                    inline_line_start,
+                    output.children.len(),
+                    inline_x,
+                    content_width,
+                    node.style.get("text-align"),
+                );
                 cursor_y = cursor_y.saturating_add(inline_line_height as i32);
                 inline_x = 0;
                 inline_line_height = 0;
@@ -305,7 +312,12 @@ fn align_inline_line(
     available_width: u32,
     value: Option<&str>,
 ) {
-    let delta = match value.map(str::trim).unwrap_or("start").to_ascii_lowercase().as_str() {
+    let delta = match value
+        .map(str::trim)
+        .unwrap_or("start")
+        .to_ascii_lowercase()
+        .as_str()
+    {
         "center" => available_width.saturating_sub(line_width) / 2,
         "right" | "end" => available_width.saturating_sub(line_width),
         _ => 0,
@@ -732,7 +744,8 @@ mod tests {
         let mut child = Node::element("span");
         child.append(Node::text("Hello"));
         root.append(child);
-        let styled = crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
         assert_eq!(layout.children[0].rect.x, 35);
     }
