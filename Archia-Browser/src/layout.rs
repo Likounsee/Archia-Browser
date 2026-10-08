@@ -769,7 +769,7 @@ fn layout_flex_children(
         .fold(0_u32, u32::saturating_add)
         .saturating_add(
             gap.saturating_mul(bases.iter().flatten().count().saturating_sub(1) as u32),
-        ));
+        );
     let available_main = if column {
         parse_length(node.style.get("height"), viewport_height).unwrap_or(base_main)
     } else {
