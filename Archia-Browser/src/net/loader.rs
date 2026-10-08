@@ -192,10 +192,8 @@ mod tests {
 
     #[test]
     fn loads_a_local_file_through_the_document_pipeline() {
-        let path = std::env::temp_dir().join(format!(
-            "archia-browser-loader-{}.html",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("archia-browser-loader-{}.html", std::process::id()));
         std::fs::write(&path, b"<title>Local</title><body><h1>Hello</h1></body>").unwrap();
 
         let url = if cfg!(windows) {
