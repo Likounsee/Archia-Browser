@@ -321,14 +321,16 @@ fn layout_styled_node(
         .get("position")
         .is_some_and(|value| value.trim().eq_ignore_ascii_case("relative"))
     {
-        let offset_x = parse_signed_px(node.style.get("left"))
+        let offset_x = parse_signed_offset(node.style.get("left"), containing_width)
             .or_else(|| {
-                parse_signed_px(node.style.get("right")).map(|value| value.saturating_neg())
+                parse_signed_offset(node.style.get("right"), containing_width)
+                    .map(|value| value.saturating_neg())
             })
             .unwrap_or(0);
-        let offset_y = parse_signed_px(node.style.get("top"))
+        let offset_y = parse_signed_offset(node.style.get("top"), viewport_height)
             .or_else(|| {
-                parse_signed_px(node.style.get("bottom")).map(|value| value.saturating_neg())
+                parse_signed_offset(node.style.get("bottom"), viewport_height)
+                    .map(|value| value.saturating_neg())
             })
             .unwrap_or(0);
         if offset_x != 0 || offset_y != 0 {
@@ -495,6 +497,24 @@ fn parse_px(value: Option<&str>) -> Option<u32> {
 fn parse_signed_px(value: Option<&str>) -> Option<i32> {
     let value = value?.trim();
     value.strip_suffix("px")?.trim().parse().ok()
+}
+
+fn parse_signed_offset(value: Option<&str>, containing_size: u32) -> Option<i32> {
+    let value = value?.trim();
+    if let Some(percent) = value.strip_suffix('%') {
+        let percent = percent.trim().parse::<i32>().ok()?;
+        return containing_size
+            .saturating_mul(percent.unsigned_abs())
+            .checked_div(100)
+            .map(|pixels| {
+                if percent < 0 {
+                    -(pixels as i32)
+                } else {
+                    pixels as i32
+                }
+            });
+    }
+    parse_signed_px(Some(value))
 }
 
 fn shift_layout_tree(node: &mut LayoutNode, offset_x: i32, offset_y: i32) {
@@ -895,6 +915,24 @@ mod tests {
         assert_eq!(layout.children[0].children[0].rect.y, 5);
         assert_eq!(layout.children[1].rect.x, 0);
         assert_eq!(layout.children[1].rect.y, 20);
+    }
+
+    #[test]
+    fn relative_position_accepts_percentage_offsets() {
+        let mut root = Node::element("body");
+        let mut child = Node::element("div");
+        child.set_attribute(
+            "style",
+            "position: relative; left: 10%; top: 25%; width: 20px; height: 10px;",
+        );
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 80));
+
+        assert_eq!(layout.children[0].rect.x, 20);
+        assert_eq!(layout.children[0].rect.y, 20);
     }
 
     #[test]
