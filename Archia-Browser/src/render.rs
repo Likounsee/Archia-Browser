@@ -826,10 +826,10 @@ mod tests {
             command,
             PaintCommand::FillRoundedRect {
                 radii: CornerRadii {
-                    top_left: 6,
-                    top_right: 6,
-                    bottom_right: 6,
-                    bottom_left: 6,
+                    top_left: CornerRadius { x: 6, y: 6 },
+                    top_right: CornerRadius { x: 6, y: 6 },
+                    bottom_right: CornerRadius { x: 6, y: 6 },
+                    bottom_left: CornerRadius { x: 6, y: 6 },
                 },
                 ..
             }
@@ -900,10 +900,10 @@ mod tests {
 
         style.set("border-radius", "100px 100px 20px 20px");
         let radii = parse_border_radii(&style, 40, 20);
-        assert_eq!(radii.top_left, 16);
-        assert_eq!(radii.top_right, 16);
-        assert_eq!(radii.bottom_right, 3);
-        assert_eq!(radii.bottom_left, 3);
+        assert_eq!(radii.top_left.x, 16);
+        assert_eq!(radii.top_right.x, 16);
+        assert_eq!(radii.bottom_right.x, 3);
+        assert_eq!(radii.bottom_left.x, 3);
     }
 
     #[test]
@@ -917,10 +917,10 @@ mod tests {
         assert_eq!(
             parse_border_radii(&style, 40, 20),
             CornerRadii {
-                top_left: 1,
-                top_right: 2,
-                bottom_right: 3,
-                bottom_left: 4,
+                top_left: CornerRadius { x: 1, y: 1 },
+                top_right: CornerRadius { x: 2, y: 2 },
+                bottom_right: CornerRadius { x: 3, y: 3 },
+                bottom_left: CornerRadius { x: 4, y: 4 },
             }
         );
     }
