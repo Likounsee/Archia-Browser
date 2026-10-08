@@ -204,7 +204,10 @@ mod tests {
             format!("file://{}", path.display())
         };
         let request = Request::new(Url::parse(&url).unwrap());
-        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), super::super::LocalFileTransport::new());
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            super::super::LocalFileTransport::new(),
+        );
         let page = loader
             .load(&request, LayoutViewport::new(320, 200))
             .unwrap();
