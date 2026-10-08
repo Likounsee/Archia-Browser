@@ -755,12 +755,17 @@ fn layout_flex_children(
         }
 
         let child_margin = box_model_from_style(&child.style, content_width);
+        let flex_shorthand = parse_flex_shorthand(child.style.get("flex"));
         let base = if column {
-            parse_length(child.style.get("flex-basis"), viewport_height)
+            flex_shorthand
+                .and_then(|(_, _, basis)| basis)
+                .or_else(|| parse_length(child.style.get("flex-basis"), viewport_height))
                 .or_else(|| parse_length(child.style.get("height"), viewport_height))
                 .unwrap_or_else(|| intrinsic_inline_height(child))
         } else {
-            parse_length(child.style.get("flex-basis"), content_width)
+            flex_shorthand
+                .and_then(|(_, _, basis)| basis)
+                .or_else(|| parse_length(child.style.get("flex-basis"), content_width))
                 .or_else(|| parse_length(child.style.get("width"), content_width))
                 .unwrap_or_else(|| intrinsic_inline_width(child, content_width))
         };
@@ -770,11 +775,12 @@ fn layout_flex_children(
             child_margin.horizontal_outer()
         };
         let base = base.saturating_add(outer_margin);
-        let grow = parse_flex_factor(child.style.get("flex-grow"));
-        let shrink = child
-            .style
-            .get("flex-shrink")
-            .map(|value| parse_flex_factor(Some(value)))
+        let grow = flex_shorthand
+            .map(|(grow, _, _)| grow)
+            .unwrap_or_else(|| parse_flex_factor(child.style.get("flex-grow")));
+        let shrink = flex_shorthand
+            .map(|(_, shrink, _)| shrink)
+            .or_else(|| child.style.get("flex-shrink").map(|value| parse_flex_factor(Some(value))))
             .unwrap_or(1.0);
         total_grow += grow;
         total_shrink_weight += shrink * base as f32;
@@ -1182,6 +1188,35 @@ fn align_flex_lines(
             .saturating_add(extra);
         let _ = line_index;
     }
+}
+
+fn parse_flex_shorthand(value: Option<&str>) -> Option<(f32, f32, Option<u32>)> {
+    let value = value?.trim().to_ascii_lowercase();
+    if value == "none" {
+        return Some((0.0, 0.0, None));
+    }
+    if value == "auto" {
+        return Some((1.0, 1.0, None));
+    }
+    let parts: Vec<&str> = value.split_whitespace().collect();
+    if parts.is_empty() || parts.len() > 3 {
+        return None;
+    }
+    let grow = parts[0].parse::<f32>().ok()?.max(0.0);
+    if parts.len() == 1 {
+        return Some((grow, 1.0, Some(0)));
+    }
+    let shrink = parts[1].parse::<f32>().ok()?.max(0.0);
+    let basis = if parts.len() == 3 {
+        if parts[2] == "auto" {
+            None
+        } else {
+            parts[2].strip_suffix("px")?.parse::<u32>().ok().map(Some)?
+        }
+    } else {
+        Some(0)
+    };
+    Some((grow, shrink, basis))
 }
 
 fn parse_flex_order(value: Option<&str>) -> i32 {
