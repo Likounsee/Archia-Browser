@@ -197,8 +197,10 @@ impl Transport for LocalFileTransport {
         {
             return Err(TransportError::UnsupportedScheme);
         }
-        if !matches!(request.method, super::HttpMethod::Get | super::HttpMethod::Head)
-            || request.has_body()
+        if !matches!(
+            request.method,
+            super::HttpMethod::Get | super::HttpMethod::Head
+        ) || request.has_body()
         {
             return Err(TransportError::InvalidRequest);
         }
@@ -504,10 +506,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(response.status, 200);
-        assert_eq!(
-            response.content_type.as_deref(),
-            Some("text/html; charset=utf-8")
-        );
+        assert_eq!(response.content_type.as_deref(), Some("text/html; charset=utf-8"));
         assert_eq!(response.body, b"Hello");
     }
 
@@ -592,10 +591,8 @@ mod tests {
 
     #[test]
     fn local_file_transport_loads_html() {
-        let path = std::env::temp_dir().join(format!(
-            "archia-browser-local-{}.html",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("archia-browser-local-{}.html", std::process::id()));
         std::fs::write(&path, b"<body>Local</body>").unwrap();
         let url = if cfg!(windows) {
             format!("file:///{}", path.display())
