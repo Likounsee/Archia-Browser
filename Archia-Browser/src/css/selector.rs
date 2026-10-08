@@ -528,7 +528,9 @@ mod tests {
 
         checked.set_attribute("disabled", "");
         assert!(Selector::parse("input:disabled").unwrap().matches(&checked));
-        assert!(Selector::parse("input:checked:disabled").unwrap().matches(&checked));
+        assert!(Selector::parse("input:checked:disabled")
+            .unwrap()
+            .matches(&checked));
     }
 
     #[test]
