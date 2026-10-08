@@ -838,15 +838,18 @@ fn matches_simple_with_siblings(
                 .split_whitespace()
                 .any(|part| attribute_value_matches(part, expected, attribute.case_insensitive, |a, b| a == b)),
             AttributeOperator::DashMatch => {
-                attribute_value_matches(actual, expected, attribute.case_insensitive, |a, b| a == b)
-                    || actual
-                        .get(..expected.len() + 1)
-                        .is_some_and(|prefix| attribute_value_matches(
-                            &prefix[..expected.len()],
-                            expected,
-                            attribute.case_insensitive,
-                            |a, b| a == b,
-                        ) && prefix.ends_with('-'))
+                let normalized_actual = if attribute.case_insensitive {
+                    actual.to_ascii_lowercase()
+                } else {
+                    actual.to_string()
+                };
+                let normalized_expected = if attribute.case_insensitive {
+                    expected.to_ascii_lowercase()
+                } else {
+                    expected.to_string()
+                };
+                normalized_actual == normalized_expected
+                    || normalized_actual.starts_with(&format!("{normalized_expected}-"))
             }
             AttributeOperator::Prefix => attribute_value_matches(actual, expected, attribute.case_insensitive, |a, b| a.starts_with(b)),
             AttributeOperator::Suffix => attribute_value_matches(actual, expected, attribute.case_insensitive, |a, b| a.ends_with(b)),
