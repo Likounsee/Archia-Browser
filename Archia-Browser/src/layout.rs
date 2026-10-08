@@ -141,7 +141,7 @@ fn layout_styled_node(
         return output;
     }
 
-    let mut box_model = box_model_from_style(&node.style);
+    let mut box_model = box_model_from_style(&node.style, containing_width);
     let margin_x = box_model.margin_left.saturating_add(box_model.margin_right);
     let padding_border_x = box_model
         .padding_left
@@ -249,7 +249,7 @@ fn layout_styled_node(
                 continue;
             }
 
-            let width = intrinsic_inline_width(child);
+            let width = intrinsic_inline_width(child, content_width.saturating_sub(inline_x));
             let line_height = used_inline_line_height(child);
             if inline_x > 0 && inline_x.saturating_add(width) > content_width {
                 cursor_y = cursor_y.saturating_add(inline_line_height as i32);
@@ -377,17 +377,23 @@ fn intrinsic_inline_content_width(node: &crate::style_tree::StyledNode) -> u32 {
     }
 }
 
-fn intrinsic_inline_width(node: &crate::style_tree::StyledNode) -> u32 {
+fn intrinsic_inline_width(
+    node: &crate::style_tree::StyledNode,
+    containing_width: u32,
+) -> u32 {
     match &node.node.kind {
         NodeKind::Text(text) => text.chars().count().min(u32::MAX as usize) as u32 * 6,
         _ => {
             let children_width = node
                 .children
                 .iter()
-                .map(intrinsic_inline_width)
+                .map(|child| intrinsic_inline_width(child, containing_width))
                 .fold(0, u32::saturating_add);
-            let content_width = children_width.max(parse_px(node.style.get("width")).unwrap_or(0));
-            content_width.saturating_add(box_model_from_style(&node.style).horizontal_outer())
+            let content_width = children_width
+                .max(parse_length(node.style.get("width"), containing_width).unwrap_or(0));
+            content_width.saturating_add(
+                box_model_from_style(&node.style, containing_width).horizontal_outer(),
+            )
         }
     }
 }
@@ -432,24 +438,24 @@ fn intrinsic_inline_height(node: &crate::style_tree::StyledNode) -> u32 {
     }
 }
 
-fn box_model_from_style(style: &ComputedStyle) -> BoxModel {
+fn box_model_from_style(style: &ComputedStyle, containing_width: u32) -> BoxModel {
     BoxModel {
-        margin_top: parse_px(style.get("margin-top"))
-            .unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
-        margin_right: parse_px(style.get("margin-right"))
-            .unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
-        margin_bottom: parse_px(style.get("margin-bottom"))
-            .unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
-        margin_left: parse_px(style.get("margin-left"))
-            .unwrap_or_else(|| parse_px(style.get("margin")).unwrap_or(0)),
-        padding_top: parse_px(style.get("padding-top"))
-            .unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
-        padding_right: parse_px(style.get("padding-right"))
-            .unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
-        padding_bottom: parse_px(style.get("padding-bottom"))
-            .unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
-        padding_left: parse_px(style.get("padding-left"))
-            .unwrap_or_else(|| parse_px(style.get("padding")).unwrap_or(0)),
+        margin_top: parse_length(style.get("margin-top"), containing_width)
+            .unwrap_or_else(|| parse_length(style.get("margin"), containing_width).unwrap_or(0)),
+        margin_right: parse_length(style.get("margin-right"), containing_width)
+            .unwrap_or_else(|| parse_length(style.get("margin"), containing_width).unwrap_or(0)),
+        margin_bottom: parse_length(style.get("margin-bottom"), containing_width)
+            .unwrap_or_else(|| parse_length(style.get("margin"), containing_width).unwrap_or(0)),
+        margin_left: parse_length(style.get("margin-left"), containing_width)
+            .unwrap_or_else(|| parse_length(style.get("margin"), containing_width).unwrap_or(0)),
+        padding_top: parse_length(style.get("padding-top"), containing_width)
+            .unwrap_or_else(|| parse_length(style.get("padding"), containing_width).unwrap_or(0)),
+        padding_right: parse_length(style.get("padding-right"), containing_width)
+            .unwrap_or_else(|| parse_length(style.get("padding"), containing_width).unwrap_or(0)),
+        padding_bottom: parse_length(style.get("padding-bottom"), containing_width)
+            .unwrap_or_else(|| parse_length(style.get("padding"), containing_width).unwrap_or(0)),
+        padding_left: parse_length(style.get("padding-left"), containing_width)
+            .unwrap_or_else(|| parse_length(style.get("padding"), containing_width).unwrap_or(0)),
         border_top: parse_border_width(style.get("border-top-width"))
             .unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
         border_right: parse_border_width(style.get("border-right-width"))
@@ -951,13 +957,35 @@ mod tests {
     }
 
     #[test]
+    fn percentage_margins_and_padding_use_containing_width() {
+        let mut root = Node::element("body");
+        let mut child = Node::element("div");
+        child.set_attribute(
+            "style",
+            "width: 50%; margin: 5%; padding: 10%; border-width: 2px;",
+        );
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 200));
+
+        assert_eq!(layout.children[0].rect.x, 10);
+        assert_eq!(layout.children[0].rect.width, 100);
+        assert_eq!(layout.children[0].box_model.margin_left, 10);
+        assert_eq!(layout.children[0].box_model.padding_left, 20);
+        assert_eq!(layout.children[0].box_model.padding_top, 20);
+        assert_eq!(layout.children[0].box_model.horizontal_outer(), 64);
+    }
+
+    #[test]
     fn border_width_keywords_have_stable_pixel_metrics() {
         let style = {
             let mut style = ComputedStyle::default();
             style.set("border-width", "thick");
             style
         };
-        let model = box_model_from_style(&style);
+        let model = box_model_from_style(&style, 100);
         assert_eq!(model.border_top, 5);
         assert_eq!(model.border_right, 5);
     }
