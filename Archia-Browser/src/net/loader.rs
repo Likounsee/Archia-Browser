@@ -454,14 +454,17 @@ mod tests {
 
         impl Transport for SequenceTransport {
             fn send(&self, request: &Request) -> Result<Response, TransportError> {
-                if request.policy.resource_kind == ResourceKind::Stylesheet
-                    && request.url.to_string() == "https://example.org/css/site.css"
-                {
-                    return Ok(Response::new(302).with_header("location", "/css/final.css"));
+                if request.policy.resource_kind == ResourceKind::Stylesheet {
+                    assert_eq!(
+                        request.url.to_string(),
+                        if request.url.path() == "/css/site.css" {
+                            "https://example.org/css/site.css"
+                        } else {
+                            "https://example.org/css/final.css"
+                        }
+                    );
                 }
-                Ok(Response::new(200)
-                    .with_header("content-type", "text/css")
-                    .with_body(b".hero { color: blue; }".to_vec()))
+                Ok(self.responses.lock().unwrap().remove(0))
             }
         }
 
