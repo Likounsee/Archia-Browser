@@ -491,7 +491,9 @@ fn display_for_styled_node(node: &crate::style_tree::StyledNode) -> Display {
     if node.style.get("display").is_some() {
         return Display::from_style(&node.style);
     }
-    if matches!(&node.node.kind, NodeKind::Element { .. }) && node.node.attribute("hidden").is_some() {
+    if matches!(&node.node.kind, NodeKind::Element { .. })
+        && node.node.attribute("hidden").is_some()
+    {
         return Display::None;
     }
     match &node.node.kind {
