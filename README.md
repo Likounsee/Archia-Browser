@@ -119,6 +119,7 @@ Current milestone:
 - [x] HTML attribute parsing and DOM preservation
 - [x] Style resolution for matching DOM nodes
 - [x] Attribute selector operators
+- [x] Initial form-state pseudo-classes (`:checked`, `:disabled`, `:enabled`, `:required`, `:optional`, `:read-only`, `:read-write`)
 - [x] `!important` handling and inline style precedence (initial)
 - [x] CSS-wide value handling (`initial`, `inherit`, `unset`) and box shorthand expansion
 - [x] First block-flow layout engine foundation
