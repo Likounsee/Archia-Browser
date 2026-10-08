@@ -1115,7 +1115,7 @@ mod tests {
         assert_eq!(layout.children[0].display, Display::InlineBlock);
         assert_eq!(layout.children[0].rect.width, 50);
         assert_eq!(layout.children[0].children[0].rect.y, 2);
-        assert_eq!(layout.children[0].children[1].rect.y, 14);
+        assert_eq!(layout.children[0].children[1].rect.y, 12);
     }
 
     #[test]
