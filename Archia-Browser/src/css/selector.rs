@@ -426,8 +426,6 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
 
     Some(simple)
 }
-
-
 fn matches_pseudo_class(
     pseudo: &str,
     attributes: &std::collections::BTreeMap<String, String>,
