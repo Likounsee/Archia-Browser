@@ -210,14 +210,22 @@ mod tests {
         assert_eq!(parent.child_count(), 3);
         assert_eq!(parent.child(1).and_then(Node::tag_name), Some("second"));
 
-        let replaced = parent.replace_child(1, Node::element("replacement")).unwrap();
+        let replaced = parent
+            .replace_child(1, Node::element("replacement"))
+            .unwrap();
         assert_eq!(replaced.tag_name(), Some("second"));
-        assert_eq!(parent.child(1).and_then(Node::tag_name), Some("replacement"));
+        assert_eq!(
+            parent.child(1).and_then(Node::tag_name),
+            Some("replacement")
+        );
 
         let removed = parent.remove_child(0).unwrap();
         assert_eq!(removed.tag_name(), Some("first"));
         assert_eq!(parent.child_count(), 2);
-        assert_eq!(parent.child_mut(0).and_then(|node| node.tag_name()), Some("replacement"));
+        assert_eq!(
+            parent.child_mut(0).and_then(|node| node.tag_name()),
+            Some("replacement")
+        );
 
         assert!(parent.insert_child(99, Node::element("invalid")).is_err());
         assert!(parent.replace_child(99, Node::element("invalid")).is_err());
