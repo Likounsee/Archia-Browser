@@ -759,7 +759,11 @@ fn layout_flex_children(
         };
         let base = base.saturating_add(outer_margin);
         let grow = parse_flex_factor(child.style.get("flex-grow"));
-        let shrink = parse_flex_factor(child.style.get("flex-shrink")).max(1.0);
+        let shrink = child
+            .style
+            .get("flex-shrink")
+            .map(|value| parse_flex_factor(Some(value)))
+            .unwrap_or(1.0);
         total_grow += grow;
         total_shrink_weight += shrink * base as f32;
         bases.push(Some((base, grow, shrink)));
@@ -862,7 +866,7 @@ fn layout_flex_children(
         };
         let child_containing_width = if column { content_width } else { target_main };
         let mut flex_child = child.clone();
-        if grow_enabled {
+        if grow_enabled || shrink_enabled {
             if column {
                 flex_child.style.set("height", target_main.to_string());
             } else {
