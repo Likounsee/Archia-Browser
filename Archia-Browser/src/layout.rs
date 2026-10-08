@@ -1819,7 +1819,10 @@ mod tests {
     #[test]
     fn flex_space_around_distributes_row_items_evenly() {
         let mut root = Node::element("div");
-        root.set_attribute("style", "display: flex; width: 100px; justify-content: space-around;");
+        root.set_attribute(
+            "style",
+            "display: flex; width: 100px; justify-content: space-around;",
+        );
         for _ in 0..2 {
             let mut child = Node::element("div");
             child.set_attribute("style", "width: 20px; height: 10px;");
