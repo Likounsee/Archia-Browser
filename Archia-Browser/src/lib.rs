@@ -329,17 +329,18 @@ mod tests {
         let mut browser = Browser::new();
         let page = crate::document::Page::from_html_at(
             Some(net::Url::parse("https://example.org/docs/index.html").unwrap()),
-            "<head><base href="/guide/"></head><body>Hello</body>",
+            r#"<head><base href="/guide/"></head><body>Hello</body>"#,
             "",
             crate::layout::LayoutViewport::new(320, 200),
         );
         let mut link = crate::html::Node::element("a");
         link.set_attribute("href", "chapter.html");
 
-        let current = browser
-            .activate_link_from_page(&page, &link, None)
-            .unwrap();
-        assert_eq!(current.to_string(), "https://example.org/guide/chapter.html");
+        let current = browser.activate_link_from_page(&page, &link, None).unwrap();
+        assert_eq!(
+            current.to_string(),
+            "https://example.org/guide/chapter.html"
+        );
     }
 
     #[test]
