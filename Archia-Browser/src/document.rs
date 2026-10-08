@@ -19,12 +19,7 @@ impl Page {
         Self::from_html_at(None, html, css, viewport)
     }
 
-    pub fn from_html_at(
-        url: Option<Url>,
-        html: &str,
-        css: &str,
-        viewport: LayoutViewport,
-    ) -> Self {
+    pub fn from_html_at(url: Option<Url>, html: &str, css: &str, viewport: LayoutViewport) -> Self {
         let tokens = HtmlTokenizer::tokenize(html);
         let document = parse(&tokens);
         let stylesheet = StyleSheet::parse(css);
