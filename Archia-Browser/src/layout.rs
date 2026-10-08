@@ -1024,15 +1024,12 @@ fn layout_flex_children(
             let desired_x = if reverse_main {
                 content_origin_x
                     .saturating_add(
-                        content_width
-                            .saturating_sub(offset)
-                            .saturating_sub(cursor)
-                            .saturating_sub(
-                                output.children[*index]
-                                    .rect
-                                    .width
-                                    .saturating_add(output.children[*index].box_model.horizontal_outer()),
-                            ) as i32,
+                        content_width.saturating_sub(offset).saturating_sub(cursor).saturating_sub(
+                        output.children[*index]
+                            .rect
+                            .width
+                            .saturating_add(output.children[*index].box_model.horizontal_outer()),
+                    ) as i32,
                     )
                     .saturating_add(margin_left as i32)
                     .saturating_sub(extra.saturating_mul(position as u32) as i32)
@@ -1067,14 +1064,12 @@ fn layout_flex_children(
             let desired_y = if reverse_main && column {
                 content_origin_y
                     .saturating_add(
-                        available_main
-                            .saturating_sub(cursor)
-                            .saturating_sub(
-                                output.children[index]
-                                    .rect
-                                    .height
-                                    .saturating_add(output.children[index].box_model.vertical_outer()),
-                            ) as i32,
+                        available_main.saturating_sub(cursor).saturating_sub(
+                            output.children[index]
+                                .rect
+                                .height
+                                .saturating_add(output.children[index].box_model.vertical_outer()),
+                        ) as i32,
                     )
                     .saturating_add(child.box_model.margin_top as i32)
             } else {
