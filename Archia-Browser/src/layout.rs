@@ -554,9 +554,7 @@ fn align_inline_vertical_align(
 
             let target_outer_top = match alignment.as_deref() {
                 Some("top" | "text-top") => line_top,
-                Some("bottom" | "text-bottom") => {
-                    line_bottom.saturating_sub(outer_height as i32)
-                }
+                Some("bottom" | "text-bottom") => line_bottom.saturating_sub(outer_height as i32),
                 Some("middle") => {
                     line_top.saturating_add(line_height.saturating_sub(outer_height as i32) / 2)
                 }
