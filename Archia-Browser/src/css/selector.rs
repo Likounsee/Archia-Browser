@@ -514,8 +514,13 @@ fn matches_pseudo_class(
                 && element_position(list, pos) + 1 == element_count(list)
         }),
         "only-child" => element_count(siblings.unwrap_or(&[])) == 1,
+        "first-of-type" => is_type_position(node, siblings, position, 0),
+        "last-of-type" => is_last_type_position(node, siblings, position),
+        "only-of-type" => type_count(node, siblings.unwrap_or(&[])) == 1,
         _ if pseudo.starts_with("nth-child(") => nth_matches(pseudo, siblings, position, false),
         _ if pseudo.starts_with("nth-last-child(") => nth_matches(pseudo, siblings, position, true),
+        _ if pseudo.starts_with("nth-of-type(") => nth_type_matches(pseudo, node, siblings, position, false),
+        _ if pseudo.starts_with("nth-last-of-type(") => nth_type_matches(pseudo, node, siblings, position, true),
         "empty" => false,
         _ if pseudo.starts_with("not(") => {
             let Some(argument) = pseudo_argument(pseudo, "not") else {
@@ -587,6 +592,80 @@ fn element_position(siblings: &[Node], position: usize) -> usize {
         .filter(|node| node.is_element())
         .count()
         .saturating_sub(1)
+}
+
+fn same_element_type(left: &Node, right: &Node) -> bool {
+    left.tag_name()
+        .zip(right.tag_name())
+        .is_some_and(|(left, right)| left.eq_ignore_ascii_case(right))
+}
+
+fn type_count(node: &Node, siblings: &[Node]) -> usize {
+    siblings
+        .iter()
+        .filter(|sibling| sibling.is_element() && same_element_type(node, sibling))
+        .count()
+}
+
+fn type_position(node: &Node, siblings: &[Node], position: usize) -> usize {
+    siblings
+        .iter()
+        .take(position + 1)
+        .filter(|sibling| sibling.is_element() && same_element_type(node, sibling))
+        .count()
+        .saturating_sub(1)
+}
+
+fn is_type_position(
+    node: &Node,
+    siblings: Option<&[Node]>,
+    position: Option<usize>,
+    expected: usize,
+) -> bool {
+    siblings.zip(position).is_some_and(|(list, pos)| {
+        list.get(pos)
+            .is_some_and(|candidate| candidate.is_element() && same_element_type(node, candidate))
+            && type_position(node, list, pos) == expected
+    })
+}
+
+fn is_last_type_position(node: &Node, siblings: Option<&[Node]>, position: Option<usize>) -> bool {
+    siblings.zip(position).is_some_and(|(list, pos)| {
+        list.get(pos)
+            .is_some_and(|candidate| candidate.is_element() && same_element_type(node, candidate))
+            && type_position(node, list, pos) + 1 == type_count(node, list)
+    })
+}
+
+fn nth_type_matches(
+    pseudo: &str,
+    node: &Node,
+    siblings: Option<&[Node]>,
+    position: Option<usize>,
+    from_end: bool,
+) -> bool {
+    let Some((list, pos)) = siblings.zip(position) else {
+        return false;
+    };
+    let Some(candidate) = list.get(pos) else {
+        return false;
+    };
+    if !candidate.is_element() || !same_element_type(node, candidate) {
+        return false;
+    }
+    let count = type_count(node, list) as i32;
+    let index = if from_end {
+        count - type_position(node, list, pos) as i32
+    } else {
+        type_position(node, list, pos) as i32 + 1
+    };
+    let Some(argument) = pseudo
+        .split_once('(')
+        .and_then(|(_, rest)| rest.strip_suffix(')'))
+    else {
+        return false;
+    };
+    parse_nth_formula(argument.trim(), index)
 }
 
 fn is_element_position(
@@ -905,6 +984,38 @@ mod tests {
             Selector::parse("div:where(#main)").unwrap().specificity(),
             Specificity::new(0, 0, 1)
         );
+    }
+
+    #[test]
+    fn matches_type_based_structural_pseudo_classes() {
+        let mut body = Node::element("body");
+        let first_div = Node::element("div");
+        let span = Node::element("span");
+        let second_div = Node::element("div");
+        let third_div = Node::element("div");
+        body.append(first_div);
+        body.append(span);
+        body.append(second_div);
+        body.append(third_div);
+
+        let siblings = body.children.as_slice();
+        let lists: [&[Node]; 2] = [&[], siblings];
+
+        assert!(Selector::parse("div:first-of-type")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[0]], &lists, &[0, 0]));
+        assert!(Selector::parse("div:nth-of-type(2)")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[2]], &lists, &[0, 2]));
+        assert!(Selector::parse("div:nth-last-of-type(1)")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[3]], &lists, &[0, 3]));
+        assert!(Selector::parse("div:last-of-type")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[3]], &lists, &[0, 3]));
+        assert!(Selector::parse("span:only-of-type")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[1]], &lists, &[0, 1]));
     }
 
     #[test]
