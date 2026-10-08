@@ -1,4 +1,4 @@
-use super::layout::{Display, LayoutNode};
+use super::layout::{Display, LayoutNode, Rect};
 use crate::css::ComputedStyle;
 use crate::html::{Node, NodeKind};
 use crate::style_tree::StyledNode;
@@ -16,6 +16,10 @@ pub enum PaintCommand {
         text: String,
         color: u32,
     },
+    PushClip {
+        rect: Rect,
+    },
+    PopClip,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -51,6 +55,9 @@ impl SoftwareRenderer {
     }
 
     pub fn rasterize(list: &DisplayList, surface: &mut SoftwareSurface) {
+        let mut clip_stack = Vec::new();
+        let mut clip = None;
+
         for command in list.commands() {
             match command {
                 PaintCommand::FillRect { rect, color } => {
@@ -60,7 +67,7 @@ impl SoftwareRenderer {
                         ((color >> 8) & 0xff) as u8,
                         (color & 0xff) as u8,
                     );
-                    surface.fill_rect(rect.x, rect.y, rect.width, rect.height, color);
+                    surface.fill_rect_clipped(rect.x, rect.y, rect.width, rect.height, color, clip);
                 }
                 PaintCommand::DrawText { x, y, text, color } => {
                     let color = Color(
@@ -69,7 +76,14 @@ impl SoftwareRenderer {
                         ((color >> 8) & 0xff) as u8,
                         (color & 0xff) as u8,
                     );
-                    surface.draw_text(*x, *y, text, color);
+                    surface.draw_text_clipped(*x, *y, text, color, clip);
+                }
+                PaintCommand::PushClip { rect } => {
+                    clip_stack.push(clip);
+                    clip = intersect_clip(clip, Some(*rect));
+                }
+                PaintCommand::PopClip => {
+                    clip = clip_stack.pop().flatten();
                 }
             }
         }
@@ -112,6 +126,16 @@ fn paint_styled_node(node: &StyledNode, layout: &LayoutNode, list: &mut DisplayL
         paint_borders(&node.style, layout, list);
     }
 
+    let clips_children = node
+        .style
+        .get("overflow")
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("hidden"));
+    if clips_children {
+        list.push(PaintCommand::PushClip {
+            rect: overflow_clip_rect(layout),
+        });
+    }
+
     if let NodeKind::Text(text) = &node.node.kind {
         list.push(PaintCommand::DrawText {
             x: layout.rect.x,
@@ -123,6 +147,10 @@ fn paint_styled_node(node: &StyledNode, layout: &LayoutNode, list: &mut DisplayL
 
     for (child, child_layout) in node.children.iter().zip(&layout.children) {
         paint_styled_node(child, child_layout, list);
+    }
+
+    if clips_children {
+        list.push(PaintCommand::PopClip);
     }
 }
 
@@ -162,6 +190,47 @@ fn paint_node(node: &Node, layout: &LayoutNode, style: &ComputedStyle, list: &mu
     for (child, child_layout) in node.children.iter().zip(&layout.children) {
         paint_node(child, child_layout, style, list);
     }
+}
+
+fn intersect_clip(current: Option<Rect>, next: Option<Rect>) -> Option<Rect> {
+    match (current, next) {
+        (None, clip) | (clip, None) => clip,
+        (Some(first), Some(second)) => {
+            let left = first.x.max(second.x);
+            let top = first.y.max(second.y);
+            let right = (first.x as i64 + first.width as i64)
+                .min(second.x as i64 + second.width as i64);
+            let bottom = (first.y as i64 + first.height as i64)
+                .min(second.y as i64 + second.height as i64);
+            if right <= left as i64 || bottom <= top as i64 {
+                Some(Rect::new(left, top, 0, 0))
+            } else {
+                Some(Rect::new(
+                    left,
+                    top,
+                    (right - left as i64) as u32,
+                    (bottom - top as i64) as u32,
+                ))
+            }
+        }
+    }
+}
+
+fn overflow_clip_rect(layout: &LayoutNode) -> Rect {
+    Rect::new(
+        layout.rect.x.saturating_sub(layout.box_model.padding_left as i32),
+        layout.rect.y.saturating_sub(layout.box_model.padding_top as i32),
+        layout
+            .rect
+            .width
+            .saturating_add(layout.box_model.padding_left)
+            .saturating_add(layout.box_model.padding_right),
+        layout
+            .rect
+            .height
+            .saturating_add(layout.box_model.padding_top)
+            .saturating_add(layout.box_model.padding_bottom),
+    )
 }
 
 fn background_rect(layout: &LayoutNode) -> super::layout::Rect {
@@ -422,6 +491,52 @@ mod tests {
                 ..
             }
         )));
+    }
+
+    #[test]
+    fn overflow_hidden_adds_a_clip_around_descendants() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "width: 20px; height: 10px; padding: 2px; overflow: hidden;");
+        let mut child = Node::element("span");
+        child.append(Node::text("This text overflows"));
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+        let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
+
+        assert!(matches!(list.commands()[1], PaintCommand::PushClip { .. }));
+        assert!(matches!(
+            list.commands().last(),
+            Some(PaintCommand::PopClip)
+        ));
+    }
+
+    #[test]
+    fn nested_clips_intersect_in_rasterization() {
+        let list = DisplayList {
+            commands: vec![
+                PaintCommand::PushClip {
+                    rect: Rect::new(0, 0, 10, 10),
+                },
+                PaintCommand::PushClip {
+                    rect: Rect::new(5, 5, 10, 10),
+                },
+                PaintCommand::FillRect {
+                    rect: Rect::new(0, 0, 20, 20),
+                    color: 0xff0000ff,
+                },
+                PaintCommand::PopClip,
+                PaintCommand::PopClip,
+            ],
+        };
+        let mut surface = SoftwareSurface::new(20, 20);
+        SoftwareRenderer::rasterize(&list, &mut surface);
+
+        assert_eq!(surface.pixel(4, 4), Some(Color(0, 0, 0, 0)));
+        assert_eq!(surface.pixel(5, 5), Some(Color(255, 0, 0, 255)));
+        assert_eq!(surface.pixel(14, 14), Some(Color(0, 0, 0, 0)));
     }
 
     #[test]

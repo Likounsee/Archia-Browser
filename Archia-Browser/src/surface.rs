@@ -136,13 +136,29 @@ impl SoftwareSurface {
     }
 
     pub fn fill_rect(&mut self, x: i32, y: i32, width: u32, height: u32, color: Color) {
-        let x0 = x.max(0) as u32;
-        let y0 = y.max(0) as u32;
-        let x1 = (x.max(0) as u32)
-            .saturating_add(width)
+        self.fill_rect_clipped(x, y, width, height, color, None);
+    }
+
+    pub fn fill_rect_clipped(
+        &mut self,
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+        color: Color,
+        clip: Option<crate::layout::Rect>,
+    ) {
+        let rect = crate::layout::Rect::new(x, y, width, height);
+        let Some(rect) = intersect_rect(rect, clip) else {
+            return;
+        };
+        let x0 = rect.x.max(0) as u32;
+        let y0 = rect.y.max(0) as u32;
+        let x1 = (rect.x.max(0) as u32)
+            .saturating_add(rect.width)
             .min(self.surface.width);
-        let y1 = (y.max(0) as u32)
-            .saturating_add(height)
+        let y1 = (rect.y.max(0) as u32)
+            .saturating_add(rect.height)
             .min(self.surface.height);
 
         for py in y0..y1 {
@@ -152,6 +168,74 @@ impl SoftwareSurface {
                     .copy_from_slice(&[color.0, color.1, color.2, color.3]);
             }
         }
+    }
+
+    pub fn draw_text_clipped(
+        &mut self,
+        x: i32,
+        y: i32,
+        text: &str,
+        color: Color,
+        clip: Option<crate::layout::Rect>,
+    ) {
+        let mut cursor_x = x;
+        let mut cursor_y = y;
+        for ch in text.chars() {
+            if ch == '\r' {
+                continue;
+            }
+            if ch == '\n' {
+                cursor_x = x;
+                cursor_y = cursor_y.saturating_add(8);
+                continue;
+            }
+            if ch == '\t' {
+                cursor_x = cursor_x.saturating_add(24);
+                continue;
+            }
+            if let Some(glyph) = glyph(ch) {
+                for (row, bits) in glyph.iter().enumerate() {
+                    for column in 0..5 {
+                        if bits & (1 << (4 - column)) != 0 {
+                            self.fill_rect_clipped(
+                                cursor_x + column,
+                                cursor_y + row as i32,
+                                1,
+                                1,
+                                color,
+                                clip,
+                            );
+                        }
+                    }
+                }
+            }
+            cursor_x = cursor_x.saturating_add(6);
+        }
+    }
+}
+
+fn intersect_rect(
+    rect: crate::layout::Rect,
+    clip: Option<crate::layout::Rect>,
+) -> Option<crate::layout::Rect> {
+    let Some(clip) = clip else {
+        return Some(rect);
+    };
+    let left = rect.x.max(clip.x);
+    let top = rect.y.max(clip.y);
+    let right = (rect.x as i64 + rect.width as i64)
+        .min(clip.x as i64 + clip.width as i64);
+    let bottom = (rect.y as i64 + rect.height as i64)
+        .min(clip.y as i64 + clip.height as i64);
+    if right <= left as i64 || bottom <= top as i64 {
+        None
+    } else {
+        Some(crate::layout::Rect::new(
+            left,
+            top,
+            (right - left as i64) as u32,
+            (bottom - top as i64) as u32,
+        ))
     }
 }
 
