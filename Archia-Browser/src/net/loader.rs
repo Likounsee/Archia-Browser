@@ -309,12 +309,9 @@ mod tests {
             }
         }
 
-        let loader =
-            DocumentLoader::new(NetworkPipeline::new(AllowAll), InspectTransport);
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), InspectTransport);
         let request = Request::new(Url::parse("https://example.org/").unwrap());
-        assert!(loader
-            .load(&request, LayoutViewport::new(320, 200))
-            .is_ok());
+        assert!(loader.load(&request, LayoutViewport::new(320, 200)).is_ok());
     }
 
     #[test]
