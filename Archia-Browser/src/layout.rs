@@ -1233,42 +1233,11 @@ fn align_flex_lines(
         _ => (0, 0),
     };
     let mut cursor = offset;
-    for (line_index, line) in lines.iter().enumerate() {
+    let line_gap = parse_length(node.style.get("row-gap"), line_cross)
+        .or_else(|| parse_length(node.style.get("gap"), line_cross))
+        .unwrap_or(0);
+    for line in &lines {
         let current_y = output.children[line[0]].rect.y;
-        let target_y = if wrap_reverse {
-            let total_height = lines
-                .iter()
-                .map(|current_line| {
-                    current_line
-                        .iter()
-                        .map(|index| {
-                            output.children[*index]
-                                .rect
-                                .height
-                                .saturating_add(output.children[*index].box_model.vertical_outer())
-                        })
-                        .max()
-                        .unwrap_or(0)
-                })
-                .fold(0_u32, u32::saturating_add)
-                .saturating_add(
-                    parse_length(node.style.get("row-gap"), line_cross)
-                        .or_else(|| parse_length(node.style.get("gap"), line_cross))
-                        .unwrap_or(0)
-                        .saturating_mul(lines.len().saturating_sub(1) as u32),
-                );
-            content_origin_y
-                .saturating_add(line_cross as i32)
-                .saturating_add(total_height.saturating_sub(cursor + line_cross) as i32)
-        } else {
-            content_origin_y.saturating_add(cursor as i32)
-        };
-        let shift = target_y.saturating_sub(current_y);
-        if shift != 0 {
-            for index in line {
-                shift_layout_tree(&mut output.children[*index], 0, shift);
-            }
-        }
         let height = line
             .iter()
             .map(|index| {
@@ -1279,15 +1248,22 @@ fn align_flex_lines(
             })
             .max()
             .unwrap_or(0);
+        let target_y = if wrap_reverse {
+            content_origin_y
+                .saturating_add(available.saturating_sub(cursor).saturating_sub(height) as i32)
+        } else {
+            content_origin_y.saturating_add(cursor as i32)
+        };
+        let shift = target_y.saturating_sub(current_y);
+        if shift != 0 {
+            for index in line {
+                shift_layout_tree(&mut output.children[*index], 0, shift);
+            }
+        }
         cursor = cursor
             .saturating_add(height)
-            .saturating_add(
-                parse_length(node.style.get("row-gap"), line_cross)
-                    .or_else(|| parse_length(node.style.get("gap"), line_cross))
-                    .unwrap_or(0),
-            )
+            .saturating_add(line_gap)
             .saturating_add(extra);
-        let _ = line_index;
     }
 }
 
