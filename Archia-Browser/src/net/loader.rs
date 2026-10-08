@@ -136,10 +136,17 @@ where
         let document = parse(&HtmlTokenizer::tokenize(html));
         let mut links = Vec::new();
         collect_stylesheet_links(&document, &mut links);
+        let base_url = document
+            .find_first_element("base")
+            .and_then(|base| base.attribute("href"))
+            .map(str::trim)
+            .filter(|href| !href.is_empty())
+            .and_then(|href| document_url.resolve(href).ok())
+            .unwrap_or_else(|| document_url.clone());
 
         let mut stylesheet = String::new();
         for href in links {
-            let Ok(url) = document_url.resolve(&href) else {
+            let Ok(url) = base_url.resolve(&href) else {
                 continue;
             };
             let Some(css) = self.load_stylesheet_resource(document_url, url) else {
@@ -467,6 +474,51 @@ mod tests {
             .load(&request, LayoutViewport::new(320, 200))
             .unwrap();
         assert_eq!(page.document.text_content(), "Hello");
+    }
+
+    #[test]
+    fn resolves_linked_stylesheets_against_base_element() {
+        #[derive(Debug)]
+        struct SequenceTransport {
+            requests: std::sync::Mutex<Vec<String>>,
+        }
+
+        impl Transport for SequenceTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                let mut requests = self.requests.lock().unwrap();
+                requests.push(request.url.to_string());
+                if request.policy.resource_kind == ResourceKind::Stylesheet {
+                    Ok(Response::new(200)
+                        .with_header("content-type", "text/css")
+                        .with_body(b"body { color: red; }".to_vec()))
+                } else {
+                    Ok(Response::new(200)
+                        .with_header("content-type", "text/html")
+                        .with_body(
+                            br#"<head><base href="/assets/"><link rel="stylesheet" href="site.css"></head><body>Hello</body>"#.to_vec(),
+                        ))
+                }
+            }
+        }
+
+        let transport = SequenceTransport {
+            requests: std::sync::Mutex::new(Vec::new()),
+        };
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
+        let request = Request::new(Url::parse("https://example.org/index.html").unwrap());
+
+        let page = loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .unwrap();
+        assert!(page.display_list.commands().iter().any(|command| {
+            matches!(
+                command,
+                crate::render::PaintCommand::DrawText {
+                    color: 0xff0000ff,
+                    ..
+                }
+            )
+        }));
     }
 
     #[test]
