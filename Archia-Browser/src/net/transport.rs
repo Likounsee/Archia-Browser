@@ -274,7 +274,7 @@ fn parse_http_response_for_method(
     }
 
     let body_forbidden =
-        matches!(method, super::HttpMethod::Head) || matches!(status, 100..=199 | 204 | 304);
+        matches!(method, crate::net::HttpMethod::Head) || matches!(status, 100..=199 | 204 | 304);
 
     let body = if body_forbidden {
         Vec::new()
@@ -409,7 +409,7 @@ mod tests {
     fn head_response_ignores_declared_body_length() {
         let response = parse_http_response_for_method(
             b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\n",
-            super::HttpMethod::Head,
+            crate::net::HttpMethod::Head,
             1024,
             1024,
         )
