@@ -94,6 +94,8 @@ impl Page {
             String::with_capacity(USER_AGENT_STYLESHEET.len() + css.len() + 32);
         stylesheet_input.push_str(USER_AGENT_STYLESHEET);
         stylesheet_input.push('\n');
+        stylesheet_input.push_str(css);
+        stylesheet_input.push('\n');
         collect_inline_styles(&document, &mut stylesheet_input);
         let stylesheet = StyleSheet::parse(&stylesheet_input);
         let styled = StyleEngine::style(&document, &stylesheet);
