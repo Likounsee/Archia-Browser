@@ -223,10 +223,8 @@ fn intersect_rect(
     };
     let left = rect.x.max(clip.x);
     let top = rect.y.max(clip.y);
-    let right = (rect.x as i64 + rect.width as i64)
-        .min(clip.x as i64 + clip.width as i64);
-    let bottom = (rect.y as i64 + rect.height as i64)
-        .min(clip.y as i64 + clip.height as i64);
+    let right = (rect.x as i64 + rect.width as i64).min(clip.x as i64 + clip.width as i64);
+    let bottom = (rect.y as i64 + rect.height as i64).min(clip.y as i64 + clip.height as i64);
     if right <= left as i64 || bottom <= top as i64 {
         None
     } else {
