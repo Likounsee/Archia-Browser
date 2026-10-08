@@ -223,7 +223,7 @@ fn layout_styled_node(
 
         if child_display == Display::Inline {
             let width = intrinsic_inline_width(child);
-            let line_height = intrinsic_inline_height(child).max(16);
+            let line_height = inline_line_height(child);
             if inline_x > 0 && inline_x.saturating_add(width) > content_width {
                 cursor_y = cursor_y.saturating_add(inline_line_height as i32);
                 inline_x = 0;
@@ -336,6 +336,15 @@ fn intrinsic_inline_width(node: &crate::style_tree::StyledNode) -> u32 {
             content_width.saturating_add(box_model_from_style(&node.style).horizontal_outer())
         }
     }
+}
+
+fn inline_line_height(node: &crate::style_tree::StyledNode) -> u32 {
+    node.style
+        .get("line-height")
+        .and_then(|value| parse_px(Some(value)))
+        .or_else(|| Some(intrinsic_inline_height(node)))
+        .unwrap_or(16)
+        .max(1)
 }
 
 fn intrinsic_inline_height(node: &crate::style_tree::StyledNode) -> u32 {
@@ -599,6 +608,21 @@ mod tests {
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
 
         assert_eq!(layout.children[0].rect.width, 120);
+    }
+
+    #[test]
+    fn inline_line_height_honors_explicit_pixel_value() {
+        let mut root = Node::element("body");
+        let mut child = Node::element("span");
+        child.set_attribute("style", "line-height: 24px;");
+        child.append(Node::text("Hello"));
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.height, 24);
     }
 
     #[test]
