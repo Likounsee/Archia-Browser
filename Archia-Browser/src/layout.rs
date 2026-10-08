@@ -921,10 +921,8 @@ mod whitespace_layout_tests {
 
     #[test]
     fn intrinsic_width_uses_transformed_text_and_longest_pre_line() {
-        let styled = crate::style_tree::StyledNode::new(
-            Node::text("ab\nCDE"),
-            ComputedStyle::default(),
-        );
+        let styled =
+            crate::style_tree::StyledNode::new(Node::text("ab\nCDE"), ComputedStyle::default());
         let mut styled = styled;
         styled.style.set("white-space", "pre-wrap");
         styled.style.set("text-transform", "uppercase");
