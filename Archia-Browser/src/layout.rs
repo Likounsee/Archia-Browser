@@ -351,6 +351,8 @@ fn layout_styled_node(
         cursor_y = cursor_y.saturating_add(inline_line_height as i32);
     }
 
+    align_inline_lines(&mut output, &node.style, content_origin_x, content_width);
+
     let mut content_height = explicit_height.unwrap_or(cursor_y.max(0) as u32);
     if border_box && explicit_height.is_some() {
         content_height = content_height
@@ -409,6 +411,71 @@ fn layout_styled_node(
     }
 
     output
+}
+
+fn align_inline_lines(
+    output: &mut LayoutNode,
+    style: &ComputedStyle,
+    content_origin_x: i32,
+    content_width: u32,
+) {
+    let alignment = match style.get("text-align").map(str::trim) {
+        Some("center") => 1,
+        Some("right" | "end") => 2,
+        _ => 0,
+    };
+    if alignment == 0 || output.children.is_empty() {
+        return;
+    }
+
+    let mut start = 0;
+    while start < output.children.len() {
+        if output.children[start].display != Display::Inline {
+            start += 1;
+            continue;
+        }
+
+        let line_y = output.children[start].rect.y;
+        let mut end = start;
+        let mut right = i64::from(output.children[start].rect.x)
+            + i64::from(output.children[start].rect.width)
+            + i64::from(output.children[start].box_model.margin_right)
+            + i64::from(output.children[start].box_model.padding_right)
+            + i64::from(output.children[start].box_model.border_right);
+        while end + 1 < output.children.len()
+            && output.children[end + 1].display == Display::Inline
+            && output.children[end + 1].rect.y == line_y
+        {
+            end += 1;
+            let child = &output.children[end];
+            right = right.max(
+                i64::from(child.rect.x)
+                    + i64::from(child.rect.width)
+                    + i64::from(child.box_model.margin_right)
+                    + i64::from(child.box_model.padding_right)
+                    + i64::from(child.box_model.border_right),
+            );
+        }
+
+        let left = i64::from(output.children[start].rect.x)
+            - i64::from(output.children[start].box_model.margin_left);
+        let line_width = right.saturating_sub(left).max(0) as u32;
+        let free_space = content_width.saturating_sub(line_width);
+        let shift = if alignment == 1 {
+            free_space / 2
+        } else {
+            free_space
+        } as i32;
+
+        if shift != 0 {
+            for child in &mut output.children[start..=end] {
+                shift_layout_tree(child, shift, 0);
+            }
+        }
+        start = end + 1;
+    }
+
+    let _ = content_origin_x;
 }
 
 fn is_absolute_positioned(node: &crate::style_tree::StyledNode) -> bool {
@@ -882,6 +949,36 @@ mod tests {
 
         assert_eq!(layout.children[0].display, Display::Inline);
         assert_eq!(layout.children[0].rect.width, 40);
+    }
+
+    #[test]
+    fn text_align_centers_inline_content() {
+        let mut root = Node::element("body");
+        root.set_attribute("style", "text-align: center; width: 100px;");
+        let mut child = Node::element("span");
+        child.append(Node::text("hello"));
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.x, 35);
+    }
+
+    #[test]
+    fn text_align_right_moves_inline_content_to_line_end() {
+        let mut root = Node::element("body");
+        root.set_attribute("style", "text-align: right; width: 100px;");
+        let mut child = Node::element("span");
+        child.append(Node::text("hello"));
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.x, 70);
     }
 
     #[test]
