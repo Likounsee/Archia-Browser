@@ -768,11 +768,13 @@ fn is_line_break(node: &crate::style_tree::StyledNode) -> bool {
 
 fn intrinsic_inline_content_width(node: &crate::style_tree::StyledNode) -> u32 {
     match &node.node.kind {
-        NodeKind::Text(text) => normalized_text(text, node.style.get("white-space"))
-            .chars()
-            .count()
-            .min(u32::MAX as usize) as u32
-            * 6,
+        NodeKind::Text(text) => {
+            normalized_text(text, node.style.get("white-space"))
+                .chars()
+                .count()
+                .min(u32::MAX as usize) as u32
+                * 6
+        },
         _ => node
             .children
             .iter()
@@ -784,11 +786,13 @@ fn intrinsic_inline_content_width(node: &crate::style_tree::StyledNode) -> u32 {
 
 fn intrinsic_inline_width(node: &crate::style_tree::StyledNode, containing_width: u32) -> u32 {
     match &node.node.kind {
-        NodeKind::Text(text) => normalized_text(text, node.style.get("white-space"))
-            .chars()
-            .count()
-            .min(u32::MAX as usize) as u32
-            * 6,
+        NodeKind::Text(text) => {
+            normalized_text(text, node.style.get("white-space"))
+                .chars()
+                .count()
+                .min(u32::MAX as usize) as u32
+                * 6
+        },
         _ => {
             let children_width = node
                 .children
