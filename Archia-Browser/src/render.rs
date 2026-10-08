@@ -831,10 +831,10 @@ mod tests {
 
         style.set("border-radius", "100px 100px 20px 20px");
         let radii = parse_border_radii(&style, 40, 20);
-        assert_eq!(radii.top_left, 10);
-        assert_eq!(radii.top_right, 10);
-        assert_eq!(radii.bottom_right, 10);
-        assert_eq!(radii.bottom_left, 10);
+        assert_eq!(radii.top_left, 16);
+        assert_eq!(radii.top_right, 16);
+        assert_eq!(radii.bottom_right, 3);
+        assert_eq!(radii.bottom_left, 3);
     }
 
     #[test]
