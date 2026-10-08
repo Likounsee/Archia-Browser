@@ -250,7 +250,7 @@ fn display_for_styled_node(node: &crate::style_tree::StyledNode) -> Display {
     }
     match &node.node.kind {
         NodeKind::Text(_) => Display::Inline,
-        NodeKind::Element { tag, .. } => match tag.as_str() {
+        NodeKind::Element { name, .. } => match name.as_str() {
             "head" | "title" | "meta" | "link" | "base" | "script" | "style" | "template" => {
                 Display::None
             }
