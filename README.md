@@ -109,7 +109,7 @@ Current milestone:
 - [x] Core event loop foundation
 - [x] HTML tokenizer (initial)
 - [x] HTML parser / tree builder (initial)
-- [x] HTML void-element handling, paragraph/list auto-closing and comment preservation
+- [x] HTML void-element handling, paragraph/list auto-closing, comment preservation and implicit html/head/body structure
 - [x] DOM node model (initial)
 - [x] CSS tokenizer (initial)
 - [x] CSS declaration parser (initial)
@@ -129,6 +129,7 @@ Current milestone:
 - [x] Bounded response/header memory limits
 - [x] Document redirect handling with a bounded redirect count
 - [x] Cookie persistence across document redirects
+- [x] Cookie domain validation, Secure delivery and Max-Age deletion
 - [x] First-party/third-party filtering context
 - [ ] JavaScript runtime
 - [ ] Browser UI
