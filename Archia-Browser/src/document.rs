@@ -115,7 +115,7 @@ mod tests {
         let url = Url::parse("https://example.org/docs/index.html").unwrap();
         let page = Page::from_html_at(
             Some(url),
-            "<head><base href="/guide/"></head><body><a href="chapter.html">Next</a></body>",
+            r#"<head><base href="/guide/"></head><body><a href="chapter.html">Next</a></body>"#,
             "",
             LayoutViewport::new(320, 200),
         );
@@ -134,7 +134,7 @@ mod tests {
     fn invalid_base_href_falls_back_to_document_url() {
         let page = Page::from_html_at(
             Some(Url::parse("https://example.org/docs/index.html").unwrap()),
-            "<head><base href="javascript:bad"></head><body>Hello</body>",
+            r#"<head><base href="javascript:bad"></head><body>Hello</body>"#,
             "",
             LayoutViewport::new(320, 200),
         );
