@@ -190,7 +190,7 @@ mod tests {
         assert!(matches!(list.commands()[0], PaintCommand::FillRect { .. }));
         assert!(matches!(
             list.commands()[1],
-            PaintCommand::DrawText { text_len: 5, .. }
+            PaintCommand::DrawText { ref text, .. } if text == "Hello"
         ));
     }
 
