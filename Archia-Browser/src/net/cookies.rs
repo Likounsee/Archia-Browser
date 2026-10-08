@@ -173,9 +173,7 @@ mod tests {
         let url = Url::parse("https://example.org/").unwrap();
         let mut jar = CookieJar::new();
         jar.store(&url, "sid=secure; Secure");
-        assert!(jar
-            .header_for(&Url::parse("http://example.org/").unwrap())
-            .is_none());
+        assert!(jar.header_for(&Url::parse("http://example.org/").unwrap()).is_none());
     }
 
     #[test]
