@@ -849,7 +849,7 @@ fn layout_flex_children(
             "flex-end" | "end" => (free_space, 0),
             "space-between" if flex_indices.len() > 1 => {
                 (0, free_space / (flex_indices.len() as u32 - 1))
-            },
+            }
             _ => (0, 0),
         };
         for (position, index) in flex_indices.iter().enumerate() {
