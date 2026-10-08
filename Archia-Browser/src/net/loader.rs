@@ -482,15 +482,12 @@ mod tests {
         let page = loader
             .load(&request, LayoutViewport::new(320, 200))
             .unwrap();
-        assert_eq!(
-            page.styled
-                .children
-                .iter()
-                .flat_map(|node| node.children.iter())
-                .find(|node| node.node.tag_name() == Some("div"))
-                .and_then(|node| node.style.get("color")),
-            Some("blue")
-        );
+        assert!(page.display_list.commands().iter().any(|command| {
+            matches!(
+                command,
+                crate::render::PaintCommand::DrawText { color: 0x0000ffff, .. }
+            )
+        }));
     }
 
     #[test]
