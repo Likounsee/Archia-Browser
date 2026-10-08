@@ -532,7 +532,17 @@ b</textarea></form>"#,
             LayoutViewport::new(100, 50),
         );
 
-        assert_eq!(page.styled.children[0].style.get("color"), Some("red"));
+        fn find_card(node: &crate::style_tree::StyledNode) -> Option<&crate::style_tree::StyledNode> {
+            if node.node.tag_name() == Some("span") {
+                return Some(node);
+            }
+            node.children.iter().find_map(find_card)
+        }
+
+        assert_eq!(
+            find_card(&page.styled).and_then(|node| node.style.get("color")),
+            Some("red")
+        );
     }
 
     #[test]
