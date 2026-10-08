@@ -100,6 +100,26 @@ mod tests {
     }
 
     #[test]
+    fn sibling_selectors_style_the_correct_dom_nodes() {
+        let mut body = Node::element("body");
+        let first = Node::element("span");
+        let mut second = Node::element("p");
+        second.set_attribute("class", "target");
+        let third = Node::element("p");
+        body.append(first);
+        body.append(second);
+        body.append(third);
+
+        let sheet = StyleSheet::parse("span + p { color: red; } span ~ p.target { padding: 4px; }");
+        let styled = StyleEngine::style(&body, &sheet);
+
+        assert_eq!(styled.children[1].style.get("color"), Some("red"));
+        assert_eq!(styled.children[1].style.get("padding"), Some("4px"));
+        assert_eq!(styled.children[2].style.get("color"), None);
+        assert_eq!(styled.children[2].style.get("padding"), None);
+    }
+
+    #[test]
     fn inline_style_is_kept_on_the_matching_node() {
         let mut root = Node::element("div");
         root.set_attribute("style", "color: blue;");
