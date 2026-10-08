@@ -1121,7 +1121,8 @@ fn layout_flex_children(
                         .height
                         .saturating_add(output.children[index].box_model.vertical_outer()),
                 )
-                .saturating_add(if column { extra } else { gap })
+                .saturating_add(gap)
+                .saturating_add(extra)
                 .saturating_add(if column {
                     0
                 } else {
