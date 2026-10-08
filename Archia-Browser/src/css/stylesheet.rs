@@ -41,6 +41,28 @@ impl StyleSheet {
         self.matching_rules_path(&[node])
     }
 
+    pub fn matching_rules_path_with_siblings<'a>(
+        &'a self,
+        path: &[&Node],
+        sibling_lists: &[&[Node]],
+        sibling_positions: &[usize],
+    ) -> Vec<(&'a StyleRule, Specificity)> {
+        let mut matches = Vec::new();
+        for rule in &self.rules {
+            let matching = rule.selectors.iter().filter(|selector| {
+                if selector.parts.len() == 1 {
+                    selector.matches(path.last().unwrap_or(&path[0]))
+                } else {
+                    selector.matches_path_with_siblings(path, sibling_lists, sibling_positions)
+                }
+            });
+            if let Some(specificity) = matching.map(Selector::specificity).max() {
+                matches.push((rule, specificity));
+            }
+        }
+        matches
+    }
+
     pub fn matching_rules_path<'a>(&'a self, path: &[&Node]) -> Vec<(&'a StyleRule, Specificity)> {
         let mut matches = Vec::new();
         let Some(node) = path.last() else {
