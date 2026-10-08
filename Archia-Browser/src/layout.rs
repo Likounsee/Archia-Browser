@@ -532,10 +532,7 @@ mod tests {
     fn min_and_max_width_constrain_used_content_width() {
         let mut root = Node::element("body");
         let mut child = Node::element("div");
-        child.set_attribute(
-            "style",
-            "width: 80%; min-width: 100px; max-width: 120px;",
-        );
+        child.set_attribute("style", "width: 80%; min-width: 100px; max-width: 120px;");
         root.append(child);
 
         let styled =
