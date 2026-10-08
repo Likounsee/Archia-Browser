@@ -396,10 +396,8 @@ mod tests {
 
     #[test]
     fn browser_loads_local_file_path_into_active_tab() {
-        let path = std::env::temp_dir().join(format!(
-            "archia-browser-path-{}.html",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("archia-browser-path-{}.html", std::process::id()));
         std::fs::write(&path, b"<title>Path</title><body>Hello path</body>").unwrap();
 
         let mut browser = Browser::new();
