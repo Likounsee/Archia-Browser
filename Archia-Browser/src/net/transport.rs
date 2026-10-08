@@ -162,9 +162,11 @@ impl Transport for HttpTransport {
 }
 
 fn validate_request(request: &Request) -> Result<(), TransportError> {
-    if request.url.authority().bytes().any(|byte| {
-        byte.is_ascii_control() || matches!(byte, b' ' | b'\t')
-    })
+    if request
+        .url
+        .authority()
+        .bytes()
+        .any(|byte| byte.is_ascii_control() || matches!(byte, b' ' | b'\t'))
         || request
             .url
             .path()
@@ -399,7 +401,10 @@ mod tests {
     #[test]
     fn rejects_authority_injection() {
         let request = Request::new(Url::parse("http://example.org evil/").unwrap());
-        assert_eq!(validate_request(&request), Err(TransportError::InvalidRequest));
+        assert_eq!(
+            validate_request(&request),
+            Err(TransportError::InvalidRequest)
+        );
     }
 
     #[test]
