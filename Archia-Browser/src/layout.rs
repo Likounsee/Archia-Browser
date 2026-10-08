@@ -13,6 +13,7 @@ impl Display {
         match style.get("display").map(str::trim) {
             Some("none") => Self::None,
             Some("inline") | Some("inline-block") => Self::Inline,
+            Some("block") | Some("flow-root") => Self::Block,
             _ => Self::Block,
         }
     }
