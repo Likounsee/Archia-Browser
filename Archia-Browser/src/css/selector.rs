@@ -163,6 +163,89 @@ impl Selector {
         self.matches_at(self.parts.len() - 1, path.len() - 1, path)
     }
 
+    pub fn matches_path_with_siblings(
+        &self,
+        path: &[&Node],
+        sibling_lists: &[&[Node]],
+        sibling_positions: &[usize],
+    ) -> bool {
+        if path.is_empty()
+            || path.len() < self.parts.len()
+            || sibling_lists.len() != path.len()
+            || sibling_positions.len() != path.len()
+        {
+            return false;
+        }
+        self.matches_at_with_siblings(
+            self.parts.len() - 1,
+            path.len() - 1,
+            path,
+            sibling_lists,
+            sibling_positions,
+        )
+    }
+
+    fn matches_at_with_siblings(
+        &self,
+        selector_index: usize,
+        node_index: usize,
+        path: &[&Node],
+        sibling_lists: &[&[Node]],
+        sibling_positions: &[usize],
+    ) -> bool {
+        let Some((combinator, simple)) = self.parts.get(selector_index) else {
+            return false;
+        };
+        if !matches_simple(simple, path[node_index]) {
+            return false;
+        }
+        if selector_index == 0 {
+            return true;
+        }
+
+        match combinator.as_ref().unwrap_or(&Combinator::Descendant) {
+            Combinator::Child => {
+                node_index > 0
+                    && self.matches_at_with_siblings(
+                        selector_index - 1,
+                        node_index - 1,
+                        path,
+                        sibling_lists,
+                        sibling_positions,
+                    )
+            }
+            Combinator::Descendant => (0..node_index).rev().any(|ancestor| {
+                self.matches_at_with_siblings(
+                    selector_index - 1,
+                    ancestor,
+                    path,
+                    sibling_lists,
+                    sibling_positions,
+                )
+            }),
+            Combinator::AdjacentSibling => {
+                let position = sibling_positions[node_index];
+                position > 0
+                    && sibling_lists[node_index]
+                        .get(position - 1)
+                        .is_some_and(|sibling| {
+                            matches_simple(&self.parts[selector_index - 1].1, sibling)
+                        })
+            }
+            Combinator::GeneralSibling => {
+                let position = sibling_positions[node_index];
+                sibling_lists[node_index]
+                    .get(..position)
+                    .is_some_and(|siblings| {
+                        siblings
+                            .iter()
+                            .rev()
+                            .any(|sibling| matches_simple(&self.parts[selector_index - 1].1, sibling))
+                    })
+            }
+        }
+    }
+
     fn matches_at(&self, selector_index: usize, node_index: usize, path: &[&Node]) -> bool {
         let Some((combinator, simple)) = self.parts.get(selector_index) else {
             return false;
@@ -421,6 +504,28 @@ mod tests {
         assert!(!Selector::parse("section > span")
             .unwrap()
             .matches_path(&path));
+    }
+
+    #[test]
+    fn matches_adjacent_and_general_sibling_selectors() {
+        let parent = Node::element("div");
+        let first = Node::element("span");
+        let mut second = Node::element("p");
+        second.set_attribute("class", "target");
+        let third = Node::element("p");
+        let path = [&parent, &second];
+        let siblings: [&[Node]; 2] = [&[] as &[Node], &[first, second, third]];
+        let positions = [0, 1];
+
+        assert!(Selector::parse("span + p")
+            .unwrap()
+            .matches_path_with_siblings(&path, &siblings, &positions));
+        assert!(Selector::parse("span ~ p")
+            .unwrap()
+            .matches_path_with_siblings(&path, &siblings, &positions));
+        assert!(Selector::parse("div > span + p.target")
+            .unwrap()
+            .matches_path_with_siblings(&[&parent, &first, &second], &siblings, &[0, 0, 1]));
     }
 
     #[test]
