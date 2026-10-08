@@ -277,6 +277,7 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
         id: None,
         classes: Vec::new(),
         attributes: Vec::new(),
+        pseudo_classes: Vec::new(),
     };
     let mut i = 0;
 
