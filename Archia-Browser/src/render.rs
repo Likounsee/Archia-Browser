@@ -150,6 +150,24 @@ fn paint_styled_node(
 
     let opacity = effective_opacity(parent_opacity, node.style.get("opacity"));
 
+    let mut child_indices: Vec<usize> =
+        (0..node.children.len().min(layout.children.len())).collect();
+    child_indices.sort_by_key(|&index| stacking_sort_key(&node.children[index].style));
+
+    if !visibility_hidden {
+        for &index in child_indices.iter().filter(|&&index| {
+            stacking_sort_key(&node.children[index].style).0 == 0
+        }) {
+            paint_styled_node(
+                &node.children[index],
+                &layout.children[index],
+                list,
+                opacity,
+                visibility_hidden,
+            );
+        }
+    }
+
     if !visibility_hidden && matches!(node.node.kind, NodeKind::Element { .. }) {
         if let Some(background) = node
             .style
@@ -198,11 +216,10 @@ fn paint_styled_node(
         }
     }
 
-    let mut child_indices: Vec<usize> =
-        (0..node.children.len().min(layout.children.len())).collect();
-    child_indices.sort_by_key(|&index| stacking_sort_key(&node.children[index].style));
-
     for index in child_indices {
+        if stacking_sort_key(&node.children[index].style).0 == 0 {
+            continue;
+        }
         paint_styled_node(
             &node.children[index],
             &layout.children[index],
@@ -861,6 +878,33 @@ mod tests {
         assert_eq!(surface.pixel(4, 4), Some(Color(0, 0, 0, 0)));
         assert_eq!(surface.pixel(5, 5), Some(Color(255, 0, 0, 255)));
         assert_eq!(surface.pixel(14, 14), Some(Color(0, 0, 0, 0)));
+    }
+
+    #[test]
+    fn negative_z_index_paints_behind_parent_background() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "width: 20px; height: 20px; background-color: white;");
+        let mut child = Node::element("div");
+        child.set_attribute(
+            "style",
+            "position: absolute; left: 0; top: 0; width: 20px; height: 20px; background-color: red; z-index: -1;",
+        );
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(40, 40));
+        let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
+        let fills = list
+            .commands()
+            .iter()
+            .filter_map(|command| match command {
+                PaintCommand::FillRect { color, .. } => Some(*color),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(fills, vec![0xffff0000, 0xffffffff]);
     }
 
     #[test]
