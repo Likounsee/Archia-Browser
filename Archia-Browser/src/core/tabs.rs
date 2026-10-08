@@ -9,7 +9,7 @@ impl TabId {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Tab {
     id: TabId,
     history: NavigationHistory,
@@ -100,7 +100,7 @@ impl TabManager {
         self.tabs.remove(index);
         self.active = match self.active {
             None => None,
-            Some(active) if self.tabs.is_empty() => None,
+            Some(_) if self.tabs.is_empty() => None,
             Some(active) if active > index => Some(active - 1),
             Some(active) if active == index => Some(active.min(self.tabs.len() - 1)),
             Some(active) => Some(active),
