@@ -183,7 +183,7 @@ Current milestone:
 - [x] Implement selector parsing and specificity.
 - [x] Implement stylesheet rules and basic cascade.
 - [x] Compute styles for matching DOM nodes.
-- [ ] Add selector sibling combinators and full selector semantics.
+- [x] Add initial selector sibling combinators (`+` and `~`).
 - [x] Implement initial inheritance and `!important` handling.
 - [ ] Implement CSS origins and full cascade semantics.
 - [ ] Expand CSS syntax toward standards compliance.
@@ -194,7 +194,7 @@ Current milestone:
 - [x] Add initial text layout metrics, intrinsic inline sizing, line placement and explicit pixel line-height.
 - [x] Build a platform-neutral software renderer and RGBA surface.
 - [x] Rasterize a first built-in bitmap glyph set.
-- [x] Paint backgrounds, padding boxes and explicit solid borders.
+- [x] Paint backgrounds, padding boxes, explicit solid borders and RGB/RGBA colors.
 - [x] Expand initial border shorthand and CSS border width keywords.
 - [x] Apply initial min/max dimension constraints, auto-margin centering, explicit inline line-height and visibility:hidden painting suppression.
 - [ ] Add scrolling, clipping and full viewport handling.
