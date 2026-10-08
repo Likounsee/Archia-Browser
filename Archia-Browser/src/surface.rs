@@ -139,6 +139,60 @@ impl SoftwareSurface {
         self.fill_rect_clipped(x, y, width, height, color, None);
     }
 
+    pub fn fill_rounded_rect_clipped(
+        &mut self,
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+        radius: u32,
+        color: Color,
+        clip: Option<crate::layout::Rect>,
+    ) {
+        if radius == 0 {
+            self.fill_rect_clipped(x, y, width, height, color, clip);
+            return;
+        }
+        let rect = crate::layout::Rect::new(x, y, width, height);
+        let Some(rect) = intersect_rect(rect, clip) else {
+            return;
+        };
+        let x0 = rect.x.max(0) as u32;
+        let y0 = rect.y.max(0) as u32;
+        let x1 = (rect.x.max(0) as u32).saturating_add(rect.width).min(self.surface.width);
+        let y1 = (rect.y.max(0) as u32).saturating_add(rect.height).min(self.surface.height);
+        let radius = radius.min(width / 2).min(height / 2) as i64;
+        let left = x as i64;
+        let top = y as i64;
+        let right = left + width as i64 - 1;
+        let bottom = top + height as i64 - 1;
+        for py in y0..y1 {
+            for px in x0..x1 {
+                let px = px as i64;
+                let py = py as i64;
+                let (cx, cy) = if px < left + radius && py < top + radius {
+                    (left + radius - 1, top + radius - 1)
+                } else if px > right - radius && py < top + radius {
+                    (right - radius + 1, top + radius - 1)
+                } else if px < left + radius && py > bottom - radius {
+                    (left + radius - 1, bottom - radius + 1)
+                } else if px > right - radius && py > bottom - radius {
+                    (right - radius + 1, bottom - radius + 1)
+                } else {
+                    let index = ((py as u32 * self.surface.width + px as u32) * 4) as usize;
+                    self.pixels[index..index + 4].copy_from_slice(&[color.0, color.1, color.2, color.3]);
+                    continue;
+                };
+                let dx = px - cx;
+                let dy = py - cy;
+                if dx * dx + dy * dy <= radius * radius {
+                    let index = ((py as u32 * self.surface.width + px as u32) * 4) as usize;
+                    self.pixels[index..index + 4].copy_from_slice(&[color.0, color.1, color.2, color.3]);
+                }
+            }
+        }
+    }
+
     pub fn fill_rect_clipped(
         &mut self,
         x: i32,
@@ -320,6 +374,15 @@ mod tests {
         assert_eq!(surface.pixel(1, 0), Some(Color::BLACK));
         assert_eq!(surface.pixel(30, 0), Some(Color::BLACK));
         assert_eq!(surface.pixel(1, 8), Some(Color::BLACK));
+    }
+
+    #[test]
+    fn rounded_rect_leaves_transparent_corners() {
+        let mut surface = SoftwareSurface::new(12, 12);
+        surface.fill_rounded_rect_clipped(0, 0, 12, 12, 4, Color::RED, None);
+        assert_eq!(surface.pixel(0, 0), Some(Color(0, 0, 0, 0)));
+        assert_eq!(surface.pixel(5, 1), Some(Color::RED));
+        assert_eq!(surface.pixel(6, 6), Some(Color::RED));
     }
 
     #[test]

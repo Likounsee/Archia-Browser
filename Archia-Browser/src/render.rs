@@ -10,6 +10,11 @@ pub enum PaintCommand {
         rect: super::layout::Rect,
         color: u32,
     },
+    FillRoundedRect {
+        rect: super::layout::Rect,
+        radius: u32,
+        color: u32,
+    },
     DrawText {
         x: i32,
         y: i32,
@@ -68,6 +73,17 @@ impl SoftwareRenderer {
                         (color & 0xff) as u8,
                     );
                     surface.fill_rect_clipped(rect.x, rect.y, rect.width, rect.height, color, clip);
+                }
+                PaintCommand::FillRoundedRect { rect, radius, color } => {
+                    let color = Color(
+                        ((color >> 24) & 0xff) as u8,
+                        ((color >> 16) & 0xff) as u8,
+                        ((color >> 8) & 0xff) as u8,
+                        (color & 0xff) as u8,
+                    );
+                    surface.fill_rounded_rect_clipped(
+                        rect.x, rect.y, rect.width, rect.height, *radius, color, clip,
+                    );
                 }
                 PaintCommand::DrawText { x, y, text, color } => {
                     let color = Color(
@@ -131,10 +147,20 @@ fn paint_styled_node(
             .or_else(|| node.style.get("background"))
         {
             if let Some(color) = parse_color(background) {
-                list.push(PaintCommand::FillRect {
-                    rect: background_rect(layout),
-                    color: apply_opacity(color, opacity),
-                });
+                let rect = background_rect(layout);
+                let radius = parse_border_radius(&node.style, rect.width, rect.height);
+                if radius > 0 {
+                    list.push(PaintCommand::FillRoundedRect {
+                        rect,
+                        radius,
+                        color: apply_opacity(color, opacity),
+                    });
+                } else {
+                    list.push(PaintCommand::FillRect {
+                        rect,
+                        color: apply_opacity(color, opacity),
+                    });
+                }
             }
         }
         paint_borders(&node.style, layout, list, opacity);
@@ -309,6 +335,18 @@ fn stacking_sort_key(style: &ComputedStyle) -> (u8, i32) {
         3
     };
     (layer, z_index)
+}
+
+fn parse_border_radius(style: &ComputedStyle, width: u32, height: u32) -> u32 {
+    let value = style.get("border-radius").map(str::trim)?;
+    let token = value.split('/').next()?.split_whitespace().next()?;
+    let radius = if let Some(percent) = token.strip_suffix('%') {
+        let percent = percent.trim().parse::<u32>().ok()?;
+        width.min(height).saturating_mul(percent).checked_div(100)?
+    } else {
+        token.strip_suffix("px")?.trim().parse::<u32>().ok()?
+    };
+    Some(radius.min(width / 2).min(height / 2))
 }
 
 fn effective_opacity(parent: u8, value: Option<&str>) -> u8 {
@@ -603,6 +641,20 @@ mod tests {
             list.commands()[1],
             PaintCommand::DrawText { ref text, .. } if text == "Hello"
         ));
+    }
+
+    #[test]
+    fn border_radius_paints_a_rounded_background_command() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "width: 20px; height: 20px; background: red; border-radius: 6px;");
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(40, 40));
+        let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
+        assert!(list.commands().iter().any(|command| matches!(
+            command,
+            PaintCommand::FillRoundedRect { radius: 6, .. }
+        )));
     }
 
     #[test]
