@@ -891,10 +891,10 @@ mod tests {
         assert_eq!(
             parse_border_radii(&style, 20, 10),
             CornerRadii {
-                top_left: CornerRadius { x: 5, y: 5 },
-                top_right: CornerRadius { x: 5, y: 5 },
-                bottom_right: CornerRadius { x: 5, y: 5 },
-                bottom_left: CornerRadius { x: 5, y: 5 },
+                top_left: CornerRadius { x: 10, y: 5 },
+                top_right: CornerRadius { x: 10, y: 5 },
+                bottom_right: CornerRadius { x: 10, y: 5 },
+                bottom_left: CornerRadius { x: 10, y: 5 },
             }
         );
 
