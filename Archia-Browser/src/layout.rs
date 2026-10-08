@@ -729,7 +729,56 @@ fn layout_flex_children(
     let mut item_count = 0_u32;
     let mut flex_indices = Vec::new();
 
+    let mut bases = Vec::new();
+    let mut total_grow = 0.0_f32;
     for child in &node.children {
+        let child_display = display_for_styled_node(child);
+        if child_display == Display::None
+            || is_absolute_positioned(child)
+            || is_fixed_positioned(child)
+        {
+            bases.push(None);
+            continue;
+        }
+
+        let child_margin = box_model_from_style(&child.style, content_width);
+        let base = if column {
+            parse_length(child.style.get("flex-basis"), viewport_height)
+                .or_else(|| parse_length(child.style.get("height"), viewport_height))
+                .unwrap_or_else(|| intrinsic_inline_height(child))
+        } else {
+            parse_length(child.style.get("flex-basis"), content_width)
+                .or_else(|| parse_length(child.style.get("width"), content_width))
+                .unwrap_or_else(|| intrinsic_inline_width(child, content_width))
+        };
+        let outer_margin = if column {
+            child_margin.vertical_outer()
+        } else {
+            child_margin.horizontal_outer()
+        };
+        let base = base.saturating_add(outer_margin);
+        let grow = parse_flex_factor(child.style.get("flex-grow"));
+        total_grow += grow;
+        bases.push(Some((base, grow)));
+    }
+
+    let base_main = bases
+        .iter()
+        .flatten()
+        .map(|(base, _)| *base)
+        .fold(0_u32, u32::saturating_add)
+        .saturating_add(gap.saturating_mul(
+            bases.iter().flatten().count().saturating_sub(1) as u32,
+        ));
+    let available_main = if column {
+        parse_length(node.style.get("height"), viewport_height).unwrap_or(base_main)
+    } else {
+        content_width
+    };
+    let free_space = available_main.saturating_sub(base_main);
+    let grow_enabled = free_space > 0 && total_grow > 0.0;
+
+    for (child_index, child) in node.children.iter().enumerate() {
         let child_display = display_for_styled_node(child);
         if child_display == Display::None {
             output.children.push(LayoutNode::new(Display::None));
@@ -771,9 +820,20 @@ fn layout_flex_children(
         }
 
         let child_margin = box_model_from_style(&child.style, content_width);
-        let base = parse_length(child.style.get("flex-basis"), content_width)
-            .or_else(|| parse_length(child.style.get("width"), content_width))
-            .unwrap_or_else(|| intrinsic_inline_width(child, content_width));
+        let base_entry = bases[child_index].expect("flex base exists for in-flow child");
+        let base = base_entry.0;
+        let grow = base_entry.1;
+        let extra = if grow_enabled {
+            ((free_space as f32 * grow / total_grow).floor() as u32)
+        } else {
+            0
+        };
+        let target_outer_main = base.saturating_add(extra);
+        let target_main = target_outer_main.saturating_sub(if column {
+            child_margin.vertical_outer()
+        } else {
+            child_margin.horizontal_outer()
+        });
         let main_position = main.saturating_add(if item_count > 0 { gap } else { 0 });
         let child_x = if column {
             content_origin_x.saturating_add(child_margin.margin_left as i32)
@@ -792,13 +852,17 @@ fn layout_flex_children(
         let child_containing_width = if column {
             content_width
         } else {
-            base.saturating_sub(child_margin.horizontal_outer())
+            target_main
         };
-        let child_layout = layout_styled_node(
+        let mut child_layout = layout_styled_node(
             child,
             child_x,
             child_y,
-            child_containing_width,
+            child_containing_width.saturating_sub(if column {
+                child_margin.horizontal_outer()
+            } else {
+                0
+            }),
             viewport_width,
             viewport_height,
             abs_origin_x,
@@ -806,6 +870,14 @@ fn layout_flex_children(
             abs_width,
             abs_height,
         );
+        if grow_enabled {
+            if column {
+                child_layout.rect.height = target_main;
+            } else {
+                child_layout.rect.width = target_main;
+            }
+        }
+
         let outer_main = if column {
             child_layout
                 .rect
@@ -911,6 +983,14 @@ fn layout_flex_children(
         main as i32
     } else {
         cross as i32
+    }
+}
+
+fn parse_flex_factor(value: Option<&str>) -> f32 {
+    let value = value.and_then(|value| value.trim().parse::<f32>().ok());
+    match value {
+        Some(value) if value.is_finite() && value > 0.0 => value,
+        _ => 0.0,
     }
 }
 
@@ -2385,4 +2465,52 @@ mod tests {
         assert_eq!(layout.children[0].rect.y, 0);
         assert_eq!(layout.children[1].rect.y, 0);
     }
-}
+}    #[test]
+    fn flex_grow_distributes_positive_free_space() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "display: flex; width: 300px; justify-content: flex-start;",
+        );
+        for _ in 0..2 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 50px; flex-grow: 1;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(
+            &styled,
+            LayoutViewport::new(300, 100),
+        );
+
+        assert_eq!(layout.children[0].rect.width, 150);
+        assert_eq!(layout.children[1].rect.width, 150);
+        assert_eq!(layout.children[0].rect.x, 0);
+        assert_eq!(layout.children[1].rect.x, 150);
+    }
+
+    #[test]
+    fn flex_grow_respects_gap_before_distribution() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "display: flex; width: 300px; gap: 20px;");
+        for _ in 0..2 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 50px; flex-grow: 1;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(
+            &styled,
+            LayoutViewport::new(300, 100),
+        );
+
+        assert_eq!(layout.children[0].rect.width, 140);
+        assert_eq!(layout.children[1].rect.width, 140);
+        assert_eq!(layout.children[1].rect.x, 160);
+    }
+
+
