@@ -86,6 +86,8 @@ impl Browser {
             .is_some_and(|tab| tab.history_mut().replace_current(entry))
         {
             self.commit_page(&page);
+        } else if let Some(tab) = self.tabs.active_tab_mut() {
+            tab.set_page(page.clone());
         }
         Ok(page)
     }
@@ -109,6 +111,7 @@ impl Browser {
         if let Some(tab) = self.tabs.active_tab_mut() {
             tab.history_mut()
                 .push(core::navigation::NavigationEntry::new(url, title));
+            tab.clear_page();
         }
     }
 
@@ -196,6 +199,21 @@ impl Browser {
             .expect("link navigation created an entry"))
     }
 
+    pub fn current_page(&self) -> Option<&crate::document::Page> {
+        self.tabs.active_tab().and_then(|tab| tab.page())
+    }
+
+    pub fn render_current_page(
+        &self,
+        surface: &mut crate::surface::SoftwareSurface,
+    ) -> bool {
+        let Some(page) = self.current_page() else {
+            return false;
+        };
+        page.render_into(surface);
+        true
+    }
+
     pub fn current_url(&self) -> Option<&net::Url> {
         self.tabs
             .active_tab()
@@ -204,17 +222,21 @@ impl Browser {
     }
 
     pub fn back(&mut self) -> Option<&net::Url> {
-        self.tabs
-            .active_tab_mut()
-            .and_then(|tab| tab.history_mut().back())
-            .map(|entry| entry.url())
+        let tab = self.tabs.active_tab_mut()?;
+        let url = tab.history_mut().back().map(|entry| entry.url());
+        if url.is_some() {
+            tab.clear_page();
+        }
+        url
     }
 
     pub fn forward(&mut self) -> Option<&net::Url> {
-        self.tabs
-            .active_tab_mut()
-            .and_then(|tab| tab.history_mut().forward())
-            .map(|entry| entry.url())
+        let tab = self.tabs.active_tab_mut()?;
+        let url = tab.history_mut().forward().map(|entry| entry.url());
+        if url.is_some() {
+            tab.clear_page();
+        }
+        url
     }
 
     pub fn set_current_title(&mut self, title: Option<String>) -> bool {
@@ -248,6 +270,46 @@ impl Default for Browser {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn browser_retains_loaded_page_for_rendering() {
+        #[derive(Debug, Default)]
+        struct AllowAll;
+
+        impl net::pipeline::RequestPolicyEngine for AllowAll {
+            fn decide(&self, _: &net::Request) -> net::pipeline::PolicyDecision {
+                net::pipeline::PolicyDecision::Allow
+            }
+        }
+
+        #[derive(Debug)]
+        struct MockTransport;
+
+        impl net::Transport for MockTransport {
+            fn send(&self, _: &net::Request) -> Result<net::Response, net::TransportError> {
+                Ok(net::Response::new(200)
+                    .with_header("content-type", "text/html")
+                    .with_body(b"<body>Hello</body>".to_vec()))
+            }
+        }
+
+        let loader =
+            net::DocumentLoader::new(net::pipeline::NetworkPipeline::new(AllowAll), MockTransport);
+        let request = net::Request::new(net::Url::parse("https://example.org/").unwrap());
+        let mut browser = Browser::new();
+        browser
+            .load_request(
+                &loader,
+                &request,
+                crate::layout::LayoutViewport::new(64, 32),
+            )
+            .unwrap();
+
+        assert!(browser.current_page().is_some());
+        let mut surface = crate::surface::SoftwareSurface::new(64, 32);
+        assert!(browser.render_current_page(&mut surface));
+        assert_eq!(surface.pixel(63, 31), Some(crate::surface::Color::WHITE));
+    }
 
     #[test]
     fn browser_starts_with_one_active_tab() {
