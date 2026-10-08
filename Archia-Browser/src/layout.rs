@@ -141,7 +141,7 @@ fn layout_styled_node(
         return output;
     }
 
-    let box_model = box_model_from_style(&node.style);
+    let mut box_model = box_model_from_style(&node.style);
     let margin_x = box_model.margin_left.saturating_add(box_model.margin_right);
     let padding_border_x = box_model
         .padding_left
