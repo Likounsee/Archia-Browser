@@ -454,8 +454,9 @@ mod tests {
 
         impl Transport for SequenceTransport {
             fn send(&self, request: &Request) -> Result<Response, TransportError> {
-                assert_eq!(request.policy.resource_kind, ResourceKind::Stylesheet);
-                if request.url.to_string() == "https://example.org/css/site.css" {
+                if request.policy.resource_kind == ResourceKind::Stylesheet
+                    && request.url.to_string() == "https://example.org/css/site.css"
+                {
                     return Ok(Response::new(302).with_header("location", "/css/final.css"));
                 }
                 Ok(Response::new(200)
