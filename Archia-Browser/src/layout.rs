@@ -747,6 +747,9 @@ fn layout_flex_children(
         .as_deref()
         .is_some_and(|value| value == "row-reverse" || value == "column-reverse")
         || flow_reverse;
+    let wrap_reverse = node.style.get("flex-wrap").is_some_and(|value| {
+        value.trim().eq_ignore_ascii_case("wrap-reverse")
+    }) || flow_parts.iter().any(|part| part == "wrap-reverse");
     let wrap = node.style.get("flex-wrap").is_some_and(|value| {
         matches!(
             value.trim().to_ascii_lowercase().as_str(),
@@ -1141,7 +1144,14 @@ fn layout_flex_children(
     }
 
     if wrap && !column {
-        align_flex_lines(output, &flex_indices, node, content_origin_y, cross);
+        align_flex_lines(
+            output,
+            &flex_indices,
+            node,
+            content_origin_y,
+            cross,
+            wrap_reverse,
+        );
     }
 
     if column {
@@ -1157,6 +1167,7 @@ fn align_flex_lines(
     node: &crate::style_tree::StyledNode,
     content_origin_y: i32,
     line_cross: u32,
+    wrap_reverse: bool,
 ) {
     if indices.len() < 2 {
         return;
@@ -1222,7 +1233,34 @@ fn align_flex_lines(
     let mut cursor = offset;
     for (line_index, line) in lines.iter().enumerate() {
         let current_y = output.children[line[0]].rect.y;
-        let target_y = content_origin_y.saturating_add(cursor as i32);
+        let target_y = if wrap_reverse {
+            let total_height = lines
+                .iter()
+                .map(|current_line| {
+                    current_line
+                        .iter()
+                        .map(|index| {
+                            output.children[*index]
+                                .rect
+                                .height
+                                .saturating_add(output.children[*index].box_model.vertical_outer())
+                        })
+                        .max()
+                        .unwrap_or(0)
+                })
+                .fold(0_u32, u32::saturating_add)
+                .saturating_add(
+                    parse_length(node.style.get("row-gap"), line_cross)
+                        .or_else(|| parse_length(node.style.get("gap"), line_cross))
+                        .unwrap_or(0)
+                        .saturating_mul(lines.len().saturating_sub(1) as u32),
+                );
+            content_origin_y
+                .saturating_add(line_cross as i32)
+                .saturating_add(total_height.saturating_sub(cursor + line_cross) as i32)
+        } else {
+            content_origin_y.saturating_add(cursor as i32)
+        };
         let shift = target_y.saturating_sub(current_y);
         if shift != 0 {
             for index in line {
