@@ -803,7 +803,7 @@ fn intrinsic_inline_content_width(node: &crate::style_tree::StyledNode) -> u32 {
             .chars()
             .count()
             .min(u32::MAX as usize) as u32
-            * 6
+                * 6
         }
         _ => node
             .children
