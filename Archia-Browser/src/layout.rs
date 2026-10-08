@@ -747,9 +747,11 @@ fn layout_flex_children(
         .as_deref()
         .is_some_and(|value| value == "row-reverse" || value == "column-reverse")
         || flow_reverse;
-    let wrap_reverse = node.style.get("flex-wrap").is_some_and(|value| {
-        value.trim().eq_ignore_ascii_case("wrap-reverse")
-    }) || flow_parts.iter().any(|part| part == "wrap-reverse");
+    let wrap_reverse = node
+        .style
+        .get("flex-wrap")
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("wrap-reverse"))
+        || flow_parts.iter().any(|part| part == "wrap-reverse");
     let wrap = node.style.get("flex-wrap").is_some_and(|value| {
         matches!(
             value.trim().to_ascii_lowercase().as_str(),
