@@ -923,7 +923,9 @@ fn layout_flex_children(
         }
         let main_position = main.saturating_add(if item_count > 0 { gap } else { 0 });
         let child_x = if column {
-            content_origin_x.saturating_add(child_margin.margin_left as i32)
+            content_origin_x
+                .saturating_add(cross_cursor as i32)
+                .saturating_add(child_margin.margin_left as i32)
         } else {
             content_origin_x
                 .saturating_add(main_position as i32)
@@ -3001,6 +3003,31 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.y, 80);
         assert_eq!(layout.children[1].rect.y, 60);
+    }
+
+    #[test]
+    fn flex_column_wrap_moves_items_to_next_column() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "display: flex; flex-direction: column; flex-wrap: wrap; width: 120px; height: 100px;",
+        );
+        for _ in 0..3 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 40px; height: 60px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(120, 100));
+
+        assert_eq!(layout.children[0].rect.x, 0);
+        assert_eq!(layout.children[0].rect.y, 0);
+        assert_eq!(layout.children[1].rect.x, 40);
+        assert_eq!(layout.children[1].rect.y, 0);
+        assert_eq!(layout.children[2].rect.x, 40);
+        assert_eq!(layout.children[2].rect.y, 60);
     }
 
     #[test]
