@@ -352,6 +352,7 @@ fn layout_styled_node(
     }
 
     align_inline_lines(&mut output, &node.style, content_origin_x, content_width);
+    align_inline_vertical_align(&mut output, node);
 
     let mut content_height = explicit_height.unwrap_or(cursor_y.max(0) as u32);
     if border_box && explicit_height.is_some() {
@@ -476,6 +477,104 @@ fn align_inline_lines(
     }
 
     let _ = content_origin_x;
+}
+
+fn align_inline_vertical_align(
+    output: &mut LayoutNode,
+    styled_node: &crate::style_tree::StyledNode,
+) {
+    let mut start = 0usize;
+    while start < output.children.len() {
+        if output.children[start].display != Display::Inline {
+            start += 1;
+            continue;
+        }
+
+        let line_y = output.children[start].rect.y;
+        let mut end = start;
+        while end + 1 < output.children.len()
+            && output.children[end + 1].display == Display::Inline
+            && output.children[end + 1].rect.y == line_y
+        {
+            end += 1;
+        }
+
+        let line_top = (start..=end)
+            .filter_map(|index| {
+                output.children.get(index).map(|child| {
+                    child
+                        .rect
+                        .y
+                        .saturating_sub(child.box_model.margin_top as i32)
+                })
+            })
+            .min()
+            .unwrap_or(line_y);
+        let line_bottom = (start..=end)
+            .filter_map(|index| {
+                output.children.get(index).map(|child| {
+                    child
+                        .rect
+                        .y
+                        .saturating_sub(child.box_model.margin_top as i32)
+                        .saturating_add(
+                            child
+                                .rect
+                                .height
+                                .saturating_add(child.box_model.vertical_outer())
+                                as i32,
+                        )
+                })
+            })
+            .max()
+            .unwrap_or(line_top);
+        let line_height = line_bottom.saturating_sub(line_top);
+
+        for index in start..=end {
+            let Some(child) = output.children.get_mut(index) else {
+                continue;
+            };
+            let Some(source) = styled_node.children.get(index) else {
+                continue;
+            };
+            let alignment = source
+                .style
+                .get("vertical-align")
+                .map(str::trim)
+                .map(str::to_ascii_lowercase);
+
+            let outer_height = child
+                .rect
+                .height
+                .saturating_add(child.box_model.vertical_outer());
+            let current_outer_top = child
+                .rect
+                .y
+                .saturating_sub(child.box_model.margin_top as i32);
+
+            let target_outer_top = match alignment.as_deref() {
+                Some("top" | "text-top") => line_top,
+                Some("bottom" | "text-bottom") => {
+                    line_bottom.saturating_sub(outer_height as i32)
+                }
+                Some("middle") => {
+                    line_top.saturating_add(line_height.saturating_sub(outer_height as i32) / 2)
+                }
+                Some(value) if value.ends_with("px") => {
+                    let offset = parse_signed_px(Some(value)).unwrap_or(0);
+                    current_outer_top.saturating_sub(offset)
+                }
+                _ => continue,
+            };
+
+            let shift = target_outer_top.saturating_sub(current_outer_top);
+            if shift != 0 {
+                shift_layout_tree(child, 0, shift);
+            }
+        }
+
+        start = end + 1;
+    }
 }
 
 fn is_absolute_positioned(node: &crate::style_tree::StyledNode) -> bool {
@@ -979,6 +1078,46 @@ mod tests {
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
 
         assert_eq!(layout.children[0].rect.x, 70);
+    }
+
+    #[test]
+    fn vertical_align_bottom_moves_short_inline_box_to_line_bottom() {
+        let mut root = Node::element("body");
+        let mut tall = Node::element("span");
+        tall.set_attribute("style", "line-height: 30px;");
+        tall.append(Node::text("tall"));
+        let mut short = Node::element("span");
+        short.set_attribute("style", "line-height: 10px; vertical-align: bottom;");
+        short.append(Node::text("short"));
+        root.append(tall);
+        root.append(short);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.y, 0);
+        assert_eq!(layout.children[1].rect.y, 20);
+    }
+
+    #[test]
+    fn vertical_align_middle_centers_short_inline_box() {
+        let mut root = Node::element("body");
+        let mut tall = Node::element("span");
+        tall.set_attribute("style", "line-height: 30px;");
+        tall.append(Node::text("tall"));
+        let mut short = Node::element("span");
+        short.set_attribute("style", "line-height: 10px; vertical-align: middle;");
+        short.append(Node::text("short"));
+        root.append(tall);
+        root.append(short);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.y, 0);
+        assert_eq!(layout.children[1].rect.y, 10);
     }
 
     #[test]
