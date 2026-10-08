@@ -2513,7 +2513,9 @@ mod tests {
         assert_eq!(layout.children[0].rect.width, 140);
         assert_eq!(layout.children[1].rect.width, 140);
         assert_eq!(layout.children[1].rect.x, 160);
-    }    #[test]
+    }
+
+    #[test]
     fn flex_shrink_distributes_negative_free_space() {
         let mut root = Node::element("div");
         root.set_attribute("style", "display: flex; width: 200px;");
@@ -2531,6 +2533,4 @@ mod tests {
         assert_eq!(layout.children[1].rect.width, 100);
         assert_eq!(layout.children[1].rect.x, 100);
     }
-
-
 }
