@@ -274,10 +274,8 @@ fn parse_http_response_for_method(
         return Err(TransportError::ConnectionFailed);
     }
 
-    let body_forbidden = matches!(
-        method,
-        super::HttpMethod::Head
-    ) || matches!(status, 100..=199 | 204 | 304);
+    let body_forbidden =
+        matches!(method, super::HttpMethod::Head) || matches!(status, 100..=199 | 204 | 304);
 
     let body = if body_forbidden {
         Vec::new()
