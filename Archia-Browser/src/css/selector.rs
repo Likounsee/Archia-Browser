@@ -237,10 +237,9 @@ impl Selector {
                 sibling_lists[node_index]
                     .get(..position)
                     .is_some_and(|siblings| {
-                        siblings
-                            .iter()
-                            .rev()
-                            .any(|sibling| matches_simple(&self.parts[selector_index - 1].1, sibling))
+                        siblings.iter().rev().any(|sibling| {
+                            matches_simple(&self.parts[selector_index - 1].1, sibling)
+                        })
                     })
             }
         }
