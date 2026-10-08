@@ -972,8 +972,31 @@ fn layout_flex_children(
                         .saturating_add(output.children[*index].box_model.horizontal_outer()),
                 )
                 .saturating_add(gap);
+        }    } else {
+        let mut ordered_indices = flex_indices.clone();
+        ordered_indices.sort_by_key(|(_, child_index)| {
+            parse_flex_order(node.children[*child_index].style.get("order"))
+        });
+        let mut cursor = 0_u32;
+        for (index, _) in ordered_indices {
+            let child = &output.children[index];
+            let desired_y = content_origin_y
+                .saturating_add(cursor as i32)
+                .saturating_add(child.box_model.margin_top as i32);
+            let shift = desired_y.saturating_sub(child.rect.y);
+            if shift != 0 {
+                shift_layout_tree(&mut output.children[index], 0, shift);
+            }
+            cursor = cursor
+                .saturating_add(
+                    output.children[index]
+                        .rect
+                        .height
+                        .saturating_add(output.children[index].box_model.vertical_outer()),
+                )
+                .saturating_add(gap);
         }
-    }
+
 
     let align = node
         .style
@@ -2667,5 +2690,25 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.width, 150);
         assert_eq!(layout.children[1].rect.width, 50);
+    }    #[test]
+    fn flex_order_repositions_column_items() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "display: flex; flex-direction: column; width: 100px;");
+
+        let mut first = Node::element("div");
+        first.set_attribute("style", "height: 20px; order: 1;");
+        let mut second = Node::element("div");
+        second.set_attribute("style", "height: 20px; order: -1;");
+        root.append(first);
+        root.append(second);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.y, 20);
+        assert_eq!(layout.children[1].rect.y, 0);
     }
+
+
 }
