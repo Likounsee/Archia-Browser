@@ -167,7 +167,7 @@ fn initial_value(name: &str) -> &'static str {
         "display" => "inline",
         "color" => "black",
         "background-color" => "transparent",
-        "width" | "height" => "auto",
+        "width" | "height" | "min-width" | "max-width" | "min-height" | "max-height" => "auto",
         "margin-top" | "margin-right" | "margin-bottom" | "margin-left" => "0",
         "padding-top" | "padding-right" | "padding-bottom" | "padding-left" => "0",
         "border-width"
