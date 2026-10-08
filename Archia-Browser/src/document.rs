@@ -29,6 +29,12 @@ impl Page {
         }
     }
 
+    pub fn title(&self) -> Option<String> {
+        let title = self.document.find_first_element("title")?.text_content();
+        let title = title.trim();
+        (!title.is_empty()).then(|| title.to_owned())
+    }
+
     pub fn render_into(&self, surface: &mut crate::surface::SoftwareSurface) {
         SoftwareRenderer::rasterize(&self.display_list, surface);
     }
@@ -68,5 +74,29 @@ mod tests {
                 }
             )
         }));
+    }
+
+    #[test]
+    fn extracts_trimmed_document_title() {
+        let page = Page::from_html(
+            "<html><head><title>  Archia Browser  </title></head><body>Hello</body></html>",
+            "",
+            LayoutViewport::new(320, 200),
+        );
+
+        assert_eq!(page.title(), Some("Archia Browser".to_owned()));
+    }
+
+    #[test]
+    fn empty_or_missing_title_is_none() {
+        let missing = Page::from_html("<body>Hello</body>", "", LayoutViewport::new(320, 200));
+        let empty = Page::from_html(
+            "<head><title>   </title></head><body>Hello</body>",
+            "",
+            LayoutViewport::new(320, 200),
+        );
+
+        assert_eq!(missing.title(), None);
+        assert_eq!(empty.title(), None);
     }
 }
