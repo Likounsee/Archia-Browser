@@ -59,6 +59,7 @@ pub struct AttributeSelector {
     pub name: String,
     pub operator: AttributeOperator,
     pub value: Option<String>,
+    pub case_insensitive: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -472,6 +473,18 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
                 while i < chars.len() && chars[i].is_whitespace() {
                     i += 1;
                 }
+                let mut case_insensitive = false;
+                if i < chars.len() && chars[i] != ']' {
+                    match chars[i].to_ascii_lowercase() {
+                        'i' => case_insensitive = true,
+                        's' => {}
+                        _ => return None,
+                    }
+                    i += 1;
+                    while i < chars.len() && chars[i].is_whitespace() {
+                        i += 1;
+                    }
+                }
                 if i >= chars.len() || chars[i] != ']' {
                     return None;
                 }
@@ -480,6 +493,7 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
                     name,
                     operator,
                     value,
+                    case_insensitive,
                 });
             }
             _ => return None,
@@ -751,6 +765,19 @@ fn is_name_char(c: char) -> bool {
     c == '_' || c == '-' || c.is_ascii_alphanumeric() || !c.is_ascii()
 }
 
+fn attribute_value_matches(
+    actual: &str,
+    expected: &str,
+    case_insensitive: bool,
+    matches: impl FnOnce(&str, &str) -> bool,
+) -> bool {
+    if case_insensitive {
+        matches(&actual.to_ascii_lowercase(), &expected.to_ascii_lowercase())
+    } else {
+        matches(actual, expected)
+    }
+}
+
 fn matches_simple(simple: &SimpleSelector, node: &Node) -> bool {
     matches_simple_with_siblings(simple, node, None, None)
 }
@@ -806,14 +833,24 @@ fn matches_simple_with_siblings(
 
         match attribute.operator {
             AttributeOperator::Exists => true,
-            AttributeOperator::Equals => actual == expected,
-            AttributeOperator::Includes => actual.split_whitespace().any(|part| part == expected),
+            AttributeOperator::Equals => attribute_value_matches(actual, expected, attribute.case_insensitive, |a, b| a == b),
+            AttributeOperator::Includes => actual
+                .split_whitespace()
+                .any(|part| attribute_value_matches(part, expected, attribute.case_insensitive, |a, b| a == b)),
             AttributeOperator::DashMatch => {
-                actual == expected || actual.starts_with(&format!("{expected}-"))
+                attribute_value_matches(actual, expected, attribute.case_insensitive, |a, b| a == b)
+                    || actual
+                        .get(..expected.len() + 1)
+                        .is_some_and(|prefix| attribute_value_matches(
+                            &prefix[..expected.len()],
+                            expected,
+                            attribute.case_insensitive,
+                            |a, b| a == b,
+                        ) && prefix.ends_with('-'))
             }
-            AttributeOperator::Prefix => actual.starts_with(expected),
-            AttributeOperator::Suffix => actual.ends_with(expected),
-            AttributeOperator::Substring => actual.contains(expected),
+            AttributeOperator::Prefix => attribute_value_matches(actual, expected, attribute.case_insensitive, |a, b| a.starts_with(b)),
+            AttributeOperator::Suffix => attribute_value_matches(actual, expected, attribute.case_insensitive, |a, b| a.ends_with(b)),
+            AttributeOperator::Substring => attribute_value_matches(actual, expected, attribute.case_insensitive, |a, b| a.contains(b)),
         }
     })
 }
@@ -915,6 +952,7 @@ mod tests {
             ("[lang^=en]", true),
             ("[lang$=US]", true),
             ("[lang*=n-U]", true),
+            ("[lang=EN-US i]", true),
         ];
 
         for (source, expected) in cases {
@@ -978,6 +1016,17 @@ mod tests {
             .unwrap()
             .matches(&div));
         assert!(!Selector::parse("div:not(.Card)").unwrap().matches(&div));
+    }
+
+    #[test]
+    fn attribute_selector_case_sensitivity_flags_work() {
+        let mut element = Node::element("div");
+        element.set_attribute("data-mode", "Dark");
+
+        assert!(!Selector::parse("[data-mode=dark]").unwrap().matches(&element));
+        assert!(Selector::parse("[data-mode=dark i]").unwrap().matches(&element));
+        assert!(Selector::parse("[data-mode=Dark s]").unwrap().matches(&element));
+        assert!(!Selector::parse("[data-mode=dark s]").unwrap().matches(&element));
     }
 
     #[test]
