@@ -68,14 +68,22 @@ impl Page {
     }
 
     pub fn from_html_at(url: Option<Url>, html: &str, css: &str, viewport: LayoutViewport) -> Self {
+        eprintln!("PAGE checkpoint: tokenize");
         let tokens = HtmlTokenizer::tokenize(html);
+        eprintln!("PAGE checkpoint: parse");
         let document = parse(&tokens);
+        eprintln!("PAGE checkpoint: collect styles");
         let mut stylesheet_input = css.to_owned();
         collect_inline_styles(&document, &mut stylesheet_input);
+        eprintln!("PAGE checkpoint: stylesheet");
         let stylesheet = StyleSheet::parse(&stylesheet_input);
+        eprintln!("PAGE checkpoint: style");
         let styled = StyleEngine::style(&document, &stylesheet);
+        eprintln!("PAGE checkpoint: layout");
         let layout = LayoutEngine::layout_styled(&styled, viewport);
+        eprintln!("PAGE checkpoint: display list");
         let display_list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
+        eprintln!("PAGE checkpoint: done");
 
         Self {
             url,
