@@ -1770,6 +1770,25 @@ mod tests {
     }
 
     #[test]
+    fn flex_space_between_distributes_remaining_row_space() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "display: flex; justify-content: space-between; width: 100px;");
+        for _ in 0..3 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 20px; height: 10px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.x, 0);
+        assert_eq!(layout.children[1].rect.x, 40);
+        assert_eq!(layout.children[2].rect.x, 80);
+    }
+
+    #[test]
     fn flex_column_stacks_children_with_gap() {
         let mut root = Node::element("div");
         root.set_attribute("style", "display: flex; flex-direction: column; gap: 3px;");
