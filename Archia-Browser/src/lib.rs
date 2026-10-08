@@ -47,9 +47,7 @@ impl Browser {
         reference: &str,
         title: Option<String>,
     ) -> Result<&net::Url, net::UrlError> {
-        let base = self
-            .current_url()
-            .ok_or(net::UrlError::MissingAuthority)?;
+        let base = self.current_url().ok_or(net::UrlError::MissingAuthority)?;
         let url = base.resolve(reference)?;
         self.navigate(url, title);
         Ok(self.current_url().expect("navigation created an entry"))
@@ -120,7 +118,10 @@ mod tests {
             .unwrap();
         assert_eq!(current.to_string(), "https://example.org/guide.html");
         assert_eq!(browser.history().len(), 2);
-        assert_eq!(browser.history().current().and_then(|entry| entry.title()), Some("Guide"));
+        assert_eq!(
+            browser.history().current().and_then(|entry| entry.title()),
+            Some("Guide")
+        );
     }
 
     #[test]
