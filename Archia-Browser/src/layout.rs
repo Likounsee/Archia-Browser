@@ -755,7 +755,14 @@ fn layout_flex_children(
         }
 
         let child_margin = box_model_from_style(&child.style, content_width);
-        let flex_shorthand = parse_flex_shorthand(child.style.get("flex"), if column { viewport_height } else { content_width });
+        let flex_shorthand = parse_flex_shorthand(
+            child.style.get("flex"),
+            if column {
+                viewport_height
+            } else {
+                content_width
+            },
+        );
         let base = if column {
             flex_shorthand
                 .and_then(|(_, _, basis)| basis)
