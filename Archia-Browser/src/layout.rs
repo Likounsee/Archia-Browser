@@ -246,7 +246,7 @@ fn layout_styled_node(
 
 fn intrinsic_inline_width(node: &crate::style_tree::StyledNode) -> u32 {
     match &node.node.kind {
-        NodeKind::Text(text) => text.chars().count().min(u32::MAX as usize) as u32 * 8,
+        NodeKind::Text(text) => text.chars().count().min(u32::MAX as usize) as u32 * 6,
         _ => node
             .children
             .iter()
@@ -423,6 +423,21 @@ mod tests {
         assert_eq!(layout.children[0].display, Display::Block);
         assert_eq!(layout.children[0].rect.height, 24);
         assert_eq!(layout.children[1].display, Display::None);
+    }
+
+    #[test]
+    fn text_intrinsic_width_matches_bootstrap_glyph_advance() {
+        let mut root = Node::element("body");
+        let mut text = Node::element("span");
+        text.set_attribute("style", "display: inline;");
+        text.append(Node::text("Hello"));
+        root.append(text);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.width, 30);
     }
 
     #[test]
