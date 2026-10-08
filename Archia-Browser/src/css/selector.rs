@@ -417,6 +417,7 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
 
                 let mut operator = AttributeOperator::Exists;
                 let mut value = None;
+                let mut parsed_case_insensitive = false;
                 if i < chars.len() && chars[i] != ']' {
                     operator = match chars[i] {
                         '=' => {
@@ -461,7 +462,6 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
                         return None;
                     }
                     let raw_value: String = chars[start_value..i].iter().collect();
-                    let mut parsed_case_insensitive = false;
                     if quote.is_none() {
                         let trimmed = raw_value.trim();
                         if let Some(value_text) = trimmed
