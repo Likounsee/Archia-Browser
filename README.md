@@ -122,6 +122,8 @@ Current milestone:
 - [x] `!important` handling and inline style precedence (initial)
 - [x] CSS-wide value handling (`initial`, `inherit`, `unset`) and box shorthand expansion
 - [x] First block-flow layout engine foundation
+- [x] Initial inline-flow wrapping and box model support
+- [x] Initial CSS box-sizing: border-box handling
 - [ ] Standards-compliant layout engine
 - [x] Software renderer foundation
 - [x] URL parsing and HTTP request/response primitives (initial)
@@ -250,7 +252,7 @@ License to be defined.
 
 ## Current engineering priorities
 
-1. Turn the layout foundation into a real block/inline layout engine.
+1. Turn the layout foundation into a standards-compliant block/inline layout engine.
 2. Build a platform-neutral software display list and renderer.
 3. Build asynchronous HTTP/HTTPS transport behind request policy, starting from the current HTTP/1.1 foundation.
 4. Expand HTML parsing toward standards-compliant tree construction.
