@@ -227,13 +227,13 @@ fn layout_styled_node(
             let line_height = used_inline_line_height(child);
             if inline_x > 0 && inline_x.saturating_add(width) > content_width {
                 align_inline_line(
-            &mut output.children,
-            inline_line_start,
-            output.children.len(),
-            inline_x,
-            content_width,
-            node.style.get("text-align"),
-        );
+                    &mut output.children,
+                    inline_line_start,
+                    output.children.len(),
+                    inline_x,
+                    content_width,
+                    node.style.get("text-align"),
+                );
                 cursor_y = cursor_y.saturating_add(inline_line_height as i32);
                 inline_x = 0;
                 inline_line_height = 0;
