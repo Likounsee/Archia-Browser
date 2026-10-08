@@ -1095,7 +1095,6 @@ mod tests {
         assert_eq!(layout.children[0].rect.width, 40);
     }
 
-
     #[test]
     fn inline_block_lays_out_block_children_inside_its_box() {
         let mut root = Node::element("body");
