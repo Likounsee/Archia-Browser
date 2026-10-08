@@ -164,12 +164,17 @@ impl StyleSheet {
 
             let mut computed = ComputedStyle::default();
             for (name, value) in inherited.iter() {
-                if is_inherited_property(name) {
+                if is_inherited_property(name) || name.starts_with("--") {
                     computed.set(name, value);
                 }
             }
             for (name, value) in local.iter() {
-                let resolved = resolve_css_value(name, value, &inherited, &inherited);
+                if name.starts_with("--") {
+                    computed.set(name, value);
+                }
+            }
+            for (name, value) in local.iter() {
+                let resolved = resolve_css_value(name, value, &computed, &inherited);
                 if local.is_important(name) {
                     computed.set_important(name, resolved);
                 } else {
