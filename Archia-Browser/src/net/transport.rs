@@ -291,14 +291,17 @@ fn decode_chunked(bytes: &[u8], max_response_size: usize) -> Result<Vec<u8>, Tra
         cursor = line_end + 2;
 
         if size == 0 {
-            let trailer_end = bytes[cursor..]
-                .windows(4)
-                .position(|window| window == b"\r\n\r\n")
-                .map(|position| cursor + position + 4);
-            if let Some(end) = trailer_end {
+            let trailer_bytes = &bytes[cursor..];
+            if trailer_bytes == b"\r\n" {
                 return Ok(output);
             }
-            if bytes.get(cursor..cursor + 2) == Some(b"\r\n") {
+            if trailer_bytes.starts_with(b"\r\n") {
+                return Err(TransportError::ConnectionFailed);
+            }
+            let trailer_end = trailer_bytes
+                .windows(4)
+                .position(|window| window == b"\r\n\r\n");
+            if trailer_end.is_some() {
                 return Ok(output);
             }
             return Err(TransportError::ConnectionFailed);
