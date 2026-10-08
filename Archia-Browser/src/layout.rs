@@ -780,7 +780,12 @@ fn layout_flex_children(
             .unwrap_or_else(|| parse_flex_factor(child.style.get("flex-grow")));
         let shrink = flex_shorthand
             .map(|(_, shrink, _)| shrink)
-            .or_else(|| child.style.get("flex-shrink").map(|value| parse_flex_factor(Some(value))))
+            .or_else(|| {
+                child
+                    .style
+                    .get("flex-shrink")
+                    .map(|value| parse_flex_factor(Some(value)))
+            })
             .unwrap_or(1.0);
         total_grow += grow;
         total_shrink_weight += shrink * base as f32;
