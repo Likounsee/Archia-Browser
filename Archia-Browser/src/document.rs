@@ -1,7 +1,7 @@
 use crate::css::StyleSheet;
-use crate::net::Url;
 use crate::html::{parse, HtmlTokenizer, Node};
 use crate::layout::{LayoutEngine, LayoutNode, LayoutViewport};
+use crate::net::Url;
 use crate::render::{DisplayList, SoftwareRenderer};
 use crate::style_tree::{StyleEngine, StyledNode};
 
