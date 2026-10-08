@@ -305,7 +305,7 @@ mod tests {
         assert_eq!(submission.method, FormMethod::Get);
         assert_eq!(
             submission.url.to_string(),
-            "https://example.org/find?q=hello+world&flag=yes&note=line%20one"
+            "https://example.org/find?q=hello+world&flag=yes&note=line+one"
         );
         assert!(submission.body.is_empty());
         assert_eq!(submission.content_type, None);
