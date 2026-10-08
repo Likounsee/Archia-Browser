@@ -153,12 +153,7 @@ impl HttpTransport {
         if bytes.len() > self.max_response_size {
             return Err(TransportError::ResponseTooLarge);
         }
-        parse_http_response_for_method(
-            &bytes,
-            method,
-            self.max_response_size,
-            self.max_header_size,
-        )
+        parse_http_response_for_method(&bytes, method, self.max_response_size, self.max_header_size)
     }
 }
 
