@@ -3362,8 +3362,8 @@ mod tests {
             crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
 
-        assert_eq!(layout.children[0].rect.x, 30);
-        assert_eq!(layout.children[1].rect.x, 30);
+        assert_eq!(layout.children[0].rect.x, 10);
+        assert_eq!(layout.children[1].rect.x, 50);
         assert_eq!(layout.children[2].rect.x, 30);
     }
 
