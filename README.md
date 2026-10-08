@@ -23,10 +23,10 @@ These percentages are engineering estimates of **functional coverage**, not line
 | CSS tokenizer/parser | ~60% | Declarations, shorthands and a growing value syntax |
 | CSS selectors | ~65% | Specificity, attributes, siblings, form-state and structural pseudo-classes |
 | Cascade / computed style | ~55% | Inheritance, !important, CSS-wide keywords and custom properties/var() |
-| Block/inline layout | ~45% | Flow, wrapping, margins, padding, borders, line-height, alignment and positioning foundations |
+| Block/inline layout | ~50% | Flow, wrapping, margins, padding, borders, line-height, alignment and positioning foundations |
 | Box model / dimensions | ~60% | Percentages, calc(), border-box, min/max constraints and auto margins |
 | Positioning | ~30% | Relative, absolute and fixed initial behavior |
-| Software rendering | ~35% | Display list, backgrounds, borders, colors, bitmap text and clipping |
+| Software rendering | ~38% | Display list, backgrounds, borders, colors, bitmap text and clipping |
 | Text / fonts / shaping | ~10% | Bootstrap glyph rasterizer only |
 | HTTP / networking | ~55% | HTTP/1.1, redirects, request policy, cookies and bounded caching |
 | HTTPS / TLS | ~5% | Explicitly isolated as a pending native TLS subsystem |
@@ -123,7 +123,7 @@ The implementation structure may evolve as the engine grows, but renderer and pl
 - Relative, absolute and fixed positioning foundations.
 - Unitless and percentage line-height.
 - `white-space: nowrap` / `pre` wrapping suppression.
-- Initial `text-align` center/right/end support.
+- Initial `text-align` center/right/end/justify support, including non-final-line distribution.
 - `display: flow-root` recognition.
 
 ### Rendering
@@ -133,7 +133,7 @@ The implementation structure may evolve as the engine grows, but renderer and pl
 - Solid borders and border shorthand.
 - Named, hexadecimal, RGB and RGBA colors.
 - Visibility suppression.
-- Nested clipping for `overflow: hidden`.
+- Nested clipping for `overflow: hidden`, `clip`, `auto` and `scroll`.
 - Bootstrap bitmap glyph rasterization.
 
 ### Networking / browser state
@@ -178,7 +178,7 @@ The implementation structure may evolve as the engine grows, but renderer and pl
 - [x] Initial block and inline layout.
 - [x] Box model, percentages, calc(), min/max and positioning foundations.
 - [x] Initial text alignment and clipping.
-- [ ] Complete inline formatting context and vertical-align.
+- [x] Initial inline vertical alignment (`top`, `middle`, `bottom`, `text-top`, `text-bottom` and pixel offsets).
 - [ ] Inline-block intrinsic sizing.
 - [ ] Flex layout.
 - [ ] Tables and table layout.
