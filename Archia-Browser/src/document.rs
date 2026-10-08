@@ -410,10 +410,7 @@ b</textarea></form>"#,
         let form = page.document.find_first_element("form").unwrap();
 
         let submission = page.form_submission(form).unwrap();
-        assert_eq!(
-            submission.body,
-            b"choice=b&tags=one&tags=two&note=a%0D%0Ab"
-        );
+        assert_eq!(submission.body, b"choice=b&tags=one&tags=two&note=a%0D%0Ab");
     }
 
     #[test]
