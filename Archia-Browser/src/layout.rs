@@ -271,7 +271,7 @@ fn layout_styled_node(
 
             let width = intrinsic_inline_width(child, content_width.saturating_sub(inline_x));
             let line_height = used_inline_line_height(child);
-            if allows_inline_wrap(node)
+            if allows_inline_wrap(child)
                 && inline_x > 0
                 && inline_x.saturating_add(width) > content_width
             {
@@ -1893,4 +1893,23 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.width, 12);
     }
+    #[test]
+    fn child_nowrap_prevents_inline_wrapping() {
+        let mut root = Node::element("body");
+        let mut first = Node::element("span");
+        first.set_attribute("style", "white-space: nowrap;");
+        first.append(Node::text("1234567890"));
+        let mut second = Node::element("span");
+        second.append(Node::text("x"));
+        root.append(first);
+        root.append(second);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(50, 100));
+
+        assert_eq!(layout.children[0].rect.y, 0);
+        assert_eq!(layout.children[1].rect.y, 0);
+    }
+
 }
