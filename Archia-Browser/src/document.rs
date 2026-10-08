@@ -91,10 +91,7 @@ impl Page {
         base.resolve(reference)
     }
 
-    pub fn form_submission(
-        &self,
-        form: &Node,
-    ) -> Result<FormSubmission, FormSubmissionError> {
+    pub fn form_submission(&self, form: &Node) -> Result<FormSubmission, FormSubmissionError> {
         if form.tag_name() != Some("form") {
             return Err(FormSubmissionError::NotForm);
         }
@@ -213,7 +210,13 @@ fn collect_form_entries(node: &Node, entries: &mut Vec<(String, String)>) {
 fn encode_form_entries(entries: &[(String, String)]) -> String {
     entries
         .iter()
-        .map(|(name, value)| format!("{}={}", encode_form_component(name), encode_form_component(value)))
+        .map(|(name, value)| {
+            format!(
+                "{}={}",
+                encode_form_component(name),
+                encode_form_component(value)
+            )
+        })
         .collect::<Vec<_>>()
         .join("&")
 }
@@ -222,13 +225,9 @@ fn encode_form_component(value: &str) -> String {
     let mut output = String::new();
     for byte in value.as_bytes() {
         match *byte {
-            b'A'..=b'Z'
-            | b'a'..=b'z'
-            | b'0'..=b'9'
-            | b'-'
-            | b'.'
-            | b'_'
-            | b'*' => output.push(*byte as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'*' => {
+                output.push(*byte as char)
+            }
             b' ' => output.push('+'),
             byte => {
                 output.push('%');
