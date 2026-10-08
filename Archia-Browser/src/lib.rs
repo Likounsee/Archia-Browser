@@ -43,7 +43,7 @@ impl Browser {
     pub fn history(&self) -> &core::navigation::NavigationHistory {
         self.tabs
             .active_tab()
-            .expect("browser always has an active tab unless all tabs were closed")
+            .expect("browser always has an active tab")
             .history()
     }
 
@@ -101,6 +101,9 @@ impl Browser {
     }
 
     pub fn close_tab(&mut self, id: core::tabs::TabId) -> bool {
+        if self.tabs.len() <= 1 {
+            return false;
+        }
         self.tabs.close(id)
     }
 }
@@ -235,6 +238,17 @@ mod tests {
             browser.history().current().and_then(|entry| entry.title()),
             Some("Updated")
         );
+    }
+
+    #[test]
+    fn browser_refuses_to_close_last_tab() {
+        let mut browser = Browser::new();
+        let only = browser.tabs().active_id().unwrap();
+
+        assert!(!browser.close_tab(only));
+        assert_eq!(browser.tabs().len(), 1);
+        assert!(browser.tabs().active_id().is_some());
+        assert!(browser.history().is_empty());
     }
 
     #[test]
