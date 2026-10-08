@@ -186,6 +186,20 @@ where
         document_url: &super::Url,
         url: super::Url,
     ) -> Option<String> {
+        self.load_stylesheet_resource_at(document_url, url, 0)
+    }
+
+    fn load_stylesheet_resource_at(
+        &self,
+        document_url: &super::Url,
+        url: super::Url,
+        import_depth: usize,
+    ) -> Option<String> {
+        const MAX_IMPORT_DEPTH: usize = 8;
+        if import_depth > MAX_IMPORT_DEPTH {
+            return None;
+        }
+
         let mut current = url;
 
         for _ in 0..=MAX_REDIRECTS {
@@ -250,12 +264,46 @@ where
                 return None;
             }
 
-            return Some(String::from_utf8_lossy(&response.body).into_owned());
+            let css = String::from_utf8_lossy(&response.body).into_owned();
+            return Some(self.expand_stylesheet_imports(
+                document_url,
+                &current,
+                &css,
+                import_depth,
+            ));
         }
 
         None
     }
-}
+
+    fn expand_stylesheet_imports(
+        &self,
+        document_url: &super::Url,
+        stylesheet_url: &super::Url,
+        css: &str,
+        import_depth: usize,
+    ) -> String {
+        let mut output = String::with_capacity(css.len());
+        for statement in css.split_inclusive(';') {
+            let trimmed = statement.trim();
+            let Some(reference) = parse_import_reference(trimmed) else {
+                output.push_str(statement);
+                continue;
+            };
+
+            if let Ok(url) = stylesheet_url.resolve(&reference) {
+                if let Some(imported) =
+                    self.load_stylesheet_resource_at(document_url, url, import_depth + 1)
+                {
+                    output.push_str(&imported);
+                    output.push('\n');
+                    continue;
+                }
+            }
+            output.push_str(statement);
+        }
+        output
+    }
 
 fn collect_stylesheet_links(node: &Node, links: &mut Vec<String>) {
     if node.tag_name() == Some("link")
@@ -276,6 +324,32 @@ fn collect_stylesheet_links(node: &Node, links: &mut Vec<String>) {
     for child in node.children() {
         collect_stylesheet_links(child, links);
     }
+}
+
+fn parse_import_reference(statement: &str) -> Option<String> {
+    let statement = statement.trim();
+    let statement = statement.strip_prefix("@import")?.trim_start();
+    if !statement.ends_with(';') {
+        return None;
+    }
+    let statement = statement[..statement.len() - 1].trim();
+    if statement.contains('{') || statement.contains('}') {
+        return None;
+    }
+
+    if let Some(value) = statement.strip_prefix("url(") {
+        let end = value.find(')')?;
+        if !value[end + 1..].trim().is_empty() {
+            return None;
+        }
+        return Some(value[..end].trim().trim_matches(['"', '\'']).to_owned());
+    }
+
+    let quote = statement.chars().next()?;
+    if !matches!(quote, '"' | '\'') || !statement.ends_with(quote) {
+        return None;
+    }
+    Some(statement[1..statement.len() - 1].to_owned())
 }
 
 fn is_css_response(response: &Response) -> bool {
@@ -495,6 +569,77 @@ mod tests {
             .load(&request, LayoutViewport::new(320, 200))
             .unwrap();
         assert_eq!(page.document.text_content(), "Hello");
+    }
+
+    #[test]
+    fn expands_local_stylesheet_imports_relative_to_the_importing_file() {
+        let root = std::env::temp_dir().join(format!(
+            "archia-browser-css-import-{}",
+            std::process::id()
+        ));
+        let nested = root.join("nested");
+        std::fs::create_dir_all(&nested).unwrap();
+        let main = root.join("main.css");
+        let theme = nested.join("theme.css");
+        std::fs::write(&main, b"@import \"nested/theme.css\"; body { color: red; }").unwrap();
+        std::fs::write(&theme, b"body { background-color: #102030; }").unwrap();
+
+        let html = format!(
+            "<head><link rel=\"stylesheet\" href=\"{}\"></head><body>Hello</body>",
+            main.to_string_lossy().replace('\\', "/")
+        );
+        let document = Response::new(200)
+            .with_header("content-type", "text/html")
+            .with_body(html.into_bytes());
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            super::super::LocalFileTransport::new(),
+        );
+        let request = Request::new(Url::parse("file:///local/index.html").unwrap());
+
+        struct RootTransport {
+            document: Response,
+        }
+        impl Transport for RootTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                if request.policy.resource_kind == ResourceKind::Stylesheet {
+                    return super::super::LocalFileTransport::new().send(request);
+                }
+                Ok(self.document.clone())
+            }
+        }
+
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            RootTransport { document },
+        );
+        let page = loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .unwrap();
+
+        assert!(page.display_list.commands().iter().any(|command| {
+            matches!(
+                command,
+                crate::render::PaintCommand::DrawText {
+                    color: 0xff0000ff,
+                    ..
+                }
+            )
+        }));
+        assert!(page.display_list.commands().iter().any(|command| {
+            matches!(
+                command,
+                crate::render::PaintCommand::FillRect {
+                    color: 0x102030ff,
+                    ..
+                }
+            )
+        }));
+
+        let _ = std::fs::remove_file(main);
+        let _ = std::fs::remove_file(theme);
+        let _ = std::fs::remove_dir(nested);
+        let _ = std::fs::remove_dir(root);
     }
 
     #[test]
