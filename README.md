@@ -124,6 +124,7 @@ Current milestone:
 - [x] First block-flow layout engine foundation
 - [x] Initial inline-flow wrapping and box model support
 - [x] Initial CSS box-sizing: border-box handling
+- [x] Initial percentage width resolution against containing blocks
 - [ ] Standards-compliant layout engine
 - [x] Software renderer foundation
 - [x] URL parsing and HTTP request/response primitives (initial)
