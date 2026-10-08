@@ -4,7 +4,7 @@ use crate::html::{Node, NodeKind};
 use crate::style_tree::StyledNode;
 use crate::surface::{Color, SoftwareSurface};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PaintCommand {
     FillRect {
         rect: super::layout::Rect,
@@ -69,7 +69,7 @@ impl SoftwareRenderer {
                         ((color >> 8) & 0xff) as u8,
                         (color & 0xff) as u8,
                     );
-                    surface.draw_text(x, y, &text, color);
+                    surface.draw_text_placeholder(x, y, text.chars().count() as u32, color);
                 }
             }
         }
@@ -143,7 +143,7 @@ fn paint_node(node: &Node, layout: &LayoutNode, style: &ComputedStyle, list: &mu
         list.push(PaintCommand::DrawText {
             x: layout.rect.x,
             y: layout.rect.y,
-            text_len: text.chars().count() as u32,
+            text: text.clone(),
             color: parse_color(style.get("color").unwrap_or("black")).unwrap_or(0x000000ff),
         });
     }
