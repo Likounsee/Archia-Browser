@@ -138,6 +138,9 @@ impl Browser {
         };
 
         self.navigate(url, page.title());
+        if let Some(tab) = self.tabs.active_tab_mut() {
+            tab.set_page(page.clone());
+        }
         true
     }
 
