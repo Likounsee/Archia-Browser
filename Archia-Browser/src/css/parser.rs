@@ -37,9 +37,11 @@ pub fn parse_declarations(tokens: &[CssToken]) -> Vec<Property> {
                     }
                 }
                 CssToken::Ident(v)
-                | CssToken::Hash(v)
-                | CssToken::Number(v)
-                | CssToken::String(v) => value.push_str(v),
+                CssToken::Hash(v) => {
+                    value.push('#');
+                    value.push_str(v);
+                }
+                CssToken::Ident(v) | CssToken::Number(v) | CssToken::String(v) => value.push_str(v),
                 CssToken::Delim(c) => value.push(*c),
                 CssToken::Colon => value.push(':'),
                 CssToken::LeftParen => value.push('('),
@@ -65,6 +67,13 @@ pub fn parse_declarations(tokens: &[CssToken]) -> Vec<Property> {
 mod tests {
     use super::*;
     use crate::css::CssTokenizer;
+
+    #[test]
+    fn preserves_hash_prefix_in_declaration_values() {
+        let tokens = CssTokenizer::tokenize("background-color: #102030;");
+        let properties = parse_declarations(&tokens);
+        assert_eq!(properties[0].value, "#102030");
+    }
 
     #[test]
     fn parses_simple_declarations() {
