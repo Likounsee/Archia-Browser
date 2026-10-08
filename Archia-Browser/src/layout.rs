@@ -874,9 +874,15 @@ fn layout_flex_children(
         for index in &flex_indices {
             let child = &mut output.children[*index];
             let child_cross = if column {
-                child.rect.width.saturating_add(child.box_model.horizontal_outer())
+                child
+                    .rect
+                    .width
+                    .saturating_add(child.box_model.horizontal_outer())
             } else {
-                child.rect.height.saturating_add(child.box_model.vertical_outer())
+                child
+                    .rect
+                    .height
+                    .saturating_add(child.box_model.vertical_outer())
             };
             let available = cross_size.saturating_sub(child_cross);
             let shift = match align.as_str() {
