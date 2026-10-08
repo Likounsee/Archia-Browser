@@ -139,10 +139,9 @@ impl Browser {
         path: impl AsRef<std::path::Path>,
         viewport: crate::layout::LayoutViewport,
     ) -> Result<crate::document::Page, crate::net::DocumentLoadError> {
-        let path = std::fs::canonicalize(path)
-            .map_err(|_| crate::net::DocumentLoadError::Network(
-                net::TransportError::ConnectionFailed,
-            ))?;
+        let path = std::fs::canonicalize(path).map_err(|_| {
+            crate::net::DocumentLoadError::Network(net::TransportError::ConnectionFailed)
+        })?;
         let url = local_path_to_file_url(&path);
         self.load_local_file_url(&url, viewport)
     }
