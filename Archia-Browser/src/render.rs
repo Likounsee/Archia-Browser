@@ -156,8 +156,14 @@ fn paint_node(node: &Node, layout: &LayoutNode, style: &ComputedStyle, list: &mu
 }
 
 fn background_rect(layout: &LayoutNode) -> super::layout::Rect {
-    let x = layout.rect.x.saturating_sub(layout.box_model.padding_left as i32);
-    let y = layout.rect.y.saturating_sub(layout.box_model.padding_top as i32);
+    let x = layout
+        .rect
+        .x
+        .saturating_sub(layout.box_model.padding_left as i32);
+    let y = layout
+        .rect
+        .y
+        .saturating_sub(layout.box_model.padding_top as i32);
     let width = layout
         .rect
         .width
