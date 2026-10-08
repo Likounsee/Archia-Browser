@@ -851,9 +851,21 @@ fn matches_simple_with_siblings(
                 normalized_actual == normalized_expected
                     || normalized_actual.starts_with(&format!("{normalized_expected}-"))
             }
-            AttributeOperator::Prefix => attribute_value_matches(actual, expected, attribute.case_insensitive, |a, b| a.starts_with(b)),
-            AttributeOperator::Suffix => attribute_value_matches(actual, expected, attribute.case_insensitive, |a, b| a.ends_with(b)),
-            AttributeOperator::Substring => attribute_value_matches(actual, expected, attribute.case_insensitive, |a, b| a.contains(b)),
+            AttributeOperator::Prefix => {
+                attribute_value_matches(actual, expected, attribute.case_insensitive, |a, b| {
+                    a.starts_with(b)
+                })
+            }
+            AttributeOperator::Suffix => {
+                attribute_value_matches(actual, expected, attribute.case_insensitive, |a, b| {
+                    a.ends_with(b)
+                })
+            }
+            AttributeOperator::Substring => {
+                attribute_value_matches(actual, expected, attribute.case_insensitive, |a, b| {
+                    a.contains(b)
+                })
+            }
         }
     })
 }
@@ -1026,18 +1038,10 @@ mod tests {
         let mut element = Node::element("div");
         element.set_attribute("data-mode", "Dark");
 
-        assert!(!Selector::parse("[data-mode=dark]")
-            .unwrap()
-            .matches(&element));
-        assert!(Selector::parse("[data-mode=dark i]")
-            .unwrap()
-            .matches(&element));
-        assert!(Selector::parse("[data-mode=Dark s]")
-            .unwrap()
-            .matches(&element));
-        assert!(!Selector::parse("[data-mode=dark s]")
-            .unwrap()
-            .matches(&element));
+        assert!(!Selector::parse("[data-mode=dark]").unwrap().matches(&element));
+        assert!(Selector::parse("[data-mode=dark i]").unwrap().matches(&element));
+        assert!(Selector::parse("[data-mode=Dark s]").unwrap().matches(&element));
+        assert!(!Selector::parse("[data-mode=dark s]").unwrap().matches(&element));
     }
 
     #[test]
