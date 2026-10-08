@@ -518,7 +518,6 @@ mod tests {
         node
     }
 
-
     #[test]
     fn matches_form_state_pseudo_classes() {
         let mut checked = Node::element("input");
