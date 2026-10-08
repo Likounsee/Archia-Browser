@@ -254,9 +254,10 @@ fn layout_styled_node(
         .y
         .saturating_add(box_model.border_top as i32)
         .saturating_add(box_model.padding_top as i32);
-    let establishes_positioned_containing_block = node.style.get("position").is_some_and(|value| {
-        !value.trim().eq_ignore_ascii_case("static")
-    });
+    let establishes_positioned_containing_block = node
+        .style
+        .get("position")
+        .is_some_and(|value| !value.trim().eq_ignore_ascii_case("static"));
     let child_abs_origin_x = if establishes_positioned_containing_block {
         content_origin_x
     } else {
@@ -353,8 +354,16 @@ fn layout_styled_node(
             let child_x = if child_is_absolute || child_is_fixed {
                 positioned_child_x(
                     child,
-                    if child_is_fixed { 0 } else { child_abs_origin_x },
-                    if child_is_fixed { viewport_width } else { child_abs_width },
+                    if child_is_fixed {
+                        0
+                    } else {
+                        child_abs_origin_x
+                    },
+                    if child_is_fixed {
+                        viewport_width
+                    } else {
+                        child_abs_width
+                    },
                     viewport_width,
                     child_is_fixed,
                 )
@@ -364,10 +373,22 @@ fn layout_styled_node(
             let child_y = if child_is_absolute || child_is_fixed {
                 positioned_child_y(
                     child,
-                    if child_is_fixed { 0 } else { child_abs_origin_y },
+                    if child_is_fixed {
+                        0
+                    } else {
+                        child_abs_origin_y
+                    },
                     cursor_y,
-                    if child_is_fixed { viewport_width } else { child_abs_width },
-                    if child_is_fixed { viewport_height } else { child_abs_height },
+                    if child_is_fixed {
+                        viewport_width
+                    } else {
+                        child_abs_width
+                    },
+                    if child_is_fixed {
+                        viewport_height
+                    } else {
+                        child_abs_height
+                    },
                     viewport_height,
                     child_is_fixed,
                 )
