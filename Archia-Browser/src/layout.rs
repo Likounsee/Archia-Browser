@@ -735,12 +735,12 @@ fn layout_flex_children(
         .is_some_and(|value| value.trim().eq_ignore_ascii_case("column"))
         || flow_column;
     let wrap = node.style.get("flex-wrap").is_some_and(|value| {
-
         matches!(
             value.trim().to_ascii_lowercase().as_str(),
             "wrap" | "wrap-reverse"
         )
-    }) || flex_flow.is_some_and(|value| value.split_whitespace().any(|part| part == "wrap"));
+    }) || flex_flow
+        .is_some_and(|value| value.split_whitespace().any(|part| part == "wrap"));
     let gap = parse_length(node.style.get("gap"), content_width).unwrap_or(0);
     let mut main = 0_u32;
     let mut cross = 0_u32;
