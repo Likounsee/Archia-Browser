@@ -1235,9 +1235,7 @@ fn align_flex_columns(
     let (offset, extra) = match alignment.as_str() {
         "center" => (free / 2, 0),
         "flex-end" | "end" => (free, 0),
-        "space-between" if columns.len() > 1 => {
-            (0, free / (columns.len() - 1) as u32)
-        }
+        "space-between" if columns.len() > 1 => (0, free / (columns.len() - 1) as u32),
         "space-around" => {
             let gap = free / columns.len() as u32;
             (gap / 2, gap)
