@@ -61,7 +61,6 @@ where
         request: &Request,
         viewport: LayoutViewport,
     ) -> Result<Page, DocumentLoadError> {
-        eprintln!("LOADER checkpoint: start");
         let mut current = request
             .clone()
             .with_cookies(&self.cookies.lock().expect("cookie jar poisoned"));
@@ -71,21 +70,17 @@ where
         }
 
         for redirect_count in 0..=self.max_redirects {
-            eprintln!("LOADER checkpoint: before cache get");
-            let response = if let Some(response) = self
-                .cache
-                .lock()
-                .expect("HTTP cache poisoned")
-                .get(&current)
-            {
+            let cached_response = {
+                let mut cache = self.cache.lock().expect("HTTP cache poisoned");
+                cache.get(&current)
+            };
+            let response = if let Some(response) = cached_response {
                 response
             } else {
-                eprintln!("LOADER checkpoint: cache miss, before transport");
                 let response = self
                     .pipeline
                     .execute(&self.transport, &current)
                     .map_err(DocumentLoadError::Network)?;
-                eprintln!("LOADER checkpoint: after transport");
                 self.cache
                     .lock()
                     .expect("HTTP cache poisoned")
@@ -93,7 +88,6 @@ where
                 response
             };
 
-            eprintln!("LOADER checkpoint: after cache/transport");
             for set_cookie in response.set_cookie_headers() {
                 self.cookies
                     .lock()
@@ -146,9 +140,7 @@ where
             }
 
             let html = String::from_utf8_lossy(&response.body);
-            eprintln!("LOADER checkpoint: before linked styles");
             let stylesheet = self.load_linked_stylesheets(&current.url, &html);
-            eprintln!("LOADER checkpoint: after linked styles");
             return Ok(Page::from_html_at(
                 Some(current.url.clone()),
                 &html,
@@ -221,12 +213,11 @@ where
                 request.headers.insert("cookie".into(), cookie);
             }
 
-            let response = if let Some(response) = self
-                .cache
-                .lock()
-                .expect("HTTP cache poisoned")
-                .get(&request)
-            {
+            let cached_response = {
+                let mut cache = self.cache.lock().expect("HTTP cache poisoned");
+                cache.get(&request)
+            };
+            let response = if let Some(response) = cached_response {
                 response
             } else {
                 let response = match self.pipeline.execute(&self.transport, &request) {
