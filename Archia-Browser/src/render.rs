@@ -295,7 +295,7 @@ mod tests {
         assert_eq!(
             list.commands()[0],
             PaintCommand::FillRect {
-                rect: super::layout::Rect::new(0, 0, 8, 8),
+                rect: crate::layout::Rect::new(0, 0, 8, 8),
                 color: 0xff0000ff,
             }
         );
