@@ -69,7 +69,7 @@ impl SoftwareRenderer {
                         ((color >> 8) & 0xff) as u8,
                         (color & 0xff) as u8,
                     );
-                    surface.draw_text_placeholder(x, y, text.chars().count() as u32, color);
+                    surface.draw_text(x, y, text, color);
                 }
             }
         }
