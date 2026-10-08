@@ -398,13 +398,8 @@ mod tests {
     #[test]
     #[test]
     fn rejects_authority_injection() {
-        let transport = HttpTransport::new();
-        let request = Request::new(
-            Url::parse("http://example.org/").unwrap(),
-        );
-        let mut request = request;
-        request.url = Url::parse("http://example.org/").unwrap();
-        assert!(validate_request(&request).is_ok());
+        let request = Request::new(Url::parse("http://example.org evil/").unwrap());
+        assert_eq!(validate_request(&request), Err(TransportError::InvalidRequest));
     }
 
     #[test]
