@@ -209,7 +209,6 @@ where
 
         None
     }
-
 }
 
 fn collect_stylesheet_links(node: &Node, links: &mut Vec<String>) {
