@@ -152,8 +152,11 @@ fn paint_styled_node(
         });
     }
 
-    for (child, child_layout) in node.children.iter().zip(&layout.children) {
-        paint_styled_node(child, child_layout, list, opacity);
+    let mut child_indices: Vec<usize> = (0..node.children.len().min(layout.children.len())).collect();
+    child_indices.sort_by_key(|&index| stacking_sort_key(&node.children[index].style));
+
+    for index in child_indices {
+        paint_styled_node(&node.children[index], &layout.children[index], list, opacity);
     }
 
     if clips_children {
@@ -208,6 +211,31 @@ fn paint_node(
     for (child, child_layout) in node.children.iter().zip(&layout.children) {
         paint_node(child, child_layout, style, list, opacity);
     }
+}
+
+fn stacking_sort_key(style: &ComputedStyle) -> (u8, i32) {
+    let positioned = style.get("position").is_some_and(|value| {
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "relative" | "absolute" | "fixed" | "sticky"
+        )
+    });
+    if !positioned {
+        return (1, 0);
+    }
+
+    let z_index = style
+        .get("z-index")
+        .and_then(|value| value.trim().parse::<i32>().ok())
+        .unwrap_or(0);
+    let layer = if z_index < 0 {
+        0
+    } else if z_index == 0 {
+        2
+    } else {
+        3
+    };
+    (layer, z_index)
 }
 
 fn effective_opacity(parent: u8, value: Option<&str>) -> u8 {
@@ -642,6 +670,38 @@ mod tests {
         assert_eq!(surface.pixel(4, 4), Some(Color(0, 0, 0, 0)));
         assert_eq!(surface.pixel(5, 5), Some(Color(255, 0, 0, 255)));
         assert_eq!(surface.pixel(14, 14), Some(Color(0, 0, 0, 0)));
+    }
+
+    #[test]
+    fn z_index_orders_positioned_siblings_by_stack_level() {
+        let mut root = Node::element("div");
+        let mut low = Node::element("div");
+        low.set_attribute(
+            "style",
+            "position: absolute; left: 0; top: 0; width: 10px; height: 10px; background-color: red; z-index: 1;",
+        );
+        let mut high = Node::element("div");
+        high.set_attribute(
+            "style",
+            "position: absolute; left: 0; top: 0; width: 10px; height: 10px; background-color: blue; z-index: 2;",
+        );
+        root.append(high);
+        root.append(low);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+        let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
+        let fills = list
+            .commands()
+            .iter()
+            .filter_map(|command| match command {
+                PaintCommand::FillRect { color, .. } => Some(*color),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(fills, vec![0xff0000ff, 0x0000ffff]);
     }
 
     #[test]
