@@ -187,16 +187,20 @@ Current milestone:
 - [ ] Expand CSS syntax toward standards compliance.
 
 ### Phase 4 — Layout and rendering
-- Implement box generation.
-- Implement block and inline layout.
-- Add text layout.
-- Build a software renderer.
-- Add scrolling and basic viewport handling.
+- [x] Implement initial box generation and box-model accumulation.
+- [x] Implement initial block and inline layout.
+- [x] Add initial text layout metrics and line placement.
+- [x] Build a platform-neutral software renderer and RGBA surface.
+- [x] Rasterize a first built-in bitmap glyph set.
+- [x] Paint backgrounds, padding boxes and explicit solid borders.
+- [ ] Add scrolling, clipping and full viewport handling.
+- [ ] Replace the bootstrap glyph rasterizer with a real font/text shaping stack.
 
 ### Phase 5 — Web platform
 - [x] Add structured URL parsing foundation.
 - [x] Add request filtering foundation for native ad/tracker blocking.
 - [x] Implement initial HTTP transport.
+- [x] Add local file URL parsing and a bounded local-file transport.
 - [ ] Add HTTPS/TLS transport.
 - [x] Add initial redirects, cookie persistence and resource caching foundations.
 - [ ] Add standards-compliant redirects, cookie attributes and HTTP caching.
@@ -205,6 +209,7 @@ Current milestone:
 - [x] Add the first tab/session-state foundation with independent tab histories.
 - [x] Add initial link/navigation activation.
 - [x] Add initial URL-encoded form submission generation.
+- [x] Retain the active loaded Page in tab state for subsequent rendering.
 - [ ] Expand browser security boundaries.
 
 ### Phase 6 — JavaScript
@@ -254,7 +259,7 @@ License to be defined.
 ## Current engineering priorities
 
 1. Turn the layout foundation into a standards-compliant block/inline layout engine.
-2. Build a platform-neutral software display list and renderer.
+2. Replace bootstrap text rendering with font loading, glyph shaping and clipping.
 3. Build asynchronous HTTP/HTTPS transport behind request policy, starting from the current HTTP/1.1 foundation.
 4. Expand HTML parsing toward standards-compliant tree construction.
 5. Expand CSS selectors, cascade, inheritance and computed values.
