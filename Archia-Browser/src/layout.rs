@@ -185,11 +185,7 @@ fn layout_styled_node(
         if left_auto || right_auto {
             let fixed_outer = content_width
                 .saturating_add(padding_border_x)
-                .saturating_add(if left_auto {
-                    0
-                } else {
-                    box_model.margin_left
-                })
+                .saturating_add(if left_auto { 0 } else { box_model.margin_left })
                 .saturating_add(if right_auto {
                     0
                 } else {
