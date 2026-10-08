@@ -755,7 +755,7 @@ fn layout_flex_children(
         }
 
         let child_margin = box_model_from_style(&child.style, content_width);
-        let flex_shorthand = parse_flex_shorthand(child.style.get("flex"));
+        let flex_shorthand = parse_flex_shorthand(child.style.get("flex"), if column { viewport_height } else { content_width });
         let base = if column {
             flex_shorthand
                 .and_then(|(_, _, basis)| basis)
@@ -1195,7 +1195,10 @@ fn align_flex_lines(
     }
 }
 
-fn parse_flex_shorthand(value: Option<&str>) -> Option<(f32, f32, Option<u32>)> {
+fn parse_flex_shorthand(
+    value: Option<&str>,
+    containing_size: u32,
+) -> Option<(f32, f32, Option<u32>)> {
     let value = value?.trim().to_ascii_lowercase();
     if value == "none" {
         return Some((0.0, 0.0, None));
@@ -1216,7 +1219,7 @@ fn parse_flex_shorthand(value: Option<&str>) -> Option<(f32, f32, Option<u32>)> 
         if parts[2] == "auto" {
             None
         } else {
-            parts[2].strip_suffix("px")?.parse::<u32>().ok().map(Some)?
+            parse_length(Some(parts[2]), containing_size)
         }
     } else {
         Some(0)
@@ -2926,5 +2929,21 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.y, 30);
         assert_eq!(layout.children[1].rect.y, 50);
+    }    #[test]
+    fn flex_shorthand_accepts_percentage_basis() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "display: flex; width: 200px;");
+
+        let mut child = Node::element("div");
+        child.set_attribute("style", "flex: 0 0 50%;");
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.width, 100);
     }
+
+
 }
