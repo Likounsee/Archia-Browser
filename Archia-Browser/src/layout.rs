@@ -809,7 +809,7 @@ fn normalized_text(text: &str, white_space: Option<&str>) -> String {
         .map(str::trim)
         .map(str::to_ascii_lowercase)
         .unwrap_or_else(|| "normal".to_owned());
-    if matches!(mode.as_str(), "pre" | "pre-wrap") {
+    if matches!(mode.as_str(), "pre" | "pre-wrap" | "break-spaces") {
         return text.to_owned();
     }
 
@@ -918,6 +918,15 @@ fn intrinsic_inline_width(node: &crate::style_tree::StyledNode, containing_width
 mod whitespace_layout_tests {
     use super::*;
     use crate::html::dom::Node;
+
+    #[test]
+    fn break_spaces_preserves_whitespace_for_intrinsic_measurement() {
+        let styled =
+            crate::style_tree::StyledNode::new(Node::text("a  b"), ComputedStyle::default());
+        let mut styled = styled;
+        styled.style.set("white-space", "break-spaces");
+        assert_eq!(intrinsic_inline_width(&styled, 100), 24);
+    }
 
     #[test]
     fn intrinsic_width_uses_transformed_text_and_longest_pre_line() {

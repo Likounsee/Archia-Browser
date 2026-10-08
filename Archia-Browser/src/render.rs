@@ -296,7 +296,7 @@ fn normalize_render_text(text: &str, white_space: Option<&str>) -> String {
         .map(str::trim)
         .map(str::to_ascii_lowercase)
         .unwrap_or_else(|| "normal".to_owned());
-    if matches!(mode.as_str(), "pre" | "pre-wrap") {
+    if matches!(mode.as_str(), "pre" | "pre-wrap" | "break-spaces") {
         return text.to_owned();
     }
 
