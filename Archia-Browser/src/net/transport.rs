@@ -155,7 +155,7 @@ impl HttpTransport {
         }
         parse_http_response_for_method(
             &bytes,
-            request.method,
+            method,
             self.max_response_size,
             self.max_header_size,
         )
@@ -433,6 +433,7 @@ mod tests {
         assert!(response.body.is_empty());
     }
 
+    #[test]
     fn rejects_malformed_status() {
         assert!(parse_http_response(b"not-http\r\n\r\nbody", 1024, 1024).is_err());
     }
@@ -466,6 +467,7 @@ mod tests {
         assert_eq!(result, Err(TransportError::ConnectionFailed));
     }
 
+    #[test]
     fn rejects_header_injection() {
         let transport = HttpTransport::new();
         let request = Request::new(Url::parse("http://example.org/").unwrap())
