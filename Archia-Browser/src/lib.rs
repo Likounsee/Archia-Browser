@@ -23,6 +23,35 @@ impl From<net::UrlError> for LinkActivationError {
     }
 }
 
+fn local_path_to_file_url(path: &std::path::Path) -> String {
+    let mut url = String::from("file://");
+    let path = path.to_string_lossy().replace('\\', "/");
+    if !path.starts_with('/') {
+        url.push('/');
+    }
+    for byte in path.as_bytes() {
+        if matches!(
+            *byte,
+            b'A'..=b'Z'
+                | b'a'..=b'z'
+                | b'0'..=b'9'
+                | b'-'
+                | b'.'
+                | b'_'
+                | b'~'
+                | b'/'
+                | b':'
+        ) {
+            url.push(*byte as char);
+        } else {
+            url.push('%');
+            url.push(char::from(b"0123456789ABCDEF"[(byte >> 4) as usize]));
+            url.push(char::from(b"0123456789ABCDEF"[(byte & 0x0f) as usize]));
+        }
+    }
+    url
+}
+
 #[derive(Debug, Default)]
 struct LocalFilePolicy;
 
@@ -103,6 +132,19 @@ impl Browser {
             tab.set_page(page.clone());
         }
         Ok(page)
+    }
+
+    pub fn load_local_file_path(
+        &mut self,
+        path: impl AsRef<std::path::Path>,
+        viewport: crate::layout::LayoutViewport,
+    ) -> Result<crate::document::Page, crate::net::DocumentLoadError> {
+        let path = std::fs::canonicalize(path)
+            .map_err(|_| crate::net::DocumentLoadError::Network(
+                net::TransportError::ConnectionFailed,
+            ))?;
+        let url = local_path_to_file_url(&path);
+        self.load_local_file_url(&url, viewport)
     }
 
     pub fn load_local_file_url(
@@ -350,6 +392,27 @@ mod tests {
         let mut surface = crate::surface::SoftwareSurface::new(64, 32);
         assert!(browser.render_current_page(&mut surface));
         assert_eq!(surface.pixel(63, 31), Some(crate::surface::Color::WHITE));
+    }
+
+    #[test]
+    fn browser_loads_local_file_path_into_active_tab() {
+        let path = std::env::temp_dir().join(format!(
+            "archia-browser-path-{}.html",
+            std::process::id()
+        ));
+        std::fs::write(&path, b"<title>Path</title><body>Hello path</body>").unwrap();
+
+        let mut browser = Browser::new();
+        let page = browser
+            .load_local_file_path(&path, crate::layout::LayoutViewport::new(64, 32))
+            .unwrap();
+
+        assert_eq!(page.title(), Some("Path".to_owned()));
+        assert_eq!(page.document.text_content(), "PathHello path");
+        assert_eq!(browser.current_url().map(ToString::to_string), Some(local_path_to_file_url(
+            &std::fs::canonicalize(&path).unwrap(),
+        )));
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]
