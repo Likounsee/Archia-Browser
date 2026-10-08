@@ -732,11 +732,21 @@ fn layout_flex_children(
     let flow_column = flow_parts
         .iter()
         .any(|part| matches!(part.as_str(), "column" | "column-reverse"));
-    let column = node
+    let flow_reverse = flow_parts
+        .iter()
+        .any(|part| matches!(part.as_str(), "row-reverse" | "column-reverse"));
+    let flex_direction = node
         .style
         .get("flex-direction")
-        .is_some_and(|value| value.trim().eq_ignore_ascii_case("column"))
+        .map(|value| value.trim().to_ascii_lowercase());
+    let column = flex_direction
+        .as_deref()
+        .is_some_and(|value| value == "column" || value == "column-reverse")
         || flow_column;
+    let reverse_main = flex_direction
+        .as_deref()
+        .is_some_and(|value| value == "row-reverse" || value == "column-reverse")
+        || flow_reverse;
     let wrap = node.style.get("flex-wrap").is_some_and(|value| {
         matches!(
             value.trim().to_ascii_lowercase().as_str(),
@@ -1011,11 +1021,28 @@ fn layout_flex_children(
         for (position, (index, _)) in ordered_indices.iter().enumerate() {
             let child = &output.children[*index];
             let margin_left = child.box_model.margin_left;
-            let desired_x = content_origin_x
-                .saturating_add(offset as i32)
-                .saturating_add(cursor as i32)
-                .saturating_add(margin_left as i32)
-                .saturating_add(extra.saturating_mul(position as u32) as i32);
+            let desired_x = if reverse_main {
+                content_origin_x
+                    .saturating_add(
+                        content_width
+                            .saturating_sub(offset)
+                            .saturating_sub(cursor)
+                            .saturating_sub(
+                                output.children[*index]
+                                    .rect
+                                    .width
+                                    .saturating_add(output.children[*index].box_model.horizontal_outer()),
+                            ) as i32,
+                    )
+                    .saturating_add(margin_left as i32)
+                    .saturating_sub(extra.saturating_mul(position as u32) as i32)
+            } else {
+                content_origin_x
+                    .saturating_add(offset as i32)
+                    .saturating_add(cursor as i32)
+                    .saturating_add(margin_left as i32)
+                    .saturating_add(extra.saturating_mul(position as u32) as i32)
+            };
             let shift = desired_x.saturating_sub(child.rect.x);
             if shift != 0 {
                 shift_layout_tree(&mut output.children[*index], shift, 0);
@@ -1037,9 +1064,24 @@ fn layout_flex_children(
         let mut cursor = 0_u32;
         for (index, _) in ordered_indices {
             let child = &output.children[index];
-            let desired_y = content_origin_y
-                .saturating_add(cursor as i32)
-                .saturating_add(child.box_model.margin_top as i32);
+            let desired_y = if reverse_main && column {
+                content_origin_y
+                    .saturating_add(
+                        available_main
+                            .saturating_sub(cursor)
+                            .saturating_sub(
+                                output.children[index]
+                                    .rect
+                                    .height
+                                    .saturating_add(output.children[index].box_model.vertical_outer()),
+                            ) as i32,
+                    )
+                    .saturating_add(child.box_model.margin_top as i32)
+            } else {
+                content_origin_y
+                    .saturating_add(cursor as i32)
+                    .saturating_add(child.box_model.margin_top as i32)
+            };
             let shift = desired_y.saturating_sub(child.rect.y);
             if shift != 0 {
                 shift_layout_tree(&mut output.children[index], 0, shift);
@@ -2906,6 +2948,45 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.y, 20);
         assert_eq!(layout.children[1].rect.y, 0);
+    }
+
+    #[test]
+    fn flex_row_reverse_places_items_from_right() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "display: flex; flex-direction: row-reverse; width: 100px;");
+        for _ in 0..2 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 20px; height: 10px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 50));
+
+        assert_eq!(layout.children[0].rect.x, 80);
+        assert_eq!(layout.children[1].rect.x, 60);
+    }
+
+    #[test]
+    fn flex_column_reverse_places_items_from_bottom() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "display: flex; flex-direction: column-reverse; width: 100px; height: 100px;",
+        );
+        for _ in 0..2 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 20px; height: 20px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.y, 80);
+        assert_eq!(layout.children[1].rect.y, 60);
     }
 
     #[test]
