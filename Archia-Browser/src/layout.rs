@@ -1060,7 +1060,7 @@ fn layout_flex_children(
                 )
                 .saturating_add(gap);
         }
-    } else if !column || !wrap {
+    } else if !wrap {
         let mut ordered_indices = flex_indices.clone();
         ordered_indices.sort_by_key(|(_, child_index)| {
             parse_flex_order(node.children[*child_index].style.get("order"))
@@ -1280,7 +1280,7 @@ fn justify_flex_rows(
         };
 
         let mut cursor = offset;
-        for (position, (index, _)) in ordered.into_iter().enumerate() {
+        for (index, _) in ordered {
             let child = &output.children[index];
             let outer_width = child
                 .rect
@@ -1307,9 +1307,6 @@ fn justify_flex_rows(
                 .saturating_add(outer_width)
                 .saturating_add(gap)
                 .saturating_add(extra);
-            if !reverse_main {
-                cursor = cursor.saturating_add(extra.saturating_mul(position as u32));
-            }
         }
     }
 }
