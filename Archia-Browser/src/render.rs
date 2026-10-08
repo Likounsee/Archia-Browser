@@ -249,14 +249,16 @@ fn intersect_clip(current: Option<Rect>, next: Option<Rect>) -> Option<Rect> {
 }
 
 fn overflow_clips_children(style: &ComputedStyle) -> bool {
-    ["overflow", "overflow-x", "overflow-y"].iter().any(|property| {
-        style.get(property).is_some_and(|value| {
-            matches!(
-                value.trim().to_ascii_lowercase().as_str(),
-                "hidden" | "clip" | "auto" | "scroll"
-            )
+    ["overflow", "overflow-x", "overflow-y"]
+        .iter()
+        .any(|property| {
+            style.get(property).is_some_and(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "hidden" | "clip" | "auto" | "scroll"
+                )
+            })
         })
-    })
 }
 
 fn overflow_clip_rect(layout: &LayoutNode) -> Rect {
