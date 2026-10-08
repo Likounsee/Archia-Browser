@@ -12,7 +12,7 @@ impl Display {
     pub fn from_style(style: &ComputedStyle) -> Self {
         match style.get("display").map(str::trim) {
             Some("none") => Self::None,
-            Some("inline") => Self::Inline,
+            Some("inline") | Some("inline-block") => Self::Inline,
             _ => Self::Block,
         }
     }
@@ -420,6 +420,21 @@ mod tests {
         assert_eq!(layout.children[0].rect.y, 0);
         assert_eq!(layout.children[1].rect.y, 32);
         assert_eq!(layout.children[0].rect.width, 800);
+    }
+
+    #[test]
+    fn inline_block_participates_in_inline_flow() {
+        let mut root = Node::element("body");
+        let mut child = Node::element("div");
+        child.set_attribute("style", "display: inline-block; width: 40px;");
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].display, Display::Inline);
+        assert_eq!(layout.children[0].rect.width, 40);
     }
 
     #[test]
