@@ -67,6 +67,20 @@ impl CookieJar {
                         }
                     }
                 }
+                "max-age" => {
+                    if pieces
+                        .next()
+                        .and_then(|value| value.trim().parse::<i64>().ok())
+                        .is_some_and(|seconds| seconds <= 0)
+                    {
+                        self.cookies.retain(|existing| {
+                            !(existing.name == cookie.name
+                                && existing.domain == cookie.domain
+                                && existing.path == cookie.path)
+                        });
+                        return;
+                    }
+                }
                 "secure" => cookie.secure = true,
                 _ => {}
             }
@@ -142,6 +156,24 @@ mod tests {
         let mut jar = CookieJar::new();
         jar.store(&url, "sid=abc; Domain=example.org");
         assert_eq!(jar.header_for(&url).as_deref(), Some("sid=abc"));
+    }
+
+    #[test]
+    #[test]
+    fn max_age_zero_deletes_cookie() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&url, "sid=one");
+        jar.store(&url, "sid=gone; Max-Age=0");
+        assert!(jar.header_for(&url).is_none());
+    }
+
+    #[test]
+    fn secure_cookie_is_not_sent_to_http() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&url, "sid=secure; Secure");
+        assert!(jar.header_for(&Url::parse("http://example.org/").unwrap()).is_none());
     }
 
     #[test]
