@@ -102,15 +102,22 @@ impl Browser {
             .filter(|href| !href.is_empty())
             .ok_or(LinkActivationError::MissingHref)?;
 
-        if link
+        let base = self
+            .current_url()
+            .cloned()
+            .ok_or(LinkActivationError::Url(net::UrlError::MissingAuthority))?;
+        let url = base
+            .resolve(href)
+            .map_err(LinkActivationError::from)?;
+        let opens_new_tab = link
             .attribute("target")
-            .is_some_and(|target| target.trim().eq_ignore_ascii_case("_blank"))
-        {
+            .is_some_and(|target| target.trim().eq_ignore_ascii_case("_blank"));
+
+        if opens_new_tab {
             self.new_tab();
         }
-
-        self.navigate_reference(href, title)
-            .map_err(LinkActivationError::from)
+        self.navigate(url, title);
+        Ok(self.current_url().expect("link navigation created an entry"))
     }
 
     pub fn current_url(&self) -> Option<&net::Url> {
