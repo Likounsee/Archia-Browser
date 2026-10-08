@@ -5,3 +5,4 @@ pub mod memory;
 pub mod memory_pressure;
 pub mod navigation;
 pub mod resource;
+pub mod tabs;
