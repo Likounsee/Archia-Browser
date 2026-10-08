@@ -1060,7 +1060,7 @@ fn layout_flex_children(
                 )
                 .saturating_add(gap);
         }
-    } else {
+    } else if !column || !wrap {
         let mut ordered_indices = flex_indices.clone();
         ordered_indices.sort_by_key(|(_, child_index)| {
             parse_flex_order(node.children[*child_index].style.get("order"))
