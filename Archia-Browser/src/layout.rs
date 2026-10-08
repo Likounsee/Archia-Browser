@@ -200,7 +200,12 @@ fn layout_styled_node(
                 content_width.saturating_sub(inline_x),
                 viewport_height,
             );
-            inline_x = inline_x.saturating_add(child_layout.rect.width);
+            inline_x = inline_x.saturating_add(
+                child_layout
+                    .rect
+                    .width
+                    .saturating_add(child_layout.box_model.horizontal_outer()),
+            );
             inline_line_height = inline_line_height.max(line_height);
             output.children.push(child_layout);
         } else {
@@ -265,12 +270,15 @@ fn display_for_styled_node(node: &crate::style_tree::StyledNode) -> Display {
 fn intrinsic_inline_width(node: &crate::style_tree::StyledNode) -> u32 {
     match &node.node.kind {
         NodeKind::Text(text) => text.chars().count().min(u32::MAX as usize) as u32 * 6,
-        _ => node
-            .children
-            .iter()
-            .map(intrinsic_inline_width)
-            .fold(0, u32::saturating_add)
-            .max(parse_px(node.style.get("width")).unwrap_or(0)),
+        _ => {
+            let children_width = node
+                .children
+                .iter()
+                .map(intrinsic_inline_width)
+                .fold(0, u32::saturating_add);
+            let content_width = children_width.max(parse_px(node.style.get("width")).unwrap_or(0));
+            content_width.saturating_add(box_model_from_style(&node.style).horizontal_outer())
+        }
     }
 }
 
@@ -420,6 +428,25 @@ mod tests {
         assert_eq!(layout.children[0].rect.y, 0);
         assert_eq!(layout.children[1].rect.y, 32);
         assert_eq!(layout.children[0].rect.width, 800);
+    }
+
+    #[test]
+    fn inline_box_outer_width_includes_padding_and_border() {
+        let mut root = Node::element("body");
+        let mut child = Node::element("span");
+        child.set_attribute(
+            "style",
+            "display: inline; padding: 2px; border-width: 1px; border-style: solid;",
+        );
+        child.append(Node::text("Hi"));
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.width, 12);
+        assert_eq!(layout.children[0].box_model.horizontal_outer(), 6);
     }
 
     #[test]
