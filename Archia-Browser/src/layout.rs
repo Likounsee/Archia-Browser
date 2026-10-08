@@ -436,7 +436,6 @@ fn layout_styled_node(
                 output.children.push(child_layout);
             }
         }
-
     }
     if inline_x > 0 {
         cursor_y = cursor_y.saturating_add(inline_line_height as i32);
