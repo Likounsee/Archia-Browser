@@ -243,9 +243,10 @@ fn file_url_path(url_path: &str) -> Result<std::path::PathBuf, TransportError> {
 }
 
 fn percent_decode(input: &str) -> Result<String, TransportError> {
-    let mut output = String::with_capacity(input.len());
+    let mut output = Vec::with_capacity(input.len());
     let bytes = input.as_bytes();
     let mut index = 0;
+
     while index < bytes.len() {
         if bytes[index] == b'%' {
             if index + 2 >= bytes.len() {
@@ -253,15 +254,23 @@ fn percent_decode(input: &str) -> Result<String, TransportError> {
             }
             let high = hex_value(bytes[index + 1]).ok_or(TransportError::InvalidRequest)?;
             let low = hex_value(bytes[index + 2]).ok_or(TransportError::InvalidRequest)?;
-            output.push((high << 4 | low) as char);
+            output.push(high << 4 | low);
             index += 3;
         } else {
-            output.push(bytes[index] as char);
-            index += 1;
+            let character = input[index..]
+                .chars()
+                .next()
+                .ok_or(TransportError::InvalidRequest)?;
+            let mut encoded = [0_u8; 4];
+            let encoded = character.encode_utf8(&mut encoded);
+            output.extend_from_slice(encoded.as_bytes());
+            index += encoded.len();
         }
     }
-    Ok(output)
+
+    String::from_utf8(output).map_err(|_| TransportError::InvalidRequest)
 }
+
 
 fn hex_value(value: u8) -> Option<u8> {
     match value {
@@ -590,6 +599,12 @@ mod tests {
             transport.send(&request),
             Err(TransportError::UnsupportedScheme)
         );
+    }
+
+    #[test]
+    fn percent_decode_preserves_utf8_paths() {
+        assert_eq!(percent_decode("/tmp/%C3%A9.html").unwrap(), "/tmp/é.html");
+        assert_eq!(percent_decode("/tmp/caf%C3%A9.html").unwrap(), "/tmp/café.html");
     }
 
     #[test]
