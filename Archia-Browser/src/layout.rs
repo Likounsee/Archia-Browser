@@ -148,7 +148,7 @@ fn layout_styled_node(
         .saturating_add(box_model.padding_right)
         .saturating_add(box_model.border_left)
         .saturating_add(box_model.border_right);
-    let specified_width = parse_px(node.style.get("width"));
+    let specified_width = parse_length(node.style.get("width"), containing_width);
     let border_box = node
         .style
         .get("box-sizing")
@@ -296,6 +296,20 @@ fn parse_border_width(value: Option<&str>) -> Option<u32> {
     parse_px(value)
 }
 
+fn parse_length(value: Option<&str>, containing_width: u32) -> Option<u32> {
+    let value = value?.trim();
+    if let Some(percent) = value.strip_suffix('%') {
+        let percent = percent.trim().parse::<u32>().ok()?;
+        return Some(
+            containing_width
+                .saturating_mul(percent)
+                .checked_div(100)
+                .unwrap_or(0),
+        );
+    }
+    parse_px(Some(value))
+}
+
 fn parse_px(value: Option<&str>) -> Option<u32> {
     let value = value?.trim();
     value.strip_suffix("px")?.trim().parse().ok()
@@ -404,6 +418,20 @@ mod tests {
         assert_eq!(layout.children[0].display, Display::Block);
         assert_eq!(layout.children[0].rect.height, 24);
         assert_eq!(layout.children[1].display, Display::None);
+    }
+
+    #[test]
+    fn percentage_width_uses_containing_width() {
+        let mut root = Node::element("body");
+        let mut child = Node::element("div");
+        child.set_attribute("style", "width: 50%;");
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 200));
+
+        assert_eq!(layout.children[0].rect.width, 100);
     }
 
     #[test]
