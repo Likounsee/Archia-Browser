@@ -133,12 +133,7 @@ fn paint_styled_node(
         paint_borders(&node.style, layout, list, opacity);
     }
 
-    let clips_children = node.style.get("overflow").is_some_and(|value| {
-        matches!(
-            value.trim().to_ascii_lowercase().as_str(),
-            "hidden" | "clip" | "auto" | "scroll"
-        )
-    });
+    let clips_children = overflow_clips_children(&node.style);
     if clips_children {
         list.push(PaintCommand::PushClip {
             rect: overflow_clip_rect(layout),
@@ -251,6 +246,17 @@ fn intersect_clip(current: Option<Rect>, next: Option<Rect>) -> Option<Rect> {
             }
         }
     }
+}
+
+fn overflow_clips_children(style: &ComputedStyle) -> bool {
+    ["overflow", "overflow-x", "overflow-y"].iter().any(|property| {
+        style.get(property).is_some_and(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "hidden" | "clip" | "auto" | "scroll"
+            )
+        })
+    })
 }
 
 fn overflow_clip_rect(layout: &LayoutNode) -> Rect {
@@ -560,6 +566,28 @@ mod tests {
             list.commands().last(),
             Some(PaintCommand::PopClip)
         ));
+    }
+
+    #[test]
+    fn overflow_axis_properties_add_descendant_clips() {
+        for property in ["overflow-x", "overflow-y"] {
+            let mut root = Node::element("div");
+            root.set_attribute(
+                "style",
+                &format!("width: 20px; height: 10px; {property}: hidden;"),
+            );
+            root.append(Node::text("overflow"));
+
+            let styled =
+                crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+            let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+            let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
+
+            assert!(list
+                .commands()
+                .iter()
+                .any(|command| matches!(command, PaintCommand::PushClip { .. })));
+        }
     }
 
     #[test]
