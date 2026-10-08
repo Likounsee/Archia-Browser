@@ -731,6 +731,7 @@ fn layout_flex_children(
 
     let mut bases = Vec::new();
     let mut total_grow = 0.0_f32;
+    let mut total_shrink_weight = 0.0_f32;
     for child in &node.children {
         let child_display = display_for_styled_node(child);
         if child_display == Display::None
@@ -758,14 +759,16 @@ fn layout_flex_children(
         };
         let base = base.saturating_add(outer_margin);
         let grow = parse_flex_factor(child.style.get("flex-grow"));
+        let shrink = parse_flex_factor(child.style.get("flex-shrink")).max(1.0);
         total_grow += grow;
-        bases.push(Some((base, grow)));
+        total_shrink_weight += shrink * base as f32;
+        bases.push(Some((base, grow, shrink)));
     }
 
     let base_main = bases
         .iter()
         .flatten()
-        .map(|(base, _)| *base)
+        .map(|(base, _, _)| *base)
         .fold(0_u32, u32::saturating_add)
         .saturating_add(
             gap.saturating_mul(bases.iter().flatten().count().saturating_sub(1) as u32),
@@ -776,7 +779,9 @@ fn layout_flex_children(
         content_width
     };
     let free_space = available_main.saturating_sub(base_main);
+    let deficit = base_main.saturating_sub(available_main);
     let grow_enabled = free_space > 0 && total_grow > 0.0;
+    let shrink_enabled = deficit > 0 && total_shrink_weight > 0.0;
 
     for (child_index, child) in node.children.iter().enumerate() {
         let child_display = display_for_styled_node(child);
@@ -823,12 +828,18 @@ fn layout_flex_children(
         let base_entry = bases[child_index].expect("flex base exists for in-flow child");
         let base = base_entry.0;
         let grow = base_entry.1;
+        let shrink = base_entry.2;
         let extra = if grow_enabled {
-            ((free_space as f32 * grow / total_grow).floor() as u32)
+            (free_space as f32 * grow / total_grow).floor() as u32
         } else {
             0
         };
-        let target_outer_main = base.saturating_add(extra);
+        let reduction = if shrink_enabled {
+            (deficit as f32 * shrink * base as f32 / total_shrink_weight).floor() as u32
+        } else {
+            0
+        };
+        let target_outer_main = base.saturating_add(extra).saturating_sub(reduction);
         let target_main = target_outer_main.saturating_sub(if column {
             child_margin.vertical_outer()
         } else {
@@ -2502,5 +2513,24 @@ mod tests {
         assert_eq!(layout.children[0].rect.width, 140);
         assert_eq!(layout.children[1].rect.width, 140);
         assert_eq!(layout.children[1].rect.x, 160);
+    }    #[test]
+    fn flex_shrink_distributes_negative_free_space() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "display: flex; width: 200px;");
+        for _ in 0..2 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 150px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.width, 100);
+        assert_eq!(layout.children[1].rect.width, 100);
+        assert_eq!(layout.children[1].rect.x, 100);
     }
+
+
 }
