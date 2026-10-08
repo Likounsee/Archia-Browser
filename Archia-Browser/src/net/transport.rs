@@ -266,8 +266,10 @@ fn parse_http_response_for_method(
         };
         let name = name.trim();
         let value = value.trim();
-        if matches!(name.to_ascii_lowercase().as_str(), "content-length" | "transfer-encoding")
-            && response.header(name).is_some()
+        if matches!(
+            name.to_ascii_lowercase().as_str(),
+            "content-length" | "transfer-encoding"
+        ) && response.header(name).is_some()
         {
             return Err(TransportError::ConnectionFailed);
         }
