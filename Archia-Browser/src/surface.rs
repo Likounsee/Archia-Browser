@@ -207,13 +207,33 @@ impl SoftwareSurface {
                 let px = px as i64;
                 let py = py as i64;
                 let corner = if px < left + radii[0].0 && py < top + radii[0].1 {
-                    Some((left + radii[0].0 - 1, top + radii[0].1 - 1, radii[0].0, radii[0].1))
+                    Some((
+                        left + radii[0].0 - 1,
+                        top + radii[0].1 - 1,
+                        radii[0].0,
+                        radii[0].1,
+                    ))
                 } else if px > right - radii[1].0 && py < top + radii[1].1 {
-                    Some((right - radii[1].0 + 1, top + radii[1].1 - 1, radii[1].0, radii[1].1))
+                    Some((
+                        right - radii[1].0 + 1,
+                        top + radii[1].1 - 1,
+                        radii[1].0,
+                        radii[1].1,
+                    ))
                 } else if px > right - radii[2].0 && py > bottom - radii[2].1 {
-                    Some((right - radii[2].0 + 1, bottom - radii[2].1 + 1, radii[2].0, radii[2].1))
+                    Some((
+                        right - radii[2].0 + 1,
+                        bottom - radii[2].1 + 1,
+                        radii[2].0,
+                        radii[2].1,
+                    ))
                 } else if px < left + radii[3].0 && py > bottom - radii[3].1 {
-                    Some((left + radii[3].0 - 1, bottom - radii[3].1 + 1, radii[3].0, radii[3].1))
+                    Some((
+                        left + radii[3].0 - 1,
+                        bottom - radii[3].1 + 1,
+                        radii[3].0,
+                        radii[3].1,
+                    ))
                 } else {
                     None
                 };
@@ -420,9 +440,7 @@ mod tests {
     #[test]
     fn rounded_rect_leaves_transparent_corners() {
         let mut surface = SoftwareSurface::new(12, 12);
-        surface.fill_rounded_rect_clipped(
-            0, 0, 12, 12, 4, 4, 4, 4, 4, 4, 4, 4, Color::RED, None,
-        );
+        surface.fill_rounded_rect_clipped(0, 0, 12, 12, 4, 4, 4, 4, 4, 4, 4, 4, Color::RED, None);
         assert_eq!(surface.pixel(0, 0), Some(Color(0, 0, 0, 0)));
         assert_eq!(surface.pixel(5, 1), Some(Color::RED));
         assert_eq!(surface.pixel(6, 6), Some(Color::RED));
