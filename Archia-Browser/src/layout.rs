@@ -193,7 +193,7 @@ fn layout_styled_node(
                 inline_x = 0;
                 inline_line_height = 0;
             }
-            let mut child_layout = layout_styled_node(
+            let child_layout = layout_styled_node(
                 child,
                 output.rect.x.saturating_add(inline_x as i32),
                 output.rect.y.saturating_add(cursor_y),
