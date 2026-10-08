@@ -193,8 +193,8 @@ fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayL
     }
     let Some(color) = style
         .get("border-color")
-        .or_else(|| style.get("color"))
         .and_then(parse_color)
+        .or_else(|| style.get("color").and_then(parse_color))
     else {
         return;
     };
@@ -337,6 +337,30 @@ mod tests {
         let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
 
         assert!(list.commands().is_empty());
+    }
+
+    #[test]
+    fn border_currentcolor_falls_back_to_text_color() {
+        let mut node = Node::element("div");
+        node.set_attribute(
+            "style",
+            "color: blue; border: 2px solid;",
+        );
+        let styled =
+            crate::style_tree::StyleEngine::style(&node, &crate::css::StyleSheet::default());
+        let layout =
+            LayoutEngine::layout_styled(&styled, crate::layout::LayoutViewport::new(100, 100));
+        let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
+
+        assert!(list.commands().iter().any(|command| {
+            matches!(
+                command,
+                PaintCommand::FillRect {
+                    color: 0x0000ffff,
+                    ..
+                }
+            )
+        }));
     }
 
     #[test]
