@@ -115,6 +115,10 @@ impl Url {
             return Self::parse(reference);
         }
 
+        if has_reference_scheme(reference) {
+            return Err(UrlError::UnsupportedReferenceScheme);
+        }
+
         if let Some(authority) = reference.strip_prefix("//") {
             return Self::parse(&format!("{}://{}", self.scheme, authority));
         }
@@ -151,6 +155,20 @@ impl Url {
             fragment: fragment.map(str::to_owned),
         })
     }
+}
+
+fn has_reference_scheme(reference: &str) -> bool {
+    let first_segment = reference
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or_default();
+    let Some((scheme, _)) = first_segment.split_once(':') else {
+        return false;
+    };
+
+    let mut chars = scheme.chars();
+    chars.next().is_some_and(|character| character.is_ascii_alphabetic())
+        && chars.all(|character| character.is_ascii_alphanumeric() || matches!(character, '+' | '-' | '.'))
 }
 
 fn normalize_path(path: &str) -> String {
@@ -191,6 +209,7 @@ pub enum UrlError {
     MissingScheme,
     InvalidScheme,
     MissingAuthority,
+    UnsupportedReferenceScheme,
 }
 
 impl fmt::Display for UrlError {
@@ -199,6 +218,7 @@ impl fmt::Display for UrlError {
             Self::MissingScheme => "URL has no scheme",
             Self::InvalidScheme => "URL scheme is invalid",
             Self::MissingAuthority => "URL has no authority",
+            Self::UnsupportedReferenceScheme => "URL reference uses an unsupported non-hierarchical scheme",
         })
     }
 }
@@ -274,6 +294,29 @@ mod tests {
         assert_eq!(
             base.resolve("../").unwrap().to_string(),
             "https://example.org/a/"
+        );
+    }
+
+    #[test]
+    #[test]
+    fn rejects_non_hierarchical_scheme_references() {
+        let base = Url::parse("https://example.org/docs/index.html").unwrap();
+
+        assert_eq!(
+            base.resolve("javascript:alert(1)").unwrap_err(),
+            UrlError::UnsupportedReferenceScheme
+        );
+        assert_eq!(
+            base.resolve("mailto:test@example.org").unwrap_err(),
+            UrlError::UnsupportedReferenceScheme
+        );
+        assert_eq!(
+            base.resolve("this:that").unwrap_err(),
+            UrlError::UnsupportedReferenceScheme
+        );
+        assert_eq!(
+            base.resolve("./this:that").unwrap().to_string(),
+            "https://example.org/docs/this:that"
         );
     }
 
