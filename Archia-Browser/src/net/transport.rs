@@ -162,11 +162,14 @@ impl Transport for HttpTransport {
 }
 
 fn validate_request(request: &Request) -> Result<(), TransportError> {
-    if request
-        .url
-        .path()
-        .bytes()
-        .any(|byte| byte.is_ascii_control() || byte == b' ')
+    if request.url.authority().bytes().any(|byte| {
+        byte.is_ascii_control() || matches!(byte, b' ' | b'\t')
+    })
+        || request
+            .url
+            .path()
+            .bytes()
+            .any(|byte| byte.is_ascii_control() || byte == b' ')
         || request.url.query().is_some_and(|query| {
             query
                 .bytes()
@@ -244,13 +247,19 @@ fn parse_http_response(
         response = response.with_header(name.trim(), value.trim());
     }
 
-    let body = if response.header("transfer-encoding").is_some_and(|value| {
+    let transfer_encoding = response.header("transfer-encoding");
+    let content_length = response.header("content-length");
+    if transfer_encoding.is_some() && content_length.is_some() {
+        return Err(TransportError::ConnectionFailed);
+    }
+
+    let body = if transfer_encoding.is_some_and(|value| {
         value
             .split(',')
             .any(|item| item.trim().eq_ignore_ascii_case("chunked"))
     }) {
         decode_chunked(body_bytes, max_response_size)?
-    } else if let Some(length) = response.header("content-length") {
+    } else if let Some(length) = content_length {
         let length = length
             .trim()
             .parse::<usize>()
@@ -387,6 +396,27 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn rejects_authority_injection() {
+        let transport = HttpTransport::new();
+        let request = Request::new(
+            Url::parse("http://example.org/").unwrap(),
+        );
+        let mut request = request;
+        request.url = Url::parse("http://example.org/").unwrap();
+        assert!(validate_request(&request).is_ok());
+    }
+
+    #[test]
+    fn rejects_conflicting_transfer_encoding_and_content_length() {
+        let result = parse_http_response(
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Length: 5\r\n\r\n5\r\nHello\r\n0\r\n\r\n",
+            1024,
+            1024,
+        );
+        assert_eq!(result, Err(TransportError::ConnectionFailed));
+    }
+
     fn rejects_header_injection() {
         let transport = HttpTransport::new();
         let request = Request::new(Url::parse("http://example.org/").unwrap())
