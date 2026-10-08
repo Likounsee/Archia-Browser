@@ -6,31 +6,9 @@ const VOID_ELEMENTS: &[&str] = &[
 ];
 
 const BLOCK_CLOSES_P: &[&str] = &[
-    "address",
-    "article",
-    "aside",
-    "blockquote",
-    "div",
-    "dl",
-    "fieldset",
-    "footer",
-    "form",
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "header",
-    "hr",
-    "menu",
-    "nav",
-    "ol",
-    "p",
-    "pre",
-    "section",
-    "table",
-    "ul",
+    "address", "article", "aside", "blockquote", "div", "dl", "fieldset", "footer", "form", "h1",
+    "h2", "h3", "h4", "h5", "h6", "header", "hr", "menu", "nav", "ol", "p", "pre", "section",
+    "table", "ul",
 ];
 
 pub fn parse(tokens: &[HtmlToken]) -> Node {
@@ -152,29 +130,29 @@ fn normalize_document_structure(mut root: Node) -> Node {
     }
 
     let html = &mut root.children[0];
-    let mut head = Node::element("head");
-    let mut body = Node::element("body");
+    let mut head = None;
+    let mut body = None;
     let children = std::mem::take(&mut html.children);
 
     for child in children {
         match child.tag_name() {
-            Some("head") if !head_has_content(&head) => head = child,
-            Some("body") if !body_has_content(&body) => body = child,
-            _ => body.append(child),
+            Some("head") if head.is_none() => head = Some(child),
+            Some("body") if body.is_none() => body = Some(child),
+            _ => {
+                if let Some(existing_body) = body.as_mut() {
+                    existing_body.append(child);
+                } else {
+                    let mut new_body = Node::element("body");
+                    new_body.append(child);
+                    body = Some(new_body);
+                }
+            }
         }
     }
 
-    html.append(head);
-    html.append(body);
+    html.append(head.unwrap_or_else(|| Node::element("head")));
+    html.append(body.unwrap_or_else(|| Node::element("body")));
     root
-}
-
-fn head_has_content(head: &Node) -> bool {
-    !head.children.is_empty()
-}
-
-fn body_has_content(body: &Node) -> bool {
-    !body.children.is_empty()
 }
 
 #[cfg(test)]
@@ -196,7 +174,9 @@ mod tests {
     fn preserves_nested_children_when_closing_parent() {
         let tokens = HtmlTokenizer::tokenize("<div><span>hello</span><b>world</b></div>");
         let root = parse(&tokens);
-        assert_eq!(root.children[0].children[1].children.len(), 2);
+        let body = &root.children[0].children[1];
+        let div = &body.children[0];
+        assert_eq!(div.children.len(), 2);
         assert_eq!(root.text_content(), "helloworld");
     }
 
