@@ -10,6 +10,19 @@ pub mod security;
 pub mod style_tree;
 pub mod surface;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LinkActivationError {
+    NotAnchor,
+    MissingHref,
+    Url(net::UrlError),
+}
+
+impl From<net::UrlError> for LinkActivationError {
+    fn from(error: net::UrlError) -> Self {
+        Self::Url(error)
+    }
+}
+
 pub struct Browser {
     version: &'static str,
     memory: core::memory::MemoryBudget,
@@ -63,6 +76,25 @@ impl Browser {
         let url = base.resolve(reference)?;
         self.navigate(url, title);
         Ok(self.current_url().expect("navigation created an entry"))
+    }
+
+    pub fn activate_link(
+        &mut self,
+        link: &crate::html::Node,
+        title: Option<String>,
+    ) -> Result<&net::Url, LinkActivationError> {
+        if link.tag_name() != Some("a") {
+            return Err(LinkActivationError::NotAnchor);
+        }
+
+        let href = link
+            .link_href()
+            .map(str::trim)
+            .filter(|href| !href.is_empty())
+            .ok_or(LinkActivationError::MissingHref)?;
+
+        self.navigate_reference(href, title)
+            .map_err(LinkActivationError::from)
     }
 
     pub fn current_url(&self) -> Option<&net::Url> {
@@ -179,6 +211,50 @@ mod tests {
         assert_eq!(
             browser.navigate_reference("/home", None),
             Err(net::UrlError::MissingAuthority)
+        );
+    }
+
+    #[test]
+    fn browser_activates_relative_anchor_links() {
+        let mut browser = Browser::new();
+        browser.navigate(
+            net::Url::parse("https://example.org/docs/index.html").unwrap(),
+            None,
+        );
+
+        let mut link = crate::html::Node::element("a");
+        link.set_attribute("href", "../guide.html");
+
+        let current = browser.activate_link(&link, Some("Guide".to_owned())).unwrap();
+        assert_eq!(current.to_string(), "https://example.org/guide.html");
+        assert_eq!(browser.history().len(), 2);
+        assert_eq!(
+            browser.history().current().and_then(|entry| entry.title()),
+            Some("Guide")
+        );
+    }
+
+    #[test]
+    fn browser_rejects_non_anchor_and_unsafe_scheme_links() {
+        let mut browser = Browser::new();
+        browser.navigate(
+            net::Url::parse("https://example.org/").unwrap(),
+            None,
+        );
+
+        let div = crate::html::Node::element("div");
+        assert_eq!(
+            browser.activate_link(&div, None),
+            Err(LinkActivationError::NotAnchor)
+        );
+
+        let mut script = crate::html::Node::element("a");
+        script.set_attribute("href", "javascript:alert(1)");
+        assert_eq!(
+            browser.activate_link(&script, None),
+            Err(LinkActivationError::Url(
+                net::UrlError::UnsupportedReferenceScheme
+            ))
         );
     }
 
