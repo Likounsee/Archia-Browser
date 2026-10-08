@@ -137,9 +137,9 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
         }
         "border" => {
             if let Some((width, style, color)) = expand_border_shorthand(&value) {
-                apply("border-width", width);
-                apply("border-style", style);
-                apply("border-color", color);
+                apply("border-width".to_owned(), width.to_owned());
+                apply("border-style".to_owned(), style.to_owned());
+                apply("border-color".to_owned(), color.to_owned());
                 return;
             }
         }
