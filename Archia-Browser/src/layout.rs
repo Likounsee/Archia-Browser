@@ -767,8 +767,8 @@ fn layout_flex_children(
         .flatten()
         .map(|(base, _)| *base)
         .fold(0_u32, u32::saturating_add)
-        .saturating_add(gap.saturating_mul(
-            bases.iter().flatten().count().saturating_sub(1) as u32,
+        .saturating_add(
+            gap.saturating_mul(bases.iter().flatten().count().saturating_sub(1) as u32),
         ));
     let available_main = if column {
         parse_length(node.style.get("height"), viewport_height).unwrap_or(base_main)
@@ -849,13 +849,17 @@ fn layout_flex_children(
         } else {
             content_origin_y.saturating_add(child_margin.margin_top as i32)
         };
-        let child_containing_width = if column {
-            content_width
-        } else {
-            target_main
-        };
-        let mut child_layout = layout_styled_node(
-            child,
+        let child_containing_width = if column { content_width } else { target_main };
+        let mut flex_child = child.clone();
+        if grow_enabled {
+            if column {
+                flex_child.style.set("height", target_main.to_string());
+            } else {
+                flex_child.style.set("width", target_main.to_string());
+            }
+        }
+        let child_layout = layout_styled_node(
+            &flex_child,
             child_x,
             child_y,
             child_containing_width.saturating_sub(if column {
@@ -870,13 +874,6 @@ fn layout_flex_children(
             abs_width,
             abs_height,
         );
-        if grow_enabled {
-            if column {
-                child_layout.rect.height = target_main;
-            } else {
-                child_layout.rect.width = target_main;
-            }
-        }
 
         let outer_main = if column {
             child_layout
@@ -2465,7 +2462,7 @@ mod tests {
         assert_eq!(layout.children[0].rect.y, 0);
         assert_eq!(layout.children[1].rect.y, 0);
     }
-}    #[test]
+    #[test]
     fn flex_grow_distributes_positive_free_space() {
         let mut root = Node::element("div");
         root.set_attribute(
@@ -2480,10 +2477,7 @@ mod tests {
 
         let styled =
             crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
-        let layout = LayoutEngine::layout_styled(
-            &styled,
-            LayoutViewport::new(300, 100),
-        );
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(300, 100));
 
         assert_eq!(layout.children[0].rect.width, 150);
         assert_eq!(layout.children[1].rect.width, 150);
@@ -2503,14 +2497,9 @@ mod tests {
 
         let styled =
             crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
-        let layout = LayoutEngine::layout_styled(
-            &styled,
-            LayoutViewport::new(300, 100),
-        );
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(300, 100));
 
         assert_eq!(layout.children[0].rect.width, 140);
         assert_eq!(layout.children[1].rect.width, 140);
         assert_eq!(layout.children[1].rect.x, 160);
     }
-
-
