@@ -114,7 +114,18 @@ impl LayoutEngine {
         root: &crate::style_tree::StyledNode,
         viewport: LayoutViewport,
     ) -> LayoutNode {
-        layout_styled_node(root, 0, 0, viewport.width, viewport.width, viewport.height)
+        layout_styled_node(
+            root,
+            0,
+            0,
+            viewport.width,
+            viewport.width,
+            viewport.height,
+            0,
+            0,
+            viewport.width,
+            viewport.height,
+        )
     }
 
     pub fn layout(root: &Node, viewport: LayoutViewport, style: &ComputedStyle) -> LayoutNode {
@@ -138,6 +149,10 @@ fn layout_styled_node(
     containing_width: u32,
     viewport_width: u32,
     viewport_height: u32,
+    abs_origin_x: i32,
+    abs_origin_y: i32,
+    abs_width: u32,
+    abs_height: u32,
 ) -> LayoutNode {
     let display = display_for_styled_node(node);
     let mut output = LayoutNode::new(display);
@@ -239,6 +254,29 @@ fn layout_styled_node(
         .y
         .saturating_add(box_model.border_top as i32)
         .saturating_add(box_model.padding_top as i32);
+    let establishes_positioned_containing_block = node.style.get("position").is_some_and(|value| {
+        !value.trim().eq_ignore_ascii_case("static")
+    });
+    let child_abs_origin_x = if establishes_positioned_containing_block {
+        content_origin_x
+    } else {
+        abs_origin_x
+    };
+    let child_abs_origin_y = if establishes_positioned_containing_block {
+        content_origin_y
+    } else {
+        abs_origin_y
+    };
+    let child_abs_width = if establishes_positioned_containing_block {
+        content_width
+    } else {
+        abs_width
+    };
+    let child_abs_height = if establishes_positioned_containing_block {
+        explicit_height.unwrap_or(viewport_height)
+    } else {
+        abs_height
+    };
     let mut cursor_y = 0_i32;
     let mut inline_x = 0_u32;
     let mut inline_line_height = 0_u32;
@@ -260,6 +298,10 @@ fn layout_styled_node(
                     content_width.saturating_sub(inline_x),
                     viewport_width,
                     viewport_height,
+                    child_abs_origin_x,
+                    child_abs_origin_y,
+                    child_abs_width,
+                    child_abs_height,
                 );
                 child_layout.rect.height = break_height;
                 output.children.push(child_layout);
@@ -286,6 +328,10 @@ fn layout_styled_node(
                 content_width.saturating_sub(inline_x),
                 viewport_width,
                 viewport_height,
+                child_abs_origin_x,
+                child_abs_origin_y,
+                child_abs_width,
+                child_abs_height,
             );
             inline_x = inline_x.saturating_add(
                 child_layout
@@ -307,8 +353,8 @@ fn layout_styled_node(
             let child_x = if child_is_absolute || child_is_fixed {
                 positioned_child_x(
                     child,
-                    content_origin_x,
-                    content_width,
+                    if child_is_fixed { 0 } else { child_abs_origin_x },
+                    if child_is_fixed { viewport_width } else { child_abs_width },
                     viewport_width,
                     child_is_fixed,
                 )
@@ -318,10 +364,10 @@ fn layout_styled_node(
             let child_y = if child_is_absolute || child_is_fixed {
                 positioned_child_y(
                     child,
-                    content_origin_y,
+                    if child_is_fixed { 0 } else { child_abs_origin_y },
                     cursor_y,
-                    content_width,
-                    output.rect.height,
+                    if child_is_fixed { viewport_width } else { child_abs_width },
+                    if child_is_fixed { viewport_height } else { child_abs_height },
                     viewport_height,
                     child_is_fixed,
                 )
@@ -335,6 +381,10 @@ fn layout_styled_node(
                 content_width,
                 viewport_width,
                 viewport_height,
+                child_abs_origin_x,
+                child_abs_origin_y,
+                child_abs_width,
+                child_abs_height,
             );
             if !child_is_absolute && !child_is_fixed {
                 cursor_y = cursor_y.saturating_add(
@@ -1628,6 +1678,31 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.width, 76);
         assert_eq!(layout.children[0].rect.height, 26);
+    }
+
+    #[test]
+    fn absolute_position_uses_nearest_positioned_ancestor() {
+        let mut root = Node::element("body");
+        let mut positioned = Node::element("section");
+        positioned.set_attribute("style", "position: relative; width: 200px; height: 100px;");
+        let mut wrapper = Node::element("div");
+        wrapper.set_attribute("style", "width: 100px; margin-left: 20px;");
+        let mut absolute = Node::element("div");
+        absolute.set_attribute(
+            "style",
+            "position: absolute; left: 30px; top: 15px; width: 20px; height: 10px;",
+        );
+        wrapper.append(absolute);
+        positioned.append(wrapper);
+        root.append(positioned);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(400, 200));
+
+        assert_eq!(layout.children[0].children[0].rect.x, 20);
+        assert_eq!(layout.children[0].children[0].children[0].rect.x, 30);
+        assert_eq!(layout.children[0].children[0].children[0].rect.y, 15);
     }
 
     #[test]
