@@ -480,7 +480,11 @@ mod tests {
         let loader = DocumentLoader::new(
             NetworkPipeline::new(AllowAll),
             SequenceTransport {
-                responses: std::sync::Mutex::new(vec![document, Response::new(302).with_header("location", "/css/final.css"), stylesheet]),
+                responses: std::sync::Mutex::new(vec![
+                    document,
+                    Response::new(302).with_header("location", "/css/final.css"),
+                    stylesheet,
+                ]),
             },
         );
         let request = Request::new(Url::parse("https://example.org/index.html").unwrap());
