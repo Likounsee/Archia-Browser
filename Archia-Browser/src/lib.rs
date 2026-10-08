@@ -120,6 +120,37 @@ impl Browser {
             .expect("link navigation created an entry"))
     }
 
+    pub fn activate_link_from_page(
+        &mut self,
+        page: &crate::document::Page,
+        link: &crate::html::Node,
+        title: Option<String>,
+    ) -> Result<&net::Url, LinkActivationError> {
+        if link.tag_name() != Some("a") {
+            return Err(LinkActivationError::NotAnchor);
+        }
+
+        let href = link
+            .link_href()
+            .map(str::trim)
+            .filter(|href| !href.is_empty())
+            .ok_or(LinkActivationError::MissingHref)?;
+        let url = page
+            .resolve_reference(href)
+            .map_err(LinkActivationError::from)?;
+        let opens_new_tab = link
+            .attribute("target")
+            .is_some_and(|target| target.trim().eq_ignore_ascii_case("_blank"));
+
+        if opens_new_tab {
+            self.new_tab();
+        }
+        self.navigate(url, title);
+        Ok(self
+            .current_url()
+            .expect("link navigation created an entry"))
+    }
+
     pub fn current_url(&self) -> Option<&net::Url> {
         self.tabs
             .active_tab()
@@ -291,6 +322,24 @@ mod tests {
             browser.history().current().and_then(|entry| entry.title()),
             Some("Guide")
         );
+    }
+
+    #[test]
+    fn browser_activates_page_link_using_base_href() {
+        let mut browser = Browser::new();
+        let page = crate::document::Page::from_html_at(
+            Some(net::Url::parse("https://example.org/docs/index.html").unwrap()),
+            "<head><base href="/guide/"></head><body>Hello</body>",
+            "",
+            crate::layout::LayoutViewport::new(320, 200),
+        );
+        let mut link = crate::html::Node::element("a");
+        link.set_attribute("href", "chapter.html");
+
+        let current = browser
+            .activate_link_from_page(&page, &link, None)
+            .unwrap();
+        assert_eq!(current.to_string(), "https://example.org/guide/chapter.html");
     }
 
     #[test]
