@@ -1105,7 +1105,7 @@ mod tests {
     #[test]
     fn text_align_justify_distributes_non_final_line_space() {
         let mut root = Node::element("body");
-        root.set_attribute("style", "text-align: justify; width: 100px;");
+        root.set_attribute("style", "text-align: justify; width: 80px;");
 
         for text in ["aaaaa", "bbbbb", "ccccc"] {
             let mut child = Node::element("span");
@@ -1115,7 +1115,7 @@ mod tests {
 
         let styled =
             crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
-        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(80, 100));
 
         assert_eq!(layout.children[0].rect.x, 0);
         assert_eq!(layout.children[1].rect.x, 50);
