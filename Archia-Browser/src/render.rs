@@ -422,7 +422,7 @@ fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayL
     if border.border_left > 0 {
         list.push(PaintCommand::FillRect {
             rect: super::layout::Rect::new(outer_x, outer_y, border.border_left, outer_height),
-            color,
+            color: apply_opacity(color, opacity),
         });
     }
     if border.border_right > 0 {
@@ -433,7 +433,7 @@ fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayL
                 border.border_right,
                 outer_height,
             ),
-            color,
+            color: apply_opacity(color, opacity),
         });
     }
 }
@@ -500,6 +500,25 @@ fn parse_rgb_function(value: &str) -> Option<u32> {
 mod tests {
     use super::*;
     use crate::layout::{LayoutEngine, LayoutViewport};
+
+    #[test]
+    fn opacity_applies_to_vertical_border_sides() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "width: 20px; height: 10px; border: 2px solid red; opacity: 0.5;",
+        );
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+        let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
+
+        assert!(list.commands().iter().any(|command| matches!(
+            command,
+            PaintCommand::FillRect { color: 0xff000080, rect, .. } if rect.width == 2
+        )));
+    }
 
     #[test]
     fn text_transform_changes_drawn_text() {
