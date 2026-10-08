@@ -737,6 +737,8 @@ fn layout_flex_children(
     let mut main = 0_u32;
     let mut cross = 0_u32;
     let mut item_count = 0_u32;
+    let mut cross_cursor = 0_u32;
+    let mut line_cross = 0_u32;
     let mut flex_indices: Vec<(usize, usize)> = Vec::new();
 
     let mut bases = Vec::new();
@@ -869,8 +871,10 @@ fn layout_flex_children(
                 item_count > 0 && main.saturating_add(gap).saturating_add(target_outer_main) > limit
             });
         if should_wrap {
+            cross_cursor = cross_cursor.saturating_add(line_cross).saturating_add(gap);
             main = 0;
             item_count = 0;
+            line_cross = 0;
         }
         let main_position = main.saturating_add(if item_count > 0 { gap } else { 0 });
         let child_x = if column {
@@ -885,7 +889,9 @@ fn layout_flex_children(
                 .saturating_add(main_position as i32)
                 .saturating_add(child_margin.margin_top as i32)
         } else {
-            content_origin_y.saturating_add(child_margin.margin_top as i32)
+            content_origin_y
+                .saturating_add(cross_cursor as i32)
+                .saturating_add(child_margin.margin_top as i32)
         };
         let child_containing_width = if column { content_width } else { target_main };
         let mut flex_child = child.clone();
@@ -939,12 +945,13 @@ fn layout_flex_children(
             .saturating_add(if item_count > 0 { gap } else { 0 })
             .saturating_add(outer_main);
         cross = cross.max(outer_cross);
+        line_cross = line_cross.max(outer_cross);
         item_count = item_count.saturating_add(1);
         flex_indices.push((output.children.len(), child_index));
         output.children.push(child_layout);
     }
 
-    if !column {
+    if !column && !wrap {
         let free_space = content_width.saturating_sub(main);
         let justify = node
             .style
