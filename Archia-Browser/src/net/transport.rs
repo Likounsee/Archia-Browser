@@ -586,6 +586,35 @@ mod tests {
     }
 
     #[test]
+    fn local_file_transport_loads_html() {
+        let path = std::env::temp_dir().join(format!(
+            "archia-browser-local-{}.html",
+            std::process::id()
+        ));
+        std::fs::write(&path, b"<body>Local</body>").unwrap();
+        let url = if cfg!(windows) {
+            format!("file:///{}", path.display())
+        } else {
+            format!("file://{}", path.display())
+        };
+        let request = Request::new(super::super::Url::parse(&url).unwrap());
+        let response = LocalFileTransport::new().send(&request).unwrap();
+        assert_eq!(response.status, 200);
+        assert_eq!(response.content_type.as_deref(), Some("text/html; charset=utf-8"));
+        assert_eq!(response.body, b"<body>Local</body>");
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn local_file_transport_rejects_non_file_urls() {
+        let request = Request::new(super::super::Url::parse("https://example.org/").unwrap());
+        assert_eq!(
+            LocalFileTransport::new().send(&request).unwrap_err(),
+            TransportError::UnsupportedScheme
+        );
+    }
+
+    #[test]
     fn rejects_authority_injection() {
         let request = Request::new(Url::parse("http://example.org evil/").unwrap());
         assert_eq!(
