@@ -1,5 +1,12 @@
-use super::{pipeline::NetworkPipeline, HttpMethod, Request, Response, Transport, TransportError};
-use crate::{document::Page, layout::LayoutViewport};
+use super::{
+    pipeline::{NetworkPipeline, RequestPolicy, ResourceKind},
+    HttpMethod, Request, Response, Transport, TransportError,
+};
+use crate::{
+    document::Page,
+    html::{parse, HtmlTokenizer, Node},
+    layout::LayoutViewport,
+};
 use std::sync::Mutex;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -112,16 +119,105 @@ where
             }
 
             let html = String::from_utf8_lossy(&response.body);
+            let stylesheet = self.load_linked_stylesheets(&current.url, &html);
             return Ok(Page::from_html_at(
                 Some(current.url.clone()),
                 &html,
-                "",
+                &stylesheet,
                 viewport,
             ));
         }
 
         Err(DocumentLoadError::RedirectLimitExceeded)
     }
+
+    fn load_linked_stylesheets(&self, document_url: &super::Url, html: &str) -> String {
+        let document = parse(&HtmlTokenizer::tokenize(html));
+        let mut links = Vec::new();
+        collect_stylesheet_links(&document, &mut links);
+
+        let mut stylesheet = String::new();
+        for href in links {
+            let Ok(url) = document_url.resolve(&href) else {
+                continue;
+            };
+            if !matches!(url.scheme(), "http" | "https" | "file") {
+                continue;
+            }
+
+            let mut request = Request::new(url.clone());
+            request.policy = RequestPolicy {
+                priority: super::pipeline::RequestPriority::Normal,
+                resource_kind: ResourceKind::Stylesheet,
+                referrer: Some(document_url.clone()),
+                first_party: Some(document_url.clone()),
+            };
+            if let Some(cookie) = self
+                .cookies
+                .lock()
+                .expect("cookie jar poisoned")
+                .header_for(&url)
+            {
+                request.headers.insert("cookie".into(), cookie);
+            }
+
+            let Ok(response) = self.pipeline.execute(&self.transport, &request) else {
+                continue;
+            };
+
+            for set_cookie in response.set_cookie_headers() {
+                self.cookies
+                    .lock()
+                    .expect("cookie jar poisoned")
+                    .store(&url, set_cookie);
+            }
+
+            if !(200..300).contains(&response.status) || !is_css_response(&response) {
+                continue;
+            }
+
+            let text = String::from_utf8_lossy(&response.body);
+            if !stylesheet.is_empty() {
+                stylesheet.push('\n');
+            }
+            stylesheet.push_str(&text);
+        }
+
+        stylesheet
+    }
+}
+
+fn collect_stylesheet_links(node: &Node, links: &mut Vec<String>) {
+    if node.tag_name() == Some("link")
+        && node.attribute("rel").is_some_and(|rel| {
+            rel.split_whitespace()
+                .any(|token| token.eq_ignore_ascii_case("stylesheet"))
+        })
+    {
+        if let Some(href) = node
+            .attribute("href")
+            .map(str::trim)
+            .filter(|href| !href.is_empty())
+        {
+            links.push(href.to_owned());
+        }
+    }
+
+    for child in node.children() {
+        collect_stylesheet_links(child, links);
+    }
+}
+
+fn is_css_response(response: &Response) -> bool {
+    let Some(content_type) = response.content_type.as_deref() else {
+        return true;
+    };
+    let media_type = content_type
+        .split(';')
+        .next()
+        .map(str::trim)
+        .unwrap_or_default();
+    media_type.eq_ignore_ascii_case("text/css")
 }
 
 fn is_redirect(status: u16) -> bool {
