@@ -1897,10 +1897,10 @@ mod tests {
     fn child_nowrap_prevents_inline_wrapping() {
         let mut root = Node::element("body");
         let mut first = Node::element("span");
-        first.set_attribute("style", "white-space: nowrap;");
-        first.append(Node::text("1234567890"));
+        first.append(Node::text("x"));
         let mut second = Node::element("span");
-        second.append(Node::text("x"));
+        second.set_attribute("style", "white-space: nowrap;");
+        second.append(Node::text("1234567890"));
         root.append(first);
         root.append(second);
 
