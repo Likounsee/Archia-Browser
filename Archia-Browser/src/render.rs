@@ -907,6 +907,22 @@ mod tests {
     }
 
     #[test]
+    fn border_radius_slash_syntax_uses_independent_axes() {
+        let mut style = ComputedStyle::default();
+        style.set("border-radius", "8px 4px / 2px 6px");
+
+        assert_eq!(
+            parse_border_radii(&style, 100, 100),
+            CornerRadii {
+                top_left: CornerRadius { x: 8, y: 2 },
+                top_right: CornerRadius { x: 4, y: 6 },
+                bottom_right: CornerRadius { x: 8, y: 2 },
+                bottom_left: CornerRadius { x: 4, y: 6 },
+            }
+        );
+    }
+
+    #[test]
     fn border_radius_longhands_set_individual_corners() {
         let mut style = ComputedStyle::default();
         style.set("border-top-left-radius", "1px");
