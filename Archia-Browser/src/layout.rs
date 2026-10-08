@@ -269,7 +269,10 @@ fn layout_styled_node(
 
             let width = intrinsic_inline_width(child, content_width.saturating_sub(inline_x));
             let line_height = used_inline_line_height(child);
-            if inline_x > 0 && inline_x.saturating_add(width) > content_width {
+            if allows_inline_wrap(node)
+                && inline_x > 0
+                && inline_x.saturating_add(width) > content_width
+            {
                 cursor_y = cursor_y.saturating_add(inline_line_height as i32);
                 inline_x = 0;
                 inline_line_height = 0;
@@ -510,6 +513,15 @@ fn display_for_styled_node(node: &crate::style_tree::StyledNode) -> Display {
         NodeKind::Document => Display::Block,
         NodeKind::Comment(_) => Display::None,
     }
+}
+
+fn allows_inline_wrap(node: &crate::style_tree::StyledNode) -> bool {
+    !node.style.get("white-space").is_some_and(|value| {
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "nowrap" | "pre"
+        )
+    })
 }
 
 fn is_line_break(node: &crate::style_tree::StyledNode) -> bool {
@@ -872,6 +884,25 @@ mod tests {
 
         assert_eq!(layout.children[0].display, Display::Inline);
         assert_eq!(layout.children[0].rect.width, 40);
+    }
+
+    #[test]
+    fn white_space_nowrap_keeps_inline_content_on_one_line() {
+        let mut root = Node::element("body");
+        root.set_attribute("style", "white-space: nowrap;");
+        let mut first = Node::element("span");
+        first.append(Node::text("1234567890"));
+        let mut second = Node::element("span");
+        second.append(Node::text("abcdefghij"));
+        root.append(first);
+        root.append(second);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(60, 100));
+
+        assert_eq!(layout.children[0].rect.y, 0);
+        assert_eq!(layout.children[1].rect.y, 0);
     }
 
     #[test]
