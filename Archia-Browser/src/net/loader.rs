@@ -313,6 +313,116 @@ mod tests {
     }
 
     #[test]
+    fn loads_linked_stylesheet_into_page_styles() {
+        #[derive(Debug)]
+        struct SequenceTransport {
+            responses: std::sync::Mutex<Vec<Response>>,
+        }
+
+        impl Transport for SequenceTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                if request.policy.resource_kind == ResourceKind::Stylesheet {
+                    assert_eq!(request.url.to_string(), "https://example.org/css/site.css");
+                    assert_eq!(
+                        request.policy.referrer.as_ref().map(ToString::to_string),
+                        Some("https://example.org/index.html".to_owned())
+                    );
+                    assert_eq!(
+                        request.policy.first_party.as_ref().map(ToString::to_string),
+                        Some("https://example.org/index.html".to_owned())
+                    );
+                }
+                Ok(self.responses.lock().unwrap().remove(0))
+            }
+        }
+
+        let document = Response::new(200)
+            .with_header("content-type", "text/html")
+            .with_body(
+                br#"<head><link rel="stylesheet" href="/css/site.css"></head><body><div class="hero">Hello</div></body>"#
+                    .to_vec(),
+            );
+        let stylesheet = Response::new(200)
+            .with_header("content-type", "text/css; charset=utf-8")
+            .with_body(b".hero { background-color: #102030; }".to_vec());
+
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            SequenceTransport {
+                responses: std::sync::Mutex::new(vec![document, stylesheet]),
+            },
+        );
+        let request = Request::new(Url::parse("https://example.org/index.html").unwrap());
+        let page = loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .unwrap();
+
+        assert!(page.display_list.commands().iter().any(|command| {
+            matches!(
+                command,
+                crate::render::PaintCommand::FillRect {
+                    color: 0x102030ff,
+                    ..
+                }
+            )
+        }));
+    }
+
+    #[test]
+    fn ignores_failed_linked_stylesheets_without_failing_document_load() {
+        #[derive(Debug)]
+        struct SequenceTransport {
+            responses: std::sync::Mutex<Vec<Response>>,
+        }
+
+        impl Transport for SequenceTransport {
+            fn send(&self, _: &Request) -> Result<Response, TransportError> {
+                Ok(self.responses.lock().unwrap().remove(0))
+            }
+        }
+
+        let document = Response::new(200)
+            .with_header("content-type", "text/html")
+            .with_body(
+                br#"<head><link rel="stylesheet" href="/missing.css"></head><body>Hello</body>"#
+                    .to_vec(),
+            );
+        let missing = Response::new(404).with_header("content-type", "text/css");
+
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            SequenceTransport {
+                responses: std::sync::Mutex::new(vec![document, missing]),
+            },
+        );
+        let request = Request::new(Url::parse("https://example.org/index.html").unwrap());
+
+        let page = loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .unwrap();
+        assert_eq!(page.document.text_content(), "Hello");
+    }
+
+    #[test]
+    fn skips_non_stylesheet_links() {
+        let document = Response::new(200)
+            .with_header("content-type", "text/html")
+            .with_body(
+                br#"<head><link rel="icon" href="/favicon.ico"></head><body>Hello</body>"#
+                    .to_vec(),
+            );
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            MockTransport { response: document },
+        );
+        let request = Request::new(Url::parse("https://example.org/index.html").unwrap());
+        let page = loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .unwrap();
+        assert_eq!(page.document.text_content(), "Hello");
+    }
+
+    #[test]
     fn rejects_unexpected_http_status() {
         let response = Response::new(500);
         let loader =
