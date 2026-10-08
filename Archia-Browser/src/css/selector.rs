@@ -522,18 +522,10 @@ mod tests {
 
         assert!(Selector::parse("span + p")
             .unwrap()
-            .matches_path_with_siblings(
-                &[&parent, &siblings_vec[1]],
-                &siblings[..2],
-                &positions,
-            ));
+            .matches_path_with_siblings(&[&parent, &siblings_vec[1]], &siblings[..2], &positions));
         assert!(Selector::parse("span ~ p")
             .unwrap()
-            .matches_path_with_siblings(
-                &[&parent, &siblings_vec[1]],
-                &siblings[..2],
-                &positions,
-            ));
+            .matches_path_with_siblings(&[&parent, &siblings_vec[1]], &siblings[..2], &positions));
         assert!(Selector::parse("div > span + p.target")
             .unwrap()
             .matches_path_with_siblings(
