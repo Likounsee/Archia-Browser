@@ -169,7 +169,9 @@ mod tests {
         document.append(body);
 
         assert_eq!(
-            document.find_first_element("title").and_then(Node::tag_name),
+            document
+                .find_first_element("title")
+                .and_then(Node::tag_name),
             Some("title")
         );
         assert!(document.find_first_element("missing").is_none());
