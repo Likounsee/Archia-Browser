@@ -271,7 +271,6 @@ fn percent_decode(input: &str) -> Result<String, TransportError> {
     String::from_utf8(output).map_err(|_| TransportError::InvalidRequest)
 }
 
-
 fn hex_value(value: u8) -> Option<u8> {
     match value {
         b'0'..=b'9' => Some(value - b'0'),
