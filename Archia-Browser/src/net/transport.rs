@@ -116,7 +116,11 @@ impl HttpTransport {
             .map_err(|_| TransportError::ConnectionFailed)
     }
 
-    fn read_response(&self, stream: &mut TcpStream) -> Result<Response, TransportError> {
+    fn read_response(
+        &self,
+        stream: &mut TcpStream,
+        method: super::HttpMethod,
+    ) -> Result<Response, TransportError> {
         let mut bytes = Vec::new();
         let mut buffer = [0_u8; 16 * 1024];
         let mut header_end = None;
@@ -162,7 +166,7 @@ impl Transport for HttpTransport {
     fn send(&self, request: &Request) -> Result<Response, TransportError> {
         let mut stream = self.connect(request)?;
         self.write_request(&mut stream, request)?;
-        self.read_response(&mut stream)
+        self.read_response(&mut stream, request.method)
     }
 }
 
@@ -407,7 +411,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn head_response_ignores_declared_body_length() {
         let response = parse_http_response_for_method(
             b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\n",
@@ -444,7 +447,6 @@ mod tests {
         );
     }
 
-    #[test]
     #[test]
     fn rejects_authority_injection() {
         let request = Request::new(Url::parse("http://example.org evil/").unwrap());
