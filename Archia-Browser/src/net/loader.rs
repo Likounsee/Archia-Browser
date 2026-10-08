@@ -111,7 +111,12 @@ where
             }
 
             let html = String::from_utf8_lossy(&response.body);
-            return Ok(Page::from_html(&html, "", viewport));
+            return Ok(Page::from_html_at(
+                Some(current.url.clone()),
+                &html,
+                "",
+                viewport,
+            ));
         }
 
         Err(DocumentLoadError::RedirectLimitExceeded)
