@@ -111,6 +111,7 @@ Current milestone:
 - [x] HTML parser / tree builder (initial)
 - [x] HTML void-element handling, paragraph/list auto-closing, comment preservation and implicit html/head/body structure
 - [x] DOM node model (initial)
+- [x] Recursive DOM element lookup foundation
 - [x] CSS tokenizer (initial)
 - [x] CSS declaration parser (initial)
 - [x] CSS selector parsing and specificity foundation
@@ -127,11 +128,15 @@ Current milestone:
 - [x] Native request filtering / ad-blocking foundation
 - [x] Native HTTP/1.1 transport foundation (HTTP; HTTPS/TLS pending)
 - [x] Bounded response/header memory limits
-- [x] Document redirect handling with a bounded redirect count
+- [x] Document redirect handling with a bounded redirect count and method semantics
 - [x] Cookie persistence across document redirects
 - [x] Cookie domain validation, Secure delivery and Max-Age deletion
 - [x] First-party/third-party filtering context
 - [x] Navigation history state machine and Browser back/forward API
+- [x] Relative navigation-reference resolution through the Browser API
+- [x] Document title extraction
+- [x] Tab manager foundation with per-tab navigation histories
+- [x] Browser tab creation, selection and closing API
 - [ ] JavaScript runtime
 - [ ] Browser UI
 - [x] Same-origin foundation
@@ -155,6 +160,7 @@ Current milestone:
 - [x] Implement the first HTML tokenizer.
 - [x] Implement initial tree construction.
 - [x] Build the first DOM node model.
+- [x] Add recursive DOM element lookup.
 - [ ] Add standards-compliant HTML parsing and error recovery.
 - [ ] Add document traversal and mutation APIs.
 - [x] Add initial HTML attributes and preserve them in the DOM.
@@ -186,6 +192,8 @@ Current milestone:
 - [x] Add initial redirects, cookie persistence and resource caching foundations.
 - [ ] Add standards-compliant redirects, cookie attributes and HTTP caching.
 - [x] Add the first navigation-history API with back/forward state.
+- [x] Add relative navigation-reference resolution.
+- [x] Add the first tab/session-state foundation with independent tab histories.
 - [ ] Add forms and navigation activation.
 - [ ] Expand browser security boundaries.
 
@@ -196,7 +204,8 @@ Current milestone:
 - Build an event loop and task model.
 
 ### Phase 7 — Browser product
-- Tabs and windows.
+- [x] Initial tab state model.
+- [ ] Full tab/window UI.
 - Address bar.
 - History and bookmarks.
 - Downloads.
@@ -240,6 +249,7 @@ License to be defined.
 4. Expand HTML parsing toward standards-compliant tree construction.
 5. Expand CSS selectors, cascade, inheritance and computed values.
 6. Extend first-party/third-party filtering into a complete filter-list and permission model.
-7. Connect navigation history to actual document activation, link handling and session/tab state.
-8. Keep ad/tracker blocking before transport so blocked resources are not downloaded when policy allows.
-9. Keep every subsystem independently testable through GitHub Actions.
+7. Connect document activation and link handling to tab/session state.
+8. Add form submission and navigation activation.
+9. Keep ad/tracker blocking before transport so blocked resources are not downloaded when policy allows.
+10. Keep every subsystem independently testable through GitHub Actions.
