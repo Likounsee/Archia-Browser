@@ -99,10 +99,11 @@ fn paint_styled_node(node: &StyledNode, layout: &LayoutNode, list: &mut DisplayL
         {
             if let Some(color) = parse_color(background) {
                 list.push(PaintCommand::FillRect {
-                    rect: layout.rect,
+                    rect: background_rect(layout),
                     color,
                 });
             }
+            paint_borders(node.style.get("border-color"), layout, list);
         }
     }
 
@@ -132,10 +133,11 @@ fn paint_node(node: &Node, layout: &LayoutNode, style: &ComputedStyle, list: &mu
         {
             if let Some(color) = parse_color(background) {
                 list.push(PaintCommand::FillRect {
-                    rect: layout.rect,
+                    rect: background_rect(layout),
                     color,
                 });
             }
+            paint_borders(node.style.get("border-color"), layout, list);
         }
     }
 
@@ -150,6 +152,76 @@ fn paint_node(node: &Node, layout: &LayoutNode, style: &ComputedStyle, list: &mu
 
     for (child, child_layout) in node.children.iter().zip(&layout.children) {
         paint_node(child, child_layout, style, list);
+    }
+}
+
+fn background_rect(layout: &LayoutNode) -> super::layout::Rect {
+    let x = layout.rect.x.saturating_sub(layout.box_model.padding_left as i32);
+    let y = layout.rect.y.saturating_sub(layout.box_model.padding_top as i32);
+    let width = layout.rect.width
+        .saturating_add(layout.box_model.padding_left)
+        .saturating_add(layout.box_model.padding_right);
+    let height = layout.rect.height
+        .saturating_add(layout.box_model.padding_top)
+        .saturating_add(layout.box_model.padding_bottom);
+    super::layout::Rect::new(x, y, width, height)
+}
+
+fn paint_borders(border_color: Option<&str>, layout: &LayoutNode, list: &mut DisplayList) {
+    let Some(color) = border_color.and_then(parse_color) else {
+        return;
+    };
+    let border = &layout.box_model;
+    let outer_x = layout.rect.x.saturating_sub(
+        border.padding_left.saturating_add(border.border_left) as i32,
+    );
+    let outer_y = layout.rect.y.saturating_sub(
+        border.padding_top.saturating_add(border.border_top) as i32,
+    );
+    let outer_width = layout.rect.width
+        .saturating_add(border.padding_left)
+        .saturating_add(border.padding_right)
+        .saturating_add(border.border_left)
+        .saturating_add(border.border_right);
+    let outer_height = layout.rect.height
+        .saturating_add(border.padding_top)
+        .saturating_add(border.padding_bottom)
+        .saturating_add(border.border_top)
+        .saturating_add(border.border_bottom);
+
+    if border.border_top > 0 {
+        list.push(PaintCommand::FillRect {
+            rect: super::layout::Rect::new(outer_x, outer_y, outer_width, border.border_top),
+            color,
+        });
+    }
+    if border.border_bottom > 0 {
+        list.push(PaintCommand::FillRect {
+            rect: super::layout::Rect::new(
+                outer_x,
+                outer_y.saturating_add(outer_height.saturating_sub(border.border_bottom) as i32),
+                outer_width,
+                border.border_bottom,
+            ),
+            color,
+        });
+    }
+    if border.border_left > 0 {
+        list.push(PaintCommand::FillRect {
+            rect: super::layout::Rect::new(outer_x, outer_y, border.border_left, outer_height),
+            color,
+        });
+    }
+    if border.border_right > 0 {
+        list.push(PaintCommand::FillRect {
+            rect: super::layout::Rect::new(
+                outer_x.saturating_add(outer_width.saturating_sub(border.border_right) as i32),
+                outer_y,
+                border.border_right,
+                outer_height,
+            ),
+            color,
+        });
     }
 }
 
@@ -192,6 +264,25 @@ mod tests {
             list.commands()[1],
             PaintCommand::DrawText { ref text, .. } if text == "Hello"
         ));
+    }
+
+    #[test]
+    fn paints_background_over_content_and_padding_box() {
+        let root = Node::element("div");
+        let mut style = ComputedStyle::default();
+        style.set("background-color", "red");
+        style.set("padding", "4px");
+
+        let layout = LayoutEngine::layout(&root, LayoutViewport::new(100, 100), &style);
+        let list = SoftwareRenderer::build_display_list(&root, &layout, &style);
+
+        assert_eq!(
+            list.commands()[0],
+            PaintCommand::FillRect {
+                rect: super::layout::Rect::new(0, 0, 8, 8),
+                color: 0xff0000ff,
+            }
+        );
     }
 
     #[test]
