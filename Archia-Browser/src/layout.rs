@@ -774,7 +774,7 @@ fn intrinsic_inline_content_width(node: &crate::style_tree::StyledNode) -> u32 {
                 .count()
                 .min(u32::MAX as usize) as u32
                 * 6
-        },
+        }
         _ => node
             .children
             .iter()
@@ -792,7 +792,7 @@ fn intrinsic_inline_width(node: &crate::style_tree::StyledNode, containing_width
                 .count()
                 .min(u32::MAX as usize) as u32
                 * 6
-        },
+        }
         _ => {
             let children_width = node
                 .children
