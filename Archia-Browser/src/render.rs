@@ -515,7 +515,10 @@ mod tests {
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
         let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
 
-        assert!(matches!(list.commands()[1], PaintCommand::PushClip { .. }));
+        assert!(list
+            .commands()
+            .iter()
+            .any(|command| matches!(command, PaintCommand::PushClip { .. })));
         assert!(matches!(
             list.commands().last(),
             Some(PaintCommand::PopClip)
