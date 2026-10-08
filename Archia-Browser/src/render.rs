@@ -126,10 +126,12 @@ fn paint_styled_node(node: &StyledNode, layout: &LayoutNode, list: &mut DisplayL
         paint_borders(&node.style, layout, list);
     }
 
-    let clips_children = node
-        .style
-        .get("overflow")
-        .is_some_and(|value| value.trim().eq_ignore_ascii_case("hidden"));
+    let clips_children = node.style.get("overflow").is_some_and(|value| {
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "hidden" | "clip" | "auto" | "scroll"
+        )
+    });
     if clips_children {
         list.push(PaintCommand::PushClip {
             rect: overflow_clip_rect(layout),
@@ -523,6 +525,32 @@ mod tests {
             list.commands().last(),
             Some(PaintCommand::PopClip)
         ));
+    }
+
+    #[test]
+    fn overflow_clip_auto_and_scroll_add_descendant_clips() {
+        for overflow in ["clip", "auto", "scroll"] {
+            let mut root = Node::element("div");
+            root.set_attribute(
+                "style",
+                &format!("width: 20px; height: 10px; overflow: {overflow};"),
+            );
+            root.append(Node::text("overflow"));
+
+            let styled =
+                crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+            let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+            let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
+
+            assert!(list
+                .commands()
+                .iter()
+                .any(|command| matches!(command, PaintCommand::PushClip { .. })));
+            assert!(matches!(
+                list.commands().last(),
+                Some(PaintCommand::PopClip)
+            ));
+        }
     }
 
     #[test]
