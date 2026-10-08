@@ -188,11 +188,12 @@ Current milestone:
 
 ### Phase 4 — Layout and rendering
 - [x] Implement initial box generation and box-model accumulation.
-- [x] Implement initial block and inline layout.
-- [x] Add initial text layout metrics and line placement.
+- [x] Implement initial block and inline layout with HTML-aware default display behavior.
+- [x] Add initial text layout metrics, intrinsic inline sizing and line placement.
 - [x] Build a platform-neutral software renderer and RGBA surface.
 - [x] Rasterize a first built-in bitmap glyph set.
 - [x] Paint backgrounds, padding boxes and explicit solid borders.
+- [x] Apply initial min-width/max-width constraints and visibility:hidden painting suppression.
 - [ ] Add scrolling, clipping and full viewport handling.
 - [ ] Replace the bootstrap glyph rasterizer with a real font/text shaping stack.
 
@@ -201,6 +202,7 @@ Current milestone:
 - [x] Add request filtering foundation for native ad/tracker blocking.
 - [x] Implement initial HTTP transport.
 - [x] Add local file URL parsing and a bounded local-file transport.
+- [x] Apply inline <style> blocks during Page construction.
 - [ ] Add HTTPS/TLS transport.
 - [x] Add initial redirects, cookie persistence and resource caching foundations.
 - [ ] Add standards-compliant redirects, cookie attributes and HTTP caching.
