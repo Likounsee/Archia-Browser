@@ -179,6 +179,27 @@ fn layout_styled_node(
         content_width = content_width.min(max_width);
     }
 
+    if display == Display::Block && specified_width.is_some() {
+        let left_auto = is_auto_dimension(node.style.get("margin-left"));
+        let right_auto = is_auto_dimension(node.style.get("margin-right"));
+        if left_auto || right_auto {
+            let fixed_outer = content_width
+                .saturating_add(padding_border_x)
+                .saturating_add(if left_auto { 0 } else { box_model.margin_left })
+                .saturating_add(if right_auto { 0 } else { box_model.margin_right });
+            let free_space = containing_width.saturating_sub(fixed_outer);
+            match (left_auto, right_auto) {
+                (true, true) => {
+                    box_model.margin_left = free_space / 2;
+                    box_model.margin_right = free_space.saturating_sub(box_model.margin_left);
+                }
+                (true, false) => box_model.margin_left = free_space,
+                (false, true) => box_model.margin_right = free_space,
+                (false, false) => {}
+            }
+        }
+    }
+
     output.box_model = box_model;
     output.rect.x = x.saturating_add(box_model.margin_left as i32);
     output.rect.y = y.saturating_add(box_model.margin_top as i32);
@@ -352,6 +373,10 @@ fn box_model_from_style(style: &ComputedStyle) -> BoxModel {
         border_left: parse_border_width(style.get("border-left-width"))
             .unwrap_or_else(|| parse_border_width(style.get("border-width")).unwrap_or(0)),
     }
+}
+
+fn is_auto_dimension(value: Option<&str>) -> bool {
+    value.is_some_and(|value| value.trim().eq_ignore_ascii_case("auto"))
 }
 
 fn parse_border_width(value: Option<&str>) -> Option<u32> {
@@ -608,6 +633,23 @@ mod tests {
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 200));
 
         assert_eq!(layout.children[0].rect.width, 100);
+    }
+
+    #[test]
+    fn auto_horizontal_margins_center_fixed_width_blocks() {
+        let mut root = Node::element("body");
+        let mut child = Node::element("div");
+        child.set_attribute("style", "width: 100px; margin-left: auto; margin-right: auto;");
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(300, 100));
+
+        assert_eq!(layout.children[0].rect.x, 100);
+        assert_eq!(layout.children[0].rect.width, 100);
+        assert_eq!(layout.children[0].box_model.margin_left, 100);
+        assert_eq!(layout.children[0].box_model.margin_right, 100);
     }
 
     #[test]
