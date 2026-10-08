@@ -70,7 +70,9 @@ impl Page {
     pub fn from_html_at(url: Option<Url>, html: &str, css: &str, viewport: LayoutViewport) -> Self {
         let tokens = HtmlTokenizer::tokenize(html);
         let document = parse(&tokens);
-        let stylesheet = StyleSheet::parse(css);
+        let mut stylesheet_input = css.to_owned();
+        collect_inline_styles(&document, &mut stylesheet_input);
+        let stylesheet = StyleSheet::parse(&stylesheet_input);
         let styled = StyleEngine::style(&document, &stylesheet);
         let layout = LayoutEngine::layout_styled(&styled, viewport);
         let display_list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
@@ -167,6 +169,17 @@ impl Page {
     pub fn render_into(&self, surface: &mut crate::surface::SoftwareSurface) {
         surface.clear(crate::surface::Color::WHITE);
         SoftwareRenderer::rasterize(&self.display_list, surface);
+    }
+}
+
+fn collect_inline_styles(node: &Node, css: &mut String) {
+    if node.tag_name() == Some("style") {
+        css.push('\n');
+        css.push_str(&node.text_content());
+        css.push('\n');
+    }
+    for child in node.children() {
+        collect_inline_styles(child, css);
     }
 }
 
@@ -509,6 +522,17 @@ b</textarea></form>"#,
         );
 
         assert_eq!(page.title(), Some("Archia Browser".to_owned()));
+    }
+
+    #[test]
+    fn inline_style_elements_reach_the_css_engine() {
+        let page = Page::from_html(
+            r#"<style>.card { color: red; }</style><body><span class="card">Hello</span></body>"#,
+            "",
+            LayoutViewport::new(100, 50),
+        );
+
+        assert_eq!(page.styled.children[0].style.get("color"), Some("red"));
     }
 
     #[test]
