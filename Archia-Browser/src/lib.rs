@@ -220,20 +220,23 @@ impl Browser {
 
     pub fn back(&mut self) -> Option<&net::Url> {
         let tab = self.tabs.active_tab_mut()?;
-        let url = tab.history_mut().back().map(|entry| entry.url());
-        if url.is_some() {
+        let moved = tab.history_mut().back().is_some();
+        if moved {
             tab.clear_page();
         }
-        url
+        moved.then(|| tab.history().current()).flatten().map(|entry| entry.url())
     }
 
     pub fn forward(&mut self) -> Option<&net::Url> {
         let tab = self.tabs.active_tab_mut()?;
-        let url = tab.history_mut().forward().map(|entry| entry.url());
-        if url.is_some() {
+        let moved = tab.history_mut().forward().is_some();
+        if moved {
             tab.clear_page();
         }
-        url
+        moved
+            .then(|| tab.history().current())
+            .flatten()
+            .map(|entry| entry.url())
     }
 
     pub fn set_current_title(&mut self, title: Option<String>) -> bool {
