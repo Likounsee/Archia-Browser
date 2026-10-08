@@ -158,10 +158,14 @@ fn paint_node(node: &Node, layout: &LayoutNode, style: &ComputedStyle, list: &mu
 fn background_rect(layout: &LayoutNode) -> super::layout::Rect {
     let x = layout.rect.x.saturating_sub(layout.box_model.padding_left as i32);
     let y = layout.rect.y.saturating_sub(layout.box_model.padding_top as i32);
-    let width = layout.rect.width
+    let width = layout
+        .rect
+        .width
         .saturating_add(layout.box_model.padding_left)
         .saturating_add(layout.box_model.padding_right);
-    let height = layout.rect.height
+    let height = layout
+        .rect
+        .height
         .saturating_add(layout.box_model.padding_top)
         .saturating_add(layout.box_model.padding_bottom);
     super::layout::Rect::new(x, y, width, height)
@@ -172,18 +176,24 @@ fn paint_borders(border_color: Option<&str>, layout: &LayoutNode, list: &mut Dis
         return;
     };
     let border = &layout.box_model;
-    let outer_x = layout.rect.x.saturating_sub(
-        border.padding_left.saturating_add(border.border_left) as i32,
-    );
-    let outer_y = layout.rect.y.saturating_sub(
-        border.padding_top.saturating_add(border.border_top) as i32,
-    );
-    let outer_width = layout.rect.width
+    let outer_x = layout
+        .rect
+        .x
+        .saturating_sub(border.padding_left.saturating_add(border.border_left) as i32);
+    let outer_y = layout
+        .rect
+        .y
+        .saturating_sub(border.padding_top.saturating_add(border.border_top) as i32);
+    let outer_width = layout
+        .rect
+        .width
         .saturating_add(border.padding_left)
         .saturating_add(border.padding_right)
         .saturating_add(border.border_left)
         .saturating_add(border.border_right);
-    let outer_height = layout.rect.height
+    let outer_height = layout
+        .rect
+        .height
         .saturating_add(border.padding_top)
         .saturating_add(border.padding_bottom)
         .saturating_add(border.border_top)
