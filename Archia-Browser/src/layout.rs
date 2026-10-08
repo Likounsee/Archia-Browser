@@ -1217,6 +1217,15 @@ fn transform_text_for_layout(text: &str, value: Option<&str>) -> String {
 }
 
 fn intrinsic_inline_content_width(node: &crate::style_tree::StyledNode) -> u32 {
+    if node.node.tag_name() == Some("img") {
+        return node
+            .node
+            .attribute("width")
+            .and_then(|value| value.trim().parse::<u32>().ok())
+            .or_else(|| parse_px(node.style.get("width")))
+            .unwrap_or(0);
+    }
+
     match &node.node.kind {
         NodeKind::Text(text) => {
             transform_text_for_layout(
@@ -1320,6 +1329,16 @@ fn parse_line_height(value: Option<&str>, font_size: u32) -> Option<u32> {
 }
 
 fn intrinsic_inline_height(node: &crate::style_tree::StyledNode) -> u32 {
+    if node.node.tag_name() == Some("img") {
+        return node
+            .node
+            .attribute("height")
+            .and_then(|value| value.trim().parse::<u32>().ok())
+            .or_else(|| parse_px(node.style.get("height")))
+            .unwrap_or(16)
+            .max(1);
+    }
+
     match &node.node.kind {
         NodeKind::Text(text) => text.split('\n').count().max(1) as u32 * 16,
         _ => node
@@ -2609,5 +2628,21 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.x, 50);
         assert_eq!(layout.children[1].rect.x, 0);
+    }    #[test]
+    fn image_html_dimensions_contribute_to_inline_layout() {
+        let mut root = Node::element("body");
+        let mut image = Node::element("img");
+        image.set_attribute("width", "64");
+        image.set_attribute("height", "32");
+        root.append(image);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.width, 64);
+        assert_eq!(layout.children[0].rect.height, 32);
     }
+
+
 }
