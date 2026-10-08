@@ -339,7 +339,7 @@ fn layout_styled_node(
                     inline_x = 0;
                     inline_line_height = 0;
                 }
-                let child_layout = layout_styled_node(
+                let mut child_layout = layout_styled_node(
                     child,
                     content_origin_x.saturating_add(inline_x as i32),
                     content_origin_y.saturating_add(cursor_y),
@@ -351,6 +351,9 @@ fn layout_styled_node(
                     child_abs_width,
                     child_abs_height,
                 );
+                if child.node.tag_name() == Some("img") {
+                    child_layout.rect.height = child_layout.rect.height.max(intrinsic_inline_height(child));
+                }
                 inline_x = inline_x.saturating_add(
                     child_layout
                         .rect
