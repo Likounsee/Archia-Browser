@@ -74,7 +74,11 @@ impl SoftwareRenderer {
                     );
                     surface.fill_rect_clipped(rect.x, rect.y, rect.width, rect.height, color, clip);
                 }
-                PaintCommand::FillRoundedRect { rect, radius, color } => {
+                PaintCommand::FillRoundedRect {
+                    rect,
+                    radius,
+                    color,
+                } => {
                     let color = Color(
                         ((color >> 24) & 0xff) as u8,
                         ((color >> 16) & 0xff) as u8,
@@ -82,7 +86,13 @@ impl SoftwareRenderer {
                         (color & 0xff) as u8,
                     );
                     surface.fill_rounded_rect_clipped(
-                        rect.x, rect.y, rect.width, rect.height, *radius, color, clip,
+                        rect.x,
+                        rect.y,
+                        rect.width,
+                        rect.height,
+                        *radius,
+                        color,
+                        clip,
                     );
                 }
                 PaintCommand::DrawText { x, y, text, color } => {
@@ -338,15 +348,29 @@ fn stacking_sort_key(style: &ComputedStyle) -> (u8, i32) {
 }
 
 fn parse_border_radius(style: &ComputedStyle, width: u32, height: u32) -> u32 {
-    let value = style.get("border-radius").map(str::trim)?;
-    let token = value.split('/').next()?.split_whitespace().next()?;
-    let radius = if let Some(percent) = token.strip_suffix('%') {
-        let percent = percent.trim().parse::<u32>().ok()?;
-        width.min(height).saturating_mul(percent).checked_div(100)?
-    } else {
-        token.strip_suffix("px")?.trim().parse::<u32>().ok()?
+    let Some(value) = style.get("border-radius").map(str::trim) else {
+        return 0;
     };
-    Some(radius.min(width / 2).min(height / 2))
+    let Some(token) = value.split('/').next().and_then(|part| part.split_whitespace().next())
+    else {
+        return 0;
+    };
+    let radius = if let Some(percent) = token.strip_suffix('%') {
+        let Ok(percent) = percent.trim().parse::<u32>() else {
+            return 0;
+        };
+        width
+            .min(height)
+            .saturating_mul(percent)
+            .checked_div(100)
+            .unwrap_or(0)
+    } else {
+        let Some(px) = token.strip_suffix("px") else {
+            return 0;
+        };
+        px.trim().parse::<u32>().unwrap_or(0)
+    };
+    radius.min(width / 2).min(height / 2)
 }
 
 fn effective_opacity(parent: u8, value: Option<&str>) -> u8 {
@@ -646,15 +670,18 @@ mod tests {
     #[test]
     fn border_radius_paints_a_rounded_background_command() {
         let mut root = Node::element("div");
-        root.set_attribute("style", "width: 20px; height: 20px; background: red; border-radius: 6px;");
+        root.set_attribute(
+            "style",
+            "width: 20px; height: 20px; background: red; border-radius: 6px;",
+        );
         let styled =
             crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(40, 40));
         let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
-        assert!(list.commands().iter().any(|command| matches!(
-            command,
-            PaintCommand::FillRoundedRect { radius: 6, .. }
-        )));
+        assert!(list
+            .commands()
+            .iter()
+            .any(|command| matches!(command, PaintCommand::FillRoundedRect { radius: 6, .. })));
     }
 
     #[test]
