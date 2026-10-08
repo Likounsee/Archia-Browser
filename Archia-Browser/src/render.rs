@@ -753,10 +753,18 @@ mod tests {
             crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(40, 40));
         let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
-        assert!(list
-            .commands()
-            .iter()
-            .any(|command| matches!(command, PaintCommand::FillRoundedRect { radii: CornerRadii { top_left: 6, top_right: 6, bottom_right: 6, bottom_left: 6 }, .. })));
+        assert!(list.commands().iter().any(|command| matches!(
+            command,
+            PaintCommand::FillRoundedRect {
+                radii: CornerRadii {
+                    top_left: 6,
+                    top_right: 6,
+                    bottom_right: 6,
+                    bottom_left: 6,
+                },
+                ..
+            }
+        )));
     }
 
     #[test]
