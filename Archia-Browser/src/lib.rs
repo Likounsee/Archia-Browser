@@ -78,6 +78,15 @@ impl Browser {
         Ok(self.current_url().expect("navigation created an entry"))
     }
 
+    pub fn commit_page(&mut self, page: &crate::document::Page) -> bool {
+        let Some(url) = page.url().cloned() else {
+            return false;
+        };
+
+        self.navigate(url, page.title());
+        true
+    }
+
     pub fn activate_link(
         &mut self,
         link: &crate::html::Node,
@@ -212,6 +221,40 @@ mod tests {
             browser.navigate_reference("/home", None),
             Err(net::UrlError::MissingAuthority)
         );
+    }
+
+    #[test]
+    fn browser_commits_loaded_page_metadata() {
+        let mut browser = Browser::new();
+        let page = crate::document::Page::from_html_at(
+            Some(net::Url::parse("https://example.org/docs/index.html").unwrap()),
+            "<title>  Example  </title><body>Hello</body>",
+            "",
+            crate::layout::LayoutViewport::new(320, 200),
+        );
+
+        assert!(browser.commit_page(&page));
+        assert_eq!(
+            browser.current_url().map(ToString::to_string),
+            Some("https://example.org/docs/index.html".to_owned())
+        );
+        assert_eq!(
+            browser.history().current().and_then(|entry| entry.title()),
+            Some("Example")
+        );
+    }
+
+    #[test]
+    fn browser_does_not_commit_page_without_url() {
+        let mut browser = Browser::new();
+        let page = crate::document::Page::from_html(
+            "<title>Example</title><body>Hello</body>",
+            "",
+            crate::layout::LayoutViewport::new(320, 200),
+        );
+
+        assert!(!browser.commit_page(&page));
+        assert!(browser.current_url().is_none());
     }
 
     #[test]
