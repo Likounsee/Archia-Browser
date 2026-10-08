@@ -293,19 +293,46 @@ fn layout_styled_node(
                 inline_x = 0;
                 inline_line_height = 0;
             }
+
+            let child_is_absolute = is_absolute_positioned(child);
+            let child_is_fixed = is_fixed_positioned(child);
+            let child_x = if child_is_absolute || child_is_fixed {
+                positioned_child_x(
+                    child,
+                    content_origin_x,
+                    content_width,
+                    viewport_height,
+                    child_is_fixed,
+                )
+            } else {
+                content_origin_x
+            };
+            let child_y = if child_is_absolute || child_is_fixed {
+                positioned_child_y(
+                    child,
+                    content_origin_y,
+                    cursor_y,
+                    viewport_height,
+                    child_is_fixed,
+                )
+            } else {
+                content_origin_y.saturating_add(cursor_y)
+            };
             let child_layout = layout_styled_node(
                 child,
-                content_origin_x,
-                content_origin_y.saturating_add(cursor_y),
+                child_x,
+                child_y,
                 content_width,
                 viewport_height,
             );
-            cursor_y = cursor_y.saturating_add(
-                child_layout
-                    .rect
-                    .height
-                    .saturating_add(child_layout.box_model.vertical_outer()) as i32,
-            );
+            if !child_is_absolute && !child_is_fixed {
+                cursor_y = cursor_y.saturating_add(
+                    child_layout
+                        .rect
+                        .height
+                        .saturating_add(child_layout.box_model.vertical_outer()) as i32,
+                );
+            }
             output.children.push(child_layout);
         }
     }
@@ -372,6 +399,69 @@ fn layout_styled_node(
     }
 
     output
+}
+
+fn is_absolute_positioned(node: &crate::style_tree::StyledNode) -> bool {
+    node.style
+        .get("position")
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("absolute"))
+}
+
+fn is_fixed_positioned(node: &crate::style_tree::StyledNode) -> bool {
+    node.style
+        .get("position")
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("fixed"))
+}
+
+fn positioned_child_x(
+    node: &crate::style_tree::StyledNode,
+    origin_x: i32,
+    containing_width: u32,
+    _viewport_height: u32,
+    fixed: bool,
+) -> i32 {
+    let origin_x = if fixed { 0 } else { origin_x };
+    let margin_left = parse_length(node.style.get("margin-left"), containing_width).unwrap_or(0);
+    let margin_right = parse_length(node.style.get("margin-right"), containing_width).unwrap_or(0);
+    if let Some(left) = parse_signed_offset(node.style.get("left"), containing_width) {
+        return origin_x.saturating_add(left);
+    }
+    if let Some(right) = parse_signed_offset(node.style.get("right"), containing_width) {
+        let width = parse_length(node.style.get("width"), containing_width).unwrap_or(0);
+        return origin_x
+            .saturating_add(
+                containing_width
+                    .saturating_sub(width)
+                    .saturating_sub(margin_left)
+                    .saturating_sub(margin_right) as i32,
+            )
+            .saturating_sub(right);
+    }
+    origin_x
+}
+
+fn positioned_child_y(
+    node: &crate::style_tree::StyledNode,
+    origin_y: i32,
+    flow_y: i32,
+    viewport_height: u32,
+    fixed: bool,
+) -> i32 {
+    let origin_y = if fixed { 0 } else { origin_y };
+    if let Some(top) = parse_signed_offset(node.style.get("top"), viewport_height) {
+        return origin_y.saturating_add(top);
+    }
+    if let Some(bottom) = parse_signed_offset(node.style.get("bottom"), viewport_height) {
+        let height = parse_length(node.style.get("height"), viewport_height).unwrap_or(0);
+        return origin_y
+            .saturating_add(
+                viewport_height
+                    .saturating_sub(height)
+                    .saturating_sub(node.box_model_vertical_outer(viewport_height)) as i32,
+            )
+            .saturating_sub(bottom);
+    }
+    origin_y.saturating_add(flow_y)
 }
 
 fn display_for_styled_node(node: &crate::style_tree::StyledNode) -> Display {
@@ -923,6 +1013,53 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.width, 76);
         assert_eq!(layout.children[0].rect.height, 26);
+    }
+
+    #[test]
+    fn absolute_positioned_children_leave_normal_flow_untouched() {
+        let mut root = Node::element("body");
+        let mut parent = Node::element("div");
+        parent.set_attribute("style", "position: relative; width: 200px; height: 100px;");
+        let mut absolute = Node::element("div");
+        absolute.set_attribute(
+            "style",
+            "position: absolute; left: 20px; top: 10px; width: 30px; height: 20px;",
+        );
+        let mut normal = Node::element("div");
+        normal.set_attribute("style", "height: 15px;");
+        parent.append(absolute);
+        parent.append(normal);
+        root.append(parent);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(300, 200));
+
+        assert_eq!(layout.children[0].children[0].rect.x, 20);
+        assert_eq!(layout.children[0].children[0].rect.y, 10);
+        assert_eq!(layout.children[0].children[1].rect.y, 0);
+    }
+
+    #[test]
+    fn fixed_positioned_children_use_viewport_origin_and_leave_flow() {
+        let mut root = Node::element("body");
+        let mut fixed = Node::element("div");
+        fixed.set_attribute(
+            "style",
+            "position: fixed; right: 10px; bottom: 20px; width: 30px; height: 20px;",
+        );
+        let mut normal = Node::element("div");
+        normal.set_attribute("style", "height: 15px;");
+        root.append(fixed);
+        root.append(normal);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(300, 200));
+
+        assert_eq!(layout.children[0].rect.x, 260);
+        assert_eq!(layout.children[0].rect.y, 160);
+        assert_eq!(layout.children[1].rect.y, 0);
     }
 
     #[test]
