@@ -15,16 +15,20 @@ fn browser_stack_foundations_work_together() {
     let html = HtmlTokenizer::tokenize("<html><body>Hello</body></html>");
     let document = parse(&html);
     assert_eq!(document.children.len(), 1);
+    assert_eq!(document.children[0].tag_name(), Some("html"));
+    assert_eq!(document.children[0].children[0].tag_name(), Some("head"));
+    assert_eq!(document.children[0].children[1].tag_name(), Some("body"));
 
     let html = HtmlTokenizer::tokenize(r#"<div id="app" class="card">Hello</div>"#);
     let document = parse(&html);
-    let NodeKind::Element { attributes, .. } = &document.children[0].kind else {
+    let body = &document.children[0].children[1];
+    let NodeKind::Element { attributes, .. } = &body.children[0].kind else {
         panic!("expected element");
     };
     assert_eq!(attributes.get("id"), Some(&"app".to_string()));
 
     let sheet = StyleSheet::parse("#app { color: red; } .card { padding: 8px; }");
-    let styled = sheet.compute_style(&document.children[0]);
+    let styled = sheet.compute_style(&body.children[0]);
     assert_eq!(styled.get("color"), Some("red"));
     assert_eq!(styled.get("padding"), Some("8px"));
 
@@ -35,7 +39,10 @@ fn browser_stack_foundations_work_together() {
     let mut filter = RequestFilter::default();
     filter.add_rule(FilterRule::block("ads.example").for_resource(ResourceType::Script));
     assert_eq!(
-        filter.decide("https://ads.example/ad.js", Some(ResourceType::Script)),
+        filter.decide(
+            "https://ads.example/ad.js",
+            Some(ResourceType::Script)
+        ),
         FilterDecision::Block
     );
 }
