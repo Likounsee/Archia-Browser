@@ -2691,10 +2691,15 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.width, 150);
         assert_eq!(layout.children[1].rect.width, 50);
-    }    #[test]
+    }
+
+    #[test]
     fn flex_order_repositions_column_items() {
         let mut root = Node::element("div");
-        root.set_attribute("style", "display: flex; flex-direction: column; width: 100px;");
+        root.set_attribute(
+            "style",
+            "display: flex; flex-direction: column; width: 100px;",
+        );
 
         let mut first = Node::element("div");
         first.set_attribute("style", "height: 20px; order: 1;");
@@ -2710,6 +2715,4 @@ mod tests {
         assert_eq!(layout.children[0].rect.y, 20);
         assert_eq!(layout.children[1].rect.y, 0);
     }
-
-
 }
