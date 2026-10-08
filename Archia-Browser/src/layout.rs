@@ -528,7 +528,7 @@ fn align_inline_vertical_align(
 ) {
     let mut start = 0usize;
     while start < output.children.len() {
-        if output.children[start].display != Display::Inline {
+        if !is_inline_level(output.children[start].display) {
             start += 1;
             continue;
         }
@@ -536,7 +536,7 @@ fn align_inline_vertical_align(
         let line_y = output.children[start].rect.y;
         let mut end = start;
         while end + 1 < output.children.len()
-            && output.children[end + 1].display == Display::Inline
+            && is_inline_level(output.children[end + 1].display)
             && output.children[end + 1].rect.y == line_y
         {
             end += 1;
@@ -728,7 +728,10 @@ fn display_for_styled_node(node: &crate::style_tree::StyledNode) -> Display {
 
 fn allows_inline_wrap(node: &crate::style_tree::StyledNode) -> bool {
     !node.style.get("white-space").is_some_and(|value| {
-        value.trim().eq_ignore_ascii_case("nowrap") || value.trim().eq_ignore_ascii_case("pre")
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "nowrap" | "pre"
+        )
     })
 }
 
