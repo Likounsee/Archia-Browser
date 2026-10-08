@@ -104,9 +104,16 @@ impl SoftwareSurface {
         let mut cursor_x = x;
         let mut cursor_y = y;
         for ch in text.chars() {
+            if ch == '\r' {
+                continue;
+            }
             if ch == '\n' {
                 cursor_x = x;
                 cursor_y = cursor_y.saturating_add(8);
+                continue;
+            }
+            if ch == '\t' {
+                cursor_x = cursor_x.saturating_add(24);
                 continue;
             }
             if let Some(glyph) = glyph(ch) {
@@ -221,6 +228,16 @@ mod tests {
         assert_eq!(surface.pixel(1, 0), Some(Color::BLACK));
         assert_eq!(surface.pixel(0, 0), Some(Color(0, 0, 0, 0)));
         assert_eq!(surface.pixel(0, 3), Some(Color::BLACK));
+    }
+
+    #[test]
+    fn draw_text_handles_newlines_and_tabs() {
+        let mut surface = SoftwareSurface::new(40, 16);
+        surface.draw_text(0, 0, "A\tB\nC", Color::BLACK);
+
+        assert_eq!(surface.pixel(1, 0), Some(Color::BLACK));
+        assert_eq!(surface.pixel(25, 0), Some(Color::BLACK));
+        assert_eq!(surface.pixel(1, 8), Some(Color::BLACK));
     }
 
     #[test]
