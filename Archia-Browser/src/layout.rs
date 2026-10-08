@@ -847,10 +847,9 @@ fn layout_flex_children(
         let (offset, extra) = match justify.as_str() {
             "center" => (free_space / 2, 0),
             "flex-end" | "end" => (free_space, 0),
-            "space-between" if flex_indices.len() > 1 => (
-                0,
-                free_space / (flex_indices.len() as u32 - 1),
-            ),
+            "space-between" if flex_indices.len() > 1 => {
+                (0, free_space / (flex_indices.len() as u32 - 1))
+            },
             _ => (0, 0),
         };
         for (position, index) in flex_indices.iter().enumerate() {
@@ -1751,7 +1750,10 @@ mod tests {
     #[test]
     fn flex_justify_content_centers_row_items() {
         let mut root = Node::element("div");
-        root.set_attribute("style", "display: flex; justify-content: center; width: 100px;");
+        root.set_attribute(
+            "style",
+            "display: flex; justify-content: center; width: 100px;",
+        );
         let mut first = Node::element("div");
         first.set_attribute("style", "width: 20px; height: 10px;");
         let mut second = Node::element("div");
