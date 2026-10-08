@@ -438,7 +438,6 @@ fn layout_styled_node(
         }
 
     }
-
     if inline_x > 0 {
         cursor_y = cursor_y.saturating_add(inline_line_height as i32);
     }
@@ -721,9 +720,10 @@ fn layout_flex_children(
     abs_width: u32,
     abs_height: u32,
 ) -> i32 {
-    let column = node.style.get("flex-direction").is_some_and(|value| {
-        value.trim().eq_ignore_ascii_case("column")
-    });
+    let column = node
+        .style
+        .get("flex-direction")
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("column"));
     let gap = parse_length(node.style.get("gap"), content_width).unwrap_or(0);
     let mut main = 0_u32;
     let mut cross = 0_u32;
