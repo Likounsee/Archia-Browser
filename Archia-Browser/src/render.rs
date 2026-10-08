@@ -287,10 +287,8 @@ mod tests {
         let mut root = Node::element("div");
         root.set_attribute("style", "background-color: red; padding: 4px;");
 
-        let styled = crate::style_tree::StyleEngine::style(
-            &root,
-            &crate::css::StyleSheet::default(),
-        );
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
         let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
 
