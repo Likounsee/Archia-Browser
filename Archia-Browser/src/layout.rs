@@ -952,7 +952,7 @@ fn layout_flex_children(
             parse_flex_order(node.children[*child_index].style.get("order"))
         });
         let mut cursor = 0_u32;
-        for (position, (index, child_index)) in ordered_indices.iter().enumerate() {
+        for (position, (index, _)) in ordered_indices.iter().enumerate() {
             let child = &output.children[*index];
             let margin_left = child.box_model.margin_left;
             let desired_x = content_origin_x
@@ -972,7 +972,6 @@ fn layout_flex_children(
                         .saturating_add(output.children[*index].box_model.horizontal_outer()),
                 )
                 .saturating_add(gap);
-            let _ = child_index;
         }
     }
 
@@ -2648,5 +2647,25 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.width, 64);
         assert_eq!(layout.children[0].rect.height, 32);
+    }    #[test]
+    fn flex_shrink_zero_keeps_item_at_base_size() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "display: flex; width: 200px;");
+
+        let mut fixed = Node::element("div");
+        fixed.set_attribute("style", "width: 150px; flex-shrink: 0;");
+        let mut shrinking = Node::element("div");
+        shrinking.set_attribute("style", "width: 150px;");
+        root.append(fixed);
+        root.append(shrinking);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.width, 150);
+        assert_eq!(layout.children[1].rect.width, 50);
     }
+
+
 }
