@@ -165,6 +165,122 @@ impl Transport for HttpTransport {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct LocalFileTransport {
+    max_file_size: usize,
+}
+
+impl Default for LocalFileTransport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl LocalFileTransport {
+    pub const fn new() -> Self {
+        Self {
+            max_file_size: 8 * 1024 * 1024,
+        }
+    }
+
+    pub const fn with_max_file_size(mut self, max_file_size: usize) -> Self {
+        self.max_file_size = max_file_size;
+        self
+    }
+}
+
+impl Transport for LocalFileTransport {
+    fn send(&self, request: &Request) -> Result<Response, TransportError> {
+        if request.url.scheme() != "file"
+            || !request.url.authority().is_empty()
+                && !request.url.authority().eq_ignore_ascii_case("localhost")
+        {
+            return Err(TransportError::UnsupportedScheme);
+        }
+        if !matches!(request.method, super::HttpMethod::Get | super::HttpMethod::Head)
+            || request.has_body()
+        {
+            return Err(TransportError::InvalidRequest);
+        }
+
+        let path = file_url_path(request.url.path())?;
+        let metadata = std::fs::metadata(&path).map_err(|_| TransportError::ConnectionFailed)?;
+        if !metadata.is_file() || metadata.len() > self.max_file_size as u64 {
+            return Err(if metadata.len() > self.max_file_size as u64 {
+                TransportError::ResponseTooLarge
+            } else {
+                TransportError::ConnectionFailed
+            });
+        }
+
+        let body = if request.method == super::HttpMethod::Head {
+            Vec::new()
+        } else {
+            std::fs::read(&path).map_err(|_| TransportError::ConnectionFailed)?
+        };
+        let content_type = content_type_for_path(&path);
+        Ok(Response::new(200)
+            .with_header("content-type", content_type)
+            .with_body(body))
+    }
+}
+
+fn file_url_path(url_path: &str) -> Result<std::path::PathBuf, TransportError> {
+    let decoded = percent_decode(url_path)?;
+    if decoded.as_bytes().contains(&0) {
+        return Err(TransportError::InvalidUrl(super::UrlError::InvalidScheme));
+    }
+    #[cfg(windows)]
+    let path = decoded
+        .strip_prefix('/')
+        .filter(|value| value.as_bytes().get(1) == Some(&b':'))
+        .unwrap_or(&decoded);
+    #[cfg(not(windows))]
+    let path = decoded.as_str();
+    Ok(std::path::PathBuf::from(path))
+}
+
+fn percent_decode(input: &str) -> Result<String, TransportError> {
+    let mut output = String::with_capacity(input.len());
+    let bytes = input.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            if index + 2 >= bytes.len() {
+                return Err(TransportError::InvalidRequest);
+            }
+            let high = hex_value(bytes[index + 1]).ok_or(TransportError::InvalidRequest)?;
+            let low = hex_value(bytes[index + 2]).ok_or(TransportError::InvalidRequest)?;
+            output.push((high << 4 | low) as char);
+            index += 3;
+        } else {
+            output.push(bytes[index] as char);
+            index += 1;
+        }
+    }
+    Ok(output)
+}
+
+fn hex_value(value: u8) -> Option<u8> {
+    match value {
+        b'0'..=b'9' => Some(value - b'0'),
+        b'a'..=b'f' => Some(value - b'a' + 10),
+        b'A'..=b'F' => Some(value - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn content_type_for_path(path: &std::path::Path) -> &'static str {
+    match path.extension().and_then(|value| value.to_str()).map(str::to_ascii_lowercase).as_deref() {
+        Some("html" | "htm") => "text/html; charset=utf-8",
+        Some("xhtml") => "application/xhtml+xml",
+        Some("css") => "text/css",
+        Some("txt") => "text/plain; charset=utf-8",
+        Some("svg") => "image/svg+xml",
+        _ => "application/octet-stream",
+    }
+}
+
 fn validate_request(request: &Request) -> Result<(), TransportError> {
     if request
         .url
