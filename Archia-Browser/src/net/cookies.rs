@@ -27,13 +27,18 @@ impl CookieJar {
         let Some((name, value)) = pair.split_once('=') else {
             return;
         };
-        if name.trim().is_empty() {
+        let name = name.trim();
+        if name.is_empty() || !valid_cookie_name(name) {
+            return;
+        }
+        let value = value.trim();
+        if !valid_cookie_value(value) {
             return;
         }
 
         let mut cookie = Cookie {
-            name: name.trim().to_owned(),
-            value: value.trim().to_owned(),
+            name: name.to_owned(),
+            value: value.to_owned(),
             domain: url.host().to_ascii_lowercase(),
             path: "/".to_owned(),
             secure: false,
@@ -94,6 +99,35 @@ impl CookieJar {
         self.cookies.push(cookie);
     }
 
+fn valid_cookie_name(value: &str) -> bool {
+    value.bytes().all(|byte| {
+        byte.is_ascii_graphic()
+            && !matches!(
+                byte,
+                b'(' | b')'
+                    | b'<'
+                    | b'>'
+                    | b'@'
+                    | b','
+                    | b';'
+                    | b':'
+                    | b'\\'
+                    | b'"'
+                    | b'/'
+                    | b'['
+                    | b']'
+                    | b'?'
+                    | b'='
+                    | b'{'
+                    | b'}'
+            )
+    })
+}
+
+fn valid_cookie_value(value: &str) -> bool {
+    !value.bytes().any(|byte| matches!(byte, b'\r' | b'\n' | b';'))
+}
+
     pub fn header_for(&self, url: &Url) -> Option<String> {
         let host = url.host().to_ascii_lowercase();
         let path = url.path();
@@ -125,6 +159,28 @@ impl CookieJar {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejects_cookie_values_that_could_inject_headers() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&url, "sid=ok\r\nX-Injected: yes");
+        jar.store(&url, "sid=also;bad");
+
+        assert!(jar.is_empty());
+    }
+
+    #[test]
+    fn rejects_invalid_cookie_names() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&url, "bad name=value");
+        jar.store(&url, "bad;name=value");
+
+        assert!(jar.is_empty());
+    }
 
     #[test]
     fn stores_and_matches_scoped_cookies() {
