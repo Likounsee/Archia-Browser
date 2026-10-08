@@ -336,7 +336,8 @@ fn layout_styled_node(
                     child_layout
                         .rect
                         .height
-                        .saturating_add(child_layout.box_model.vertical_outer()) as i32,
+                        .saturating_add(child_layout.box_model.vertical_outer())
+                        as i32,
                 );
             }
             output.children.push(child_layout);
