@@ -626,6 +626,12 @@ fn parse_border_width(value: Option<&str>) -> Option<u32> {
 
 fn parse_length(value: Option<&str>, containing_width: u32) -> Option<u32> {
     let value = value?.trim();
+    if value.len() >= 6
+        && value[..5].eq_ignore_ascii_case("calc(")
+        && value.ends_with(')')
+    {
+        return parse_calc_length(&value[5..value.len() - 1], containing_width);
+    }
     if let Some(percent) = value.strip_suffix('%') {
         let percent = percent.trim().parse::<u32>().ok()?;
         return Some(
@@ -636,6 +642,58 @@ fn parse_length(value: Option<&str>, containing_width: u32) -> Option<u32> {
         );
     }
     parse_px(Some(value))
+}
+
+fn parse_calc_length(expression: &str, containing_width: u32) -> Option<u32> {
+    let expression = expression
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .collect::<String>();
+    if expression.is_empty() {
+        return None;
+    }
+
+    let bytes = expression.as_bytes();
+    let mut index = 0usize;
+    let mut total = 0_i64;
+    let mut add = true;
+    let mut saw_term = false;
+
+    while index < bytes.len() {
+        if bytes[index] == b'+' || bytes[index] == b'-' {
+            if !saw_term || index + 1 == bytes.len() {
+                return None;
+            }
+            add = bytes[index] == b'+';
+            index += 1;
+        }
+
+        let start = index;
+        while index < bytes.len() && bytes[index] != b'+' && bytes[index] != b'-' {
+            index += 1;
+        }
+        let term = &expression[start..index];
+        if term.is_empty() {
+            return None;
+        }
+
+        let value = if let Some(percent) = term.strip_suffix('%') {
+            let percent = percent.parse::<i64>().ok()?;
+            (i64::from(containing_width) * percent).checked_div(100)?
+        } else {
+            let px = term.strip_suffix("px")?;
+            px.parse::<i64>().ok()?
+        };
+
+        total = if add {
+            total.checked_add(value)?
+        } else {
+            total.checked_sub(value)?
+        };
+        saw_term = true;
+    }
+
+    u32::try_from(total).ok()
 }
 
 fn parse_px(value: Option<&str>) -> Option<u32> {
@@ -1145,6 +1203,24 @@ mod tests {
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
 
         assert_eq!(layout.children[0].rect.height, 26);
+    }
+
+    #[test]
+    fn calc_lengths_combine_percentages_and_pixels() {
+        let mut root = Node::element("body");
+        let mut child = Node::element("div");
+        child.set_attribute(
+            "style",
+            "width: calc(50% - 10px); margin-left: calc(10% + 5px);",
+        );
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.width, 90);
+        assert_eq!(layout.children[0].box_model.margin_left, 25);
     }
 
     #[test]
