@@ -214,24 +214,23 @@ where
                 request.headers.insert("cookie".into(), cookie);
             }
 
-            let Ok(response) = (|| {
-                if let Some(response) = self
-                    .cache
-                    .lock()
-                    .expect("HTTP cache poisoned")
-                    .get(&request)
-                {
-                    return Ok(response);
-                }
-
-                let response = self.pipeline.execute(&self.transport, &request)?;
+            let response = if let Some(response) = self
+                .cache
+                .lock()
+                .expect("HTTP cache poisoned")
+                .get(&request)
+            {
+                response
+            } else {
+                let response = match self.pipeline.execute(&self.transport, &request) {
+                    Ok(response) => response,
+                    Err(_) => return None,
+                };
                 self.cache
                     .lock()
                     .expect("HTTP cache poisoned")
                     .store(&request, &response);
-                Ok(response)
-            })() else {
-                return None;
+                response
             };
 
             for set_cookie in response.set_cookie_headers() {

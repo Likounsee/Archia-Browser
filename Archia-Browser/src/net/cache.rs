@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use crate::core::ResourceCache;
+use crate::core::cache::ResourceCache;
 
 use super::{HttpMethod, Request, Response};
 
@@ -139,14 +139,14 @@ mod tests {
     use super::*;
     use crate::net::Url;
 
-    fn request(url: &str) -> Request {
+    fn make_request(url: &str) -> Request {
         Request::new(Url::parse(url).unwrap())
     }
 
     #[test]
     fn caches_fresh_get_responses_with_max_age() {
         let mut cache = HttpCache::default();
-        let request = request("https://example.org/index.html");
+        let request = make_request("https://example.org/index.html");
         let response = Response::new(200)
             .with_header("cache-control", "public, max-age=60")
             .with_body(b"cached".to_vec());
