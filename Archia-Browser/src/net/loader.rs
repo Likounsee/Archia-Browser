@@ -191,6 +191,31 @@ mod tests {
     }
 
     #[test]
+    fn loads_a_local_file_through_the_document_pipeline() {
+        let path = std::env::temp_dir().join(format!(
+            "archia-browser-loader-{}.html",
+            std::process::id()
+        ));
+        std::fs::write(&path, b"<title>Local</title><body><h1>Hello</h1></body>").unwrap();
+
+        let url = if cfg!(windows) {
+            format!("file:///{}", path.display())
+        } else {
+            format!("file://{}", path.display())
+        };
+        let request = Request::new(Url::parse(&url).unwrap());
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), super::super::LocalFileTransport::new());
+        let page = loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .unwrap();
+
+        assert_eq!(page.title(), Some("Local".to_owned()));
+        assert_eq!(page.document.text_content(), "Hello");
+        assert!(!page.display_list.commands().is_empty());
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn rejects_unexpected_http_status() {
         let response = Response::new(500);
         let loader =
