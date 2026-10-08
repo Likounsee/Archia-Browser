@@ -2544,10 +2544,15 @@ mod tests {
         assert_eq!(layout.children[0].rect.width, 100);
         assert_eq!(layout.children[1].rect.width, 100);
         assert_eq!(layout.children[1].rect.x, 100);
-    }    #[test]
+    }
+
+    #[test]
     fn flex_align_self_overrides_parent_align_items() {
         let mut root = Node::element("div");
-        root.set_attribute("style", "display: flex; width: 200px; height: 100px; align-items: center;");
+        root.set_attribute(
+            "style",
+            "display: flex; width: 200px; height: 100px; align-items: center;",
+        );
         let mut child = Node::element("div");
         child.set_attribute("style", "width: 40px; height: 20px; align-self: flex-end;");
         root.append(child);
@@ -2558,6 +2563,4 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.y, 80);
     }
-
-
 }
