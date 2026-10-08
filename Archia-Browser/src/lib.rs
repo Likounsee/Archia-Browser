@@ -409,9 +409,12 @@ mod tests {
 
         assert_eq!(page.title(), Some("Path".to_owned()));
         assert_eq!(page.document.text_content(), "PathHello path");
-        assert_eq!(browser.current_url().map(ToString::to_string), Some(local_path_to_file_url(
-            &std::fs::canonicalize(&path).unwrap(),
-        )));
+        assert_eq!(
+            browser.current_url().map(ToString::to_string),
+            Some(local_path_to_file_url(
+                &std::fs::canonicalize(&path).unwrap(),
+            ))
+        );
         std::fs::remove_file(path).unwrap();
     }
 
