@@ -908,7 +908,7 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        assert_eq!(fills, vec![0xffff0000, 0xffffffff]);
+        assert_eq!(fills, vec![0xff0000ff, 0xffffffff]);
     }
 
     #[test]
