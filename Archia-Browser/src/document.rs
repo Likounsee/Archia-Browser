@@ -532,7 +532,9 @@ b</textarea></form>"#,
             LayoutViewport::new(100, 50),
         );
 
-        fn find_card(node: &crate::style_tree::StyledNode) -> Option<&crate::style_tree::StyledNode> {
+        fn find_card(
+            node: &crate::style_tree::StyledNode,
+        ) -> Option<&crate::style_tree::StyledNode> {
             if node.node.tag_name() == Some("span") {
                 return Some(node);
             }
