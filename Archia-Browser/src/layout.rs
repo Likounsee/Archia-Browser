@@ -1073,10 +1073,115 @@ fn layout_flex_children(
         }
     }
 
+    if wrap && !column {
+        align_flex_lines(&mut output, &flex_indices, node, content_origin_y, cross);
+    }
+
     if column {
         main as i32
     } else {
         cross as i32
+    }
+}
+
+fn align_flex_lines(
+    output: &mut LayoutNode,
+    indices: &[(usize, usize)],
+    node: &crate::style_tree::StyledNode,
+    content_origin_y: i32,
+    line_cross: u32,
+) {
+    if indices.len() < 2 {
+        return;
+    }
+
+    let mut lines: Vec<Vec<usize>> = Vec::new();
+    for (index, _) in indices {
+        let y = output.children[*index].rect.y;
+        if let Some(line) = lines
+            .iter_mut()
+            .find(|line| output.children[line[0]].rect.y == y)
+        {
+            line.push(*index);
+        } else {
+            lines.push(vec![*index]);
+        }
+    }
+    if lines.len() < 2 {
+        return;
+    }
+
+    let total = lines
+        .iter()
+        .map(|line| {
+            line.iter()
+                .map(|index| {
+                    output.children[*index]
+                        .rect
+                        .height
+                        .saturating_add(output.children[*index].box_model.vertical_outer())
+                })
+                .max()
+                .unwrap_or(0)
+        })
+        .fold(0_u32, u32::saturating_add)
+        .saturating_add(
+            parse_length(node.style.get("row-gap"), line_cross)
+                .or_else(|| parse_length(node.style.get("gap"), line_cross))
+                .unwrap_or(0)
+                .saturating_mul(lines.len().saturating_sub(1) as u32),
+        );
+    let available = parse_length(node.style.get("height"), line_cross).unwrap_or(line_cross);
+    let free = available.saturating_sub(total);
+    let alignment = node
+        .style
+        .get("align-content")
+        .map(|value| value.trim().to_ascii_lowercase())
+        .unwrap_or_else(|| "stretch".to_owned());
+    let (offset, extra) = match alignment.as_str() {
+        "center" => (free / 2, 0),
+        "flex-end" | "end" => (free, 0),
+        "space-between" if lines.len() > 1 => (0, free / (lines.len() - 1) as u32),
+        "space-around" => {
+            let gap = free / lines.len() as u32;
+            (gap / 2, gap)
+        }
+        "space-evenly" => {
+            let gap = free / (lines.len() + 1) as u32;
+            (gap, gap)
+        }
+        _ => (0, 0),
+    };
+    let mut cursor = offset;
+    for (line_index, line) in lines.iter().enumerate() {
+        let current_y = output.children[line[0]].rect.y;
+        let target_y = content_origin_y
+            .saturating_add(cursor as i32);
+        let shift = target_y.saturating_sub(current_y);
+        if shift != 0 {
+            for index in line {
+                shift_layout_tree(&mut output.children[*index], 0, shift);
+            }
+        }
+        let height = line
+            .iter()
+            .map(|index| {
+                output.children[*index]
+                    .rect
+                    .height
+                    .saturating_add(output.children[*index].box_model.vertical_outer())
+            })
+            .max()
+            .unwrap_or(0);
+        cursor = cursor
+            .saturating_add(height)
+            .saturating_add(
+                parse_length(node.style.get("row-gap"), line_cross)
+                    .or_else(|| parse_length(node.style.get("gap"), line_cross))
+                    .unwrap_or(0),
+            )
+            .saturating_add(extra);
+        let _ = line_index;
     }
 }
 
@@ -2761,5 +2866,26 @@ mod tests {
         assert_eq!(layout.children[2].rect.x, 0);
         assert_eq!(layout.children[1].rect.y, 20);
         assert_eq!(layout.children[2].rect.y, 40);
+    }    #[test]
+    fn flex_wrap_align_content_centers_lines() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "display: flex; flex-wrap: wrap; align-content: center; width: 100px; height: 100px;",
+        );
+        for _ in 0..2 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 60px; height: 20px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.y, 30);
+        assert_eq!(layout.children[1].rect.y, 50);
     }
+
+
 }
