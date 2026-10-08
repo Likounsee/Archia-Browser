@@ -227,36 +227,6 @@ fn layout_styled_node(
             let line_height = used_inline_line_height(child);
             if inline_x > 0 && inline_x.saturating_add(width) > content_width {
                 align_inline_line(
-            &mut output.children,
-            inline_line_start,
-            output.children.len(),
-            inline_x,
-            content_width,
-            node.style.get("text-align"),
-        );
-                cursor_y = cursor_y.saturating_add(inline_line_height as i32);
-                inline_x = 0;
-                inline_line_height = 0;
-                inline_line_start = output.children.len();
-            }
-            let child_layout = layout_styled_node(
-                child,
-                output.rect.x.saturating_add(inline_x as i32),
-                output.rect.y.saturating_add(cursor_y),
-                content_width.saturating_sub(inline_x),
-                viewport_height,
-            );
-            inline_x = inline_x.saturating_add(
-                child_layout
-                    .rect
-                    .width
-                    .saturating_add(child_layout.box_model.horizontal_outer()),
-            );
-            inline_line_height = inline_line_height.max(line_height);
-            output.children.push(child_layout);
-        } else {
-            if inline_x > 0 {
-                align_inline_line(
                     &mut output.children,
                     inline_line_start,
                     output.children.len(),
