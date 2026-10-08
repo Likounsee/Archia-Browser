@@ -626,10 +626,7 @@ fn parse_border_width(value: Option<&str>) -> Option<u32> {
 
 fn parse_length(value: Option<&str>, containing_width: u32) -> Option<u32> {
     let value = value?.trim();
-    if value.len() >= 6
-        && value[..5].eq_ignore_ascii_case("calc(")
-        && value.ends_with(')')
-    {
+    if value.len() >= 6 && value[..5].eq_ignore_ascii_case("calc(") && value.ends_with(')') {
         return parse_calc_length(&value[5..value.len() - 1], containing_width);
     }
     if let Some(percent) = value.strip_suffix('%') {
