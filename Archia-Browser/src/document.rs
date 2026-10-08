@@ -7,7 +7,7 @@ use crate::style_tree::{StyleEngine, StyledNode};
 
 const USER_AGENT_STYLESHEET: &str = r#"
 html, body { display: block; }
-body { margin: 8px; }
+body { margin: 0; }
 h1 { display: block; font-size: 32px; font-weight: bold; margin-top: 21px; margin-bottom: 21px; }
 h2 { display: block; font-size: 24px; font-weight: bold; margin-top: 19px; margin-bottom: 19px; }
 h3 { display: block; font-size: 19px; font-weight: bold; margin-top: 18px; margin-bottom: 18px; }
@@ -406,7 +406,7 @@ mod tests {
         );
 
         let body = &page.styled.children[0].children[1];
-        assert_eq!(body.style.get("margin-top"), Some("8px"));
+        assert_eq!(body.style.get("margin-top"), Some("0"));
         let heading = &body.children[0];
         assert_eq!(heading.style.get("font-size"), Some("32px"));
         assert_eq!(heading.style.get("font-weight"), Some("bold"));
@@ -615,8 +615,7 @@ b</textarea></form>"#,
         page.render_into(&mut surface);
 
         assert_eq!(surface.pixel(19, 19), Some(crate::surface::Color::WHITE));
-        assert_eq!(surface.pixel(8, 8), Some(crate::surface::Color::RED));
-        assert_eq!(surface.pixel(0, 0), Some(crate::surface::Color::WHITE));
+        assert_eq!(surface.pixel(0, 0), Some(crate::surface::Color::RED));
     }
 
     #[test]
