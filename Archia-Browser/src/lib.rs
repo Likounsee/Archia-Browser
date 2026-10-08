@@ -60,6 +60,39 @@ impl Browser {
             .history()
     }
 
+    pub fn reload<P, T>(
+        &mut self,
+        loader: &net::DocumentLoader<P, T>,
+        viewport: crate::layout::LayoutViewport,
+    ) -> Result<crate::document::Page, net::DocumentLoadError>
+    where
+        P: net::pipeline::RequestPolicyEngine,
+        T: net::Transport,
+    {
+        let url = self.current_url().cloned().ok_or(
+            net::DocumentLoadError::Network(net::TransportError::InvalidUrl(
+                net::UrlError::MissingAuthority,
+            )),
+        )?;
+        let request = net::Request::new(url);
+        let page = loader.load(&request, viewport)?;
+        let Some(url) = page.url().cloned() else {
+            return Err(net::DocumentLoadError::Network(
+                net::TransportError::InvalidUrl(net::UrlError::MissingAuthority),
+            ));
+        };
+
+        let entry = core::navigation::NavigationEntry::new(url, page.title());
+        if !self
+            .tabs
+            .active_tab_mut()
+            .is_some_and(|tab| tab.history_mut().replace_current(entry))
+        {
+            self.commit_page(&page);
+        }
+        Ok(page)
+    }
+
     pub fn load_request<P, T>(
         &mut self,
         loader: &net::DocumentLoader<P, T>,
@@ -224,6 +257,47 @@ mod tests {
         let browser = Browser::new();
         assert_eq!(browser.tabs().len(), 1);
         assert!(browser.tabs().active_id().is_some());
+    }
+
+    #[test]
+    fn browser_reload_replaces_current_entry() {
+        #[derive(Debug, Default)]
+        struct AllowAll;
+
+        impl net::pipeline::RequestPolicyEngine for AllowAll {
+            fn decide(&self, _: &net::Request) -> net::pipeline::PolicyDecision {
+                net::pipeline::PolicyDecision::Allow
+            }
+        }
+
+        #[derive(Debug)]
+        struct MockTransport;
+
+        impl net::Transport for MockTransport {
+            fn send(&self, _: &net::Request) -> Result<net::Response, net::TransportError> {
+                Ok(net::Response::new(200)
+                    .with_header("content-type", "text/html")
+                    .with_body(b"<title>Reloaded</title><body>Updated</body>".to_vec()))
+            }
+        }
+
+        let loader =
+            net::DocumentLoader::new(net::pipeline::NetworkPipeline::new(AllowAll), MockTransport);
+        let mut browser = Browser::new();
+        browser.navigate(
+            net::Url::parse("https://example.org/").unwrap(),
+            Some("Old".to_owned()),
+        );
+
+        browser
+            .reload(&loader, crate::layout::LayoutViewport::new(320, 200))
+            .unwrap();
+
+        assert_eq!(browser.history().len(), 1);
+        assert_eq!(
+            browser.history().current().and_then(|entry| entry.title()),
+            Some("Reloaded")
+        );
     }
 
     #[test]
