@@ -174,10 +174,20 @@ fn layout_styled_node(
     );
 
     if let Some(min_width) = parse_length(node.style.get("min-width"), containing_width) {
-        content_width = content_width.max(min_width);
+        let min_content_width = if border_box {
+            min_width.saturating_sub(padding_border_x)
+        } else {
+            min_width
+        };
+        content_width = content_width.max(min_content_width);
     }
     if let Some(max_width) = parse_length(node.style.get("max-width"), containing_width) {
-        content_width = content_width.min(max_width);
+        let max_content_width = if border_box {
+            max_width.saturating_sub(padding_border_x)
+        } else {
+            max_width
+        };
+        content_width = content_width.min(max_content_width);
     }
 
     if display == Display::Block && specified_width.is_some() {
@@ -210,7 +220,12 @@ fn layout_styled_node(
     output.rect.y = y.saturating_add(box_model.margin_top as i32);
     output.rect.width = content_width;
 
-    let explicit_height = parse_px(node.style.get("height"));
+    let padding_border_y = box_model
+        .padding_top
+        .saturating_add(box_model.padding_bottom)
+        .saturating_add(box_model.border_top)
+        .saturating_add(box_model.border_bottom);
+    let explicit_height = parse_length(node.style.get("height"), viewport_height);
     let content_origin_x = output
         .rect
         .x
@@ -308,10 +323,20 @@ fn layout_styled_node(
             .saturating_sub(box_model.border_bottom);
     }
     if let Some(min_height) = parse_length(node.style.get("min-height"), viewport_height) {
-        content_height = content_height.max(min_height);
+        let min_content_height = if border_box {
+            min_height.saturating_sub(padding_border_y)
+        } else {
+            min_height
+        };
+        content_height = content_height.max(min_content_height);
     }
     if let Some(max_height) = parse_length(node.style.get("max-height"), viewport_height) {
-        content_height = content_height.min(max_height);
+        let max_content_height = if border_box {
+            max_height.saturating_sub(padding_border_y)
+        } else {
+            max_height
+        };
+        content_height = content_height.min(max_content_height);
     }
 
     output.rect.height = if border_box && explicit_height.is_some() {
@@ -898,6 +923,82 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.width, 76);
         assert_eq!(layout.children[0].rect.height, 26);
+    }
+
+    #[test]
+    fn border_box_min_and_max_width_include_padding_and_border() {
+        let mut root = Node::element("body");
+        let mut child = Node::element("div");
+        child.set_attribute(
+            "style",
+            "box-sizing: border-box; width: 20px; min-width: 50px; padding: 10px; border-width: 2px;",
+        );
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.width, 26);
+
+        let mut root = Node::element("body");
+        let mut child = Node::element("div");
+        child.set_attribute(
+            "style",
+            "box-sizing: border-box; width: 80px; max-width: 50px; padding: 10px; border-width: 2px;",
+        );
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.width, 26);
+    }
+
+    #[test]
+    fn border_box_min_and_max_height_include_padding_and_border() {
+        let mut root = Node::element("body");
+        let mut child = Node::element("div");
+        child.set_attribute(
+            "style",
+            "box-sizing: border-box; height: 20px; min-height: 50px; padding: 10px 0; border-width: 2px;",
+        );
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.height, 26);
+
+        let mut root = Node::element("body");
+        let mut child = Node::element("div");
+        child.set_attribute(
+            "style",
+            "box-sizing: border-box; height: 80px; max-height: 50px; padding: 10px 0; border-width: 2px;",
+        );
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.height, 26);
+    }
+
+    #[test]
+    fn percentage_height_uses_viewport_height() {
+        let mut root = Node::element("body");
+        let mut child = Node::element("div");
+        child.set_attribute("style", "height: 25%;");
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 80));
+
+        assert_eq!(layout.children[0].rect.height, 20);
     }
 
     #[test]
