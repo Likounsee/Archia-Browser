@@ -211,7 +211,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(page.title(), Some("Local".to_owned()));
-        assert_eq!(page.document.text_content(), "Hello");
+        assert_eq!(page.document.text_content(), "LocalHello");
         assert!(!page.display_list.commands().is_empty());
         std::fs::remove_file(path).unwrap();
     }
