@@ -44,7 +44,6 @@ fn browser_stack_foundations_work_together() {
     );
 }
 
-
 #[test]
 fn visibility_is_inherited_but_visible_descendants_can_paint() {
     let mut root = archia_browser::html::Node::element("div");
@@ -67,14 +66,21 @@ fn visibility_is_inherited_but_visible_descendants_can_paint() {
     assert_eq!(layout.children[0].rect.y, 0);
     assert_eq!(layout.children[1].rect.y, 16);
 
-    let list = archia_browser::render::SoftwareRenderer::build_display_list_styled(&styled, &layout);
+    let list =
+        archia_browser::render::SoftwareRenderer::build_display_list_styled(&styled, &layout);
     assert!(list.commands().iter().any(|command| matches!(
         command,
-        archia_browser::render::PaintCommand::FillRect { color: 0x008000ff, .. }
+        archia_browser::render::PaintCommand::FillRect {
+            color: 0x008000ff,
+            ..
+        }
     )));
     assert!(!list.commands().iter().any(|command| matches!(
         command,
-        archia_browser::render::PaintCommand::FillRect { color: 0xff0000ff, .. }
+        archia_browser::render::PaintCommand::FillRect {
+            color: 0xff0000ff,
+            ..
+        }
     )));
 }
 
@@ -89,7 +95,8 @@ fn visibility_collapse_stays_in_layout_but_suppresses_paint() {
         archia_browser::layout::LayoutViewport::new(200, 100),
     );
     assert!(layout.rect.height > 0);
-    let list = archia_browser::render::SoftwareRenderer::build_display_list_styled(&styled, &layout);
+    let list =
+        archia_browser::render::SoftwareRenderer::build_display_list_styled(&styled, &layout);
     assert!(list.commands().is_empty());
 }
 
@@ -103,7 +110,8 @@ fn whitespace_pre_line_collapses_spaces_but_preserves_newlines() {
         &styled,
         archia_browser::layout::LayoutViewport::new(200, 100),
     );
-    let list = archia_browser::render::SoftwareRenderer::build_display_list_styled(&styled, &layout);
+    let list =
+        archia_browser::render::SoftwareRenderer::build_display_list_styled(&styled, &layout);
     assert!(list.commands().iter().any(|command| matches!(
         command,
         archia_browser::render::PaintCommand::DrawText { text, .. } if text == "one\ntwo"
