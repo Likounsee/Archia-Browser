@@ -516,9 +516,10 @@ fn display_for_styled_node(node: &crate::style_tree::StyledNode) -> Display {
 }
 
 fn allows_inline_wrap(node: &crate::style_tree::StyledNode) -> bool {
-    !node.style.get("white-space").is_some_and(|value| {
-        matches!(value.trim().to_ascii_lowercase().as_str(), "nowrap" | "pre")
-    })
+    !node
+        .style
+        .get("white-space")
+        .is_some_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "nowrap" | "pre"))
 }
 
 fn is_line_break(node: &crate::style_tree::StyledNode) -> bool {
