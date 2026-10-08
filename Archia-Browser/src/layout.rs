@@ -423,6 +423,8 @@ fn align_inline_lines(
     let alignment = match style.get("text-align").map(str::trim) {
         Some("center") => 1,
         Some("right" | "end") => 2,
+        Some("justify") => 3,
+        Some("justify-all") => 4,
         _ => 0,
     };
     if alignment == 0 || output.children.is_empty() {
@@ -462,15 +464,39 @@ fn align_inline_lines(
             - i64::from(output.children[start].box_model.margin_left);
         let line_width = right.saturating_sub(left).max(0) as u32;
         let free_space = content_width.saturating_sub(line_width);
-        let shift = if alignment == 1 {
-            free_space / 2
+        if alignment == 3 || alignment == 4 {
+            let child_count = end.saturating_sub(start).saturating_add(1);
+            let has_later_line = output.children[end + 1..]
+                .iter()
+                .any(|child| child.display == Display::Inline && child.rect.y > line_y);
+            if child_count > 1 && (alignment == 4 || has_later_line) {
+                let gap_count = child_count - 1;
+                let gap = free_space / gap_count as u32;
+                let remainder = free_space % gap_count as u32;
+                for (offset, child) in output.children[start..=end].iter_mut().enumerate() {
+                    if offset == 0 {
+                        continue;
+                    }
+                    let extra = remainder.min(offset as u32);
+                    let shift = gap
+                        .saturating_mul(offset as u32)
+                        .saturating_add(extra) as i32;
+                    if shift != 0 {
+                        shift_layout_tree(child, shift, 0);
+                    }
+                }
+            }
         } else {
-            free_space
-        } as i32;
+            let shift = if alignment == 1 {
+                free_space / 2
+            } else {
+                free_space
+            } as i32;
 
-        if shift != 0 {
-            for child in &mut output.children[start..=end] {
-                shift_layout_tree(child, shift, 0);
+            if shift != 0 {
+                for child in &mut output.children[start..=end] {
+                    shift_layout_tree(child, shift, 0);
+                }
             }
         }
         start = end + 1;
@@ -1076,6 +1102,47 @@ mod tests {
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
 
         assert_eq!(layout.children[0].rect.x, 70);
+    }
+
+    #[test]
+    fn text_align_justify_distributes_non_final_line_space() {
+        let mut root = Node::element("body");
+        root.set_attribute("style", "text-align: justify; width: 100px;");
+
+        for text in ["aaaaa", "bbbbb", "ccccc"] {
+            let mut child = Node::element("span");
+            child.append(Node::text(text));
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.x, 0);
+        assert_eq!(layout.children[1].rect.x, 50);
+        assert_eq!(layout.children[2].rect.x, 0);
+        assert_eq!(layout.children[2].rect.y, 16);
+    }
+
+    #[test]
+    fn text_align_justify_keeps_final_line_start_aligned() {
+        let mut root = Node::element("body");
+        root.set_attribute("style", "text-align: justify; width: 100px;");
+
+        let mut first = Node::element("span");
+        first.append(Node::text("aaaaa"));
+        let mut second = Node::element("span");
+        second.append(Node::text("bbbbb"));
+        root.append(first);
+        root.append(second);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.x, 0);
+        assert_eq!(layout.children[1].rect.x, 30);
     }
 
     #[test]
