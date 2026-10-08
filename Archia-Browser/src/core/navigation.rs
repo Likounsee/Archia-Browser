@@ -18,6 +18,10 @@ impl NavigationEntry {
     pub fn title(&self) -> Option<&str> {
         self.title.as_deref()
     }
+
+    pub fn set_title(&mut self, title: Option<String>) {
+        self.title = title;
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -79,6 +83,18 @@ impl NavigationHistory {
 
         self.current = Some(index + 1);
         self.current()
+    }
+
+    pub fn set_current_title(&mut self, title: Option<String>) -> bool {
+        let Some(index) = self.current else {
+            return false;
+        };
+        let Some(entry) = self.entries.get_mut(index) else {
+            return false;
+        };
+
+        entry.set_title(title);
+        true
     }
 
     pub fn clear(&mut self) {
@@ -162,7 +178,7 @@ mod tests {
     }
 
     #[test]
-    fn titles_are_retained() {
+    fn titles_are_retained_and_can_be_updated() {
         let mut history = NavigationHistory::new();
         history.push(NavigationEntry::new(
             Url::parse("https://example.org/").unwrap(),
@@ -173,6 +189,30 @@ mod tests {
             history.current().and_then(NavigationEntry::title),
             Some("Example")
         );
+        assert!(history.set_current_title(Some("Updated".to_owned())));
+        assert_eq!(
+            history.current().and_then(NavigationEntry::title),
+            Some("Updated")
+        );
+        assert!(history.set_current_title(None));
+        assert_eq!(history.current().and_then(NavigationEntry::title), None);
+    }
+
+    #[test]
+    fn title_update_does_not_create_history_entry() {
+        let mut history = NavigationHistory::new();
+        history.push(entry("https://example.org/"));
+        assert!(history.set_current_title(Some("Example".to_owned())));
+
+        assert_eq!(history.len(), 1);
+        assert!(!history.can_go_back());
+        assert!(!history.can_go_forward());
+    }
+
+    #[test]
+    fn title_update_on_empty_history_fails() {
+        let mut history = NavigationHistory::new();
+        assert!(!history.set_current_title(Some("Example".to_owned())));
     }
 
     #[test]
