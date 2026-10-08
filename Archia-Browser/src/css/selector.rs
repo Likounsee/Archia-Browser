@@ -43,6 +43,7 @@ pub struct SimpleSelector {
     pub id: Option<String>,
     pub classes: Vec<String>,
     pub attributes: Vec<AttributeSelector>,
+    pub pseudo_classes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -144,7 +145,9 @@ impl Selector {
             if part.id.is_some() {
                 result.ids += 1;
             }
-            result.classes += part.classes.len() as u32 + part.attributes.len() as u32;
+            result.classes += part.classes.len() as u32
+                + part.attributes.len() as u32
+                + part.pseudo_classes.len() as u32;
             if part.tag.is_some() {
                 result.types += 1;
             }
@@ -294,6 +297,22 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
 
     while i < chars.len() {
         match chars[i] {
+            ':' => {
+                i += 1;
+                let start = i;
+                while i < chars.len() && is_name_char(chars[i]) {
+                    i += 1;
+                }
+                if start == i {
+                    return None;
+                }
+                simple.pseudo_classes.push(
+                    chars[start..i]
+                        .iter()
+                        .collect::<String>()
+                        .to_ascii_lowercase(),
+                );
+            }
             '#' | '.' => {
                 let kind = chars[i];
                 i += 1;
@@ -408,6 +427,20 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
     Some(simple)
 }
 
+
+fn matches_pseudo_class(pseudo: &str, attributes: &std::collections::BTreeMap<String, String>) -> bool {
+    match pseudo {
+        "checked" => attributes.contains_key("checked"),
+        "disabled" => attributes.contains_key("disabled"),
+        "enabled" => !attributes.contains_key("disabled"),
+        "required" => attributes.contains_key("required"),
+        "optional" => !attributes.contains_key("required"),
+        "read-only" => attributes.contains_key("readonly"),
+        "read-write" => !attributes.contains_key("readonly"),
+        _ => false,
+    }
+}
+
 fn is_name_char(c: char) -> bool {
     c == '_' || c == '-' || c.is_ascii_alphanumeric() || !c.is_ascii()
 }
@@ -436,6 +469,14 @@ fn matches_simple(simple: &SimpleSelector, node: &Node) -> bool {
         .classes
         .iter()
         .any(|class| !classes.contains(&class.as_str()))
+    {
+        return false;
+    }
+
+    if simple
+        .pseudo_classes
+        .iter()
+        .any(|pseudo| !matches_pseudo_class(pseudo, attributes))
     {
         return false;
     }
@@ -475,6 +516,19 @@ mod tests {
             attributes.insert("lang".into(), "en-US".into());
         }
         node
+    }
+
+
+    #[test]
+    fn matches_form_state_pseudo_classes() {
+        let mut checked = Node::element("input");
+        checked.set_attribute("checked", "");
+        assert!(Selector::parse("input:checked").unwrap().matches(&checked));
+        assert!(!Selector::parse("input:disabled").unwrap().matches(&checked));
+
+        checked.set_attribute("disabled", "");
+        assert!(Selector::parse("input:disabled").unwrap().matches(&checked));
+        assert!(Selector::parse("input:checked:disabled").unwrap().matches(&checked));
     }
 
     #[test]
