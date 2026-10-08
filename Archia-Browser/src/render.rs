@@ -50,7 +50,7 @@ pub struct SoftwareRenderer;
 impl SoftwareRenderer {
     pub fn build_display_list_styled(root: &StyledNode, layout: &LayoutNode) -> DisplayList {
         let mut list = DisplayList::new();
-        paint_styled_node(root, layout, &mut list);
+        paint_styled_node(root, layout, &mut list, 255);
         list
     }
 
@@ -95,7 +95,7 @@ impl SoftwareRenderer {
         style: &ComputedStyle,
     ) -> DisplayList {
         let mut list = DisplayList::new();
-        paint_node(root, layout, style, &mut list);
+        paint_node(root, layout, style, &mut list, 255);
         list
     }
 }
