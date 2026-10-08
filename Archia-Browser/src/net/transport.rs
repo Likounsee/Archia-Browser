@@ -604,7 +604,10 @@ mod tests {
     #[test]
     fn percent_decode_preserves_utf8_paths() {
         assert_eq!(percent_decode("/tmp/%C3%A9.html").unwrap(), "/tmp/é.html");
-        assert_eq!(percent_decode("/tmp/caf%C3%A9.html").unwrap(), "/tmp/café.html");
+        assert_eq!(
+            percent_decode("/tmp/caf%C3%A9.html").unwrap(),
+            "/tmp/café.html"
+        );
     }
 
     #[test]
