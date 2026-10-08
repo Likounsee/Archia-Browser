@@ -388,7 +388,13 @@ fn is_auto_dimension(value: Option<&str>) -> bool {
 }
 
 fn parse_border_width(value: Option<&str>) -> Option<u32> {
-    parse_px(value)
+    let value = value?.trim();
+    match value.to_ascii_lowercase().as_str() {
+        "thin" => Some(1),
+        "medium" => Some(3),
+        "thick" => Some(5),
+        _ => parse_px(Some(value)),
+    }
 }
 
 fn parse_length(value: Option<&str>, containing_width: u32) -> Option<u32> {
@@ -697,6 +703,18 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.width, 76);
         assert_eq!(layout.children[0].rect.height, 50);
+    }
+
+    #[test]
+    fn border_width_keywords_have_stable_pixel_metrics() {
+        let style = {
+            let mut style = ComputedStyle::default();
+            style.set("border-width", "thick");
+            style
+        };
+        let model = box_model_from_style(&style);
+        assert_eq!(model.border_top, 5);
+        assert_eq!(model.border_right, 5);
     }
 
     #[test]
