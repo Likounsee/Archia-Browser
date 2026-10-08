@@ -173,9 +173,7 @@ where
                 referrer: Some(document_url.clone()),
                 first_party: Some(document_url.clone()),
             };
-            request
-                .headers
-                .insert("accept".into(), "text/css".into());
+            request.headers.insert("accept".into(), "text/css".into());
             request
                 .headers
                 .insert("referer".into(), document_url.to_string());
