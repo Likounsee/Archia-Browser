@@ -264,7 +264,14 @@ fn parse_http_response_for_method(
         let Some((name, value)) = line.split_once(':') else {
             return Err(TransportError::ConnectionFailed);
         };
-        response = response.with_header(name.trim(), value.trim());
+        let name = name.trim();
+        let value = value.trim();
+        if matches!(name.to_ascii_lowercase().as_str(), "content-length" | "transfer-encoding")
+            && response.header(name).is_some()
+        {
+            return Err(TransportError::ConnectionFailed);
+        }
+        response = response.with_header(name, value);
     }
 
     let transfer_encoding = response.header("transfer-encoding");
@@ -426,6 +433,23 @@ mod tests {
         )
         .unwrap();
         assert!(response.body.is_empty());
+    }
+
+    #[test]
+    fn rejects_duplicate_framing_headers() {
+        let result = parse_http_response(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nContent-Length: 5\r\n\r\nHello",
+            1024,
+            1024,
+        );
+        assert_eq!(result, Err(TransportError::ConnectionFailed));
+
+        let result = parse_http_response(
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n",
+            1024,
+            1024,
+        );
+        assert_eq!(result, Err(TransportError::ConnectionFailed));
     }
 
     #[test]
