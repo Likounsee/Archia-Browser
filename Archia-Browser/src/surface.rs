@@ -192,7 +192,8 @@ impl SoftwareSurface {
                 let dy = py - cy;
                 if dx * dx + dy * dy <= radius * radius {
                     let index = ((py as u32 * self.surface.width + px as u32) * 4) as usize;
-                    self.pixels[index..index + 4].copy_from_slice(&[color.0, color.1, color.2, color.3]);
+                    self.pixels[index..index + 4]
+                        .copy_from_slice(&[color.0, color.1, color.2, color.3]);
                 }
             }
         }
