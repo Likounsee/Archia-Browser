@@ -104,7 +104,7 @@ fn paint_styled_node(node: &StyledNode, layout: &LayoutNode, list: &mut DisplayL
                 });
             }
         }
-        paint_borders(node.style.get("border-color"), layout, list);
+        paint_borders(&node.style, layout, list);
     }
 
     if let NodeKind::Text(text) = &node.node.kind {
@@ -138,7 +138,7 @@ fn paint_node(node: &Node, layout: &LayoutNode, style: &ComputedStyle, list: &mu
                 });
             }
         }
-        paint_borders(style.get("border-color"), layout, list);
+        paint_borders(style, layout, list);
     }
 
     if let NodeKind::Text(text) = &node.kind {
@@ -177,8 +177,19 @@ fn background_rect(layout: &LayoutNode) -> super::layout::Rect {
     super::layout::Rect::new(x, y, width, height)
 }
 
-fn paint_borders(border_color: Option<&str>, layout: &LayoutNode, list: &mut DisplayList) {
-    let Some(color) = border_color.and_then(parse_color) else {
+fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayList) {
+    let border_style = style
+        .get("border-style")
+        .map(str::trim)
+        .unwrap_or("none");
+    if matches!(border_style, "none" | "hidden") {
+        return;
+    }
+    let Some(color) = style
+        .get("border-color")
+        .or_else(|| style.get("color"))
+        .and_then(parse_color)
+    else {
         return;
     };
     let border = &layout.box_model;
@@ -299,6 +310,27 @@ mod tests {
                 color: 0xff0000ff,
             }
         );
+    }
+
+    #[test]
+    fn paints_explicit_solid_borders() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "width: 20px; height: 10px; border-width: 2px; border-style: solid; border-color: blue;",
+        );
+
+        let styled = crate::style_tree::StyleEngine::style(
+            &root,
+            &crate::css::StyleSheet::default(),
+        );
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+        let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
+
+        assert!(list.commands().iter().any(|command| matches!(
+            command,
+            PaintCommand::FillRect { color: 0x0000ffff, .. }
+        )));
     }
 
     #[test]
