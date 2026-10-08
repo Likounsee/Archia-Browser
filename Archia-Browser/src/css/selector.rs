@@ -151,9 +151,18 @@ impl Selector {
             if part.id.is_some() {
                 result.ids += 1;
             }
-            result.classes += part.classes.len() as u32
-                + part.attributes.len() as u32
-                + part.pseudo_classes.len() as u32;
+            result.classes += part.classes.len() as u32 + part.attributes.len() as u32;
+            for pseudo in &part.pseudo_classes {
+                if let Some(argument) = pseudo_argument(pseudo, "where") {
+                    let _ = argument;
+                } else if let Some(argument) = pseudo_argument(pseudo, "not") {
+                    result = result.max(pseudo_argument_specificity(argument));
+                } else if let Some(argument) = pseudo_argument(pseudo, "is") {
+                    result = result.max(pseudo_argument_specificity(argument));
+                } else {
+                    result.classes += 1;
+                }
+            }
             if part.tag.is_some() {
                 result.types += 1;
             }
@@ -498,8 +507,57 @@ fn matches_pseudo_class(
         "only-child" => element_count(siblings.unwrap_or(&[])) == 1,
         _ if pseudo.starts_with("nth-child(") => nth_matches(pseudo, siblings, position, false),
         _ if pseudo.starts_with("nth-last-child(") => nth_matches(pseudo, siblings, position, true),
+        "empty" => false,
+        _ if pseudo.starts_with("not(") => {
+            let Some(argument) = pseudo_argument(pseudo, "not") else {
+                return false;
+            };
+            !pseudo_argument_matches(argument, node, siblings, position)
+        }
+        _ if pseudo.starts_with("is(") || pseudo.starts_with("where(") => {
+            let name = if pseudo.starts_with("is(") { "is" } else { "where" };
+            let Some(argument) = pseudo_argument(pseudo, name) else {
+                return false;
+            };
+            pseudo_argument_matches(argument, node, siblings, position)
+        }
         _ => false,
     }
+}
+
+fn pseudo_argument<'a>(pseudo: &'a str, name: &str) -> Option<&'a str> {
+    let prefix = format!("{name}(");
+    pseudo.strip_prefix(&prefix)?.strip_suffix(')')
+}
+
+fn split_pseudo_arguments(argument: &str) -> impl Iterator<Item = &str> {
+    argument.split(',').map(str::trim).filter(|part| !part.is_empty())
+}
+
+fn pseudo_argument_matches(
+    argument: &str,
+    node: &Node,
+    siblings: Option<&[Node]>,
+    position: Option<usize>,
+) -> bool {
+    split_pseudo_arguments(argument).any(|candidate| {
+        let Some(selector) = Selector::parse(candidate) else {
+            return false;
+        };
+        if selector.parts.len() != 1 {
+            return false;
+        }
+        matches_simple_with_siblings(&selector.parts[0].1, node, siblings, position)
+    })
+}
+
+fn pseudo_argument_specificity(argument: &str) -> Specificity {
+    split_pseudo_arguments(argument)
+        .filter_map(|candidate| Selector::parse(candidate))
+        .filter(|selector| selector.parts.len() == 1)
+        .map(|selector| selector.specificity())
+        .max()
+        .unwrap_or_default()
 }
 
 fn element_count(siblings: &[Node]) -> usize {
