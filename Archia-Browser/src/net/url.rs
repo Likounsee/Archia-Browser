@@ -28,8 +28,8 @@ impl Url {
         if authority.is_empty() && scheme != "file" {
             return Err(UrlError::MissingAuthority);
         }
-        if scheme == "file" && !authority.is_empty() && !authority.eq_ignore_ascii_case("localhost") {
-
+        if scheme == "file" && !authority.is_empty() && !authority.eq_ignore_ascii_case("localhost")
+        {
             return Err(UrlError::UnsupportedFileAuthority);
         }
         let rest = &remainder[authority_end..];
