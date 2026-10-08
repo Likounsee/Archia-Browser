@@ -150,13 +150,14 @@ fn paint_styled_node(
     if !visibility_hidden {
         if let NodeKind::Text(text) = &node.node.kind {
             list.push(PaintCommand::DrawText {
-            x: layout.rect.x,
-            y: layout.rect.y,
-            text: transform_text(text, node.style.get("text-transform")),
-            color: apply_opacity(
-                parse_color(node.style.get("color").unwrap_or("black")).unwrap_or(0x000000ff),
-                opacity,
-            ),
+                x: layout.rect.x,
+                y: layout.rect.y,
+                text: transform_text(text, node.style.get("text-transform")),
+                color: apply_opacity(
+                    parse_color(node.style.get("color").unwrap_or("black"))
+                        .unwrap_or(0x000000ff),
+                    opacity,
+                ),
             });
         }
     }
@@ -792,4 +793,26 @@ mod tests {
         let list = SoftwareRenderer::build_display_list(&root, &layout, &style);
         assert!(list.commands().is_empty());
     }
+
+    #[test]
+    fn visibility_hidden_allows_explicitly_visible_descendants() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "visibility: hidden;");
+        let mut child = Node::element("span");
+        child.set_attribute("style", "visibility: visible; color: red;");
+        child.append(Node::text("Visible"));
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 50));
+        let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
+
+        assert!(list.commands().iter().any(|command| matches!(
+            command,
+            PaintCommand::DrawText { text, color, .. }
+                if text == "Visible" && *color == 0xff0000ff
+        )));
+    }
+
 }
