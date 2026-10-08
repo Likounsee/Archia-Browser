@@ -209,15 +209,13 @@ fn layout_styled_node(
                 inline_x = 0;
                 inline_line_height = 0;
             }
-            let mut child_layout =
-                layout_styled_node(
-                    child,
-                    output.rect.x,
-                    output.rect.y.saturating_add(cursor_y),
-                    content_width,
-                    viewport_height,
-                );
-            translate_layout_tree(&mut child_layout, output.rect.x, output.rect.y);
+            let mut child_layout = layout_styled_node(
+                child,
+                output.rect.x,
+                output.rect.y.saturating_add(cursor_y),
+                content_width,
+                viewport_height,
+            );
             cursor_y = cursor_y.saturating_add(
                 child_layout
                     .rect
