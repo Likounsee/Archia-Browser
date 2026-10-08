@@ -310,7 +310,9 @@ fn layout_styled_node(
             })
             .unwrap_or(0);
         let offset_y = parse_signed_px(node.style.get("top"))
-            .or_else(|| parse_signed_px(node.style.get("bottom")).map(|value| value.saturating_neg()))
+            .or_else(|| {
+                parse_signed_px(node.style.get("bottom")).map(|value| value.saturating_neg())
+            })
             .unwrap_or(0);
         if offset_x != 0 || offset_y != 0 {
             shift_layout_tree(&mut output, offset_x, offset_y);
