@@ -260,6 +260,42 @@ mod tests {
     }
 
     #[test]
+    fn resolves_dot_segments_and_trailing_slashes() {
+        let base = Url::parse("https://example.org/a/b/index.html").unwrap();
+
+        assert_eq!(
+            base.resolve("././next/../guide/").unwrap().to_string(),
+            "https://example.org/a/b/guide/"
+        );
+        assert_eq!(
+            base.resolve("/a/../b/./").unwrap().to_string(),
+            "https://example.org/b/"
+        );
+        assert_eq!(
+            base.resolve("../").unwrap().to_string(),
+            "https://example.org/a/"
+        );
+    }
+
+    #[test]
+    fn preserves_empty_and_replaced_queries() {
+        let base = Url::parse("https://example.org/page?old=1#top").unwrap();
+
+        assert_eq!(
+            base.resolve("?").unwrap().to_string(),
+            "https://example.org/page?"
+        );
+        assert_eq!(
+            base.resolve("?new=2").unwrap().to_string(),
+            "https://example.org/page?new=2"
+        );
+        assert_eq!(
+            base.resolve("#next").unwrap().to_string(),
+            "https://example.org/page?old=1#next"
+        );
+    }
+
+    #[test]
     fn defaults_empty_path() {
         assert_eq!(
             Url::parse("https://example.org").unwrap().to_string(),
