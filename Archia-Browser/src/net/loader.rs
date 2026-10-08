@@ -141,11 +141,31 @@ where
             let Ok(url) = document_url.resolve(&href) else {
                 continue;
             };
-            if !matches!(url.scheme(), "http" | "https" | "file") {
+            let Some(css) = self.load_stylesheet_resource(document_url, url) else {
                 continue;
+            };
+            if !stylesheet.is_empty() {
+                stylesheet.push('\n');
+            }
+            stylesheet.push_str(&css);
+        }
+
+        stylesheet
+    }
+
+    fn load_stylesheet_resource(
+        &self,
+        document_url: &super::Url,
+        url: super::Url,
+    ) -> Option<String> {
+        let mut current = url;
+
+        for _ in 0..=MAX_REDIRECTS {
+            if !matches!(current.scheme(), "http" | "https" | "file") {
+                return None;
             }
 
-            let mut request = Request::new(url.clone());
+            let mut request = Request::new(current.clone());
             request.policy = RequestPolicy {
                 priority: super::pipeline::RequestPriority::Normal,
                 resource_kind: ResourceKind::Stylesheet,
@@ -156,35 +176,40 @@ where
                 .cookies
                 .lock()
                 .expect("cookie jar poisoned")
-                .header_for(&url)
+                .header_for(&current)
             {
                 request.headers.insert("cookie".into(), cookie);
             }
 
             let Ok(response) = self.pipeline.execute(&self.transport, &request) else {
-                continue;
+                return None;
             };
 
             for set_cookie in response.set_cookie_headers() {
                 self.cookies
                     .lock()
                     .expect("cookie jar poisoned")
-                    .store(&url, set_cookie);
+                    .store(&current, set_cookie);
             }
 
-            if !(200..300).contains(&response.status) || !is_css_response(&response) {
+            if is_redirect(response.status) {
+                let location = response
+                    .header("location")
+                    .filter(|value| !value.trim().is_empty())?;
+                current = current.resolve(location).ok()?;
                 continue;
             }
 
-            let text = String::from_utf8_lossy(&response.body);
-            if !stylesheet.is_empty() {
-                stylesheet.push('\n');
+            if !(200..300).contains(&response.status) || !is_css_response(&response) {
+                return None;
             }
-            stylesheet.push_str(&text);
+
+            return Some(String::from_utf8_lossy(&response.body).into_owned());
         }
 
-        stylesheet
+        None
     }
+
 }
 
 fn collect_stylesheet_links(node: &Node, links: &mut Vec<String>) {
@@ -419,6 +444,53 @@ mod tests {
             .load(&request, LayoutViewport::new(320, 200))
             .unwrap();
         assert_eq!(page.document.text_content(), "Hello");
+    }
+
+    #[test]
+    fn follows_linked_stylesheet_redirects() {
+        #[derive(Debug)]
+        struct SequenceTransport {
+            responses: std::sync::Mutex<Vec<Response>>,
+        }
+
+        impl Transport for SequenceTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                assert_eq!(request.policy.resource_kind, ResourceKind::Stylesheet);
+                if request.url.to_string() == "https://example.org/css/site.css" {
+                    return Ok(Response::new(302).with_header("location", "/css/final.css"));
+                }
+                Ok(Response::new(200)
+                    .with_header("content-type", "text/css")
+                    .with_body(b".hero { color: blue; }".to_vec()))
+            }
+        }
+
+        let document = Response::new(200)
+            .with_header("content-type", "text/html")
+            .with_body(
+                br#"<head><link rel="stylesheet" href="/css/site.css"></head><body><div class="hero">Hello</div></body>"#
+                    .to_vec(),
+            );
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            SequenceTransport {
+                responses: std::sync::Mutex::new(vec![document]),
+            },
+        );
+        let request = Request::new(Url::parse("https://example.org/index.html").unwrap());
+
+        let page = loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .unwrap();
+        assert_eq!(
+            page.styled
+                .children
+                .iter()
+                .flat_map(|node| node.children.iter())
+                .find(|node| node.node.tag_name() == Some("div"))
+                .and_then(|node| node.style.get("color")),
+            Some("blue")
+        );
     }
 
     #[test]
