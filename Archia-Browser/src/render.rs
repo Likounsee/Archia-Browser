@@ -5,11 +5,17 @@ use crate::style_tree::StyledNode;
 use crate::surface::{Color, SoftwareSurface};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct CornerRadius {
+    x: u32,
+    y: u32,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct CornerRadii {
-    top_left: u32,
-    top_right: u32,
-    bottom_right: u32,
-    bottom_left: u32,
+    top_left: CornerRadius,
+    top_right: CornerRadius,
+    bottom_right: CornerRadius,
+    bottom_left: CornerRadius,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,10 +100,14 @@ impl SoftwareRenderer {
                         rect.y,
                         rect.width,
                         rect.height,
-                        radii.top_left,
-                        radii.top_right,
-                        radii.bottom_right,
-                        radii.bottom_left,
+                        radii.top_left.x,
+                        radii.top_left.y,
+                        radii.top_right.x,
+                        radii.top_right.y,
+                        radii.bottom_right.x,
+                        radii.bottom_right.y,
+                        radii.bottom_left.x,
+                        radii.bottom_left.y,
                         color,
                         clip,
                     );
@@ -377,7 +387,6 @@ fn parse_border_radii(style: &ComputedStyle, width: u32, height: u32) -> CornerR
         return parse_border_radius_shorthand(value, width, height);
     }
 
-    let reference = width.min(height);
     let values = [
         style.get("border-top-left-radius"),
         style.get("border-top-right-radius"),
@@ -387,6 +396,7 @@ fn parse_border_radii(style: &ComputedStyle, width: u32, height: u32) -> CornerR
     if values.iter().all(Option::is_none) {
         return CornerRadii::default();
     }
+    let reference = width.min(height);
     let Some(values) = values
         .into_iter()
         .map(|value| value.and_then(|token| parse_radius_component(token.trim(), reference)))
@@ -394,59 +404,55 @@ fn parse_border_radii(style: &ComputedStyle, width: u32, height: u32) -> CornerR
     else {
         return CornerRadii::default();
     };
-    scale_corner_radii(
-        CornerRadii {
-            top_left: values[0],
-            top_right: values[1],
-            bottom_right: values[2],
-            bottom_left: values[3],
-        },
-        width,
-        height,
-    )
+    CornerRadii {
+        top_left: CornerRadius { x: values[0], y: values[0] },
+        top_right: CornerRadius { x: values[1], y: values[1] },
+        bottom_right: CornerRadius { x: values[2], y: values[2] },
+        bottom_left: CornerRadius { x: values[3], y: values[3] },
+    }
 }
 
 fn parse_border_radius_shorthand(value: &str, width: u32, height: u32) -> CornerRadii {
-    let horizontal = value.split('/').next().unwrap_or("").split_whitespace();
-    let values = horizontal
-        .map(|token| parse_radius_component(token, width.min(height)))
-        .collect::<Option<Vec<_>>>();
-    let Some(values) = values else {
+    let mut parts = value.split('/');
+    let horizontal = parse_radius_values(parts.next().unwrap_or(""), width);
+    let vertical = parts.next().map(|part| parse_radius_values(part, height));
+    let Some(horizontal) = horizontal else {
         return CornerRadii::default();
     };
-    if values.is_empty() || values.len() > 4 {
+    let vertical = match vertical {
+        Some(Some(values)) => values,
+        Some(None) => return CornerRadii::default(),
+        None => horizontal.clone(),
+    };
+    if horizontal.len() > 4 || vertical.len() > 4 || horizontal.is_empty() || vertical.is_empty() {
         return CornerRadii::default();
     }
-    let radii = match values.as_slice() {
-        [a] => CornerRadii {
-            top_left: *a,
-            top_right: *a,
-            bottom_right: *a,
-            bottom_left: *a,
-        },
-        [a, b] => CornerRadii {
-            top_left: *a,
-            top_right: *b,
-            bottom_right: *a,
-            bottom_left: *b,
-        },
-        [a, b, c] => CornerRadii {
-            top_left: *a,
-            top_right: *b,
-            bottom_right: *c,
-            bottom_left: *b,
-        },
-        [a, b, c, d] => CornerRadii {
-            top_left: *a,
-            top_right: *b,
-            bottom_right: *c,
-            bottom_left: *d,
-        },
-        _ => return CornerRadii::default(),
-    };
-    scale_corner_radii(radii, width, height)
+    let horizontal = expand_radius_values(&horizontal);
+    let vertical = expand_radius_values(&vertical);
+    scale_corner_radii(CornerRadii {
+        top_left: CornerRadius { x: horizontal[0], y: vertical[0] },
+        top_right: CornerRadius { x: horizontal[1], y: vertical[1] },
+        bottom_right: CornerRadius { x: horizontal[2], y: vertical[2] },
+        bottom_left: CornerRadius { x: horizontal[3], y: vertical[3] },
+    }, width, height)
 }
 
+fn parse_radius_values(value: &str, reference: u32) -> Option<Vec<u32>> {
+    value
+        .split_whitespace()
+        .map(|token| parse_radius_component(token, reference))
+        .collect()
+}
+
+fn expand_radius_values(values: &[u32]) -> Vec<u32> {
+    match values {
+        [a] => vec![*a, *a, *a, *a],
+        [a, b] => vec![*a, *b, *a, *b],
+        [a, b, c] => vec![*a, *b, *c, *b],
+        [a, b, c, d] => vec![*a, *b, *c, *d],
+        _ => Vec::new(),
+    }
+}
 fn parse_radius_component(token: &str, reference: u32) -> Option<u32> {
     if let Some(percent) = token.strip_suffix('%') {
         let percent = percent.trim().parse::<u32>().ok()?;
@@ -456,29 +462,33 @@ fn parse_radius_component(token: &str, reference: u32) -> Option<u32> {
 }
 
 fn scale_corner_radii(radii: CornerRadii, width: u32, height: u32) -> CornerRadii {
-    let sum_top = radii.top_left.saturating_add(radii.top_right);
-    let sum_bottom = radii.bottom_left.saturating_add(radii.bottom_right);
-    let sum_left = radii.top_left.saturating_add(radii.bottom_left);
-    let sum_right = radii.top_right.saturating_add(radii.bottom_right);
-    let factor = [
-        sum_top as f32 / width.max(1) as f32,
-        sum_bottom as f32 / width.max(1) as f32,
-        sum_left as f32 / height.max(1) as f32,
-        sum_right as f32 / height.max(1) as f32,
-    ]
-    .into_iter()
-    .fold(1.0_f32, f32::max);
-    if factor <= 1.0 {
-        return radii;
-    }
+    let horizontal = [
+        radii.top_left.x.saturating_add(radii.top_right.x),
+        radii.bottom_left.x.saturating_add(radii.bottom_right.x),
+    ];
+    let vertical = [
+        radii.top_left.y.saturating_add(radii.bottom_left.y),
+        radii.top_right.y.saturating_add(radii.bottom_right.y),
+    ];
+    let horizontal_factor = horizontal
+        .into_iter()
+        .map(|sum| sum as f32 / width.max(1) as f32)
+        .fold(1.0_f32, f32::max);
+    let vertical_factor = vertical
+        .into_iter()
+        .map(|sum| sum as f32 / height.max(1) as f32)
+        .fold(1.0_f32, f32::max);
+    let scale = |radius: CornerRadius| CornerRadius {
+        x: (radius.x as f32 / horizontal_factor).floor() as u32,
+        y: (radius.y as f32 / vertical_factor).floor() as u32,
+    };
     CornerRadii {
-        top_left: (radii.top_left as f32 / factor).floor() as u32,
-        top_right: (radii.top_right as f32 / factor).floor() as u32,
-        bottom_right: (radii.bottom_right as f32 / factor).floor() as u32,
-        bottom_left: (radii.bottom_left as f32 / factor).floor() as u32,
+        top_left: scale(radii.top_left),
+        top_right: scale(radii.top_right),
+        bottom_right: scale(radii.bottom_right),
+        bottom_left: scale(radii.bottom_left),
     }
 }
-
 fn effective_opacity(parent: u8, value: Option<&str>) -> u8 {
     let local = value
         .and_then(|value| value.trim().parse::<f32>().ok())
@@ -805,10 +815,10 @@ mod tests {
         assert_eq!(
             parse_border_radii(&style, 40, 20),
             CornerRadii {
-                top_left: 4,
-                top_right: 4,
-                bottom_right: 4,
-                bottom_left: 4,
+                top_left: CornerRadius { x: 4, y: 4 },
+                top_right: CornerRadius { x: 4, y: 4 },
+                bottom_right: CornerRadius { x: 4, y: 4 },
+                bottom_left: CornerRadius { x: 4, y: 4 },
             }
         );
 
@@ -816,10 +826,10 @@ mod tests {
         assert_eq!(
             parse_border_radii(&style, 40, 20),
             CornerRadii {
-                top_left: 4,
-                top_right: 6,
-                bottom_right: 4,
-                bottom_left: 6,
+                top_left: CornerRadius { x: 4, y: 4 },
+                top_right: CornerRadius { x: 6, y: 6 },
+                bottom_right: CornerRadius { x: 4, y: 4 },
+                bottom_left: CornerRadius { x: 6, y: 6 },
             }
         );
 
@@ -827,10 +837,10 @@ mod tests {
         assert_eq!(
             parse_border_radii(&style, 40, 20),
             CornerRadii {
-                top_left: 1,
-                top_right: 2,
-                bottom_right: 3,
-                bottom_left: 2,
+                top_left: CornerRadius { x: 1, y: 1 },
+                top_right: CornerRadius { x: 2, y: 2 },
+                bottom_right: CornerRadius { x: 3, y: 3 },
+                bottom_left: CornerRadius { x: 2, y: 2 },
             }
         );
 
@@ -838,10 +848,10 @@ mod tests {
         assert_eq!(
             parse_border_radii(&style, 40, 20),
             CornerRadii {
-                top_left: 1,
-                top_right: 2,
-                bottom_right: 3,
-                bottom_left: 4,
+                top_left: CornerRadius { x: 1, y: 1 },
+                top_right: CornerRadius { x: 2, y: 2 },
+                bottom_right: CornerRadius { x: 3, y: 3 },
+                bottom_left: CornerRadius { x: 4, y: 4 },
             }
         );
     }
@@ -853,10 +863,10 @@ mod tests {
         assert_eq!(
             parse_border_radii(&style, 20, 10),
             CornerRadii {
-                top_left: 5,
-                top_right: 5,
-                bottom_right: 5,
-                bottom_left: 5,
+                top_left: CornerRadius { x: 5, y: 5 },
+                top_right: CornerRadius { x: 5, y: 5 },
+                bottom_right: CornerRadius { x: 5, y: 5 },
+                bottom_left: CornerRadius { x: 5, y: 5 },
             }
         );
 

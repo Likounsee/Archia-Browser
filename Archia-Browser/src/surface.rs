@@ -145,14 +145,26 @@ impl SoftwareSurface {
         y: i32,
         width: u32,
         height: u32,
-        top_left: u32,
-        top_right: u32,
-        bottom_right: u32,
-        bottom_left: u32,
+        top_left_x: u32,
+        top_left_y: u32,
+        top_right_x: u32,
+        top_right_y: u32,
+        bottom_right_x: u32,
+        bottom_right_y: u32,
+        bottom_left_x: u32,
+        bottom_left_y: u32,
         color: Color,
         clip: Option<crate::layout::Rect>,
     ) {
-        if top_left == 0 && top_right == 0 && bottom_right == 0 && bottom_left == 0 {
+        if top_left_x == 0
+            && top_left_y == 0
+            && top_right_x == 0
+            && top_right_y == 0
+            && bottom_right_x == 0
+            && bottom_right_y == 0
+            && bottom_left_x == 0
+            && bottom_left_y == 0
+        {
             self.fill_rect_clipped(x, y, width, height, color, clip);
             return;
         }
@@ -169,10 +181,22 @@ impl SoftwareSurface {
             .saturating_add(rect.height)
             .min(self.surface.height);
         let radii = [
-            top_left.min(width / 2).min(height / 2) as i64,
-            top_right.min(width / 2).min(height / 2) as i64,
-            bottom_right.min(width / 2).min(height / 2) as i64,
-            bottom_left.min(width / 2).min(height / 2) as i64,
+            (
+                top_left_x.min(width / 2) as i64,
+                top_left_y.min(height / 2) as i64,
+            ),
+            (
+                top_right_x.min(width / 2) as i64,
+                top_right_y.min(height / 2) as i64,
+            ),
+            (
+                bottom_right_x.min(width / 2) as i64,
+                bottom_right_y.min(height / 2) as i64,
+            ),
+            (
+                bottom_left_x.min(width / 2) as i64,
+                bottom_left_y.min(height / 2) as i64,
+            ),
         ];
         let left = x as i64;
         let top = y as i64;
@@ -183,20 +207,23 @@ impl SoftwareSurface {
                 let px = px as i64;
                 let py = py as i64;
                 let corner = if px < left + radii[0] && py < top + radii[0] {
-                    Some((left + radii[0] - 1, top + radii[0] - 1, radii[0]))
+                    Some((left + radii[0].0 - 1, top + radii[0].1 - 1, radii[0].0, radii[0].1))
                 } else if px > right - radii[1] && py < top + radii[1] {
-                    Some((right - radii[1] + 1, top + radii[1] - 1, radii[1]))
+                    Some((right - radii[1].0 + 1, top + radii[1].1 - 1, radii[1].0, radii[1].1))
                 } else if px > right - radii[2] && py > bottom - radii[2] {
-                    Some((right - radii[2] + 1, bottom - radii[2] + 1, radii[2]))
+                    Some((right - radii[2].0 + 1, bottom - radii[2].1 + 1, radii[2].0, radii[2].1))
                 } else if px < left + radii[3] && py > bottom - radii[3] {
-                    Some((left + radii[3] - 1, bottom - radii[3] + 1, radii[3]))
+                    Some((left + radii[3].0 - 1, bottom - radii[3].1 + 1, radii[3].0, radii[3].1))
                 } else {
                     None
                 };
-                if let Some((cx, cy, radius)) = corner {
+                if let Some((cx, cy, radius_x, radius_y)) = corner {
                     let dx = px - cx;
                     let dy = py - cy;
-                    if dx * dx + dy * dy > radius * radius {
+                    let lhs = dx * dx * radius_y * radius_y
+                        + dy * dy * radius_x * radius_x;
+                    let rhs = radius_x * radius_x * radius_y * radius_y;
+                    if lhs > rhs {
                         continue;
                     }
                 }
@@ -393,7 +420,9 @@ mod tests {
     #[test]
     fn rounded_rect_leaves_transparent_corners() {
         let mut surface = SoftwareSurface::new(12, 12);
-        surface.fill_rounded_rect_clipped(0, 0, 12, 12, 4, 4, 4, 4, Color::RED, None);
+        surface.fill_rounded_rect_clipped(
+            0, 0, 12, 12, 4, 4, 4, 4, 4, 4, 4, 4, Color::RED, None,
+        );
         assert_eq!(surface.pixel(0, 0), Some(Color(0, 0, 0, 0)));
         assert_eq!(surface.pixel(5, 1), Some(Color::RED));
         assert_eq!(surface.pixel(6, 6), Some(Color::RED));
