@@ -428,7 +428,10 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
 }
 
 
-fn matches_pseudo_class(pseudo: &str, attributes: &std::collections::BTreeMap<String, String>) -> bool {
+fn matches_pseudo_class(
+    pseudo: &str,
+    attributes: &std::collections::BTreeMap<String, String>,
+) -> bool {
     match pseudo {
         "checked" => attributes.contains_key("checked"),
         "disabled" => attributes.contains_key("disabled"),
