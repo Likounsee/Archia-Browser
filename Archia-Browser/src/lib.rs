@@ -203,10 +203,7 @@ impl Browser {
         self.tabs.active_tab().and_then(|tab| tab.page())
     }
 
-    pub fn render_current_page(
-        &self,
-        surface: &mut crate::surface::SoftwareSurface,
-    ) -> bool {
+    pub fn render_current_page(&self, surface: &mut crate::surface::SoftwareSurface) -> bool {
         let Some(page) = self.current_page() else {
             return false;
         };
