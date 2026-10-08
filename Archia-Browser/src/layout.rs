@@ -3025,6 +3025,28 @@ mod tests {
     }
 
     #[test]
+    fn flex_wrap_reverse_places_lines_from_bottom() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "display: flex; flex-wrap: wrap-reverse; width: 100px; height: 100px;",
+        );
+        for _ in 0..3 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 60px; height: 20px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.y, 80);
+        assert_eq!(layout.children[1].rect.y, 60);
+        assert_eq!(layout.children[2].rect.y, 40);
+    }
+
+    #[test]
     fn flex_wrap_align_content_centers_lines() {
         let mut root = Node::element("div");
         root.set_attribute(
