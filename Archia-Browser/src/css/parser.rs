@@ -36,7 +36,6 @@ pub fn parse_declarations(tokens: &[CssToken]) -> Vec<Property> {
                         value.push(' ');
                     }
                 }
-                CssToken::Ident(v)
                 CssToken::Hash(v) => {
                     value.push('#');
                     value.push_str(v);
