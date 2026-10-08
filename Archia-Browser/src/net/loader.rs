@@ -9,6 +9,7 @@ pub enum DocumentLoadError {
     UnsupportedContentType,
     RedirectLimitExceeded,
     InvalidRedirect,
+    NoCurrentDocument,
 }
 
 const MAX_REDIRECTS: usize = 10;
