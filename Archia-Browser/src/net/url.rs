@@ -158,17 +158,18 @@ impl Url {
 }
 
 fn has_reference_scheme(reference: &str) -> bool {
-    let first_segment = reference
-        .split(['/', '?', '#'])
-        .next()
-        .unwrap_or_default();
+    let first_segment = reference.split(['/', '?', '#']).next().unwrap_or_default();
     let Some((scheme, _)) = first_segment.split_once(':') else {
         return false;
     };
 
     let mut chars = scheme.chars();
-    chars.next().is_some_and(|character| character.is_ascii_alphabetic())
-        && chars.all(|character| character.is_ascii_alphanumeric() || matches!(character, '+' | '-' | '.'))
+    chars
+        .next()
+        .is_some_and(|character| character.is_ascii_alphabetic())
+        && chars.all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '+' | '-' | '.')
+        })
 }
 
 fn normalize_path(path: &str) -> String {
@@ -218,7 +219,9 @@ impl fmt::Display for UrlError {
             Self::MissingScheme => "URL has no scheme",
             Self::InvalidScheme => "URL scheme is invalid",
             Self::MissingAuthority => "URL has no authority",
-            Self::UnsupportedReferenceScheme => "URL reference uses an unsupported non-hierarchical scheme",
+            Self::UnsupportedReferenceScheme => {
+                "URL reference uses an unsupported non-hierarchical scheme"
+            }
         })
     }
 }
