@@ -87,7 +87,11 @@ impl CookieJar {
                     }
                 }
                 "secure" => cookie.secure = true,
-                _ => {}
+                _ => {
+                    if pieces.next().is_none() {
+                        return;
+                    }
+                }
             }
         }
 
