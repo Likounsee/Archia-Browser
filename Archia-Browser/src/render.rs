@@ -194,6 +194,20 @@ fn paint_node(node: &Node, layout: &LayoutNode, style: &ComputedStyle, list: &mu
     }
 }
 
+fn effective_opacity(parent: u8, value: Option<&str>) -> u8 {
+    let local = value
+        .and_then(|value| value.trim().parse::<f32>().ok())
+        .map(|value| value.clamp(0.0, 1.0))
+        .map(|value| (value * 255.0).round() as u8)
+        .unwrap_or(255);
+    ((u16::from(parent) * u16::from(local) + 127) / 255) as u8
+}
+
+fn apply_opacity(color: u32, opacity: u8) -> u32 {
+    let alpha = ((color & 0xff) as u16 * u16::from(opacity) + 127) / 255;
+    (color & 0xffffff00) | u32::from(alpha as u8)
+}
+
 fn intersect_clip(current: Option<Rect>, next: Option<Rect>) -> Option<Rect> {
     match (current, next) {
         (None, clip) | (clip, None) => clip,
