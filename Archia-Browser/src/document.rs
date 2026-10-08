@@ -165,6 +165,7 @@ impl Page {
     }
 
     pub fn render_into(&self, surface: &mut crate::surface::SoftwareSurface) {
+        surface.clear(crate::surface::Color::WHITE);
         SoftwareRenderer::rasterize(&self.display_list, surface);
     }
 }
@@ -508,6 +509,21 @@ b</textarea></form>"#,
         );
 
         assert_eq!(page.title(), Some("Archia Browser".to_owned()));
+    }
+
+    #[test]
+    fn render_into_clears_previous_surface_contents() {
+        let page = Page::from_html(
+            "<body><div style=\"background-color: red; width: 4px; height: 4px;\"></div></body>",
+            "",
+            LayoutViewport::new(20, 20),
+        );
+        let mut surface = crate::surface::SoftwareSurface::new(20, 20);
+        surface.clear(crate::surface::Color::RED);
+        page.render_into(&mut surface);
+
+        assert_eq!(surface.pixel(19, 19), Some(crate::surface::Color::WHITE));
+        assert_eq!(surface.pixel(0, 0), Some(crate::surface::Color::RED));
     }
 
     #[test]
