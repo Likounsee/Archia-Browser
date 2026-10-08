@@ -368,8 +368,7 @@ fn parse_http_response_for_method(
     let mut cursor = 0;
 
     loop {
-        let (response, body_start) =
-            parse_http_response_head(&bytes[cursor..], max_header_size)?;
+        let (response, body_start) = parse_http_response_head(&bytes[cursor..], max_header_size)?;
 
         if is_interim_response(response.status) {
             cursor = cursor
