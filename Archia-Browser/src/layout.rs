@@ -246,7 +246,14 @@ fn layout_styled_node(
         cursor_y = cursor_y.saturating_add(inline_line_height as i32);
     }
 
-    let content_height = explicit_height.unwrap_or(cursor_y.max(0) as u32);
+    let mut content_height = explicit_height.unwrap_or(cursor_y.max(0) as u32);
+    if let Some(min_height) = parse_length(node.style.get("min-height"), viewport_height) {
+        content_height = content_height.max(min_height);
+    }
+    if let Some(max_height) = parse_length(node.style.get("max-height"), viewport_height) {
+        content_height = content_height.min(max_height);
+    }
+
     output.rect.height = if border_box && explicit_height.is_some() {
         content_height
     } else {
@@ -255,8 +262,7 @@ fn layout_styled_node(
             .saturating_add(box_model.padding_bottom)
             .saturating_add(box_model.border_top)
             .saturating_add(box_model.border_bottom)
-    }
-    .min(viewport_height.max(content_height));
+    };
     output
 }
 
@@ -558,6 +564,36 @@ mod tests {
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
 
         assert_eq!(layout.children[0].rect.width, 120);
+    }
+
+    #[test]
+    fn min_and_max_height_constrain_used_content_height() {
+        let mut root = Node::element("body");
+        let mut child = Node::element("div");
+        child.set_attribute("style", "min-height: 80px; max-height: 120px;");
+        child.append(Node::text("short"));
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 200));
+
+        assert_eq!(layout.children[0].rect.height, 80);
+    }
+
+    #[test]
+    fn max_height_limits_content_before_padding_is_added() {
+        let mut root = Node::element("body");
+        let mut child = Node::element("div");
+        child.set_attribute("style", "max-height: 20px; padding: 4px;");
+        child.append(Node::text("content"));
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 200));
+
+        assert_eq!(layout.children[0].rect.height, 28);
     }
 
     #[test]
