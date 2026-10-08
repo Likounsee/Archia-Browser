@@ -4,6 +4,14 @@ use crate::html::{Node, NodeKind};
 use crate::style_tree::StyledNode;
 use crate::surface::{Color, SoftwareSurface};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CornerRadii {
+    top_left: u32,
+    top_right: u32,
+    bottom_right: u32,
+    bottom_left: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PaintCommand {
     FillRect {
@@ -12,7 +20,7 @@ pub enum PaintCommand {
     },
     FillRoundedRect {
         rect: super::layout::Rect,
-        radius: u32,
+        radii: CornerRadii,
         color: u32,
     },
     DrawText {
@@ -76,7 +84,7 @@ impl SoftwareRenderer {
                 }
                 PaintCommand::FillRoundedRect {
                     rect,
-                    radius,
+                    radii,
                     color,
                 } => {
                     let color = Color(
@@ -90,7 +98,10 @@ impl SoftwareRenderer {
                         rect.y,
                         rect.width,
                         rect.height,
-                        *radius,
+                        radii.top_left,
+                        radii.top_right,
+                        radii.bottom_right,
+                        radii.bottom_left,
                         color,
                         clip,
                     );
@@ -177,11 +188,11 @@ fn paint_styled_node(
         {
             if let Some(color) = parse_color(background) {
                 let rect = background_rect(layout);
-                let radius = parse_border_radius(&node.style, rect.width, rect.height);
-                if radius > 0 {
+                let radii = parse_border_radii(&node.style, rect.width, rect.height);
+                if radii != CornerRadii::default() {
                     list.push(PaintCommand::FillRoundedRect {
                         rect,
-                        radius,
+                        radii,
                         color: apply_opacity(color, opacity),
                     });
                 } else {
@@ -365,33 +376,60 @@ fn stacking_sort_key(style: &ComputedStyle) -> (u8, i32) {
     (layer, z_index)
 }
 
-fn parse_border_radius(style: &ComputedStyle, width: u32, height: u32) -> u32 {
+fn parse_border_radii(style: &ComputedStyle, width: u32, height: u32) -> CornerRadii {
     let Some(value) = style.get("border-radius").map(str::trim) else {
-        return 0;
+        return CornerRadii::default();
     };
-    let Some(token) = value
-        .split('/')
-        .next()
-        .and_then(|part| part.split_whitespace().next())
-    else {
-        return 0;
+    let horizontal = value.split('/').next().unwrap_or("").split_whitespace();
+    let values = horizontal
+        .map(|token| parse_radius_component(token, width.min(height)))
+        .collect::<Option<Vec<_>>>();
+    let Some(values) = values else {
+        return CornerRadii::default();
     };
-    let radius = if let Some(percent) = token.strip_suffix('%') {
-        let Ok(percent) = percent.trim().parse::<u32>() else {
-            return 0;
-        };
-        width
-            .min(height)
-            .saturating_mul(percent)
-            .checked_div(100)
-            .unwrap_or(0)
-    } else {
-        let Some(px) = token.strip_suffix("px") else {
-            return 0;
-        };
-        px.trim().parse::<u32>().unwrap_or(0)
+    if values.is_empty() || values.len() > 4 {
+        return CornerRadii::default();
+    }
+    let radii = match values.as_slice() {
+        [a] => CornerRadii { top_left: *a, top_right: *a, bottom_right: *a, bottom_left: *a },
+        [a, b] => CornerRadii { top_left: *a, top_right: *b, bottom_right: *a, bottom_left: *b },
+        [a, b, c] => CornerRadii { top_left: *a, top_right: *b, bottom_right: *c, bottom_left: *b },
+        [a, b, c, d] => CornerRadii { top_left: *a, top_right: *b, bottom_right: *c, bottom_left: *d },
+        _ => return CornerRadii::default(),
     };
-    radius.min(width / 2).min(height / 2)
+    scale_corner_radii(radii, width, height)
+}
+
+fn parse_radius_component(token: &str, reference: u32) -> Option<u32> {
+    if let Some(percent) = token.strip_suffix('%') {
+        let percent = percent.trim().parse::<u32>().ok()?;
+        return reference.saturating_mul(percent).checked_div(100);
+    }
+    token.strip_suffix("px")?.trim().parse::<u32>().ok()
+}
+
+fn scale_corner_radii(radii: CornerRadii, width: u32, height: u32) -> CornerRadii {
+    let sum_top = radii.top_left.saturating_add(radii.top_right);
+    let sum_bottom = radii.bottom_left.saturating_add(radii.bottom_right);
+    let sum_left = radii.top_left.saturating_add(radii.bottom_left);
+    let sum_right = radii.top_right.saturating_add(radii.bottom_right);
+    let factor = [
+        sum_top as f32 / width.max(1) as f32,
+        sum_bottom as f32 / width.max(1) as f32,
+        sum_left as f32 / height.max(1) as f32,
+        sum_right as f32 / height.max(1) as f32,
+    ]
+    .into_iter()
+    .fold(1.0_f32, f32::max);
+    if factor <= 1.0 {
+        return radii;
+    }
+    CornerRadii {
+        top_left: (radii.top_left as f32 / factor).floor() as u32,
+        top_right: (radii.top_right as f32 / factor).floor() as u32,
+        bottom_right: (radii.bottom_right as f32 / factor).floor() as u32,
+        bottom_left: (radii.bottom_left as f32 / factor).floor() as u32,
+    }
 }
 
 fn effective_opacity(parent: u8, value: Option<&str>) -> u8 {
@@ -702,7 +740,7 @@ mod tests {
         assert!(list
             .commands()
             .iter()
-            .any(|command| matches!(command, PaintCommand::FillRoundedRect { radius: 6, .. })));
+            .any(|command| matches!(command, PaintCommand::FillRoundedRect { radii: CornerRadii { top_left: 6, top_right: 6, bottom_right: 6, bottom_left: 6 }, .. })));
     }
 
     #[test]
