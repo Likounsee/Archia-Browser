@@ -742,7 +742,9 @@ fn layout_flex_children(
             value.trim().to_ascii_lowercase().as_str(),
             "wrap" | "wrap-reverse"
         )
-    }) || flow_parts.iter().any(|part| part == "wrap" || part == "wrap-reverse");
+    }) || flow_parts
+        .iter()
+        .any(|part| part == "wrap" || part == "wrap-reverse");
     let gap = parse_length(node.style.get("gap"), content_width).unwrap_or(0);
     let mut main = 0_u32;
     let mut cross = 0_u32;
