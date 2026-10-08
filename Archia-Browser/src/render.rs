@@ -373,9 +373,40 @@ fn stacking_sort_key(style: &ComputedStyle) -> (u8, i32) {
 }
 
 fn parse_border_radii(style: &ComputedStyle, width: u32, height: u32) -> CornerRadii {
-    let Some(value) = style.get("border-radius").map(str::trim) else {
+    if let Some(value) = style.get("border-radius").map(str::trim) {
+        return parse_border_radius_shorthand(value, width, height);
+    }
+
+    let reference = width.min(height);
+    let values = [
+        style.get("border-top-left-radius"),
+        style.get("border-top-right-radius"),
+        style.get("border-bottom-right-radius"),
+        style.get("border-bottom-left-radius"),
+    ];
+    if values.iter().all(Option::is_none) {
+        return CornerRadii::default();
+    }
+    let Some(values) = values
+        .into_iter()
+        .map(|value| value.and_then(|token| parse_radius_component(token.trim(), reference)))
+        .collect::<Option<Vec<_>>>()
+    else {
         return CornerRadii::default();
     };
+    scale_corner_radii(
+        CornerRadii {
+            top_left: values[0],
+            top_right: values[1],
+            bottom_right: values[2],
+            bottom_left: values[3],
+        },
+        width,
+        height,
+    )
+}
+
+fn parse_border_radius_shorthand(value: &str, width: u32, height: u32) -> CornerRadii {
     let horizontal = value.split('/').next().unwrap_or("").split_whitespace();
     let values = horizontal
         .map(|token| parse_radius_component(token, width.min(height)))
@@ -835,6 +866,25 @@ mod tests {
         assert_eq!(radii.top_right, 16);
         assert_eq!(radii.bottom_right, 3);
         assert_eq!(radii.bottom_left, 3);
+    }
+
+    #[test]
+    fn border_radius_longhands_set_individual_corners() {
+        let mut style = ComputedStyle::default();
+        style.set("border-top-left-radius", "1px");
+        style.set("border-top-right-radius", "2px");
+        style.set("border-bottom-right-radius", "3px");
+        style.set("border-bottom-left-radius", "4px");
+
+        assert_eq!(
+            parse_border_radii(&style, 40, 20),
+            CornerRadii {
+                top_left: 1,
+                top_right: 2,
+                bottom_right: 3,
+                bottom_left: 4,
+            }
+        );
     }
 
     #[test]
