@@ -351,7 +351,10 @@ fn parse_border_radius(style: &ComputedStyle, width: u32, height: u32) -> u32 {
     let Some(value) = style.get("border-radius").map(str::trim) else {
         return 0;
     };
-    let Some(token) = value.split('/').next().and_then(|part| part.split_whitespace().next())
+    let Some(token) = value
+        .split('/')
+        .next()
+        .and_then(|part| part.split_whitespace().next())
     else {
         return 0;
     };
