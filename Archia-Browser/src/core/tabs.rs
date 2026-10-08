@@ -152,22 +152,18 @@ mod tests {
         let first = manager.open();
         let second = manager.open();
 
-        manager
-            .tab_mut(first)
-            .unwrap()
-            .history_mut()
-            .push(super::super::navigation::NavigationEntry::new(
+        manager.tab_mut(first).unwrap().history_mut().push(
+            super::super::navigation::NavigationEntry::new(
                 Url::parse("https://example.org/one").unwrap(),
                 None,
-            ));
-        manager
-            .tab_mut(second)
-            .unwrap()
-            .history_mut()
-            .push(super::super::navigation::NavigationEntry::new(
+            ),
+        );
+        manager.tab_mut(second).unwrap().history_mut().push(
+            super::super::navigation::NavigationEntry::new(
                 Url::parse("https://example.org/two").unwrap(),
                 None,
-            ));
+            ),
+        );
 
         assert_eq!(
             manager
