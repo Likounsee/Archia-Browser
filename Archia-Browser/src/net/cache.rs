@@ -160,7 +160,7 @@ mod tests {
     #[test]
     fn does_not_cache_cookie_or_vary_responses() {
         let mut cache = HttpCache::default();
-        let mut request = request("https://example.org/");
+        let mut request = make_request("https://example.org/");
         request.headers.insert("cookie".into(), "sid=1".into());
         let response = Response::new(200)
             .with_header("cache-control", "max-age=60")
@@ -182,7 +182,7 @@ mod tests {
     #[test]
     fn no_store_and_no_cache_bypass_reuse() {
         let mut cache = HttpCache::default();
-        let request = request("https://example.org/");
+        let request = make_request("https://example.org/");
         let response = Response::new(200)
             .with_header("cache-control", "max-age=60")
             .with_body(b"cached".to_vec());
