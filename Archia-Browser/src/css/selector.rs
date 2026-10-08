@@ -833,10 +833,12 @@ fn matches_simple_with_siblings(
 
         match attribute.operator {
             AttributeOperator::Exists => true,
-            AttributeOperator::Equals => attribute_value_matches(actual, expected, attribute.case_insensitive, |a, b| a == b),
-            AttributeOperator::Includes => actual
-                .split_whitespace()
-                .any(|part| attribute_value_matches(part, expected, attribute.case_insensitive, |a, b| a == b)),
+            AttributeOperator::Equals => {
+                attribute_value_matches(actual, expected, attribute.case_insensitive, |a, b| a == b)
+            }
+            AttributeOperator::Includes => actual.split_whitespace().any(|part| {
+                attribute_value_matches(part, expected, attribute.case_insensitive, |a, b| a == b)
+            }),
             AttributeOperator::DashMatch => {
                 let normalized_actual = if attribute.case_insensitive {
                     actual.to_ascii_lowercase()
