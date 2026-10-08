@@ -149,10 +149,11 @@ fn paint_styled_node(
 
     if !visibility_hidden {
         if let NodeKind::Text(text) = &node.node.kind {
+            let normalized = normalize_render_text(text, node.style.get("white-space"));
             list.push(PaintCommand::DrawText {
                 x: layout.rect.x,
                 y: layout.rect.y,
-                text: transform_text(text, node.style.get("text-transform")),
+                text: transform_text(&normalized, node.style.get("text-transform")),
                 color: apply_opacity(
                     parse_color(node.style.get("color").unwrap_or("black")).unwrap_or(0x000000ff),
                     opacity,
@@ -227,6 +228,36 @@ fn paint_node(
     for (child, child_layout) in node.children.iter().zip(&layout.children) {
         paint_node(child, child_layout, style, list, opacity);
     }
+}
+
+fn normalize_render_text(text: &str, white_space: Option<&str>) -> String {
+    let mode = white_space
+        .map(str::trim)
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_else(|| "normal".to_owned());
+    if matches!(mode.as_str(), "pre" | "pre-wrap") {
+        return text.to_owned();
+    }
+
+    let mut output = String::with_capacity(text.len());
+    let mut pending_space = false;
+    for character in text.chars() {
+        if character.is_whitespace() {
+            if mode == "pre-line" && character == '\n' {
+                pending_space = false;
+                output.push('\n');
+            } else {
+                pending_space = true;
+            }
+        } else {
+            if pending_space && !output.is_empty() && !output.ends_with('\n') {
+                output.push(' ');
+            }
+            pending_space = false;
+            output.push(character);
+        }
+    }
+    output
 }
 
 fn transform_text(text: &str, value: Option<&str>) -> String {

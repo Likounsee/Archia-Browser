@@ -43,3 +43,69 @@ fn browser_stack_foundations_work_together() {
         FilterDecision::Block
     );
 }
+
+
+#[test]
+fn visibility_is_inherited_but_visible_descendants_can_paint() {
+    let mut root = archia_browser::html::Node::element("div");
+    root.set_attribute("style", "visibility: hidden; background-color: red;");
+    let mut hidden = archia_browser::html::Node::element("span");
+    hidden.set_attribute("style", "background-color: blue;");
+    hidden.append(archia_browser::html::Node::text("hidden"));
+    let mut visible = archia_browser::html::Node::element("span");
+    visible.set_attribute("style", "visibility: visible; background-color: green;");
+    visible.append(archia_browser::html::Node::text("visible"));
+    root.append(hidden);
+    root.append(visible);
+
+    let styled = archia_browser::style_tree::StyleEngine::style(&root, &StyleSheet::default());
+    let layout = archia_browser::layout::LayoutEngine::layout_styled(
+        &styled,
+        archia_browser::layout::LayoutViewport::new(200, 100),
+    );
+    assert_eq!(layout.children.len(), 2);
+    assert_eq!(layout.children[0].rect.y, 0);
+    assert_eq!(layout.children[1].rect.y, 16);
+
+    let list = archia_browser::render::SoftwareRenderer::build_display_list_styled(&styled, &layout);
+    assert!(list.commands().iter().any(|command| matches!(
+        command,
+        archia_browser::render::PaintCommand::FillRect { color: 0x008000ff, .. }
+    )));
+    assert!(!list.commands().iter().any(|command| matches!(
+        command,
+        archia_browser::render::PaintCommand::FillRect { color: 0xff0000ff, .. }
+    )));
+}
+
+#[test]
+fn visibility_collapse_stays_in_layout_but_suppresses_paint() {
+    let mut root = archia_browser::html::Node::element("div");
+    root.set_attribute("style", "visibility: collapse;");
+    root.append(archia_browser::html::Node::text("collapsed"));
+    let styled = archia_browser::style_tree::StyleEngine::style(&root, &StyleSheet::default());
+    let layout = archia_browser::layout::LayoutEngine::layout_styled(
+        &styled,
+        archia_browser::layout::LayoutViewport::new(200, 100),
+    );
+    assert!(layout.rect.height > 0);
+    let list = archia_browser::render::SoftwareRenderer::build_display_list_styled(&styled, &layout);
+    assert!(list.commands().is_empty());
+}
+
+#[test]
+fn whitespace_pre_line_collapses_spaces_but_preserves_newlines() {
+    let mut root = archia_browser::html::Node::element("div");
+    root.set_attribute("style", "white-space: pre-line;");
+    root.append(archia_browser::html::Node::text("  one\n  two  "));
+    let styled = archia_browser::style_tree::StyleEngine::style(&root, &StyleSheet::default());
+    let layout = archia_browser::layout::LayoutEngine::layout_styled(
+        &styled,
+        archia_browser::layout::LayoutViewport::new(200, 100),
+    );
+    let list = archia_browser::render::SoftwareRenderer::build_display_list_styled(&styled, &layout);
+    assert!(list.commands().iter().any(|command| matches!(
+        command,
+        archia_browser::render::PaintCommand::DrawText { text, .. } if text == "one\ntwo"
+    )));
+}
