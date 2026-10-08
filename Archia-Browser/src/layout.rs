@@ -802,8 +802,8 @@ fn intrinsic_inline_content_width(node: &crate::style_tree::StyledNode) -> u32 {
             )
             .chars()
             .count()
-                .min(u32::MAX as usize) as u32
-                * 6
+            .min(u32::MAX as usize) as u32
+            * 6
         }
         _ => node
             .children
@@ -1893,6 +1893,4 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.width, 12);
     }
-
-
 }
