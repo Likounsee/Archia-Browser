@@ -144,7 +144,7 @@ fn paint_styled_node(
         list.push(PaintCommand::DrawText {
             x: layout.rect.x,
             y: layout.rect.y,
-            text: text.clone(),
+            text: transform_text(text, node.style.get("text-transform")),
             color: apply_opacity(
                 parse_color(node.style.get("color").unwrap_or("black")).unwrap_or(0x000000ff),
                 opacity,
@@ -216,6 +216,32 @@ fn paint_node(
 
     for (child, child_layout) in node.children.iter().zip(&layout.children) {
         paint_node(child, child_layout, style, list, opacity);
+    }
+}
+
+fn transform_text(text: &str, value: Option<&str>) -> String {
+    match value.map(str::trim).map(str::to_ascii_lowercase).as_deref() {
+        Some("uppercase") => text.to_uppercase(),
+        Some("lowercase") => text.to_lowercase(),
+        Some("capitalize") => {
+            let mut output = String::with_capacity(text.len());
+            let mut word_start = true;
+            for character in text.chars() {
+                if character.is_alphanumeric() {
+                    if word_start {
+                        output.extend(character.to_uppercase());
+                    } else {
+                        output.push(character);
+                    }
+                    word_start = false;
+                } else {
+                    output.push(character);
+                    word_start = true;
+                }
+            }
+            output
+        }
+        _ => text.to_owned(),
     }
 }
 
@@ -474,6 +500,23 @@ fn parse_rgb_function(value: &str) -> Option<u32> {
 mod tests {
     use super::*;
     use crate::layout::{LayoutEngine, LayoutViewport};
+
+    #[test]
+    fn text_transform_changes_drawn_text() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "text-transform: uppercase; color: black;");
+        root.append(Node::text("Hello world"));
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 50));
+        let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
+
+        assert!(list.commands().iter().any(|command| matches!(
+            command,
+            PaintCommand::DrawText { text, .. } if text == "HELLO WORLD"
+        )));
+    }
 
     #[test]
     fn parses_rgb_and_rgba_colors() {
