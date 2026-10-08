@@ -13,15 +13,18 @@ pub mod surface;
 pub struct Browser {
     version: &'static str,
     memory: core::memory::MemoryBudget,
-    history: core::navigation::NavigationHistory,
+    tabs: core::tabs::TabManager,
 }
 
 impl Browser {
     pub fn new() -> Self {
+        let mut tabs = core::tabs::TabManager::new();
+        tabs.open();
+
         Self {
             version: env!("CARGO_PKG_VERSION"),
             memory: core::memory::MemoryBudget::new(512 * 1024 * 1024),
-            history: core::navigation::NavigationHistory::new(),
+            tabs,
         }
     }
 
@@ -33,13 +36,22 @@ impl Browser {
         &self.memory
     }
 
+    pub fn tabs(&self) -> &core::tabs::TabManager {
+        &self.tabs
+    }
+
     pub fn history(&self) -> &core::navigation::NavigationHistory {
-        &self.history
+        self.tabs
+            .active_tab()
+            .expect("browser always has an active tab unless all tabs were closed")
+            .history()
     }
 
     pub fn navigate(&mut self, url: net::Url, title: Option<String>) {
-        self.history
-            .push(core::navigation::NavigationEntry::new(url, title));
+        if let Some(tab) = self.tabs.active_tab_mut() {
+            tab.history_mut()
+                .push(core::navigation::NavigationEntry::new(url, title));
+        }
     }
 
     pub fn navigate_reference(
@@ -54,15 +66,36 @@ impl Browser {
     }
 
     pub fn current_url(&self) -> Option<&net::Url> {
-        self.history.current().map(|entry| entry.url())
+        self.tabs
+            .active_tab()
+            .and_then(|tab| tab.history().current())
+            .map(|entry| entry.url())
     }
 
     pub fn back(&mut self) -> Option<&net::Url> {
-        self.history.back().map(|entry| entry.url())
+        self.tabs
+            .active_tab_mut()
+            .and_then(|tab| tab.history_mut().back())
+            .map(|entry| entry.url())
     }
 
     pub fn forward(&mut self) -> Option<&net::Url> {
-        self.history.forward().map(|entry| entry.url())
+        self.tabs
+            .active_tab_mut()
+            .and_then(|tab| tab.history_mut().forward())
+            .map(|entry| entry.url())
+    }
+
+    pub fn new_tab(&mut self) -> core::tabs::TabId {
+        self.tabs.open()
+    }
+
+    pub fn select_tab(&mut self, id: core::tabs::TabId) -> bool {
+        self.tabs.select(id)
+    }
+
+    pub fn close_tab(&mut self, id: core::tabs::TabId) -> bool {
+        self.tabs.close(id)
     }
 }
 
@@ -75,6 +108,13 @@ impl Default for Browser {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn browser_starts_with_one_active_tab() {
+        let browser = Browser::new();
+        assert_eq!(browser.tabs().len(), 1);
+        assert!(browser.tabs().active_id().is_some());
+    }
 
     #[test]
     fn browser_navigation_updates_current_url() {
@@ -147,5 +187,44 @@ mod tests {
             "https://example.org/docs/index.html#features"
         );
         assert!(browser.history().can_go_back());
+    }
+
+    #[test]
+    fn browser_tabs_keep_independent_histories() {
+        let mut browser = Browser::new();
+        let first = browser.tabs().active_id().unwrap();
+
+        browser.navigate(net::Url::parse("https://example.org/one").unwrap(), None);
+        let second = browser.new_tab();
+        browser.navigate(net::Url::parse("https://example.org/two").unwrap(), None);
+
+        assert_eq!(
+            browser.current_url().map(ToString::to_string),
+            Some("https://example.org/two".to_owned())
+        );
+
+        assert!(browser.select_tab(first));
+        assert_eq!(
+            browser.current_url().map(ToString::to_string),
+            Some("https://example.org/one".to_owned())
+        );
+        assert!(browser.select_tab(second));
+        assert_eq!(
+            browser.current_url().map(ToString::to_string),
+            Some("https://example.org/two".to_owned())
+        );
+    }
+
+    #[test]
+    fn closing_tab_removes_its_history() {
+        let mut browser = Browser::new();
+        let first = browser.tabs().active_id().unwrap();
+        let second = browser.new_tab();
+
+        browser.navigate(net::Url::parse("https://example.org/two").unwrap(), None);
+        assert!(browser.close_tab(second));
+        assert!(browser.select_tab(first));
+        assert_eq!(browser.current_url(), None);
+        assert_eq!(browser.tabs().len(), 1);
     }
 }
