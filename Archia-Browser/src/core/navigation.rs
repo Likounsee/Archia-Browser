@@ -85,6 +85,18 @@ impl NavigationHistory {
         self.current()
     }
 
+    pub fn replace_current(&mut self, entry: NavigationEntry) -> bool {
+        let Some(index) = self.current else {
+            return false;
+        };
+        let Some(current) = self.entries.get_mut(index) else {
+            return false;
+        };
+
+        *current = entry;
+        true
+    }
+
     pub fn set_current_title(&mut self, title: Option<String>) -> bool {
         let Some(index) = self.current else {
             return false;
@@ -196,6 +208,22 @@ mod tests {
         );
         assert!(history.set_current_title(None));
         assert_eq!(history.current().and_then(NavigationEntry::title), None);
+    }
+
+    #[test]
+    fn replace_current_preserves_history_position() {
+        let mut history = NavigationHistory::new();
+        history.push(entry("https://example.org/one"));
+        history.push(entry("https://example.org/two"));
+        history.back();
+
+        assert!(history.replace_current(entry("https://example.org/reloaded")));
+        assert_eq!(history.len(), 2);
+        assert_eq!(
+            history.current().map(|entry| entry.url().to_string()),
+            Some("https://example.org/reloaded".to_owned())
+        );
+        assert!(history.can_go_forward());
     }
 
     #[test]
