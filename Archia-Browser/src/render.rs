@@ -100,7 +100,12 @@ impl SoftwareRenderer {
     }
 }
 
-fn paint_styled_node(node: &StyledNode, layout: &LayoutNode, list: &mut DisplayList) {
+fn paint_styled_node(
+    node: &StyledNode,
+    layout: &LayoutNode,
+    list: &mut DisplayList,
+    parent_opacity: u8,
+) {
     if layout.display == Display::None
         || node
             .style
@@ -109,6 +114,8 @@ fn paint_styled_node(node: &StyledNode, layout: &LayoutNode, list: &mut DisplayL
     {
         return;
     }
+
+    let opacity = effective_opacity(parent_opacity, node.style.get("opacity"));
 
     if matches!(node.node.kind, NodeKind::Element { .. }) {
         if let Some(background) = node
@@ -119,7 +126,7 @@ fn paint_styled_node(node: &StyledNode, layout: &LayoutNode, list: &mut DisplayL
             if let Some(color) = parse_color(background) {
                 list.push(PaintCommand::FillRect {
                     rect: background_rect(layout),
-                    color,
+                    color: apply_opacity(color, opacity),
                 });
             }
         }
@@ -143,12 +150,15 @@ fn paint_styled_node(node: &StyledNode, layout: &LayoutNode, list: &mut DisplayL
             x: layout.rect.x,
             y: layout.rect.y,
             text: text.clone(),
-            color: parse_color(node.style.get("color").unwrap_or("black")).unwrap_or(0x000000ff),
+            color: apply_opacity(
+                parse_color(node.style.get("color").unwrap_or("black")).unwrap_or(0x000000ff),
+                opacity,
+            ),
         });
     }
 
     for (child, child_layout) in node.children.iter().zip(&layout.children) {
-        paint_styled_node(child, child_layout, list);
+        paint_styled_node(child, child_layout, list, opacity);
     }
 
     if clips_children {
@@ -156,7 +166,13 @@ fn paint_styled_node(node: &StyledNode, layout: &LayoutNode, list: &mut DisplayL
     }
 }
 
-fn paint_node(node: &Node, layout: &LayoutNode, style: &ComputedStyle, list: &mut DisplayList) {
+fn paint_node(
+    node: &Node,
+    layout: &LayoutNode,
+    style: &ComputedStyle,
+    list: &mut DisplayList,
+    parent_opacity: u8,
+) {
     if layout.display == Display::None
         || style
             .get("visibility")
@@ -164,6 +180,8 @@ fn paint_node(node: &Node, layout: &LayoutNode, style: &ComputedStyle, list: &mu
     {
         return;
     }
+
+    let opacity = effective_opacity(parent_opacity, style.get("opacity"));
 
     if matches!(node.kind, NodeKind::Element { .. }) {
         if let Some(background) = style
@@ -173,7 +191,7 @@ fn paint_node(node: &Node, layout: &LayoutNode, style: &ComputedStyle, list: &mu
             if let Some(color) = parse_color(background) {
                 list.push(PaintCommand::FillRect {
                     rect: background_rect(layout),
-                    color,
+                    color: apply_opacity(color, opacity),
                 });
             }
         }
@@ -185,12 +203,15 @@ fn paint_node(node: &Node, layout: &LayoutNode, style: &ComputedStyle, list: &mu
             x: layout.rect.x,
             y: layout.rect.y,
             text: text.clone(),
-            color: parse_color(style.get("color").unwrap_or("black")).unwrap_or(0x000000ff),
+            color: apply_opacity(
+                parse_color(style.get("color").unwrap_or("black")).unwrap_or(0x000000ff),
+                opacity,
+            ),
         });
     }
 
     for (child, child_layout) in node.children.iter().zip(&layout.children) {
-        paint_node(child, child_layout, style, list);
+        paint_node(child, child_layout, style, list, opacity);
     }
 }
 
@@ -327,7 +348,7 @@ fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayL
                 outer_width,
                 border.border_bottom,
             ),
-            color,
+            color: apply_opacity(color, opacity),
         });
     }
     if border.border_left > 0 {
