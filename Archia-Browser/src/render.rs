@@ -257,6 +257,13 @@ fn parse_color(value: &str) -> Option<u32> {
         "green" => Some(0x008000ff),
         "blue" => Some(0x0000ffff),
         "transparent" => Some(0x00000000),
+        value if value.starts_with('#') && value.len() == 4 => {
+            let mut digits = value[1..].chars();
+            let r = u8::from_str_radix(&digits.next()?.to_string().repeat(2), 16).ok()?;
+            let g = u8::from_str_radix(&digits.next()?.to_string().repeat(2), 16).ok()?;
+            let b = u8::from_str_radix(&digits.next()?.to_string().repeat(2), 16).ok()?;
+            Some(((r as u32) << 24) | ((g as u32) << 16) | ((b as u32) << 8) | 0xff)
+        }
         value if value.starts_with('#') && value.len() == 7 => {
             let rgb = u32::from_str_radix(&value[1..], 16).ok()?;
             Some((rgb << 8) | 0xff)
