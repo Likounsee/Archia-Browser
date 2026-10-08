@@ -352,7 +352,8 @@ fn layout_styled_node(
                     child_abs_height,
                 );
                 if child.node.tag_name() == Some("img") {
-                    child_layout.rect.height = child_layout.rect.height.max(intrinsic_inline_height(child));
+                    child_layout.rect.height =
+                        child_layout.rect.height.max(intrinsic_inline_height(child));
                 }
                 inline_x = inline_x.saturating_add(
                     child_layout
