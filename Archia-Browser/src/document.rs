@@ -615,7 +615,8 @@ b</textarea></form>"#,
         page.render_into(&mut surface);
 
         assert_eq!(surface.pixel(19, 19), Some(crate::surface::Color::WHITE));
-        assert_eq!(surface.pixel(0, 0), Some(crate::surface::Color::RED));
+        assert_eq!(surface.pixel(8, 8), Some(crate::surface::Color::RED));
+        assert_eq!(surface.pixel(0, 0), Some(crate::surface::Color::WHITE));
     }
 
     #[test]
