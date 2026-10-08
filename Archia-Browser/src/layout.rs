@@ -213,7 +213,6 @@ fn layout_styled_node(
     let mut cursor_y = 0_i32;
     let mut inline_x = 0_u32;
     let mut inline_line_height = 0_u32;
-    let mut inline_line_start = output.children.len();
 
     for child in &node.children {
         let child_display = display_for_styled_node(child);
@@ -226,18 +225,30 @@ fn layout_styled_node(
             let width = intrinsic_inline_width(child);
             let line_height = used_inline_line_height(child);
             if inline_x > 0 && inline_x.saturating_add(width) > content_width {
-                align_inline_line(
-                    &mut output.children,
-                    inline_line_start,
-                    output.children.len(),
-                    inline_x,
-                    content_width,
-                    node.style.get("text-align"),
-                );
                 cursor_y = cursor_y.saturating_add(inline_line_height as i32);
                 inline_x = 0;
                 inline_line_height = 0;
-                inline_line_start = output.children.len();
+            }
+            let child_layout = layout_styled_node(
+                child,
+                output.rect.x.saturating_add(inline_x as i32),
+                output.rect.y.saturating_add(cursor_y),
+                content_width.saturating_sub(inline_x),
+                viewport_height,
+            );
+            inline_x = inline_x.saturating_add(
+                child_layout
+                    .rect
+                    .width
+                    .saturating_add(child_layout.box_model.horizontal_outer()),
+            );
+            inline_line_height = inline_line_height.max(line_height);
+            output.children.push(child_layout);
+        } else {
+            if inline_x > 0 {
+                cursor_y = cursor_y.saturating_add(inline_line_height as i32);
+                inline_x = 0;
+                inline_line_height = 0;
             }
             let child_layout = layout_styled_node(
                 child,
@@ -257,14 +268,6 @@ fn layout_styled_node(
     }
 
     if inline_x > 0 {
-        align_inline_line(
-            &mut output.children,
-            inline_line_start,
-            output.children.len(),
-            inline_x,
-            content_width,
-            node.style.get("text-align"),
-        );
         cursor_y = cursor_y.saturating_add(inline_line_height as i32);
     }
 
@@ -286,41 +289,6 @@ fn layout_styled_node(
             .saturating_add(box_model.border_bottom)
     };
     output
-}
-
-fn align_inline_line(
-    children: &mut [LayoutNode],
-    start: usize,
-    end: usize,
-    line_width: u32,
-    available_width: u32,
-    value: Option<&str>,
-) {
-    let delta = match value
-        .map(str::trim)
-        .unwrap_or("start")
-        .to_ascii_lowercase()
-        .as_str()
-    {
-        "center" => available_width.saturating_sub(line_width) / 2,
-        "right" | "end" => available_width.saturating_sub(line_width),
-        _ => 0,
-    } as i32;
-    if delta == 0 {
-        return;
-    }
-    if let Some(line) = children.get_mut(start..end) {
-        for child in line {
-            shift_layout_x(child, delta);
-        }
-    }
-}
-
-fn shift_layout_x(layout: &mut LayoutNode, delta: i32) {
-    layout.rect.x = layout.rect.x.saturating_add(delta);
-    for child in &mut layout.children {
-        shift_layout_x(child, delta);
-    }
 }
 
 fn display_for_styled_node(node: &crate::style_tree::StyledNode) -> Display {
@@ -719,32 +687,6 @@ mod tests {
         assert_eq!(layout.children[0].rect.width, 100);
         assert_eq!(layout.children[0].box_model.margin_left, 100);
         assert_eq!(layout.children[0].box_model.margin_right, 100);
-    }
-
-    #[test]
-    fn text_align_centers_inline_content() {
-        let mut root = Node::element("body");
-        root.set_attribute("style", "text-align: center;");
-        let mut child = Node::element("span");
-        child.append(Node::text("Hello"));
-        root.append(child);
-        let styled =
-            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
-        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
-        assert_eq!(layout.children[0].rect.x, 35);
-    }
-
-    #[test]
-    fn text_align_right_moves_inline_content_to_end() {
-        let mut root = Node::element("body");
-        root.set_attribute("style", "text-align: right;");
-        let mut child = Node::element("span");
-        child.append(Node::text("Hi"));
-        root.append(child);
-        let styled =
-            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
-        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
-        assert_eq!(layout.children[0].rect.x, 88);
     }
 
     #[test]
