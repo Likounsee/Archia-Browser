@@ -162,8 +162,12 @@ impl SoftwareSurface {
         };
         let x0 = rect.x.max(0) as u32;
         let y0 = rect.y.max(0) as u32;
-        let x1 = (rect.x.max(0) as u32).saturating_add(rect.width).min(self.surface.width);
-        let y1 = (rect.y.max(0) as u32).saturating_add(rect.height).min(self.surface.height);
+        let x1 = (rect.x.max(0) as u32)
+            .saturating_add(rect.width)
+            .min(self.surface.width);
+        let y1 = (rect.y.max(0) as u32)
+            .saturating_add(rect.height)
+            .min(self.surface.height);
         let radii = [
             top_left.min(width / 2).min(height / 2) as i64,
             top_right.min(width / 2).min(height / 2) as i64,
@@ -197,7 +201,8 @@ impl SoftwareSurface {
                     }
                 }
                 let index = ((py as u32 * self.surface.width + px as u32) * 4) as usize;
-                self.pixels[index..index + 4].copy_from_slice(&[color.0, color.1, color.2, color.3]);
+                self.pixels[index..index + 4]
+                    .copy_from_slice(&[color.0, color.1, color.2, color.3]);
             }
         }
     }

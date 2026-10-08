@@ -82,11 +82,7 @@ impl SoftwareRenderer {
                     );
                     surface.fill_rect_clipped(rect.x, rect.y, rect.width, rect.height, color, clip);
                 }
-                PaintCommand::FillRoundedRect {
-                    rect,
-                    radii,
-                    color,
-                } => {
+                PaintCommand::FillRoundedRect { rect, radii, color } => {
                     let color = Color(
                         ((color >> 24) & 0xff) as u8,
                         ((color >> 16) & 0xff) as u8,
@@ -391,10 +387,30 @@ fn parse_border_radii(style: &ComputedStyle, width: u32, height: u32) -> CornerR
         return CornerRadii::default();
     }
     let radii = match values.as_slice() {
-        [a] => CornerRadii { top_left: *a, top_right: *a, bottom_right: *a, bottom_left: *a },
-        [a, b] => CornerRadii { top_left: *a, top_right: *b, bottom_right: *a, bottom_left: *b },
-        [a, b, c] => CornerRadii { top_left: *a, top_right: *b, bottom_right: *c, bottom_left: *b },
-        [a, b, c, d] => CornerRadii { top_left: *a, top_right: *b, bottom_right: *c, bottom_left: *d },
+        [a] => CornerRadii {
+            top_left: *a,
+            top_right: *a,
+            bottom_right: *a,
+            bottom_left: *a,
+        },
+        [a, b] => CornerRadii {
+            top_left: *a,
+            top_right: *b,
+            bottom_right: *a,
+            bottom_left: *b,
+        },
+        [a, b, c] => CornerRadii {
+            top_left: *a,
+            top_right: *b,
+            bottom_right: *c,
+            bottom_left: *b,
+        },
+        [a, b, c, d] => CornerRadii {
+            top_left: *a,
+            top_right: *b,
+            bottom_right: *c,
+            bottom_left: *d,
+        },
         _ => return CornerRadii::default(),
     };
     scale_corner_radii(radii, width, height)
