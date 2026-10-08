@@ -27,7 +27,7 @@ pub struct StyleEngine;
 impl StyleEngine {
     pub fn style(document: &Node, sheet: &StyleSheet) -> StyledNode {
         let mut path = Vec::new();
-        let mut sibling_lists = Vec::new();
+        let mut sibling_lists = vec![&[] as &[Node]];
         let mut sibling_positions = Vec::new();
         style_node(
             document,
