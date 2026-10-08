@@ -80,6 +80,11 @@ where
                 let mut next = current.clone();
                 next.url = url;
                 next.headers.remove("cookie");
+                if let Some(first_party) = next.policy.first_party.as_ref() {
+                    if first_party.host().is_empty() {
+                        return Err(DocumentLoadError::InvalidRedirect);
+                    }
+                }
                 if let Some(cookie) = self
                     .cookies
                     .lock()
