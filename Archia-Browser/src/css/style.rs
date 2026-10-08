@@ -6,6 +6,10 @@ pub struct Property {
     pub value: String,
 }
 
+fn normalize_property_name(name: &str) -> String {
+    name.trim().to_ascii_lowercase()
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ComputedStyle {
     properties: BTreeMap<String, String>,
@@ -18,13 +22,13 @@ impl ComputedStyle {
     }
 
     pub fn set_important(&mut self, name: impl Into<String>, value: impl Into<String>) {
-        let name = name.into();
+        let name = normalize_property_name(&name.into());
         self.properties.insert(name.clone(), value.into());
         self.important.insert(name, true);
     }
 
     pub fn set_if_unimportant(&mut self, name: impl Into<String>, value: impl Into<String>) {
-        let name = name.into();
+        let name = normalize_property_name(&name.into());
         if self.important.get(&name).copied().unwrap_or(false) {
             return;
         }
@@ -33,11 +37,16 @@ impl ComputedStyle {
     }
 
     pub fn is_important(&self, name: &str) -> bool {
-        self.important.get(name).copied().unwrap_or(false)
+        self.important
+            .get(&normalize_property_name(name))
+            .copied()
+            .unwrap_or(false)
     }
 
     pub fn get(&self, name: &str) -> Option<&str> {
-        self.properties.get(name).map(String::as_str)
+        self.properties
+            .get(&normalize_property_name(name))
+            .map(String::as_str)
     }
 
     pub fn len(&self) -> usize {
@@ -48,5 +57,28 @@ impl ComputedStyle {
         self.properties
             .iter()
             .map(|(name, value)| (name.as_str(), value.as_str()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn property_names_are_case_insensitive_and_trimmed() {
+        let mut style = ComputedStyle::default();
+        style.set("  BACKGROUND-COLOR  ", "red");
+        assert_eq!(style.get("background-color"), Some("red"));
+        assert_eq!(style.get("BACKGROUND-COLOR"), Some("red"));
+        assert_eq!(style.len(), 1);
+    }
+
+    #[test]
+    fn important_state_uses_normalized_property_names() {
+        let mut style = ComputedStyle::default();
+        style.set_important(" COLOR ", "red");
+        style.set_if_unimportant("color", "blue");
+        assert_eq!(style.get("color"), Some("red"));
+        assert!(style.is_important(" COLOR "));
     }
 }
