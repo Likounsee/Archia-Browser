@@ -25,8 +25,11 @@ impl Url {
         }
         let authority_end = remainder.find(['/', '?', '#']).unwrap_or(remainder.len());
         let authority = &remainder[..authority_end];
-        if authority.is_empty() {
+        if authority.is_empty() && scheme != "file" {
             return Err(UrlError::MissingAuthority);
+        }
+        if scheme == "file" && !authority.is_empty() && !authority.eq_ignore_ascii_case("localhost") {
+            return Err(UrlError::UnsupportedFileAuthority);
         }
         let rest = &remainder[authority_end..];
         let (without_fragment, fragment) = rest
@@ -211,6 +214,7 @@ pub enum UrlError {
     InvalidScheme,
     MissingAuthority,
     UnsupportedReferenceScheme,
+    UnsupportedFileAuthority,
 }
 
 impl fmt::Display for UrlError {
@@ -222,6 +226,7 @@ impl fmt::Display for UrlError {
             Self::UnsupportedReferenceScheme => {
                 "URL reference uses an unsupported non-hierarchical scheme"
             }
+            Self::UnsupportedFileAuthority => "file URL uses an unsupported authority",
         })
     }
 }
@@ -231,6 +236,27 @@ impl std::error::Error for UrlError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_local_file_urls_without_authority() {
+        let url = Url::parse("file:///tmp/index.html").unwrap();
+        assert_eq!(url.scheme(), "file");
+        assert_eq!(url.authority(), "");
+        assert_eq!(url.path(), "/tmp/index.html");
+        assert_eq!(url.to_string(), "file:///tmp/index.html");
+    }
+
+    #[test]
+    fn rejects_remote_file_authorities() {
+        assert_eq!(
+            Url::parse("file://example.org/index.html").unwrap_err(),
+            UrlError::UnsupportedFileAuthority
+        );
+        assert_eq!(
+            Url::parse("file://localhost/index.html").unwrap().authority(),
+            "localhost"
+        );
+    }
 
     #[test]
     fn parses_components() {
