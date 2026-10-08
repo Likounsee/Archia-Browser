@@ -43,6 +43,25 @@ impl From<crate::net::UrlError> for FormSubmissionError {
     }
 }
 
+impl FormSubmission {
+    pub fn into_request(self) -> crate::net::Request {
+        let mut request = crate::net::Request::new(self.url);
+        match self.method {
+            FormMethod::Get => request,
+            FormMethod::Post => {
+                request.method = crate::net::HttpMethod::Post;
+                if let Some(content_type) = self.content_type {
+                    request
+                        .headers
+                        .insert("content-type".to_owned(), content_type.to_owned());
+                }
+                request.body = self.body;
+                request
+            }
+        }
+    }
+}
+
 impl Page {
     pub fn from_html(html: &str, css: &str, viewport: LayoutViewport) -> Self {
         Self::from_html_at(None, html, css, viewport)
@@ -309,6 +328,23 @@ mod tests {
         );
         assert!(submission.body.is_empty());
         assert_eq!(submission.content_type, None);
+    }
+
+    #[test]
+    fn converts_post_form_submission_into_request() {
+        let page = Page::from_html_at(
+            Some(Url::parse("https://example.org/form").unwrap()),
+            r#"<form method="post"><input name="q" value="rust"></form>"#,
+            "",
+            LayoutViewport::new(320, 200),
+        );
+        let form = page.document.find_first_element("form").unwrap();
+
+        let request = page.form_submission(form).unwrap().into_request();
+        assert_eq!(request.method, crate::net::HttpMethod::Post);
+        assert_eq!(request.url.to_string(), "https://example.org/form");
+        assert_eq!(request.header("content-type"), Some("application/x-www-form-urlencoded"));
+        assert_eq!(request.body, b"q=rust");
     }
 
     #[test]
