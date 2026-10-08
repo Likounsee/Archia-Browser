@@ -767,12 +767,41 @@ fn is_line_break(node: &crate::style_tree::StyledNode) -> bool {
     matches!(&node.node.kind, NodeKind::Element { name, .. } if name == "br")
 }
 
+fn transform_text_for_layout(text: &str, value: Option<&str>) -> String {
+    match value.map(str::trim).map(str::to_ascii_lowercase).as_deref() {
+        Some("uppercase") => text.to_uppercase(),
+        Some("lowercase") => text.to_lowercase(),
+        Some("capitalize") => {
+            let mut output = String::with_capacity(text.len());
+            let mut word_start = true;
+            for character in text.chars() {
+                if character.is_alphanumeric() {
+                    if word_start {
+                        output.extend(character.to_uppercase());
+                    } else {
+                        output.push(character);
+                    }
+                    word_start = false;
+                } else {
+                    output.push(character);
+                    word_start = true;
+                }
+            }
+            output
+        }
+        _ => text.to_owned(),
+    }
+}
+
 fn intrinsic_inline_content_width(node: &crate::style_tree::StyledNode) -> u32 {
     match &node.node.kind {
         NodeKind::Text(text) => {
-            normalized_text(text, node.style.get("white-space"))
-                .chars()
-                .count()
+            transform_text_for_layout(
+                &normalized_text(text, node.style.get("white-space")),
+                node.style.get("text-transform"),
+            )
+            .chars()
+            .count()
                 .min(u32::MAX as usize) as u32
                 * 6
         }
@@ -1850,4 +1879,20 @@ mod tests {
         };
         assert_eq!(model.horizontal_outer(), 31);
     }
+    #[test]
+    fn text_transform_affects_intrinsic_inline_width() {
+        let mut root = Node::element("div");
+        let mut child = Node::element("span");
+        child.set_attribute("style", "text-transform: uppercase;");
+        child.append(Node::text("ß"));
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 50));
+
+        assert_eq!(layout.children[0].rect.width, 12);
+    }
+
+
 }
