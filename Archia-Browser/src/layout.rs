@@ -2628,7 +2628,9 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.x, 50);
         assert_eq!(layout.children[1].rect.x, 0);
-    }    #[test]
+    }
+
+    #[test]
     fn image_html_dimensions_contribute_to_inline_layout() {
         let mut root = Node::element("body");
         let mut image = Node::element("img");
@@ -2643,6 +2645,4 @@ mod tests {
         assert_eq!(layout.children[0].rect.width, 64);
         assert_eq!(layout.children[0].rect.height, 32);
     }
-
-
 }
