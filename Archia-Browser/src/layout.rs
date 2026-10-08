@@ -298,6 +298,23 @@ fn layout_styled_node(
             .saturating_add(box_model.border_top)
             .saturating_add(box_model.border_bottom)
     };
+
+    if node
+        .style
+        .get("position")
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("relative"))
+    {
+        let offset_x = parse_signed_px(node.style.get("left"))
+            .or_else(|| parse_signed_px(node.style.get("right")).map(|value| value.saturating_neg()))
+            .unwrap_or(0);
+        let offset_y = parse_signed_px(node.style.get("top"))
+            .or_else(|| parse_signed_px(node.style.get("bottom")).map(|value| value.saturating_neg()))
+            .unwrap_or(0);
+        if offset_x != 0 || offset_y != 0 {
+            shift_layout_tree(&mut output, offset_x, offset_y);
+        }
+    }
+
     output
 }
 
@@ -429,6 +446,19 @@ fn parse_length(value: Option<&str>, containing_width: u32) -> Option<u32> {
 fn parse_px(value: Option<&str>) -> Option<u32> {
     let value = value?.trim();
     value.strip_suffix("px")?.trim().parse().ok()
+}
+
+fn parse_signed_px(value: Option<&str>) -> Option<i32> {
+    let value = value?.trim();
+    value.strip_suffix("px")?.trim().parse().ok()
+}
+
+fn shift_layout_tree(node: &mut LayoutNode, offset_x: i32, offset_y: i32) {
+    node.rect.x = node.rect.x.saturating_add(offset_x);
+    node.rect.y = node.rect.y.saturating_add(offset_y);
+    for child in &mut node.children {
+        shift_layout_tree(child, offset_x, offset_y);
+    }
 }
 
 fn layout_children(node: &Node, output: &mut LayoutNode, containing_width: u32) {
@@ -751,6 +781,46 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.width, 76);
         assert_eq!(layout.children[0].rect.height, 50);
+    }
+
+    #[test]
+    fn relative_position_offsets_box_and_descendants_without_changing_flow() {
+        let mut root = Node::element("body");
+        let mut first = Node::element("div");
+        first.set_attribute("style", "position: relative; left: 10px; top: 5px; height: 20px;");
+        let mut nested = Node::element("span");
+        nested.append(Node::text("child"));
+        first.append(nested);
+        let mut second = Node::element("div");
+        second.set_attribute("style", "height: 10px;");
+        root.append(first);
+        root.append(second);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.x, 10);
+        assert_eq!(layout.children[0].rect.y, 5);
+        assert_eq!(layout.children[0].children[0].rect.x, 10);
+        assert_eq!(layout.children[0].children[0].rect.y, 5);
+        assert_eq!(layout.children[1].rect.x, 0);
+        assert_eq!(layout.children[1].rect.y, 20);
+    }
+
+    #[test]
+    fn relative_position_uses_bottom_and_right_when_opposite_offsets_are_absent() {
+        let mut root = Node::element("body");
+        let mut child = Node::element("div");
+        child.set_attribute("style", "position: relative; right: 7px; bottom: 3px;");
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.x, -7);
+        assert_eq!(layout.children[0].rect.y, -3);
     }
 
     #[test]
