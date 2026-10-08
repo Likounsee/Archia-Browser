@@ -351,6 +351,7 @@ mod tests {
 
     #[test]
     fn document_loads_are_marked_as_document_resources() {
+        eprintln!("TEST checkpoint: entered");
         #[derive(Debug)]
         struct InspectTransport;
 
@@ -363,9 +364,13 @@ mod tests {
             }
         }
 
+        eprintln!("TEST checkpoint: before loader");
         let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), InspectTransport);
+        eprintln!("TEST checkpoint: after loader");
         let request = Request::new(Url::parse("https://example.org/").unwrap());
+        eprintln!("TEST checkpoint: before load");
         assert!(loader.load(&request, LayoutViewport::new(320, 200)).is_ok());
+        eprintln!("TEST checkpoint: after load");
     }
 
     #[test]
