@@ -343,7 +343,10 @@ mod tests {
         let request = page.form_submission(form).unwrap().into_request();
         assert_eq!(request.method, crate::net::HttpMethod::Post);
         assert_eq!(request.url.to_string(), "https://example.org/form");
-        assert_eq!(request.header("content-type"), Some("application/x-www-form-urlencoded"));
+        assert_eq!(
+            request.header("content-type"),
+            Some("application/x-www-form-urlencoded")
+        );
         assert_eq!(request.body, b"q=rust");
     }
 
