@@ -972,7 +972,8 @@ fn layout_flex_children(
                         .saturating_add(output.children[*index].box_model.horizontal_outer()),
                 )
                 .saturating_add(gap);
-        }    } else {
+        }
+    } else {
         let mut ordered_indices = flex_indices.clone();
         ordered_indices.sort_by_key(|(_, child_index)| {
             parse_flex_order(node.children[*child_index].style.get("order"))
@@ -996,7 +997,7 @@ fn layout_flex_children(
                 )
                 .saturating_add(gap);
         }
-
+    }
 
     let align = node
         .style
