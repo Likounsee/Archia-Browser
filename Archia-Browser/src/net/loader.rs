@@ -474,10 +474,13 @@ mod tests {
                 br#"<head><link rel="stylesheet" href="/css/site.css"></head><body><div class="hero">Hello</div></body>"#
                     .to_vec(),
             );
+        let stylesheet = Response::new(200)
+            .with_header("content-type", "text/css")
+            .with_body(b".hero { color: blue; }".to_vec());
         let loader = DocumentLoader::new(
             NetworkPipeline::new(AllowAll),
             SequenceTransport {
-                responses: std::sync::Mutex::new(vec![document]),
+                responses: std::sync::Mutex::new(vec![document, Response::new(302).with_header("location", "/css/final.css"), stylesheet]),
             },
         );
         let request = Request::new(Url::parse("https://example.org/index.html").unwrap());
