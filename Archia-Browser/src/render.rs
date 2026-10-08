@@ -198,10 +198,10 @@ fn intersect_clip(current: Option<Rect>, next: Option<Rect>) -> Option<Rect> {
         (Some(first), Some(second)) => {
             let left = first.x.max(second.x);
             let top = first.y.max(second.y);
-            let right = (first.x as i64 + first.width as i64)
-                .min(second.x as i64 + second.width as i64);
-            let bottom = (first.y as i64 + first.height as i64)
-                .min(second.y as i64 + second.height as i64);
+            let right =
+                (first.x as i64 + first.width as i64).min(second.x as i64 + second.width as i64);
+            let bottom =
+                (first.y as i64 + first.height as i64).min(second.y as i64 + second.height as i64);
             if right <= left as i64 || bottom <= top as i64 {
                 Some(Rect::new(left, top, 0, 0))
             } else {
@@ -218,8 +218,14 @@ fn intersect_clip(current: Option<Rect>, next: Option<Rect>) -> Option<Rect> {
 
 fn overflow_clip_rect(layout: &LayoutNode) -> Rect {
     Rect::new(
-        layout.rect.x.saturating_sub(layout.box_model.padding_left as i32),
-        layout.rect.y.saturating_sub(layout.box_model.padding_top as i32),
+        layout
+            .rect
+            .x
+            .saturating_sub(layout.box_model.padding_left as i32),
+        layout
+            .rect
+            .y
+            .saturating_sub(layout.box_model.padding_top as i32),
         layout
             .rect
             .width
@@ -496,7 +502,10 @@ mod tests {
     #[test]
     fn overflow_hidden_adds_a_clip_around_descendants() {
         let mut root = Node::element("div");
-        root.set_attribute("style", "width: 20px; height: 10px; padding: 2px; overflow: hidden;");
+        root.set_attribute(
+            "style",
+            "width: 20px; height: 10px; padding: 2px; overflow: hidden;",
+        );
         let mut child = Node::element("span");
         child.append(Node::text("This text overflows"));
         root.append(child);
