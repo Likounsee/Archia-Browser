@@ -102,6 +102,13 @@ impl Browser {
             .filter(|href| !href.is_empty())
             .ok_or(LinkActivationError::MissingHref)?;
 
+        if link
+            .attribute("target")
+            .is_some_and(|target| target.trim().eq_ignore_ascii_case("_blank"))
+        {
+            self.new_tab();
+        }
+
         self.navigate_reference(href, title)
             .map_err(LinkActivationError::from)
     }
@@ -277,6 +284,20 @@ mod tests {
             browser.history().current().and_then(|entry| entry.title()),
             Some("Guide")
         );
+    }
+
+    #[test]
+    fn browser_opens_blank_target_in_a_new_tab() {
+        let mut browser = Browser::new();
+        browser.navigate(net::Url::parse("https://example.org/").unwrap(), None);
+
+        let mut link = crate::html::Node::element("a");
+        link.set_attribute("href", "/new-tab");
+        link.set_attribute("target", "_BLANK");
+
+        let current = browser.activate_link(&link, None).unwrap();
+        assert_eq!(current.to_string(), "https://example.org/new-tab");
+        assert_eq!(browser.tabs().len(), 2);
     }
 
     #[test]
