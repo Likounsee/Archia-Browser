@@ -49,10 +49,10 @@ fn visibility_is_inherited_but_visible_descendants_can_paint() {
     let mut root = archia_browser::html::Node::element("div");
     root.set_attribute("style", "visibility: hidden; background-color: red;");
     let mut hidden = archia_browser::html::Node::element("span");
-    hidden.set_attribute("style", "background-color: blue;");
+    hidden.set_attribute("style", "display: block; background-color: blue;");
     hidden.append(archia_browser::html::Node::text("hidden"));
     let mut visible = archia_browser::html::Node::element("span");
-    visible.set_attribute("style", "visibility: visible; background-color: green;");
+    visible.set_attribute("style", "display: block; visibility: visible; background-color: green;");
     visible.append(archia_browser::html::Node::text("visible"));
     root.append(hidden);
     root.append(visible);
