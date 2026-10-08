@@ -223,7 +223,7 @@ fn layout_styled_node(
 
         if child_display == Display::Inline {
             let width = intrinsic_inline_width(child);
-            let line_height = inline_line_height(child);
+            let line_height = used_inline_line_height(child);
             if inline_x > 0 && inline_x.saturating_add(width) > content_width {
                 cursor_y = cursor_y.saturating_add(inline_line_height as i32);
                 inline_x = 0;
@@ -338,7 +338,7 @@ fn intrinsic_inline_width(node: &crate::style_tree::StyledNode) -> u32 {
     }
 }
 
-fn inline_line_height(node: &crate::style_tree::StyledNode) -> u32 {
+fn used_inline_line_height(node: &crate::style_tree::StyledNode) -> u32 {
     node.style
         .get("line-height")
         .and_then(|value| parse_px(Some(value)))
