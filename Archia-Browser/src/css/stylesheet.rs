@@ -119,12 +119,17 @@ impl StyleSheet {
 
             let mut computed = ComputedStyle::default();
             for (name, value) in inherited.iter() {
-                if is_inherited_property(name) {
+                if is_inherited_property(name) || name.starts_with("--") {
                     computed.set(name, value);
                 }
             }
             for (name, value) in local.iter() {
-                let resolved = resolve_css_wide_value(name, value, &inherited);
+                if name.starts_with("--") {
+                    computed.set(name, value);
+                }
+            }
+            for (name, value) in local.iter() {
+                let resolved = resolve_css_value(name, value, &computed, &inherited);
                 if local.is_important(name) {
                     computed.set_important(name, resolved);
                 } else {
@@ -220,8 +225,13 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
     apply(name, value);
 }
 
-fn resolve_css_wide_value(name: &str, value: &str, inherited: &ComputedStyle) -> String {
-    match value.trim().to_ascii_lowercase().as_str() {
+fn resolve_css_value(
+    name: &str,
+    value: &str,
+    variables: &ComputedStyle,
+    inherited: &ComputedStyle,
+) -> String {
+    let wide = match value.trim().to_ascii_lowercase().as_str() {
         "inherit" => inherited
             .get(name)
             .map(str::to_owned)
@@ -238,7 +248,49 @@ fn resolve_css_wide_value(name: &str, value: &str, inherited: &ComputedStyle) ->
             }
         }
         _ => value.to_owned(),
+    };
+    resolve_variables(&wide, variables, 0)
+}
+
+fn resolve_variables(value: &str, variables: &ComputedStyle, depth: usize) -> String {
+    if depth >= 16 {
+        return value.to_owned();
     }
+    let Some(start) = value.find("var(") else {
+        return value.to_owned();
+    };
+    let mut level = 0usize;
+    let mut end = None;
+    for (offset, character) in value[start + 4..].char_indices() {
+        match character {
+            '(' => level += 1,
+            ')' if level == 0 => {
+                end = Some(start + 4 + offset);
+                break;
+            }
+            ')' => level -= 1,
+            _ => {}
+        }
+    }
+    let Some(end) = end else {
+        return value.to_owned();
+    };
+    let inside = &value[start + 4..end];
+    let mut parts = inside.splitn(2, ',');
+    let name = parts.next().unwrap_or("").trim();
+    let replacement = variables
+        .get(name)
+        .map(str::to_owned)
+        .or_else(|| parts.next().map(str::trim).map(str::to_owned));
+    let Some(replacement) = replacement else {
+        return value.to_owned();
+    };
+    let replacement = resolve_variables(&replacement, variables, depth + 1);
+    let mut output = String::with_capacity(value.len() + replacement.len());
+    output.push_str(&value[..start]);
+    output.push_str(&replacement);
+    output.push_str(&value[end + 1..]);
+    resolve_variables(&output, variables, depth + 1)
 }
 
 fn initial_value(name: &str) -> &'static str {
@@ -465,6 +517,21 @@ mod tests {
         assert_eq!(style.get("border-width"), Some("2px"));
         assert_eq!(style.get("border-style"), Some("solid"));
         assert_eq!(style.get("border-color"), Some("#102030"));
+    }
+
+    #[test]
+    fn custom_properties_inherit_and_resolve_var_functions() {
+        let sheet = StyleSheet::parse(
+            "body { --accent: #123456; color: var(--accent); } span { background-color: var(--missing, var(--accent)); }",
+        );
+        let body = Node::element("body");
+        let span = Node::element("span");
+        let path = [&body, &span];
+
+        let style = sheet.compute_style_path(&path);
+        assert_eq!(style.get("--accent"), Some("#123456"));
+        assert_eq!(style.get("color"), Some("#123456"));
+        assert_eq!(style.get("background-color"), Some("#123456"));
     }
 
     #[test]
