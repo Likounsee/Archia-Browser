@@ -178,10 +178,7 @@ fn background_rect(layout: &LayoutNode) -> super::layout::Rect {
 }
 
 fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayList) {
-    let border_style = style
-        .get("border-style")
-        .map(str::trim)
-        .unwrap_or("none");
+    let border_style = style.get("border-style").map(str::trim).unwrap_or("none");
     if matches!(border_style, "none" | "hidden") {
         return;
     }
@@ -320,16 +317,17 @@ mod tests {
             "width: 20px; height: 10px; border-width: 2px; border-style: solid; border-color: blue;",
         );
 
-        let styled = crate::style_tree::StyleEngine::style(
-            &root,
-            &crate::css::StyleSheet::default(),
-        );
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
         let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
 
         assert!(list.commands().iter().any(|command| matches!(
             command,
-            PaintCommand::FillRect { color: 0x0000ffff, .. }
+            PaintCommand::FillRect {
+                color: 0x0000ffff,
+                ..
+            }
         )));
     }
 
