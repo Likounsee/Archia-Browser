@@ -1,4 +1,5 @@
 use crate::css::StyleSheet;
+use crate::net::Url;
 use crate::html::{parse, HtmlTokenizer, Node};
 use crate::layout::{LayoutEngine, LayoutNode, LayoutViewport};
 use crate::render::{DisplayList, SoftwareRenderer};
@@ -6,6 +7,7 @@ use crate::style_tree::{StyleEngine, StyledNode};
 
 #[derive(Debug, Clone)]
 pub struct Page {
+    url: Option<Url>,
     pub document: Node,
     pub styled: StyledNode,
     pub layout: LayoutNode,
@@ -14,6 +16,15 @@ pub struct Page {
 
 impl Page {
     pub fn from_html(html: &str, css: &str, viewport: LayoutViewport) -> Self {
+        Self::from_html_at(None, html, css, viewport)
+    }
+
+    pub fn from_html_at(
+        url: Option<Url>,
+        html: &str,
+        css: &str,
+        viewport: LayoutViewport,
+    ) -> Self {
         let tokens = HtmlTokenizer::tokenize(html);
         let document = parse(&tokens);
         let stylesheet = StyleSheet::parse(css);
@@ -22,11 +33,16 @@ impl Page {
         let display_list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
 
         Self {
+            url,
             document,
             styled,
             layout,
             display_list,
         }
+    }
+
+    pub fn url(&self) -> Option<&Url> {
+        self.url.as_ref()
     }
 
     pub fn title(&self) -> Option<String> {
@@ -77,6 +93,19 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn retains_document_url_when_loaded_at_a_navigation_target() {
+        let url = Url::parse("https://example.org/docs/index.html").unwrap();
+        let page = Page::from_html_at(
+            Some(url.clone()),
+            "<title>Example</title><body>Hello</body>",
+            "",
+            LayoutViewport::new(320, 200),
+        );
+
+        assert_eq!(page.url(), Some(&url));
+    }
+
     fn extracts_trimmed_document_title() {
         let page = Page::from_html(
             "<html><head><title>  Archia Browser  </title></head><body>Hello</body></html>",
