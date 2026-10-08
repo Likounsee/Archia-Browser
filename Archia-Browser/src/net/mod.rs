@@ -10,7 +10,7 @@ pub mod url;
 
 pub use cookies::{Cookie, CookieJar};
 pub use loader::{DocumentLoadError, DocumentLoader};
-pub use transport::HttpTransport;
+pub use transport::{HttpTransport, LocalFileTransport};
 pub use url::{Url, UrlError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
