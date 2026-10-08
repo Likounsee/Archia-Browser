@@ -23,6 +23,19 @@ impl From<net::UrlError> for LinkActivationError {
     }
 }
 
+#[derive(Debug, Default)]
+struct LocalFilePolicy;
+
+impl net::pipeline::RequestPolicyEngine for LocalFilePolicy {
+    fn decide(&self, request: &net::Request) -> net::pipeline::PolicyDecision {
+        if request.url.scheme() == "file" {
+            net::pipeline::PolicyDecision::Allow
+        } else {
+            net::pipeline::PolicyDecision::Block
+        }
+    }
+}
+
 pub struct Browser {
     version: &'static str,
     memory: core::memory::MemoryBudget,
@@ -90,6 +103,22 @@ impl Browser {
             tab.set_page(page.clone());
         }
         Ok(page)
+    }
+
+    pub fn load_local_file_url(
+        &mut self,
+        url: &str,
+        viewport: crate::layout::LayoutViewport,
+    ) -> Result<crate::document::Page, crate::net::DocumentLoadError> {
+        let url = net::Url::parse(url)
+            .map_err(net::TransportError::InvalidUrl)
+            .map_err(net::DocumentLoadError::Network)?;
+        let request = net::Request::new(url);
+        let loader = net::DocumentLoader::new(
+            net::pipeline::NetworkPipeline::new(LocalFilePolicy),
+            net::LocalFileTransport::new(),
+        );
+        self.load_request(&loader, &request, viewport)
     }
 
     pub fn load_request<P, T>(
@@ -321,6 +350,33 @@ mod tests {
         let mut surface = crate::surface::SoftwareSurface::new(64, 32);
         assert!(browser.render_current_page(&mut surface));
         assert_eq!(surface.pixel(63, 31), Some(crate::surface::Color::WHITE));
+    }
+
+    #[test]
+    fn browser_loads_local_file_url_into_active_tab() {
+        let path = std::env::temp_dir().join(format!(
+            "archia-browser-browser-{}.html",
+            std::process::id()
+        ));
+        std::fs::write(&path, b"<title>Local</title><body>Hello</body>").unwrap();
+        let url = if cfg!(windows) {
+            format!("file:///{}", path.display())
+        } else {
+            format!("file://{}", path.display())
+        };
+
+        let mut browser = Browser::new();
+        let page = browser
+            .load_local_file_url(&url, crate::layout::LayoutViewport::new(64, 32))
+            .unwrap();
+
+        assert_eq!(page.title(), Some("Local".to_owned()));
+        assert_eq!(
+            browser.current_url().map(ToString::to_string),
+            Some(url)
+        );
+        assert!(browser.current_page().is_some());
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]
