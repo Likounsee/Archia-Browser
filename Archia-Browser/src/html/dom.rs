@@ -105,7 +105,9 @@ impl Node {
 
     pub fn attribute(&self, name: &str) -> Option<&str> {
         match &self.kind {
-            NodeKind::Element { attributes, .. } => attributes.get(name).map(String::as_str),
+            NodeKind::Element { attributes, .. } => attributes
+                .get(&name.to_ascii_lowercase())
+                .map(String::as_str),
             _ => None,
         }
     }
@@ -118,7 +120,7 @@ impl Node {
 
     pub fn remove_attribute(&mut self, name: &str) -> Option<String> {
         match &mut self.kind {
-            NodeKind::Element { attributes, .. } => attributes.remove(name),
+            NodeKind::Element { attributes, .. } => attributes.remove(&name.to_ascii_lowercase()),
             _ => None,
         }
     }
