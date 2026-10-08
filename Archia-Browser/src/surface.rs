@@ -17,6 +17,13 @@ impl Color {
             "green" => Some(Self(0, 128, 0, 255)),
             "blue" => Some(Self(0, 0, 255, 255)),
             "transparent" => Some(Self(0, 0, 0, 0)),
+            value if value.len() == 4 && value.starts_with('#') => {
+                let mut digits = value[1..].chars();
+                let r = u8::from_str_radix(&digits.next()?.to_string().repeat(2), 16).ok()?;
+                let g = u8::from_str_radix(&digits.next()?.to_string().repeat(2), 16).ok()?;
+                let b = u8::from_str_radix(&digits.next()?.to_string().repeat(2), 16).ok()?;
+                Some(Self(r, g, b, 255))
+            }
             value if value.len() == 7 && value.starts_with('#') => {
                 let rgb = u32::from_str_radix(&value[1..], 16).ok()?;
                 Some(Self((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8, 255))
@@ -227,5 +234,6 @@ mod tests {
     #[test]
     fn parses_hex_color() {
         assert_eq!(Color::parse("#102030"), Some(Color(16, 32, 48, 255)));
+        assert_eq!(Color::parse("#abc"), Some(Color(170, 187, 204, 255)));
     }
 }
