@@ -727,6 +727,7 @@ fn layout_flex_children(
     let mut main = 0_u32;
     let mut cross = 0_u32;
     let mut item_count = 0_u32;
+    let mut flex_indices = Vec::new();
 
     for child in &node.children {
         let child_display = display_for_styled_node(child);
@@ -832,7 +833,32 @@ fn layout_flex_children(
             .saturating_add(outer_main);
         cross = cross.max(outer_cross);
         item_count = item_count.saturating_add(1);
+        flex_indices.push(output.children.len());
         output.children.push(child_layout);
+    }
+
+    if !column {
+        let free_space = content_width.saturating_sub(main);
+        let justify = node
+            .style
+            .get("justify-content")
+            .map(|value| value.trim().to_ascii_lowercase())
+            .unwrap_or_else(|| "flex-start".to_owned());
+        let (offset, extra) = match justify.as_str() {
+            "center" => (free_space / 2, 0),
+            "flex-end" | "end" => (free_space, 0),
+            "space-between" if flex_indices.len() > 1 => (
+                0,
+                free_space / (flex_indices.len() as u32 - 1),
+            ),
+            _ => (0, 0),
+        };
+        for (position, index) in flex_indices.iter().enumerate() {
+            let shift = offset.saturating_add(extra.saturating_mul(position as u32));
+            if shift != 0 {
+                shift_layout_tree(&mut output.children[*index], shift as i32, 0);
+            }
+        }
     }
 
     if column {
@@ -1720,6 +1746,25 @@ mod tests {
         assert_eq!(layout.children[0].rect.x, 0);
         assert_eq!(layout.children[1].rect.x, 24);
         assert_eq!(layout.rect.height, 12);
+    }
+
+    #[test]
+    fn flex_justify_content_centers_row_items() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "display: flex; justify-content: center; width: 100px;");
+        let mut first = Node::element("div");
+        first.set_attribute("style", "width: 20px; height: 10px;");
+        let mut second = Node::element("div");
+        second.set_attribute("style", "width: 20px; height: 10px;");
+        root.append(first);
+        root.append(second);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.x, 30);
+        assert_eq!(layout.children[1].rect.x, 50);
     }
 
     #[test]
