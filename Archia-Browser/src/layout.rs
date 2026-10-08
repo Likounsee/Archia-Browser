@@ -860,6 +860,40 @@ fn layout_flex_children(
         }
     }
 
+    let align = node
+        .style
+        .get("align-items")
+        .map(|value| value.trim().to_ascii_lowercase())
+        .unwrap_or_else(|| "stretch".to_owned());
+    let cross_size = if column {
+        content_width
+    } else {
+        parse_length(node.style.get("height"), viewport_height).unwrap_or(cross)
+    };
+    if matches!(align.as_str(), "center" | "flex-end" | "end" | "stretch") {
+        for index in &flex_indices {
+            let child = &mut output.children[*index];
+            let child_cross = if column {
+                child.rect.width.saturating_add(child.box_model.horizontal_outer())
+            } else {
+                child.rect.height.saturating_add(child.box_model.vertical_outer())
+            };
+            let available = cross_size.saturating_sub(child_cross);
+            let shift = match align.as_str() {
+                "center" => available / 2,
+                "flex-end" | "end" => available,
+                _ => 0,
+            };
+            if shift != 0 {
+                if column {
+                    shift_layout_tree(child, shift as i32, 0);
+                } else {
+                    shift_layout_tree(child, 0, shift as i32);
+                }
+            }
+        }
+    }
+
     if column {
         main as i32
     } else {
@@ -1767,6 +1801,24 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.x, 30);
         assert_eq!(layout.children[1].rect.x, 50);
+    }
+
+    #[test]
+    fn flex_align_items_centers_row_children_on_cross_axis() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "display: flex; height: 100px; align-items: center;",
+        );
+        let mut child = Node::element("div");
+        child.set_attribute("style", "width: 20px; height: 20px;");
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.y, 40);
     }
 
     #[test]
