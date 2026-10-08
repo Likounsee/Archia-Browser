@@ -255,6 +255,9 @@ fn parse_http_response(
             .trim()
             .parse::<usize>()
             .map_err(|_| TransportError::ConnectionFailed)?;
+        if length > max_response_size {
+            return Err(TransportError::ResponseTooLarge);
+        }
         body_bytes
             .get(..length)
             .ok_or(TransportError::ConnectionFailed)?
