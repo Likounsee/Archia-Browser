@@ -191,12 +191,12 @@ Current milestone:
 ### Phase 4 — Layout and rendering
 - [x] Implement initial box generation and box-model accumulation.
 - [x] Implement initial block and inline layout with HTML-aware default display behavior.
-- [x] Add initial text layout metrics, intrinsic inline sizing and line placement.
+- [x] Add initial text layout metrics, intrinsic inline sizing, line placement and explicit pixel line-height.
 - [x] Build a platform-neutral software renderer and RGBA surface.
 - [x] Rasterize a first built-in bitmap glyph set.
 - [x] Paint backgrounds, padding boxes and explicit solid borders.
 - [x] Expand initial border shorthand and CSS border width keywords.
-- [x] Apply initial min/max dimension constraints, auto-margin centering and visibility:hidden painting suppression.
+- [x] Apply initial min/max dimension constraints, auto-margin centering, explicit inline line-height and visibility:hidden painting suppression.
 - [ ] Add scrolling, clipping and full viewport handling.
 - [ ] Replace the bootstrap glyph rasterizer with a real font/text shaping stack.
 
