@@ -371,10 +371,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(page.title(), Some("Local".to_owned()));
-        assert_eq!(
-            browser.current_url().map(ToString::to_string),
-            Some(url)
-        );
+        assert_eq!(browser.current_url().map(ToString::to_string), Some(url));
         assert!(browser.current_page().is_some());
         std::fs::remove_file(path).unwrap();
     }
