@@ -964,6 +964,14 @@ fn layout_flex_children(
     if matches!(align.as_str(), "center" | "flex-end" | "end" | "stretch") {
         for index in &flex_indices {
             let child = &mut output.children[*index];
+            let child_align = node
+                .children
+                .get(*index)
+                .and_then(|node| node.style.get("align-self"))
+                .map(str::trim)
+                .map(str::to_ascii_lowercase)
+                .filter(|value| !matches!(value.as_str(), "auto" | "normal"))
+                .unwrap_or_else(|| align.clone());
             let child_cross = if column {
                 child
                     .rect
@@ -976,7 +984,7 @@ fn layout_flex_children(
                     .saturating_add(child.box_model.vertical_outer())
             };
             let available = cross_size.saturating_sub(child_cross);
-            let shift = match align.as_str() {
+            let shift = match child_align.as_str() {
                 "center" => available / 2,
                 "flex-end" | "end" => available,
                 _ => 0,
@@ -2536,5 +2544,20 @@ mod tests {
         assert_eq!(layout.children[0].rect.width, 100);
         assert_eq!(layout.children[1].rect.width, 100);
         assert_eq!(layout.children[1].rect.x, 100);
+    }    #[test]
+    fn flex_align_self_overrides_parent_align_items() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "display: flex; width: 200px; height: 100px; align-items: center;");
+        let mut child = Node::element("div");
+        child.set_attribute("style", "width: 40px; height: 20px; align-self: flex-end;");
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.y, 80);
     }
+
+
 }
