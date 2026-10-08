@@ -723,16 +723,24 @@ fn layout_flex_children(
     abs_width: u32,
     abs_height: u32,
 ) -> i32 {
+    let flex_flow = node.style.get("flex-flow");
+    let flow_column = flex_flow.is_some_and(|value| {
+        value
+            .split_whitespace()
+            .any(|part| matches!(part, "column" | "column-reverse"))
+    });
     let column = node
         .style
         .get("flex-direction")
-        .is_some_and(|value| value.trim().eq_ignore_ascii_case("column"));
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("column"))
+        || flow_column;
     let wrap = node.style.get("flex-wrap").is_some_and(|value| {
+
         matches!(
             value.trim().to_ascii_lowercase().as_str(),
             "wrap" | "wrap-reverse"
         )
-    });
+    }) || flex_flow.is_some_and(|value| value.split_whitespace().any(|part| part == "wrap"));
     let gap = parse_length(node.style.get("gap"), content_width).unwrap_or(0);
     let mut main = 0_u32;
     let mut cross = 0_u32;
