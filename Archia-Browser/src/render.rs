@@ -263,12 +263,7 @@ fn background_rect(layout: &LayoutNode) -> super::layout::Rect {
     super::layout::Rect::new(x, y, width, height)
 }
 
-fn paint_borders(
-    style: &ComputedStyle,
-    layout: &LayoutNode,
-    list: &mut DisplayList,
-    opacity: u8,
-) {
+fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayList, opacity: u8) {
     let border_style = style.get("border-style").map(str::trim).unwrap_or("none");
     if matches!(border_style, "none" | "hidden") {
         return;
