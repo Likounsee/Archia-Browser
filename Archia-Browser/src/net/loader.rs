@@ -186,7 +186,7 @@ mod tests {
             .load(&request, LayoutViewport::new(320, 200))
             .unwrap();
 
-        assert_eq!(page.document.text_content(), "LocalHello");
+        assert_eq!(page.document.text_content(), "Hello");
         assert!(!page.display_list.commands().is_empty());
     }
 
