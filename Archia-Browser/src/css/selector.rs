@@ -1038,10 +1038,18 @@ mod tests {
         let mut element = Node::element("div");
         element.set_attribute("data-mode", "Dark");
 
-        assert!(!Selector::parse("[data-mode=dark]").unwrap().matches(&element));
-        assert!(Selector::parse("[data-mode=dark i]").unwrap().matches(&element));
-        assert!(Selector::parse("[data-mode=Dark s]").unwrap().matches(&element));
-        assert!(!Selector::parse("[data-mode=dark s]").unwrap().matches(&element));
+        assert!(!Selector::parse("[data-mode=dark]")
+            .unwrap()
+            .matches(&element));
+        assert!(Selector::parse("[data-mode=dark i]")
+            .unwrap()
+            .matches(&element));
+        assert!(Selector::parse("[data-mode=Dark s]")
+            .unwrap()
+            .matches(&element));
+        assert!(!Selector::parse("[data-mode=dark s]")
+            .unwrap()
+            .matches(&element));
     }
 
     #[test]
