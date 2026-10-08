@@ -57,6 +57,7 @@ where
         let mut current = request
             .clone()
             .with_cookies(&self.cookies.lock().expect("cookie jar poisoned"));
+        current.policy.resource_kind = ResourceKind::Document;
         if current.policy.first_party.is_none() {
             current.policy.first_party = Some(current.url.clone());
         }
@@ -292,6 +293,28 @@ mod tests {
         fn send(&self, _: &Request) -> Result<Response, TransportError> {
             Ok(self.response.clone())
         }
+    }
+
+    #[test]
+    fn document_loads_are_marked_as_document_resources() {
+        #[derive(Debug)]
+        struct InspectTransport;
+
+        impl Transport for InspectTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                assert_eq!(request.policy.resource_kind, ResourceKind::Document);
+                Ok(Response::new(200)
+                    .with_header("content-type", "text/html")
+                    .with_body(b"<body>Hello</body>".to_vec()))
+            }
+        }
+
+        let loader =
+            DocumentLoader::new(NetworkPipeline::new(AllowAll), InspectTransport);
+        let request = Request::new(Url::parse("https://example.org/").unwrap());
+        assert!(loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .is_ok());
     }
 
     #[test]
