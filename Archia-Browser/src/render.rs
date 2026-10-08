@@ -87,7 +87,9 @@ impl SoftwareRenderer {
 }
 
 fn paint_styled_node(node: &StyledNode, layout: &LayoutNode, list: &mut DisplayList) {
-    if layout.display == Display::None {
+    if layout.display == Display::None
+        || node.style.get("visibility").is_some_and(|value| value.trim() == "hidden")
+    {
         return;
     }
 
@@ -122,7 +124,11 @@ fn paint_styled_node(node: &StyledNode, layout: &LayoutNode, list: &mut DisplayL
 }
 
 fn paint_node(node: &Node, layout: &LayoutNode, style: &ComputedStyle, list: &mut DisplayList) {
-    if layout.display == Display::None {
+    if layout.display == Display::None
+        || style
+            .get("visibility")
+            .is_some_and(|value| value.trim() == "hidden")
+    {
         return;
     }
 
@@ -314,6 +320,20 @@ mod tests {
                 color: 0xff0000ff,
             }
         );
+    }
+
+    #[test]
+    fn hidden_visibility_suppresses_painting() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "visibility: hidden; background-color: red;");
+        root.append(Node::text("Hidden"));
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 50));
+        let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
+
+        assert!(list.commands().is_empty());
     }
 
     #[test]
