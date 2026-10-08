@@ -743,10 +743,15 @@ fn nth_matches(
 }
 
 fn parse_nth_formula(formula: &str, index: i32) -> bool {
-    if let Ok(value) = formula.parse::<i32>() {
+    let compact = formula.replace(' ', "").to_ascii_lowercase();
+    match compact.as_str() {
+        "odd" => return index % 2 == 1,
+        "even" => return index % 2 == 0,
+        _ => {}
+    }
+    if let Ok(value) = compact.parse::<i32>() {
         return index == value;
     }
-    let compact = formula.replace(' ', "");
     let Some(n_pos) = compact.find('n') else {
         return false;
     };
@@ -999,6 +1004,33 @@ mod tests {
                 "{source}"
             );
         }
+    }
+
+    #[test]
+    fn matches_odd_and_even_nth_formulas() {
+        let mut body = Node::element("body");
+        for _ in 0..4 {
+            body.append(Node::element("p"));
+        }
+
+        let siblings = body.children.as_slice();
+        let lists: [&[Node]; 2] = [&[], siblings];
+
+        assert!(Selector::parse("p:nth-child(odd)")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[0]], &lists, &[0, 0]));
+        assert!(Selector::parse("p:nth-child(odd)")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[2]], &lists, &[0, 2]));
+        assert!(Selector::parse("p:nth-child(even)")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[1]], &lists, &[0, 1]));
+        assert!(Selector::parse("p:nth-child(even)")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[3]], &lists, &[0, 3]));
+        assert!(!Selector::parse("p:nth-child(even)")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[0]], &lists, &[0, 0]));
     }
 
     #[test]
