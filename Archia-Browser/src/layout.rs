@@ -727,10 +727,39 @@ fn display_for_styled_node(node: &crate::style_tree::StyledNode) -> Display {
 }
 
 fn allows_inline_wrap(node: &crate::style_tree::StyledNode) -> bool {
-    !node
-        .style
-        .get("white-space")
-        .is_some_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "nowrap" | "pre"))
+    !node.style.get("white-space").is_some_and(|value| {
+        value.trim().eq_ignore_ascii_case("nowrap") || value.trim().eq_ignore_ascii_case("pre")
+    })
+}
+
+fn normalized_text(text: &str, white_space: Option<&str>) -> String {
+    let mode = white_space
+        .map(str::trim)
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_else(|| "normal".to_owned());
+    if matches!(mode.as_str(), "pre" | "pre-wrap") {
+        return text.to_owned();
+    }
+
+    let mut output = String::with_capacity(text.len());
+    let mut pending_space = false;
+    for character in text.chars() {
+        if character.is_whitespace() {
+            if mode == "pre-line" && character == '\\n' {
+                pending_space = false;
+                output.push('\\n');
+            } else {
+                pending_space = true;
+            }
+        } else {
+            if pending_space && !output.is_empty() && !output.ends_with('\\n') {
+                output.push(' ');
+            }
+            pending_space = false;
+            output.push(character);
+        }
+    }
+    output
 }
 
 fn is_line_break(node: &crate::style_tree::StyledNode) -> bool {
@@ -739,7 +768,11 @@ fn is_line_break(node: &crate::style_tree::StyledNode) -> bool {
 
 fn intrinsic_inline_content_width(node: &crate::style_tree::StyledNode) -> u32 {
     match &node.node.kind {
-        NodeKind::Text(text) => text.chars().count().min(u32::MAX as usize) as u32 * 6,
+        NodeKind::Text(text) => normalized_text(text, node.style.get("white-space"))
+            .chars()
+            .count()
+            .min(u32::MAX as usize) as u32
+            * 6,
         _ => node
             .children
             .iter()
@@ -751,7 +784,11 @@ fn intrinsic_inline_content_width(node: &crate::style_tree::StyledNode) -> u32 {
 
 fn intrinsic_inline_width(node: &crate::style_tree::StyledNode, containing_width: u32) -> u32 {
     match &node.node.kind {
-        NodeKind::Text(text) => text.chars().count().min(u32::MAX as usize) as u32 * 6,
+        NodeKind::Text(text) => normalized_text(text, node.style.get("white-space"))
+            .chars()
+            .count()
+            .min(u32::MAX as usize) as u32
+            * 6,
         _ => {
             let children_width = node
                 .children
@@ -1249,6 +1286,36 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.y, 0);
         assert_eq!(layout.children[1].rect.y, 10);
+    }
+
+    #[test]
+    fn white_space_normal_collapses_runs_for_intrinsic_width() {
+        let mut root = Node::element("body");
+        let mut span = Node::element("span");
+        span.append(Node::text("a   b"));
+        root.append(span);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.width, 18);
+    }
+
+    #[test]
+    fn white_space_pre_preserves_spaces_and_newlines() {
+        let mut root = Node::element("body");
+        let mut span = Node::element("span");
+        span.set_attribute("style", "white-space: pre;");
+        span.append(Node::text("a   b\nc"));
+        root.append(span);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.width, 36);
+        assert_eq!(layout.children[0].rect.height, 32);
     }
 
     #[test]
