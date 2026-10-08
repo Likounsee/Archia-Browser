@@ -209,8 +209,7 @@ mod tests {
         let request = request("https://example.org/");
         cache.store(
             &request,
-            &Response::new(404)
-                .with_header("cache-control", "max-age=60"),
+            &Response::new(404).with_header("cache-control", "max-age=60"),
         );
         assert_eq!(cache.len(), 0);
     }
