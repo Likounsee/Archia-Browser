@@ -484,7 +484,10 @@ mod tests {
         assert!(page.display_list.commands().iter().any(|command| {
             matches!(
                 command,
-                crate::render::PaintCommand::DrawText { color: 0x0000ffff, .. }
+                crate::render::PaintCommand::DrawText {
+                    color: 0x0000ffff,
+                    ..
+                }
             )
         }));
     }
