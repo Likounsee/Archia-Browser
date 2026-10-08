@@ -109,9 +109,15 @@ impl Browser {
 
     pub fn navigate(&mut self, url: net::Url, title: Option<String>) {
         if let Some(tab) = self.tabs.active_tab_mut() {
+            let same_document = tab
+                .history()
+                .current()
+                .is_some_and(|entry| entry.url().same_document(&url));
             tab.history_mut()
                 .push(core::navigation::NavigationEntry::new(url, title));
-            tab.clear_page();
+            if !same_document {
+                tab.clear_page();
+            }
         }
     }
 
@@ -572,6 +578,26 @@ mod tests {
             Err(LinkActivationError::Url(
                 net::UrlError::UnsupportedReferenceScheme
             ))
+        );
+    }
+
+    #[test]
+    fn browser_fragment_navigation_keeps_loaded_page() {
+        let mut browser = Browser::new();
+        let page = crate::document::Page::from_html_at(
+            Some(net::Url::parse("https://example.org/docs/index.html").unwrap()),
+            "<body>Hello</body>",
+            "",
+            crate::layout::LayoutViewport::new(64, 32),
+        );
+        browser.commit_page(&page);
+
+        browser.navigate_reference("#features", None).unwrap();
+
+        assert!(browser.current_page().is_some());
+        assert_eq!(
+            browser.current_url().map(ToString::to_string),
+            Some("https://example.org/docs/index.html#features".to_owned())
         );
     }
 
