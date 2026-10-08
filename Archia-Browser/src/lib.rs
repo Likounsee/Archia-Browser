@@ -248,10 +248,8 @@ mod tests {
             }
         }
 
-        let loader = net::DocumentLoader::new(
-            net::pipeline::NetworkPipeline::new(AllowAll),
-            MockTransport,
-        );
+        let loader =
+            net::DocumentLoader::new(net::pipeline::NetworkPipeline::new(AllowAll), MockTransport);
         let request = net::Request::new(net::Url::parse("https://example.org/").unwrap());
         let mut browser = Browser::new();
 
