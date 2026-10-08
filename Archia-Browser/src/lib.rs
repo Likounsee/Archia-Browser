@@ -106,9 +106,7 @@ impl Browser {
             .current_url()
             .cloned()
             .ok_or(LinkActivationError::Url(net::UrlError::MissingAuthority))?;
-        let url = base
-            .resolve(href)
-            .map_err(LinkActivationError::from)?;
+        let url = base.resolve(href).map_err(LinkActivationError::from)?;
         let opens_new_tab = link
             .attribute("target")
             .is_some_and(|target| target.trim().eq_ignore_ascii_case("_blank"));
@@ -117,7 +115,9 @@ impl Browser {
             self.new_tab();
         }
         self.navigate(url, title);
-        Ok(self.current_url().expect("link navigation created an entry"))
+        Ok(self
+            .current_url()
+            .expect("link navigation created an entry"))
     }
 
     pub fn current_url(&self) -> Option<&net::Url> {
