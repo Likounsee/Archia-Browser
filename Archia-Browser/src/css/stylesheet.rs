@@ -169,7 +169,7 @@ impl StyleSheet {
                 }
             }
             for (name, value) in local.iter() {
-                let resolved = resolve_css_wide_value(name, value, &inherited);
+                let resolved = resolve_css_value(name, value, &inherited, &inherited);
                 if local.is_important(name) {
                     computed.set_important(name, resolved);
                 } else {
