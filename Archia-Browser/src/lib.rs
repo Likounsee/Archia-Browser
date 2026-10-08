@@ -224,7 +224,10 @@ impl Browser {
         if moved {
             tab.clear_page();
         }
-        moved.then(|| tab.history().current()).flatten().map(|entry| entry.url())
+        moved
+            .then(|| tab.history().current())
+            .flatten()
+            .map(|entry| entry.url())
     }
 
     pub fn forward(&mut self) -> Option<&net::Url> {
