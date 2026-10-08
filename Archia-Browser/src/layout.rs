@@ -491,6 +491,9 @@ fn display_for_styled_node(node: &crate::style_tree::StyledNode) -> Display {
     if node.style.get("display").is_some() {
         return Display::from_style(&node.style);
     }
+    if matches!(&node.node.kind, NodeKind::Element { .. }) && node.node.attribute("hidden").is_some() {
+        return Display::None;
+    }
     match &node.node.kind {
         NodeKind::Text(_) => Display::Inline,
         NodeKind::Element { name, .. } => match name.as_str() {
@@ -867,6 +870,41 @@ mod tests {
 
         assert_eq!(layout.children[0].display, Display::Inline);
         assert_eq!(layout.children[0].rect.width, 40);
+    }
+
+    #[test]
+    fn hidden_attribute_removes_element_from_layout() {
+        let mut root = Node::element("body");
+        let mut hidden = Node::element("div");
+        hidden.set_attribute("hidden", "");
+        hidden.append(Node::text("not visible"));
+        let mut visible = Node::element("div");
+        visible.set_attribute("style", "height: 10px;");
+        root.append(hidden);
+        root.append(visible);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].display, Display::None);
+        assert_eq!(layout.children[1].rect.y, 0);
+    }
+
+    #[test]
+    fn explicit_display_overrides_hidden_attribute() {
+        let mut root = Node::element("body");
+        let mut shown = Node::element("div");
+        shown.set_attribute("hidden", "");
+        shown.set_attribute("style", "display: block; height: 10px;");
+        root.append(shown);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].display, Display::Block);
+        assert_eq!(layout.children[0].rect.height, 10);
     }
 
     #[test]
