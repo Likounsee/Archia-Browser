@@ -768,6 +768,76 @@ mod tests {
     }
 
     #[test]
+    fn border_radius_shorthand_expands_one_to_four_values() {
+        let mut style = ComputedStyle::default();
+        style.set("border-radius", "4px");
+        assert_eq!(
+            parse_border_radii(&style, 40, 20),
+            CornerRadii {
+                top_left: 4,
+                top_right: 4,
+                bottom_right: 4,
+                bottom_left: 4,
+            }
+        );
+
+        style.set("border-radius", "4px 6px");
+        assert_eq!(
+            parse_border_radii(&style, 40, 20),
+            CornerRadii {
+                top_left: 4,
+                top_right: 6,
+                bottom_right: 4,
+                bottom_left: 6,
+            }
+        );
+
+        style.set("border-radius", "1px 2px 3px");
+        assert_eq!(
+            parse_border_radii(&style, 40, 20),
+            CornerRadii {
+                top_left: 1,
+                top_right: 2,
+                bottom_right: 3,
+                bottom_left: 2,
+            }
+        );
+
+        style.set("border-radius", "1px 2px 3px 4px");
+        assert_eq!(
+            parse_border_radii(&style, 40, 20),
+            CornerRadii {
+                top_left: 1,
+                top_right: 2,
+                bottom_right: 3,
+                bottom_left: 4,
+            }
+        );
+    }
+
+    #[test]
+    fn border_radius_percentage_and_overflow_are_constrained() {
+        let mut style = ComputedStyle::default();
+        style.set("border-radius", "50%");
+        assert_eq!(
+            parse_border_radii(&style, 20, 10),
+            CornerRadii {
+                top_left: 5,
+                top_right: 5,
+                bottom_right: 5,
+                bottom_left: 5,
+            }
+        );
+
+        style.set("border-radius", "100px 100px 20px 20px");
+        let radii = parse_border_radii(&style, 40, 20);
+        assert_eq!(radii.top_left, 10);
+        assert_eq!(radii.top_right, 10);
+        assert_eq!(radii.bottom_right, 10);
+        assert_eq!(radii.bottom_left, 10);
+    }
+
+    #[test]
     fn paints_background_over_content_and_padding_box() {
         let mut root = Node::element("div");
         root.set_attribute("style", "background-color: red; padding: 4px;");
