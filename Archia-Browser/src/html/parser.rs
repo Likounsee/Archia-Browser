@@ -127,6 +127,32 @@ fn normalize_document_structure(mut root: Node) -> Node {
         .iter()
         .position(|node| node.tag_name() == Some("html"))
     else {
+        let mut html = Node::element("html");
+        let head = Node::element("head");
+        let mut body = Node::element("body");
+
+        let children = std::mem::take(&mut root.children);
+        for child in children {
+            if child.tag_name() == Some("head") {
+                html.append(child);
+            } else {
+                body.append(child);
+            }
+        }
+
+        if !html
+            .children
+            .iter()
+            .any(|node| node.tag_name() == Some("head"))
+        {
+            let mut rebuilt = Node::element("html");
+            rebuilt.append(head);
+            rebuilt.append(body);
+            root.append(rebuilt);
+        } else {
+            html.append(body);
+            root.append(html);
+        }
         return root;
     };
 
@@ -141,16 +167,22 @@ fn normalize_document_structure(mut root: Node) -> Node {
         .iter()
         .position(|node| node.tag_name() == Some("head"))
     else {
-        if let Some(body_position) = html
+        let body_position = html
             .children
             .iter()
-            .position(|node| node.tag_name() == Some("body"))
-        {
+            .position(|node| node.tag_name() == Some("body"));
+        if let Some(body_position) = body_position {
             let body = html.children.remove(body_position);
-            let mut head = Node::element("head");
-            head.children = Vec::new();
-            html.children.insert(0, head);
+            html.children.insert(0, Node::element("head"));
             html.children.push(body);
+        } else {
+            let mut body = Node::element("body");
+            let children = std::mem::take(&mut html.children);
+            for child in children {
+                body.append(child);
+            }
+            html.append(Node::element("head"));
+            html.append(body);
         }
         return root;
     };
@@ -165,7 +197,7 @@ fn normalize_document_structure(mut root: Node) -> Node {
         .iter()
         .any(|node| node.tag_name() == Some("body"))
     {
-        html.children.push(Node::element("body"));
+        html.append(Node::element("body"));
     }
     root
 }
@@ -219,6 +251,17 @@ mod tests {
             root.children[0].children[0].kind,
             super::super::dom::NodeKind::Comment(_)
         ));
+    }
+
+    #[test]
+    fn plain_content_gets_implicit_html_head_and_body() {
+        let tokens = HtmlTokenizer::tokenize("Hello <p>world</p>");
+        let root = parse(&tokens);
+        let html = &root.children[0];
+        assert_eq!(html.tag_name(), Some("html"));
+        assert_eq!(html.children[0].tag_name(), Some("head"));
+        assert_eq!(html.children[1].tag_name(), Some("body"));
+        assert_eq!(html.children[1].text_content(), "Hello world");
     }
 
     #[test]
