@@ -2929,7 +2929,9 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.y, 30);
         assert_eq!(layout.children[1].rect.y, 50);
-    }    #[test]
+    }
+
+    #[test]
     fn flex_shorthand_accepts_percentage_basis() {
         let mut root = Node::element("div");
         root.set_attribute("style", "display: flex; width: 200px;");
@@ -2944,6 +2946,4 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.width, 100);
     }
-
-
 }
