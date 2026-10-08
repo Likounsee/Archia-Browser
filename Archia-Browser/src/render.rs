@@ -155,9 +155,10 @@ fn paint_styled_node(
     child_indices.sort_by_key(|&index| stacking_sort_key(&node.children[index].style));
 
     if !visibility_hidden {
-        for &index in child_indices.iter().filter(|&&index| {
-            stacking_sort_key(&node.children[index].style).0 == 0
-        }) {
+        for &index in child_indices
+            .iter()
+            .filter(|&&index| stacking_sort_key(&node.children[index].style).0 == 0)
+        {
             paint_styled_node(
                 &node.children[index],
                 &layout.children[index],
@@ -883,7 +884,10 @@ mod tests {
     #[test]
     fn negative_z_index_paints_behind_parent_background() {
         let mut root = Node::element("div");
-        root.set_attribute("style", "width: 20px; height: 20px; background-color: white;");
+        root.set_attribute(
+            "style",
+            "width: 20px; height: 20px; background-color: white;",
+        );
         let mut child = Node::element("div");
         child.set_attribute(
             "style",
