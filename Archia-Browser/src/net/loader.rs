@@ -173,6 +173,12 @@ where
                 referrer: Some(document_url.clone()),
                 first_party: Some(document_url.clone()),
             };
+            request
+                .headers
+                .insert("accept".into(), "text/css".into());
+            request
+                .headers
+                .insert("referer".into(), document_url.to_string());
             if let Some(cookie) = self
                 .cookies
                 .lock()
@@ -475,6 +481,11 @@ mod tests {
         impl Transport for SequenceTransport {
             fn send(&self, request: &Request) -> Result<Response, TransportError> {
                 if request.policy.resource_kind == ResourceKind::Stylesheet {
+                    assert_eq!(request.header("accept"), Some("text/css"));
+                    assert_eq!(
+                        request.header("referer"),
+                        Some("https://example.org/index.html")
+                    );
                     assert_eq!(
                         request.url.to_string(),
                         if request.url.path() == "/css/site.css" {
