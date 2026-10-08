@@ -231,6 +231,10 @@ mod tests {
             .load(&request, LayoutViewport::new(320, 200))
             .unwrap();
         assert_eq!(page.document.text_content(), "redirected");
+        assert_eq!(
+            page.url().map(ToString::to_string),
+            Some("https://example.org/next".to_owned())
+        );
     }
 
     #[test]
