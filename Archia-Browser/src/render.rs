@@ -13,7 +13,7 @@ pub enum PaintCommand {
     DrawText {
         x: i32,
         y: i32,
-        text_len: u32,
+        text: String,
         color: u32,
     },
 }
@@ -62,14 +62,14 @@ impl SoftwareRenderer {
                     );
                     surface.fill_rect(rect.x, rect.y, rect.width, rect.height, color);
                 }
-                PaintCommand::DrawText { x, y, text_len, color } => {
+                PaintCommand::DrawText { x, y, text, color } => {
                     let color = Color(
                         ((color >> 24) & 0xff) as u8,
                         ((color >> 16) & 0xff) as u8,
                         ((color >> 8) & 0xff) as u8,
                         (color & 0xff) as u8,
                     );
-                    surface.draw_text_placeholder(x, y, text_len, color);
+                    surface.draw_text(x, y, &text, color);
                 }
             }
         }
@@ -110,7 +110,7 @@ fn paint_styled_node(node: &StyledNode, layout: &LayoutNode, list: &mut DisplayL
         list.push(PaintCommand::DrawText {
             x: layout.rect.x,
             y: layout.rect.y,
-            text_len: text.chars().count() as u32,
+            text: text.clone(),
             color: parse_color(node.style.get("color").unwrap_or("black")).unwrap_or(0x000000ff),
         });
     }
