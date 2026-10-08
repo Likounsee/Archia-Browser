@@ -377,10 +377,7 @@ fn intrinsic_inline_content_width(node: &crate::style_tree::StyledNode) -> u32 {
     }
 }
 
-fn intrinsic_inline_width(
-    node: &crate::style_tree::StyledNode,
-    containing_width: u32,
-) -> u32 {
+fn intrinsic_inline_width(node: &crate::style_tree::StyledNode, containing_width: u32) -> u32 {
     match &node.node.kind {
         NodeKind::Text(text) => text.chars().count().min(u32::MAX as usize) as u32 * 6,
         _ => {
