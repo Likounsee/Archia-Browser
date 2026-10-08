@@ -256,7 +256,14 @@ fn layout_styled_node(
             output.children.push(child_layout);
         } else {
             if inline_x > 0 {
-                align_inline_line(&mut output.children, inline_line_start, output.children.len(), inline_x, content_width, node.style.get("text-align"));
+                align_inline_line(
+                    &mut output.children,
+                    inline_line_start,
+                    output.children.len(),
+                    inline_x,
+                    content_width,
+                    node.style.get("text-align"),
+                );
                 cursor_y = cursor_y.saturating_add(inline_line_height as i32);
                 inline_x = 0;
                 inline_line_height = 0;
@@ -280,7 +287,14 @@ fn layout_styled_node(
     }
 
     if inline_x > 0 {
-        align_inline_line(&mut output.children, inline_line_start, output.children.len(), inline_x, content_width, node.style.get("text-align"));
+        align_inline_line(
+                    &mut output.children,
+                    inline_line_start,
+                    output.children.len(),
+                    inline_x,
+                    content_width,
+                    node.style.get("text-align"),
+                );
         cursor_y = cursor_y.saturating_add(inline_line_height as i32);
     }
 
@@ -757,7 +771,8 @@ mod tests {
         let mut child = Node::element("span");
         child.append(Node::text("Hi"));
         root.append(child);
-        let styled = crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
         assert_eq!(layout.children[0].rect.x, 88);
     }
