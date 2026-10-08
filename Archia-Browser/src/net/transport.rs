@@ -149,7 +149,12 @@ impl HttpTransport {
         if bytes.len() > self.max_response_size {
             return Err(TransportError::ResponseTooLarge);
         }
-        parse_http_response(&bytes, self.max_response_size, self.max_header_size)
+        parse_http_response_for_method(
+            &bytes,
+            request.method,
+            self.max_response_size,
+            self.max_header_size,
+        )
     }
 }
 
@@ -216,6 +221,20 @@ fn parse_http_response(
     max_response_size: usize,
     max_header_size: usize,
 ) -> Result<Response, TransportError> {
+    parse_http_response_for_method(
+        bytes,
+        super::HttpMethod::Get,
+        max_response_size,
+        max_header_size,
+    )
+}
+
+fn parse_http_response_for_method(
+    bytes: &[u8],
+    method: super::HttpMethod,
+    max_response_size: usize,
+    max_header_size: usize,
+) -> Result<Response, TransportError> {
     let separator = bytes
         .windows(4)
         .position(|window| window == b"\r\n\r\n")
@@ -255,7 +274,14 @@ fn parse_http_response(
         return Err(TransportError::ConnectionFailed);
     }
 
-    let body = if transfer_encoding.is_some_and(|value| {
+    let body_forbidden = matches!(
+        method,
+        super::HttpMethod::Head
+    ) || matches!(status, 100..=199 | 204 | 304);
+
+    let body = if body_forbidden {
+        Vec::new()
+    } else if transfer_encoding.is_some_and(|value| {
         value
             .split(',')
             .any(|item| item.trim().eq_ignore_ascii_case("chunked"))
@@ -383,6 +409,29 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn head_response_ignores_declared_body_length() {
+        let response = parse_http_response_for_method(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\n",
+            super::HttpMethod::Head,
+            1024,
+            1024,
+        )
+        .unwrap();
+        assert!(response.body.is_empty());
+    }
+
+    #[test]
+    fn no_content_response_has_no_body() {
+        let response = parse_http_response(
+            b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n",
+            1024,
+            1024,
+        )
+        .unwrap();
+        assert!(response.body.is_empty());
+    }
+
     fn rejects_malformed_status() {
         assert!(parse_http_response(b"not-http\r\n\r\nbody", 1024, 1024).is_err());
     }
