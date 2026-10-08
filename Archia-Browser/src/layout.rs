@@ -917,14 +917,13 @@ fn intrinsic_inline_width(node: &crate::style_tree::StyledNode, containing_width
 #[cfg(test)]
 mod whitespace_layout_tests {
     use super::*;
-    use crate::dom::Node;
+    use crate::html::dom::Node;
 
     #[test]
     fn intrinsic_width_uses_transformed_text_and_longest_pre_line() {
         let styled = crate::style_tree::StyledNode::new(
             Node::text("ab\nCDE"),
             ComputedStyle::default(),
-            Vec::new(),
         );
         let mut styled = styled;
         styled.style.set("white-space", "pre-wrap");
