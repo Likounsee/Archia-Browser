@@ -125,6 +125,8 @@ Current milestone:
 - [x] Initial inline-flow wrapping and box model support
 - [x] Initial CSS box-sizing: border-box handling
 - [x] Initial percentage width resolution against containing blocks
+- [x] Initial min-width/max-width and min-height/max-height constraints
+- [x] Initial fixed-width block auto-margin distribution
 - [ ] Standards-compliant layout engine
 - [x] Software renderer foundation
 - [x] URL parsing and HTTP request/response primitives (initial)
@@ -193,7 +195,8 @@ Current milestone:
 - [x] Build a platform-neutral software renderer and RGBA surface.
 - [x] Rasterize a first built-in bitmap glyph set.
 - [x] Paint backgrounds, padding boxes and explicit solid borders.
-- [x] Apply initial min-width/max-width constraints and visibility:hidden painting suppression.
+- [x] Expand initial border shorthand and CSS border width keywords.
+- [x] Apply initial min/max dimension constraints, auto-margin centering and visibility:hidden painting suppression.
 - [ ] Add scrolling, clipping and full viewport handling.
 - [ ] Replace the bootstrap glyph rasterizer with a real font/text shaping stack.
 
@@ -203,6 +206,7 @@ Current milestone:
 - [x] Implement initial HTTP transport.
 - [x] Add local file URL parsing and a bounded local-file transport.
 - [x] Apply inline <style> blocks during Page construction.
+- [x] Load linked text/css stylesheets through the request pipeline, including relative URLs and bounded redirects.
 - [ ] Add HTTPS/TLS transport.
 - [x] Add initial redirects, cookie persistence and resource caching foundations.
 - [ ] Add standards-compliant redirects, cookie attributes and HTTP caching.
@@ -212,6 +216,7 @@ Current milestone:
 - [x] Add initial link/navigation activation.
 - [x] Add initial URL-encoded form submission generation.
 - [x] Retain the active loaded Page in tab state for subsequent rendering.
+- [x] Classify document and stylesheet subrequests for request policy.
 - [ ] Expand browser security boundaries.
 
 ### Phase 6 — JavaScript
