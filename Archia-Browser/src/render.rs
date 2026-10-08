@@ -486,6 +486,9 @@ fn parse_radius_component(token: &str, reference: u32) -> Option<u32> {
         let percent = percent.trim().parse::<u32>().ok()?;
         return reference.saturating_mul(percent).checked_div(100);
     }
+    if token.trim() == "0" {
+        return Some(0);
+    }
     token.strip_suffix("px")?.trim().parse::<u32>().ok()
 }
 
@@ -904,6 +907,22 @@ mod tests {
         assert_eq!(radii.top_right.x, 20);
         assert_eq!(radii.bottom_right.x, 4);
         assert_eq!(radii.bottom_left.x, 4);
+    }
+
+    #[test]
+    fn border_radius_accepts_unitless_zero() {
+        let mut style = ComputedStyle::default();
+        style.set("border-radius", "0 4px 0 8px");
+
+        assert_eq!(
+            parse_border_radii(&style, 100, 100),
+            CornerRadii {
+                top_left: CornerRadius { x: 0, y: 0 },
+                top_right: CornerRadius { x: 4, y: 4 },
+                bottom_right: CornerRadius { x: 0, y: 0 },
+                bottom_left: CornerRadius { x: 8, y: 8 },
+            }
+        );
     }
 
     #[test]
