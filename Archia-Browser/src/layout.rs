@@ -2647,7 +2647,9 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.width, 64);
         assert_eq!(layout.children[0].rect.height, 32);
-    }    #[test]
+    }
+
+    #[test]
     fn flex_shrink_zero_keeps_item_at_base_size() {
         let mut root = Node::element("div");
         root.set_attribute("style", "display: flex; width: 200px;");
@@ -2666,6 +2668,4 @@ mod tests {
         assert_eq!(layout.children[0].rect.width, 150);
         assert_eq!(layout.children[1].rect.width, 50);
     }
-
-
 }
