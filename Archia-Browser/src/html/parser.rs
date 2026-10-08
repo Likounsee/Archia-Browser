@@ -132,26 +132,24 @@ fn normalize_document_structure(mut root: Node) -> Node {
     let html = &mut root.children[0];
     let mut head = None;
     let mut body = None;
+    let mut body_extras = Vec::new();
     let children = std::mem::take(&mut html.children);
 
     for child in children {
         match child.tag_name() {
             Some("head") if head.is_none() => head = Some(child),
             Some("body") if body.is_none() => body = Some(child),
-            _ => {
-                if let Some(existing_body) = body.as_mut() {
-                    existing_body.append(child);
-                } else {
-                    let mut new_body = Node::element("body");
-                    new_body.append(child);
-                    body = Some(new_body);
-                }
-            }
+            _ => body_extras.push(child),
         }
     }
 
+    let mut body = body.unwrap_or_else(|| Node::element("body"));
+    for child in body_extras {
+        body.append(child);
+    }
+
     html.append(head.unwrap_or_else(|| Node::element("head")));
-    html.append(body.unwrap_or_else(|| Node::element("body")));
+    html.append(body);
     root
 }
 
