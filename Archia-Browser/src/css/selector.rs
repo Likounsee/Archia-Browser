@@ -199,7 +199,12 @@ impl Selector {
         let Some((combinator, simple)) = self.parts.get(selector_index) else {
             return false;
         };
-        if !matches_simple(simple, path[node_index]) {
+        if !matches_simple_with_siblings(
+            simple,
+            path[node_index],
+            Some(sibling_lists[node_index]),
+            Some(sibling_positions[node_index]),
+        ) {
             return false;
         }
         if selector_index == 0 {
@@ -227,21 +232,28 @@ impl Selector {
                 )
             }),
             Combinator::AdjacentSibling => {
-                let position = sibling_positions[node_index];
-                position > 0
-                    && sibling_lists[node_index]
-                        .get(position - 1)
-                        .is_some_and(|sibling| {
-                            matches_simple(&self.parts[selector_index - 1].1, sibling)
-                        })
+                previous_element(sibling_lists[node_index], sibling_positions[node_index])
+                    .is_some_and(|(sibling, position)| {
+                        matches_simple_with_siblings(
+                            &self.parts[selector_index - 1].1,
+                            sibling,
+                            Some(sibling_lists[node_index]),
+                            Some(position),
+                        )
+                    })
             }
             Combinator::GeneralSibling => {
                 let position = sibling_positions[node_index];
                 sibling_lists[node_index]
                     .get(..position)
                     .is_some_and(|siblings| {
-                        siblings.iter().rev().any(|sibling| {
-                            matches_simple(&self.parts[selector_index - 1].1, sibling)
+                        siblings.iter().enumerate().rev().any(|(index, sibling)| {
+                            matches_simple_with_siblings(
+                                &self.parts[selector_index - 1].1,
+                                sibling,
+                                Some(sibling_lists[node_index]),
+                                Some(index),
+                            )
                         })
                     })
             }
@@ -307,12 +319,37 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
                 if start == i {
                     return None;
                 }
-                simple.pseudo_classes.push(
-                    chars[start..i]
+                let name = chars[start..i]
+                    .iter()
+                    .collect::<String>()
+                    .to_ascii_lowercase();
+                if i < chars.len() && chars[i] == '(' {
+                    let argument_start = i + 1;
+                    let mut depth = 1;
+                    i += 1;
+                    while i < chars.len() && depth > 0 {
+                        match chars[i] {
+                            '(' => depth += 1,
+                            ')' => depth -= 1,
+                            _ => {}
+                        }
+                        i += 1;
+                    }
+                    if depth != 0 || i <= argument_start {
+                        return None;
+                    }
+                    let argument = chars[argument_start..i - 1]
                         .iter()
                         .collect::<String>()
-                        .to_ascii_lowercase(),
-                );
+                        .trim()
+                        .to_ascii_lowercase();
+                    if argument.is_empty() {
+                        return None;
+                    }
+                    simple.pseudo_classes.push(format!("{name}({argument})"));
+                } else {
+                    simple.pseudo_classes.push(name);
+                }
             }
             '#' | '.' => {
                 let kind = chars[i];
@@ -429,7 +466,10 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
 }
 fn matches_pseudo_class(
     pseudo: &str,
+    node: &Node,
     attributes: &std::collections::BTreeMap<String, String>,
+    siblings: Option<&[Node]>,
+    position: Option<usize>,
 ) -> bool {
     match pseudo {
         "checked" => attributes.contains_key("checked"),
@@ -439,8 +479,110 @@ fn matches_pseudo_class(
         "optional" => !attributes.contains_key("required"),
         "read-only" => attributes.contains_key("readonly"),
         "read-write" => !attributes.contains_key("readonly"),
+        "empty" => node.children.iter().all(|child| match &child.kind {
+            NodeKind::Text(text) => text.is_empty(),
+            NodeKind::Comment(_) => true,
+            NodeKind::Element { .. } | NodeKind::Document => false,
+        }),
+        "first-child" => is_element_position(siblings, position, 0),
+        "last-child" => siblings.zip(position).is_some_and(|(list, pos)| {
+            list.get(pos).is_some_and(Node::is_element)
+                && element_position(list, pos) + 1 == element_count(list)
+        }),
+        "only-child" => element_count(siblings.unwrap_or(&[])) == 1,
+        _ if pseudo.starts_with("nth-child(") => nth_matches(pseudo, siblings, position, false),
+        _ if pseudo.starts_with("nth-last-child(") => nth_matches(pseudo, siblings, position, true),
         _ => false,
     }
+}
+
+fn element_count(siblings: &[Node]) -> usize {
+    siblings.iter().filter(|node| node.is_element()).count()
+}
+
+fn element_position(siblings: &[Node], position: usize) -> usize {
+    siblings
+        .iter()
+        .take(position + 1)
+        .filter(|node| node.is_element())
+        .count()
+        .saturating_sub(1)
+}
+
+fn is_element_position(
+    siblings: Option<&[Node]>,
+    position: Option<usize>,
+    expected: usize,
+) -> bool {
+    siblings.zip(position).is_some_and(|(list, pos)| {
+        list.get(pos).is_some_and(Node::is_element) && element_position(list, pos) == expected
+    })
+}
+
+fn nth_matches(
+    pseudo: &str,
+    siblings: Option<&[Node]>,
+    position: Option<usize>,
+    from_end: bool,
+) -> bool {
+    let Some((list, pos)) = siblings.zip(position) else {
+        return false;
+    };
+    if list.get(pos).is_none_or(|node| !node.is_element()) {
+        return false;
+    }
+    let count = element_count(list) as i32;
+    let index = if from_end {
+        count - element_position(list, pos) as i32
+    } else {
+        element_position(list, pos) as i32 + 1
+    };
+    let Some(argument) = pseudo
+        .split_once('(')
+        .and_then(|(_, rest)| rest.strip_suffix(')'))
+    else {
+        return false;
+    };
+    parse_nth_formula(argument.trim(), index)
+}
+
+fn parse_nth_formula(formula: &str, index: i32) -> bool {
+    if let Ok(value) = formula.parse::<i32>() {
+        return index == value;
+    }
+    let compact = formula.replace(' ', "");
+    let Some(n_pos) = compact.find('n') else {
+        return false;
+    };
+    let (a_text, b_text) = compact.split_at(n_pos);
+    let a = match a_text {
+        "" | "+" => 1,
+        "-" => -1,
+        _ => match a_text.parse::<i32>() {
+            Ok(value) => value,
+            Err(_) => return false,
+        },
+    };
+    let b = if b_text.len() <= 1 {
+        0
+    } else {
+        match b_text[1..].parse::<i32>() {
+            Ok(value) => value,
+            Err(_) => return false,
+        }
+    };
+    let delta = index - b;
+    delta >= 0 && a != 0 && delta % a == 0
+}
+
+fn previous_element(siblings: &[Node], position: usize) -> Option<(&Node, usize)> {
+    siblings
+        .get(..position)?
+        .iter()
+        .enumerate()
+        .rev()
+        .find(|(_, node)| node.is_element())
+        .map(|(index, node)| (node, index))
 }
 
 fn is_name_char(c: char) -> bool {
@@ -448,6 +590,15 @@ fn is_name_char(c: char) -> bool {
 }
 
 fn matches_simple(simple: &SimpleSelector, node: &Node) -> bool {
+    matches_simple_with_siblings(simple, node, None, None)
+}
+
+fn matches_simple_with_siblings(
+    simple: &SimpleSelector,
+    node: &Node,
+    siblings: Option<&[Node]>,
+    position: Option<usize>,
+) -> bool {
     let NodeKind::Element { name, attributes } = &node.kind else {
         return false;
     };
@@ -478,7 +629,7 @@ fn matches_simple(simple: &SimpleSelector, node: &Node) -> bool {
     if simple
         .pseudo_classes
         .iter()
-        .any(|pseudo| !matches_pseudo_class(pseudo, attributes))
+        .any(|pseudo| !matches_pseudo_class(pseudo, node, attributes, siblings, position))
     {
         return false;
     }
@@ -611,6 +762,48 @@ mod tests {
                 "{source}"
             );
         }
+    }
+
+    #[test]
+    fn matches_structural_pseudo_classes() {
+        let mut body = Node::element("body");
+        let first = Node::element("p");
+        let mut second = Node::element("p");
+        second.append(Node::text("content"));
+        let third = Node::element("p");
+        body.append(Node::text("whitespace"));
+        body.append(first);
+        body.append(Node::text("between"));
+        body.append(second);
+        body.append(third);
+
+        let siblings = body.children.as_slice();
+        let lists: [&[Node]; 2] = [&[], siblings];
+
+        assert!(Selector::parse("p:first-child")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[1]], &lists, &[0, 1]));
+        assert!(Selector::parse("p:nth-child(2)")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[3]], &lists, &[0, 3]));
+        assert!(Selector::parse("p:nth-child(2n+1)")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[4]], &lists, &[0, 4]));
+        assert!(Selector::parse("p:nth-last-child(1)")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[4]], &lists, &[0, 4]));
+        assert!(Selector::parse("p:last-child")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[4]], &lists, &[0, 4]));
+        assert!(!Selector::parse("p:only-child")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[1]], &lists, &[0, 1]));
+        assert!(Selector::parse("p:empty")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[1]], &lists, &[0, 1]));
+        assert!(!Selector::parse("p:empty")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[3]], &lists, &[0, 3]));
     }
 
     #[test]
