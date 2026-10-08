@@ -727,7 +727,7 @@ fn layout_flex_children(
     let mut main = 0_u32;
     let mut cross = 0_u32;
     let mut item_count = 0_u32;
-    let mut flex_indices = Vec::new();
+    let mut flex_indices: Vec<(usize, usize)> = Vec::new();
 
     let mut bases = Vec::new();
     let mut total_grow = 0.0_f32;
@@ -917,7 +917,7 @@ fn layout_flex_children(
             .saturating_add(outer_main);
         cross = cross.max(outer_cross);
         item_count = item_count.saturating_add(1);
-        flex_indices.push(output.children.len());
+        flex_indices.push((output.children.len(), child_index));
         output.children.push(child_layout);
     }
 
@@ -943,11 +943,32 @@ fn layout_flex_children(
             }
             _ => (0, 0),
         };
-        for (position, index) in flex_indices.iter().enumerate() {
-            let shift = offset.saturating_add(extra.saturating_mul(position as u32));
+        let mut ordered_indices = flex_indices.clone();
+        ordered_indices.sort_by_key(|(_, child_index)| {
+            parse_flex_order(node.children[*child_index].style.get("order"))
+        });
+        let mut cursor = 0_u32;
+        for (position, (index, child_index)) in ordered_indices.iter().enumerate() {
+            let child = &output.children[*index];
+            let margin_left = child.box_model.margin_left;
+            let desired_x = content_origin_x
+                .saturating_add(offset as i32)
+                .saturating_add(cursor as i32)
+                .saturating_add(margin_left as i32)
+                .saturating_add(extra.saturating_mul(position as u32) as i32);
+            let shift = desired_x.saturating_sub(child.rect.x);
             if shift != 0 {
-                shift_layout_tree(&mut output.children[*index], shift as i32, 0);
+                shift_layout_tree(&mut output.children[*index], shift, 0);
             }
+            cursor = cursor
+                .saturating_add(
+                    output.children[*index]
+                        .rect
+                        .width
+                        .saturating_add(output.children[*index].box_model.horizontal_outer()),
+                )
+                .saturating_add(gap);
+            let _ = child_index;
         }
     }
 
@@ -962,11 +983,11 @@ fn layout_flex_children(
         parse_length(node.style.get("height"), viewport_height).unwrap_or(cross)
     };
     if matches!(align.as_str(), "center" | "flex-end" | "end" | "stretch") {
-        for index in &flex_indices {
+        for (index, child_index) in &flex_indices {
             let child = &mut output.children[*index];
             let child_align = node
                 .children
-                .get(*index)
+                .get(*child_index)
                 .and_then(|node| node.style.get("align-self"))
                 .map(str::trim)
                 .map(str::to_ascii_lowercase)
@@ -1004,6 +1025,12 @@ fn layout_flex_children(
     } else {
         cross as i32
     }
+}
+
+fn parse_flex_order(value: Option<&str>) -> i32 {
+    value
+        .and_then(|value| value.trim().parse::<i32>().ok())
+        .unwrap_or(0)
 }
 
 fn parse_flex_factor(value: Option<&str>) -> f32 {
@@ -2562,5 +2589,25 @@ mod tests {
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
 
         assert_eq!(layout.children[0].rect.y, 80);
+    }    #[test]
+    fn flex_order_repositions_items_without_changing_dom_order() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "display: flex; width: 200px; gap: 10px;");
+
+        let mut first = Node::element("div");
+        first.set_attribute("style", "width: 40px; order: 1;");
+        let mut second = Node::element("div");
+        second.set_attribute("style", "width: 40px; order: -1;");
+        root.append(first);
+        root.append(second);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.x, 50);
+        assert_eq!(layout.children[1].rect.x, 0);
     }
+
+
 }
