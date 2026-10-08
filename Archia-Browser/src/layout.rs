@@ -283,6 +283,7 @@ fn layout_styled_node(
     let mut cursor_y = 0_i32;
     let mut inline_x = 0_u32;
     let mut inline_line_height = 0_u32;
+    let mut previous_block_margin_bottom = 0_u32;
 
     if display == Display::Flex {
         cursor_y = layout_flex_children(
@@ -416,7 +417,7 @@ fn layout_styled_node(
                 } else {
                     content_origin_y.saturating_add(cursor_y)
                 };
-                let child_layout = layout_styled_node(
+                let mut child_layout = layout_styled_node(
                     child,
                     child_x,
                     child_y,
@@ -429,6 +430,14 @@ fn layout_styled_node(
                     child_abs_height,
                 );
                 if !child_is_absolute && !child_is_fixed {
+                    let collapsible_margin = if child_display == Display::Block {
+                        previous_block_margin_bottom.min(child_layout.box_model.margin_top)
+                    } else {
+                        0
+                    };
+                    if collapsible_margin != 0 {
+                        shift_layout_tree(&mut child_layout, 0, -(collapsible_margin as i32));
+                    }
                     cursor_y = cursor_y.saturating_add(
                         child_layout
                             .rect
@@ -436,6 +445,14 @@ fn layout_styled_node(
                             .saturating_add(child_layout.box_model.vertical_outer())
                             as i32,
                     );
+                    cursor_y = cursor_y.saturating_sub(collapsible_margin as i32);
+                    previous_block_margin_bottom = if child_display == Display::Block {
+                        child_layout.box_model.margin_bottom
+                    } else {
+                        0
+                    };
+                } else {
+                    previous_block_margin_bottom = 0;
                 }
                 output.children.push(child_layout);
             }
@@ -2543,6 +2560,41 @@ mod tests {
         assert_eq!(layout.children[0].rect.x, 0);
         assert_eq!(layout.children[1].rect.x, 40);
         assert_eq!(layout.children[2].rect.x, 80);
+    }
+
+    #[test]
+    fn block_sibling_vertical_margins_collapse_to_the_larger_margin() {
+        let mut root = Node::element("div");
+        let mut first = Node::element("div");
+        first.set_attribute("style", "height: 10px; margin-bottom: 20px;");
+        let mut second = Node::element("div");
+        second.set_attribute("style", "height: 10px; margin-top: 30px;");
+        root.append(first);
+        root.append(second);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.y, 0);
+        assert_eq!(layout.children[1].rect.y, 40);
+    }
+
+    #[test]
+    fn block_sibling_vertical_margins_collapse_when_equal() {
+        let mut root = Node::element("div");
+        let mut first = Node::element("div");
+        first.set_attribute("style", "height: 10px; margin-bottom: 20px;");
+        let mut second = Node::element("div");
+        second.set_attribute("style", "height: 10px; margin-top: 20px;");
+        root.append(first);
+        root.append(second);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[1].rect.y, 30);
     }
 
     #[test]
