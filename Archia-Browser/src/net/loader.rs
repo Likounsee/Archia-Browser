@@ -574,10 +574,8 @@ mod tests {
 
     #[test]
     fn expands_local_stylesheet_imports_relative_to_the_importing_file() {
-        let root = std::env::temp_dir().join(format!(
-            "archia-browser-css-import-{}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("archia-browser-css-import-{}", std::process::id()));
         let nested = root.join("nested");
         std::fs::create_dir_all(&nested).unwrap();
         let main = root.join("main.css");
@@ -610,10 +608,8 @@ mod tests {
             }
         }
 
-        let loader = DocumentLoader::new(
-            NetworkPipeline::new(AllowAll),
-            RootTransport { document },
-        );
+        let loader =
+            DocumentLoader::new(NetworkPipeline::new(AllowAll), RootTransport { document });
         let page = loader
             .load(&request, LayoutViewport::new(320, 200))
             .unwrap();
