@@ -284,18 +284,20 @@ mod tests {
 
     #[test]
     fn paints_background_over_content_and_padding_box() {
-        let root = Node::element("div");
-        let mut style = ComputedStyle::default();
-        style.set("background-color", "red");
-        style.set("padding", "4px");
+        let mut root = Node::element("div");
+        root.set_attribute("style", "background-color: red; padding: 4px;");
 
-        let layout = LayoutEngine::layout(&root, LayoutViewport::new(100, 100), &style);
-        let list = SoftwareRenderer::build_display_list(&root, &layout, &style);
+        let styled = crate::style_tree::StyleEngine::style(
+            &root,
+            &crate::css::StyleSheet::default(),
+        );
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+        let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
 
         assert_eq!(
             list.commands()[0],
             PaintCommand::FillRect {
-                rect: crate::layout::Rect::new(0, 0, 8, 8),
+                rect: crate::layout::Rect::new(0, 0, 100, 8),
                 color: 0xff0000ff,
             }
         );
