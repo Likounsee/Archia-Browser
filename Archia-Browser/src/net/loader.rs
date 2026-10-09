@@ -116,9 +116,8 @@ where
                 }
 
                 let mut next = current.clone();
-                let had_referrer =
-                    has_header_case_insensitive(&next.headers, "referer")
-                        || next.policy.referrer.is_some();
+                let had_referrer = has_header_case_insensitive(&next.headers, "referer")
+                    || next.policy.referrer.is_some();
                 let cross_origin = !same_origin(&current.url, &url);
                 next.url = url;
                 if had_referrer {
@@ -1024,11 +1023,19 @@ mod tests {
         };
         let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
         let mut request = Request::new(Url::parse("https://example.org/start").unwrap());
-        request.headers.insert("Authorization".into(), "Bearer secret".into());
-        request.headers.insert("Proxy-Authorization".into(), "Basic secret".into());
+        request
+            .headers
+            .insert("Authorization".into(), "Bearer secret".into());
+        request
+            .headers
+            .insert("Proxy-Authorization".into(), "Basic secret".into());
         request.headers.insert("Host".into(), "example.org".into());
-        request.headers.insert("Referer".into(), "https://example.org/private".into());
-        loader.load(&request, LayoutViewport::new(320, 200)).unwrap();
+        request
+            .headers
+            .insert("Referer".into(), "https://example.org/private".into());
+        loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .unwrap();
 
         let requests = loader.transport.requests.lock().unwrap();
         assert_eq!(requests.len(), 2);
@@ -1201,7 +1208,11 @@ mod tests {
 
         impl Transport for MixedContentTransport {
             fn send(&self, request: &Request) -> Result<Response, TransportError> {
-                assert_eq!(request.url.scheme(), "https", "insecure request escaped guard");
+                assert_eq!(
+                    request.url.scheme(),
+                    "https",
+                    "insecure request escaped guard"
+                );
                 if request.url.path() == "/" {
                     let html = format!(
                         "<html><head><link rel=\"stylesheet\" href=\"{}\"></head><body>Safe</body></html>",
@@ -1213,10 +1224,7 @@ mod tests {
                 }
 
                 assert_eq!(request.url.path(), "/style.css");
-                Ok(Response::new(302).with_header(
-                    "location",
-                    "http://example.org/style.css",
-                ))
+                Ok(Response::new(302).with_header("location", "http://example.org/style.css"))
             }
         }
 
