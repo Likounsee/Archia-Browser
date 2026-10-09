@@ -289,7 +289,7 @@ fn has_cache_max_age_zero(header: Option<&str>) -> bool {
 
 fn has_cache_directive(header: Option<&str>, wanted: &str) -> bool {
     header.is_some_and(|value| {
-        value.split(',').any(|directive| {
+        cache_control_directives(value).into_iter().any(|directive| {
             let name = directive
                 .split_once('=')
                 .map_or(directive, |(name, _)| name);
@@ -569,6 +569,22 @@ mod tests {
                 response.headers
             );
         }
+    }
+
+    #[test]
+    fn quoted_cache_control_text_is_not_treated_as_a_no_store_directive() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/resource");
+        let response = Response::new(200)
+            .with_header(
+                "cache-control",
+                r#"extension="text, no-store, text", max-age=60"#,
+            )
+            .with_body(b"cached".to_vec());
+
+        cache.store(&request, &response);
+
+        assert_eq!(cache.len(), 1);
     }
 
     #[test]
