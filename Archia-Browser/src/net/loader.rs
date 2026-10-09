@@ -208,6 +208,12 @@ where
             return None;
         }
 
+        // A remote document must not load local files as CSS subresources,
+        // including through a <base> element or @import.
+        if document_url.scheme() != "file" && url.scheme() == "file" {
+            return None;
+        }
+
         let mut current = url;
 
         for _ in 0..=MAX_REDIRECTS {
@@ -431,7 +437,6 @@ mod tests {
 
     #[test]
     fn document_loads_are_marked_as_document_resources() {
-        eprintln!("TEST checkpoint: entered");
         #[derive(Debug)]
         struct InspectTransport;
 
@@ -444,13 +449,39 @@ mod tests {
             }
         }
 
-        eprintln!("TEST checkpoint: before loader");
         let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), InspectTransport);
-        eprintln!("TEST checkpoint: after loader");
         let request = Request::new(Url::parse("https://example.org/").unwrap());
-        eprintln!("TEST checkpoint: before load");
         assert!(loader.load(&request, LayoutViewport::new(320, 200)).is_ok());
-        eprintln!("TEST checkpoint: after load");
+    }
+
+    #[test]
+    fn remote_documents_cannot_load_file_url_stylesheets() {
+        #[derive(Debug)]
+        struct DocumentOnlyTransport;
+
+        impl Transport for DocumentOnlyTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                assert_eq!(request.policy.resource_kind, ResourceKind::Document);
+                assert_eq!(request.url.scheme(), "https");
+                Ok(Response::new(200)
+                    .with_header("content-type", "text/html")
+                    .with_body(
+                        br#"<base href="file:///tmp/"><link rel="stylesheet" href="secret.css"><body>Safe</body>"#
+                            .to_vec(),
+                    ))
+            }
+        }
+
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            DocumentOnlyTransport,
+        );
+        let request = Request::new(Url::parse("https://example.org/").unwrap());
+        let page = loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .unwrap();
+
+        assert_eq!(page.document.text_content(), "Safe");
     }
 
     #[test]
