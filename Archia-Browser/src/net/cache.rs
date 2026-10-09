@@ -446,9 +446,18 @@ mod tests {
     #[test]
     fn equivalent_host_case_and_default_ports_share_cache_entries() {
         for (stored_url, lookup_url) in [
-            ("https://EXAMPLE.org/resource", "https://example.org:443/resource"),
-            ("http://Example.org:80/resource", "http://example.org/resource"),
-            ("https://[2001:DB8::1]/resource", "https://[2001:db8::1]:443/resource"),
+            (
+                "https://EXAMPLE.org/resource",
+                "https://example.org:443/resource",
+            ),
+            (
+                "http://Example.org:80/resource",
+                "http://example.org/resource",
+            ),
+            (
+                "https://[2001:DB8::1]/resource",
+                "https://[2001:db8::1]:443/resource",
+            ),
         ] {
             let mut cache = HttpCache::default();
             let request = make_request(stored_url);
@@ -480,9 +489,14 @@ mod tests {
                 .with_body(b"alternate port".to_vec()),
         );
 
-        assert!(cache.get(&make_request("https://example.org/resource")).is_none());
+        assert!(cache
+            .get(&make_request("https://example.org/resource"))
+            .is_none());
         assert_eq!(
-            cache.get(&make_request("https://example.org:8443/resource")).unwrap().body,
+            cache
+                .get(&make_request("https://example.org:8443/resource"))
+                .unwrap()
+                .body,
             b"alternate port"
         );
     }
