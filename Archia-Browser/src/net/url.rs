@@ -188,19 +188,26 @@ fn has_reference_scheme(reference: &str) -> bool {
 
 fn normalize_path(path: &str) -> String {
     let mut segments = Vec::new();
-    for segment in path.split('/') {
+    let mut trailing_slash = path.ends_with('/');
+    for (index, segment) in path.split('/').enumerate() {
         match segment {
-            "" | "." => {}
+            "" if index == 0 => {}
+            "" => segments.push(""),
+            "." => trailing_slash = true,
             ".." => {
                 segments.pop();
+                trailing_slash = true;
             }
-            value => segments.push(value),
+            value => {
+                segments.push(value);
+                trailing_slash = false;
+            }
         }
     }
 
     let mut result = String::from("/");
     result.push_str(&segments.join("/"));
-    if path.ends_with('/') && !result.ends_with('/') {
+    if trailing_slash && !result.ends_with('/') {
         result.push('/');
     }
     result
@@ -328,6 +335,24 @@ mod tests {
                 .unwrap()
                 .to_string(),
             "https://cdn.example.org/app.js"
+        );
+    }
+
+    #[test]
+    fn preserves_repeated_slashes_when_resolving_paths() {
+        let base = Url::parse("https://example.org/index.html").unwrap();
+
+        assert_eq!(
+            base.resolve("/assets//app.js").unwrap().path(),
+            "/assets//app.js"
+        );
+        assert_eq!(
+            base.resolve("/assets/a/../app.js").unwrap().path(),
+            "/assets/app.js"
+        );
+        assert_eq!(
+            base.resolve("/assets//").unwrap().path(),
+            "/assets//"
         );
     }
 
