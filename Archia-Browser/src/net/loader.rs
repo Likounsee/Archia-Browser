@@ -20,6 +20,7 @@ pub enum DocumentLoadError {
 }
 
 const MAX_REDIRECTS: usize = 10;
+const MAX_STYLESHEET_BYTES_PER_DOCUMENT: usize = 2 * 1024 * 1024;
 
 pub struct DocumentLoader<P, T> {
     pipeline: NetworkPipeline<P>,
@@ -192,22 +193,28 @@ where
             .unwrap_or_else(|| document_url.clone());
 
         let mut stylesheet = String::new();
-        // Bound the total number of stylesheet requests (including redirects
-        // and nested @imports) so one document cannot trigger unbounded work.
+        // Bound both network work and the expanded CSS retained for one
+        // document. Imports share these budgets with linked stylesheets.
         let mut request_budget = 64;
+        let mut remaining_css_bytes = MAX_STYLESHEET_BYTES_PER_DOCUMENT;
         for href in links {
-            if request_budget == 0 {
+            if request_budget == 0 || remaining_css_bytes == 0 {
                 break;
             }
             let Ok(url) = base_url.resolve(&href) else {
                 continue;
             };
-            let Some(css) = self.load_stylesheet_resource(document_url, url, &mut request_budget)
-            else {
+            let Some(css) = self.load_stylesheet_resource(
+                document_url,
+                url,
+                &mut request_budget,
+                &mut remaining_css_bytes,
+            ) else {
                 continue;
             };
-            if !stylesheet.is_empty() {
+            if !stylesheet.is_empty() && remaining_css_bytes > 0 {
                 stylesheet.push('\n');
+                remaining_css_bytes = remaining_css_bytes.saturating_sub(1);
             }
             stylesheet.push_str(&css);
         }
@@ -220,8 +227,15 @@ where
         document_url: &super::Url,
         url: super::Url,
         request_budget: &mut usize,
+        remaining_css_bytes: &mut usize,
     ) -> Option<String> {
-        self.load_stylesheet_resource_at(document_url, url, 0, request_budget)
+        self.load_stylesheet_resource_at(
+            document_url,
+            url,
+            0,
+            request_budget,
+            remaining_css_bytes,
+        )
     }
 
     fn load_stylesheet_resource_at(
@@ -230,9 +244,10 @@ where
         url: super::Url,
         import_depth: usize,
         request_budget: &mut usize,
+        remaining_css_bytes: &mut usize,
     ) -> Option<String> {
         const MAX_IMPORT_DEPTH: usize = 8;
-        if import_depth > MAX_IMPORT_DEPTH || *request_budget == 0 {
+        if import_depth > MAX_IMPORT_DEPTH || *request_budget == 0 || *remaining_css_bytes == 0 {
             return None;
         }
 
@@ -331,6 +346,7 @@ where
                 &css,
                 import_depth,
                 request_budget,
+                remaining_css_bytes,
             ));
         }
 
@@ -344,12 +360,16 @@ where
         css: &str,
         import_depth: usize,
         request_budget: &mut usize,
+        remaining_css_bytes: &mut usize,
     ) -> String {
-        let mut output = String::with_capacity(css.len());
+        let mut output = String::with_capacity(css.len().min(*remaining_css_bytes));
         for statement in css.split_inclusive(';') {
             let trimmed = statement.trim();
             let Some(reference) = parse_import_reference(trimmed) else {
-                output.push_str(statement);
+                append_css_with_budget(&mut output, statement, remaining_css_bytes);
+                if *remaining_css_bytes == 0 {
+                    break;
+                }
                 continue;
             };
 
@@ -359,16 +379,38 @@ where
                     url,
                     import_depth + 1,
                     request_budget,
+                    remaining_css_bytes,
                 ) {
                     output.push_str(&imported);
-                    output.push('\n');
+                    if *remaining_css_bytes > 0 {
+                        output.push('\n');
+                        *remaining_css_bytes = (*remaining_css_bytes).saturating_sub(1);
+                    }
+                    if *remaining_css_bytes == 0 {
+                        break;
+                    }
                     continue;
                 }
             }
-            output.push_str(statement);
+            append_css_with_budget(&mut output, statement, remaining_css_bytes);
+            if *remaining_css_bytes == 0 {
+                break;
+            }
         }
         output
     }
+}
+
+fn append_css_with_budget(output: &mut String, text: &str, remaining: &mut usize) {
+    if *remaining == 0 {
+        return;
+    }
+    let mut end = text.len().min(*remaining);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    output.push_str(&text[..end]);
+    *remaining -= end;
 }
 
 fn has_header_case_insensitive(
