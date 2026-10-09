@@ -26,9 +26,9 @@ impl<T> ResourceCache<T> {
     pub fn insert(&mut self, key: impl Into<String>, value: T, bytes: usize) {
         let key = key.into();
         // Even an empty payload occupies memory through its key and entry
-        // metadata. Charging at least one byte prevents unlimited zero-cost
-        // entries from bypassing the cache capacity.
-        let bytes = bytes.max(1);
+        // metadata. Account for the key too, and charge at least one byte,
+        // so empty entries cannot bypass the cache capacity.
+        let bytes = bytes.max(key.len()).max(1);
 
         if let Some(position) = self.entries.iter().position(|entry| entry.key == key) {
             if let Some(previous) = self.entries.remove(position) {
