@@ -163,6 +163,11 @@ impl HttpCache {
         self.entries.used()
     }
 
+    /// Returns the configured maximum accounted size of the HTTP cache.
+    pub fn capacity_bytes(&self) -> usize {
+        self.entries.capacity()
+    }
+
     /// Removes all cached responses and releases the cache's accounted budget.
     pub fn clear(&mut self) {
         self.entries.clear();
@@ -434,6 +439,7 @@ mod tests {
     fn cache_management_reports_usage_and_clear_releases_entries() {
         let mut cache = HttpCache::new(4096);
         assert!(cache.is_empty());
+        assert_eq!(cache.capacity_bytes(), 4096);
         assert_eq!(cache.used_bytes(), 0);
 
         let request = make_request("https://example.org/resource");
