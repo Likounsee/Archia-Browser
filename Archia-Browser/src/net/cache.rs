@@ -135,9 +135,7 @@ impl HttpCache {
             .headers
             .iter()
             .fold(response.body.len(), |total, (name, value)| {
-                total
-                    .saturating_add(name.len())
-                    .saturating_add(value.len())
+                total.saturating_add(name.len()).saturating_add(value.len())
             })
             .saturating_add(64);
 
