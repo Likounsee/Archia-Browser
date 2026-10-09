@@ -1177,15 +1177,15 @@ fn layout_flex_children(
                     .is_some_and(|value| !value.trim().eq_ignore_ascii_case("auto"));
                 if !has_explicit_height {
                     child.rect.height = cross_size.saturating_sub(child.box_model.vertical_outer());
-                    if let Some(min_height) = child_style
-                        .and_then(|style| parse_length(style.get("min-height"), viewport_height))
-                    {
-                        child.rect.height = child.rect.height.max(min_height);
-                    }
                     if let Some(max_height) = child_style
                         .and_then(|style| parse_length(style.get("max-height"), viewport_height))
                     {
                         child.rect.height = child.rect.height.min(max_height);
+                    }
+                    if let Some(min_height) = child_style
+                        .and_then(|style| parse_length(style.get("min-height"), viewport_height))
+                    {
+                        child.rect.height = child.rect.height.max(min_height);
                     }
                 }
             }
