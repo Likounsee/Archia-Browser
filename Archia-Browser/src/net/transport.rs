@@ -1133,10 +1133,14 @@ mod tests {
             Err(TransportError::InvalidRequest)
         );
 
-        let duplicate_length = Request::new(url)
+        let mut duplicate_length = Request::new(url)
             .with_body(b"Hello".to_vec())
-            .with_header("Content-Length", "5")
             .with_header("content-length", "5");
+        // Construct a malformed map directly: the public builder normalizes
+        // names and would otherwise collapse this duplicate before validation.
+        duplicate_length
+            .headers
+            .insert("Content-Length".into(), "5".into());
         assert_eq!(
             validate_request(&duplicate_length),
             Err(TransportError::InvalidRequest)
