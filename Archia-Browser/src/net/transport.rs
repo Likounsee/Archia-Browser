@@ -55,7 +55,7 @@ impl HttpTransport {
             _ => return Err(TransportError::UnsupportedScheme),
         }
 
-        let address = format!("{}:{}", request.url.host(), request.url.effective_port());
+        let address = socket_address(&request.url);
         let mut addresses = address
             .to_socket_addrs()
             .map_err(|_| TransportError::ConnectionFailed)?;
@@ -394,6 +394,15 @@ fn validate_http_authority(authority: &str) -> Result<(), TransportError> {
     }
 
     Ok(())
+}
+
+fn socket_address(url: &super::Url) -> String {
+    let host = url.host();
+    if host.contains(':') {
+        format!("[{host}]:{}", url.effective_port())
+    } else {
+        format!("{host}:{}", url.effective_port())
+    }
 }
 
 fn host_header(request: &Request) -> String {
@@ -810,6 +819,12 @@ mod tests {
             transport.send(&request),
             Err(TransportError::InvalidRequest)
         );
+    }
+
+    #[test]
+    fn formats_ipv6_socket_addresses_with_brackets() {
+        let url = Url::parse("http://[::1]:8080/").unwrap();
+        assert_eq!(socket_address(&url), "[::1]:8080");
     }
 
     #[test]
