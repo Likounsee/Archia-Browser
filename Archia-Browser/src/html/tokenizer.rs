@@ -54,7 +54,13 @@ impl HtmlTokenizer {
             let end = cursor + offset;
             let inside = input[cursor + 1..end].trim();
 
-            if inside.len() >= 8 && inside[..8].eq_ignore_ascii_case("!doctype") {
+            // HTML is untrusted input. Do not slice at an arbitrary byte
+            // offset before checking the prefix: a malformed tag can start
+            // with multi-byte UTF-8 and otherwise panic the tokenizer.
+            if inside
+                .get(..8)
+                .is_some_and(|prefix| prefix.eq_ignore_ascii_case("!doctype"))
+            {
                 tokens.push(HtmlToken::Doctype(inside[8..].trim().to_owned()));
             } else if let Some(name) = inside.strip_prefix('/') {
                 tokens.push(HtmlToken::EndTag(name.trim().to_ascii_lowercase()));
@@ -177,6 +183,12 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn malformed_unicode_tag_does_not_panic() {
+        let tokens = HtmlTokenizer::tokenize("<ééééé>");
+        assert!(matches!(tokens.as_slice(), [HtmlToken::StartTag { name, .. }] if name == "ééééé"));
+    }
 
     #[test]
     fn tokenizes_basic_document() {
