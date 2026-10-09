@@ -472,10 +472,7 @@ mod tests {
             }
         }
 
-        let loader = DocumentLoader::new(
-            NetworkPipeline::new(AllowAll),
-            DocumentOnlyTransport,
-        );
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), DocumentOnlyTransport);
         let request = Request::new(Url::parse("https://example.org/").unwrap());
         let page = loader
             .load(&request, LayoutViewport::new(320, 200))
