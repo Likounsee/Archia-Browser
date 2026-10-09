@@ -1196,7 +1196,13 @@ mod tests {
 
     #[test]
     fn rejects_authority_injection() {
-        let request = Request::new(Url::parse("http://example.org evil/").unwrap());
+        assert_eq!(
+            Url::parse("http://example.org evil/"),
+            Err(crate::net::url::UrlError::InvalidCharacter)
+        );
+
+        let request = Request::new(Url::parse("http://example.org/").unwrap())
+            .with_header("Host", "example.org evil");
         assert_eq!(
             validate_request(&request),
             Err(TransportError::InvalidRequest)
