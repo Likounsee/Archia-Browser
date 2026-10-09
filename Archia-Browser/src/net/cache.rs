@@ -471,7 +471,11 @@ mod tests {
 
         let strict = request.clone().with_header("cache-control", "max-age=30");
         assert!(cache.get(&strict).is_none());
-        assert_eq!(cache.len(), 1, "request freshness limits must not evict the entry");
+        assert_eq!(
+            cache.len(),
+            1,
+            "request freshness limits must not evict the entry"
+        );
 
         let permissive = request.with_header("cache-control", "max-age=60");
         assert_eq!(cache.get(&permissive).unwrap().body, b"cached");
