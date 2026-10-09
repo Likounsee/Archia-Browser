@@ -3585,6 +3585,50 @@ mod tests {
     }
 
     #[test]
+    fn flex_row_uses_row_gap_between_wrapped_lines() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "display: flex; flex-wrap: wrap; width: 40px; height: 100px; row-gap: 5px;",
+        );
+        for _ in 0..3 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 20px; height: 10px; flex: 0 0 20px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(40, 100));
+
+        assert_eq!(layout.children[0].rect.y, 0);
+        assert_eq!(layout.children[1].rect.y, 0);
+        assert_eq!(layout.children[2].rect.y, 15);
+    }
+
+    #[test]
+    fn flex_column_uses_column_gap_between_wrapped_columns() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "display: flex; flex-flow: column wrap; width: 100px; height: 40px; column-gap: 7px;",
+        );
+        for _ in 0..3 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 10px; height: 20px; flex: 0 0 20px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 40));
+
+        assert_eq!(layout.children[0].rect.x, 0);
+        assert_eq!(layout.children[1].rect.x, 0);
+        assert_eq!(layout.children[2].rect.x, 17);
+    }
+
+    #[test]
     fn flex_shorthand_rejects_non_finite_or_negative_factors() {
         assert!(parse_flex_shorthand(Some("NaN 1 20px"), 100).is_none());
         assert!(parse_flex_shorthand(Some("inf 1 20px"), 100).is_none());
