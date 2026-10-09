@@ -227,7 +227,10 @@ impl CookieJar {
             .cookies
             .iter()
             .filter(|cookie| {
-                if cookie.expires_at.is_some_and(|expires_at| expires_at <= now) {
+                if cookie
+                    .expires_at
+                    .is_some_and(|expires_at| expires_at <= now)
+                {
                     return false;
                 }
                 let domain_matches = if cookie.host_only {
@@ -252,7 +255,9 @@ impl CookieJar {
     fn remove_expired(&mut self) {
         let now = SystemTime::now();
         self.cookies.retain(|cookie| {
-            !cookie.expires_at.is_some_and(|expires_at| expires_at <= now)
+            !cookie
+                .expires_at
+                .is_some_and(|expires_at| expires_at <= now)
         });
     }
 
@@ -479,7 +484,11 @@ mod tests {
 
         assert_eq!(jar.header_for(&url), None);
         jar.store(&url, "fresh=value");
-        assert_eq!(jar.len(), 1, "expired cookies must be pruned before storage");
+        assert_eq!(
+            jar.len(),
+            1,
+            "expired cookies must be pruned before storage"
+        );
     }
 
     #[test]
