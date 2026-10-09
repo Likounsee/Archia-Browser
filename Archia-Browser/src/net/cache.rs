@@ -111,9 +111,11 @@ fn response_can_store(response: &Response) -> bool {
         && response.set_cookie_headers().is_empty()
         && !has_cache_directive(response.header("cache-control"), "no-store")
         && !has_cache_directive(response.header("cache-control"), "no-cache")
-        && !response
-            .header("pragma")
-            .is_some_and(|value| value.split(',').any(|d| d.trim().eq_ignore_ascii_case("no-cache")))
+        && !response.header("pragma").is_some_and(|value| {
+            value
+                .split(',')
+                .any(|d| d.trim().eq_ignore_ascii_case("no-cache"))
+        })
         && response.header("vary").is_none()
 }
 
