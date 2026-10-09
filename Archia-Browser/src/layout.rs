@@ -193,14 +193,6 @@ fn layout_styled_node(
         },
     );
 
-    if let Some(min_width) = parse_length(node.style.get("min-width"), containing_width) {
-        let min_content_width = if border_box {
-            min_width.saturating_sub(padding_border_x)
-        } else {
-            min_width
-        };
-        content_width = content_width.max(min_content_width);
-    }
     if let Some(max_width) = parse_length(node.style.get("max-width"), containing_width) {
         let max_content_width = if border_box {
             max_width.saturating_sub(padding_border_x)
@@ -208,6 +200,14 @@ fn layout_styled_node(
             max_width
         };
         content_width = content_width.min(max_content_width);
+    }
+    if let Some(min_width) = parse_length(node.style.get("min-width"), containing_width) {
+        let min_content_width = if border_box {
+            min_width.saturating_sub(padding_border_x)
+        } else {
+            min_width
+        };
+        content_width = content_width.max(min_content_width);
     }
 
     if display == Display::Block && specified_width.is_some() {
@@ -474,14 +474,6 @@ fn layout_styled_node(
             .saturating_sub(box_model.border_top)
             .saturating_sub(box_model.border_bottom);
     }
-    if let Some(min_height) = parse_length(node.style.get("min-height"), viewport_height) {
-        let min_content_height = if border_box {
-            min_height.saturating_sub(padding_border_y)
-        } else {
-            min_height
-        };
-        content_height = content_height.max(min_content_height);
-    }
     if let Some(max_height) = parse_length(node.style.get("max-height"), viewport_height) {
         let max_content_height = if border_box {
             max_height.saturating_sub(padding_border_y)
@@ -489,6 +481,14 @@ fn layout_styled_node(
             max_height
         };
         content_height = content_height.min(max_content_height);
+    }
+    if let Some(min_height) = parse_length(node.style.get("min-height"), viewport_height) {
+        let min_content_height = if border_box {
+            min_height.saturating_sub(padding_border_y)
+        } else {
+            min_height
+        };
+        content_height = content_height.max(min_content_height);
     }
 
     output.rect.height = if border_box && explicit_height.is_some() {
