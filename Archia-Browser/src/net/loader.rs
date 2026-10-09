@@ -493,6 +493,14 @@ fn is_html_response(response: &Response) -> bool {
 
 #[cfg(test)]
 mod tests {
+
+    use super::*;
+    use crate::net::{
+        pipeline::{PolicyDecision, RequestPolicyEngine},
+        Response, Url,
+    };
+
+
     #[test]
     fn stylesheet_byte_budget_preserves_utf8_and_stops_at_limit() {
         let mut output = String::new();
@@ -504,13 +512,6 @@ mod tests {
         assert_eq!(remaining, 0);
         assert!(output.len() <= 5);
     }
-
-
-    use super::*;
-    use crate::net::{
-        pipeline::{PolicyDecision, RequestPolicyEngine},
-        Response, Url,
-    };
 
     #[derive(Debug, Default)]
     struct AllowAll;
