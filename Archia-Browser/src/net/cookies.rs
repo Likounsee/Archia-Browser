@@ -45,6 +45,7 @@ impl CookieJar {
             secure: false,
             host_only: true,
         };
+        let mut delete_cookie = false;
 
         for attribute in parts {
             let mut pieces = attribute.splitn(2, '=');
@@ -76,24 +77,29 @@ impl CookieJar {
                     }
                 }
                 "max-age" => {
-                    if pieces
+                    delete_cookie = pieces
                         .next()
                         .and_then(|value| value.trim().parse::<i64>().ok())
-                        .is_some_and(|seconds| seconds <= 0)
-                    {
-                        self.cookies.retain(|existing| {
-                            !(existing.name == cookie.name
-                                && existing.domain == cookie.domain
-                                && existing.path == cookie.path)
-                        });
-                        return;
-                    }
+                        .is_some_and(|seconds| seconds <= 0);
                 }
                 "secure" => cookie.secure = true,
                 // Ignore extension attributes (including HttpOnly and
                 // SameSite) instead of rejecting an otherwise valid cookie.
                 _ => {}
             }
+        }
+
+        if delete_cookie {
+            // Cookie identity depends on the fully parsed Domain and Path, so
+            // apply deletion only after all attributes have been processed.
+            // An insecure origin also cannot delete an existing Secure cookie.
+            self.cookies.retain(|existing| {
+                let same_key = existing.name == cookie.name
+                    && existing.domain == cookie.domain
+                    && existing.path == cookie.path;
+                !same_key || (!url.is_secure() && existing.secure)
+            });
+            return;
         }
 
         // An insecure origin must not be able to plant a Secure cookie that
@@ -307,6 +313,29 @@ mod tests {
         jar.store(&url, "sid=one");
         jar.store(&url, "sid=gone; Max-Age=0");
         assert!(jar.header_for(&url).is_none());
+    }
+
+    #[test]
+    fn max_age_deletion_uses_path_parsed_after_max_age() {
+        let url = Url::parse("https://example.org/account/page").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&url, "sid=one; Path=/");
+
+        jar.store(&url, "sid=gone; Max-Age=0; Path=/");
+
+        assert!(jar.header_for(&url).is_none());
+    }
+
+    #[test]
+    fn insecure_origin_cannot_delete_existing_secure_cookie() {
+        let secure_url = Url::parse("https://example.org/").unwrap();
+        let insecure_url = Url::parse("http://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&secure_url, "sid=trusted; Secure");
+
+        jar.store(&insecure_url, "sid=gone; Max-Age=0");
+
+        assert_eq!(jar.header_for(&secure_url).as_deref(), Some("sid=trusted"));
     }
 
     #[test]
