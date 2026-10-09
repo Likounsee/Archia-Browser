@@ -256,11 +256,28 @@ impl Transport for LocalFileTransport {
         let body = if request.method == super::HttpMethod::Head {
             Vec::new()
         } else {
-            std::fs::read(&path).map_err(|_| TransportError::ConnectionFailed)?
+            let file = std::fs::File::open(&path).map_err(|_| TransportError::ConnectionFailed)?;
+            let read_limit = u64::try_from(self.max_file_size)
+                .unwrap_or(u64::MAX)
+                .saturating_add(1);
+            let mut body = Vec::new();
+            file.take(read_limit)
+                .read_to_end(&mut body)
+                .map_err(|_| TransportError::ConnectionFailed)?;
+            if body.len() > self.max_file_size {
+                return Err(TransportError::ResponseTooLarge);
+            }
+            body
+        };
+        let content_length = if request.method == super::HttpMethod::Head {
+            metadata.len()
+        } else {
+            body.len() as u64
         };
         let content_type = content_type_for_path(&path);
         Ok(Response::new(200)
             .with_header("content-type", content_type)
+            .with_header("content-length", content_length.to_string())
             .with_body(body))
     }
 }
@@ -1036,7 +1053,14 @@ mod tests {
             response.content_type.as_deref(),
             Some("text/html; charset=utf-8")
         );
+        assert_eq!(response.header("content-length"), Some("18"));
         assert_eq!(response.body, b"<body>Local</body>");
+
+        let head_request = Request::new(super::super::Url::parse(&url).unwrap())
+            .with_method(crate::net::HttpMethod::Head);
+        let head_response = LocalFileTransport::new().send(&head_request).unwrap();
+        assert_eq!(head_response.header("content-length"), Some("18"));
+        assert!(head_response.body.is_empty());
         std::fs::remove_file(path).unwrap();
     }
 
