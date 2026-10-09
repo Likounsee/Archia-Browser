@@ -90,11 +90,9 @@ impl CookieJar {
                     }
                 }
                 "secure" => cookie.secure = true,
-                _ => {
-                    if pieces.next().is_none() {
-                        return;
-                    }
-                }
+                // Ignore extension attributes (including HttpOnly and
+                // SameSite) instead of rejecting an otherwise valid cookie.
+                _ => {}
             }
         }
 
@@ -275,6 +273,16 @@ mod tests {
             jar.header_for(&Url::parse("http://example.org/account").unwrap()),
             None
         );
+    }
+
+    #[test]
+    fn accepts_cookies_with_http_only_and_same_site_attributes() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&url, "sid=abc; HttpOnly; SameSite=Lax; Secure");
+
+        assert_eq!(jar.header_for(&url).as_deref(), Some("sid=abc"));
     }
 
     #[test]
