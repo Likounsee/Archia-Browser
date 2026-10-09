@@ -10,6 +10,7 @@ const DEFAULT_CAPACITY: usize = 16 * 1024 * 1024;
 struct CachedResponse {
     response: Response,
     stored_at: Instant,
+    initial_age: u64,
     expires_at: Instant,
 }
 
@@ -57,7 +58,9 @@ impl HttpCache {
         // still be allowed to use it under the origin's Cache-Control policy.
         if let Some(max_age) = request_max_age(request) {
             let too_old_for_request = self.entries.get(&key).is_some_and(|entry| {
-                now.saturating_duration_since(entry.stored_at).as_secs() > max_age
+                entry.initial_age.saturating_add(
+                    now.saturating_duration_since(entry.stored_at).as_secs(),
+                ) > max_age
             });
             if too_old_for_request {
                 return None;
@@ -118,6 +121,7 @@ impl HttpCache {
             CachedResponse {
                 response: response.clone(),
                 stored_at: Instant::now(),
+                initial_age: age,
                 expires_at,
             },
             bytes,
@@ -459,6 +463,7 @@ mod tests {
             CachedResponse {
                 response,
                 stored_at: Instant::now() - Duration::from_secs(45),
+                initial_age: 0,
                 expires_at: Instant::now() + Duration::from_secs(255),
             },
             128,
@@ -470,6 +475,21 @@ mod tests {
 
         let permissive = request.with_header("cache-control", "max-age=60");
         assert_eq!(cache.get(&permissive).unwrap().body, b"cached");
+    }
+
+    #[test]
+    fn request_max_age_includes_origin_age_header() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/resource");
+        let response = Response::new(200)
+            .with_header("cache-control", "max-age=300")
+            .with_header("age", "45")
+            .with_body(b"cached".to_vec());
+        cache.store(&request, &response);
+
+        let strict = request.with_header("cache-control", "max-age=30");
+        assert!(cache.get(&strict).is_none());
+        assert_eq!(cache.len(), 1);
     }
 
     #[test]
