@@ -6,3 +6,5 @@ license = "MIT"
 description = "A lightweight, independent web browser built from the ground up."
 
 [dependencies]
+rustls = "0.23"
+webpki-roots = "1.0"
