@@ -1,14 +1,14 @@
 use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
+use std::sync::Arc;
+
+use rustls::pki_types::ServerName;
+use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 
 use super::{Request, Response, Transport, TransportError};
 
-/// Minimal HTTP/1.1 transport built directly on the platform TCP socket API.
-///
-/// HTTPS is intentionally rejected until the browser has a native TLS layer.
-/// This keeps the transport honest: it never silently sends plaintext bytes to
-/// a secure origin.
+/// Minimal HTTP/1.1 transport with certificate-validated TLS for HTTPS origins.
 #[derive(Debug, Clone)]
 pub struct HttpTransport {
     connect_timeout: Duration,
@@ -48,18 +48,18 @@ impl HttpTransport {
         self
     }
 
-    fn connect(&self, request: &Request) -> Result<TcpStream, TransportError> {
+    fn connect(&self, request: &Request) -> Result<Box<dyn ReadWrite>, TransportError> {
         match request.url.scheme() {
-            "http" => {}
-            "https" => return Err(TransportError::TlsFailed),
+            "http" | "https" => {}
             _ => return Err(TransportError::UnsupportedScheme),
         }
 
         let address = socket_address(&request.url);
-        let mut addresses = address
+        let addresses = address
             .to_socket_addrs()
             .map_err(|_| TransportError::ConnectionFailed)?;
         let stream = addresses
+            .into_iter()
             .find_map(|address| TcpStream::connect_timeout(&address, self.connect_timeout).ok())
             .ok_or(TransportError::ConnectionFailed)?;
 
@@ -69,12 +69,25 @@ impl HttpTransport {
         stream
             .set_write_timeout(Some(self.read_timeout))
             .map_err(|_| TransportError::ConnectionFailed)?;
-        Ok(stream)
+
+        if request.url.scheme() == "http" {
+            return Ok(Box::new(stream));
+        }
+
+        let mut roots = RootCertStore::empty();
+        roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+        let config = ClientConfig::builder()
+            .with_root_certificates(roots)
+            .with_no_client_auth();
+        let server_name = tls_server_name(request.url.host())?;
+        let connection = ClientConnection::new(Arc::new(config), server_name)
+            .map_err(|_| TransportError::TlsFailed)?;
+        Ok(Box::new(StreamOwned::new(connection, stream)))
     }
 
     fn write_request(
         &self,
-        stream: &mut TcpStream,
+        stream: &mut dyn ReadWrite,
         request: &Request,
     ) -> Result<(), TransportError> {
         validate_request(request)?;
@@ -118,7 +131,7 @@ impl HttpTransport {
 
     fn read_response(
         &self,
-        stream: &mut TcpStream,
+        stream: &mut dyn ReadWrite,
         method: super::HttpMethod,
     ) -> Result<Response, TransportError> {
         let mut bytes = Vec::new();
@@ -155,6 +168,16 @@ impl HttpTransport {
         }
         parse_http_response_for_method(&bytes, method, self.max_response_size, self.max_header_size)
     }
+}
+
+trait ReadWrite: Read + Write {}
+impl<T: Read + Write> ReadWrite for T {}
+
+fn tls_server_name(host: &str) -> Result<ServerName<'static>, TransportError> {
+    if let Ok(address) = host.parse::<std::net::IpAddr>() {
+        return Ok(ServerName::IpAddress(address.into()));
+    }
+    ServerName::try_from(host.to_owned()).map_err(|_| TransportError::TlsFailed)
 }
 
 impl Transport for HttpTransport {
@@ -604,6 +627,14 @@ fn decode_chunked(bytes: &[u8], max_response_size: usize) -> Result<Vec<u8>, Tra
 mod tests {
     use super::*;
     use crate::net::Url;
+
+    #[test]
+    fn creates_tls_server_names_for_dns_and_ip_hosts() {
+        assert!(tls_server_name("example.org").is_ok());
+        assert!(tls_server_name("127.0.0.1").is_ok());
+        assert!(tls_server_name("::1").is_ok());
+        assert!(tls_server_name("").is_err());
+    }
 
     #[test]
     fn parses_content_length_response() {
