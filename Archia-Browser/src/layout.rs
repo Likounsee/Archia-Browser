@@ -737,6 +737,18 @@ fn align_inline_vertical_align(
     }
 }
 
+fn parse_gap_shorthand(value: Option<&str>, reference: u32, column_gap: bool) -> Option<u32> {
+    let value = value?;
+    let mut parts = value.split_whitespace();
+    let first = parts.next()?;
+    let second = parts.next();
+    let selected = match (column_gap, second) {
+        (true, Some(second)) => second,
+        (_, _) => first,
+    };
+    parse_length(Some(selected), reference)
+}
+
 fn layout_flex_children(
     node: &crate::style_tree::StyledNode,
     output: &mut LayoutNode,
@@ -803,14 +815,14 @@ fn layout_flex_children(
     } else {
         parse_length(node.style.get("column-gap"), main_gap_reference)
     }
-    .or_else(|| parse_length(node.style.get("gap"), main_gap_reference))
+    .or_else(|| parse_gap_shorthand(node.style.get("gap"), main_gap_reference, !column))
     .unwrap_or(0);
     let cross_gap = if column {
         parse_length(node.style.get("column-gap"), cross_gap_reference)
     } else {
         parse_length(node.style.get("row-gap"), cross_gap_reference)
     }
-    .or_else(|| parse_length(node.style.get("gap"), cross_gap_reference))
+    .or_else(|| parse_gap_shorthand(node.style.get("gap"), cross_gap_reference, column))
     .unwrap_or(0);
     let mut main = 0_u32;
     let mut cross = 0_u32;
@@ -1343,7 +1355,7 @@ fn justify_flex_rows(
     reverse_main: bool,
 ) {
     let gap = parse_length(node.style.get("column-gap"), content_width)
-        .or_else(|| parse_length(node.style.get("gap"), content_width))
+        .or_else(|| parse_gap_shorthand(node.style.get("gap"), content_width, true))
         .unwrap_or(0);
     let mut rows: Vec<Vec<(usize, usize)>> = Vec::new();
     let mut row_width = 0_u32;
@@ -1474,7 +1486,7 @@ fn align_flex_columns(
     }
 
     let column_gap = parse_length(node.style.get("column-gap"), content_width)
-        .or_else(|| parse_length(node.style.get("gap"), content_width))
+        .or_else(|| parse_gap_shorthand(node.style.get("gap"), content_width, true))
         .unwrap_or(0);
     let total = columns
         .iter()
@@ -1590,7 +1602,7 @@ fn align_flex_lines(
         .fold(0_u32, u32::saturating_add)
         .saturating_add(
             parse_length(node.style.get("row-gap"), cross_size)
-                .or_else(|| parse_length(node.style.get("gap"), cross_size))
+                .or_else(|| parse_gap_shorthand(node.style.get("gap"), cross_size, false))
                 .unwrap_or(0)
                 .saturating_mul(lines.len().saturating_sub(1) as u32),
         );
@@ -1617,7 +1629,7 @@ fn align_flex_lines(
     };
     let mut cursor = offset;
     let line_gap = parse_length(node.style.get("row-gap"), cross_size)
-        .or_else(|| parse_length(node.style.get("gap"), cross_size))
+        .or_else(|| parse_gap_shorthand(node.style.get("gap"), cross_size, false))
         .unwrap_or(0);
     for line in &lines {
         let current_y = output.children[line[0]].rect.y;
@@ -2736,6 +2748,28 @@ mod tests {
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 500));
 
         assert_eq!(layout.children[0].rect.height, 50);
+    }
+
+    #[test]
+    fn flex_wrap_supports_two_value_gap_shorthand() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "display: flex; flex-wrap: wrap; gap: 4px 12px; width: 100px;",
+        );
+        for _ in 0..3 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 40px; height: 10px; flex: 0 0 40px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.x, 0);
+        assert_eq!(layout.children[1].rect.x, 52);
+        assert_eq!(layout.children[2].rect.y, 14);
     }
 
     #[test]
