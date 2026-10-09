@@ -1331,6 +1331,7 @@ fn layout_flex_children(
                 &flex_indices,
                 node,
                 content_origin_y,
+                content_width,
                 parse_length(node.style.get("height"), viewport_height)
                     .map(|_| flex_basis_reference_height)
                     .unwrap_or(cross),
@@ -1563,6 +1564,7 @@ fn align_flex_lines(
     indices: &[(usize, usize)],
     node: &crate::style_tree::StyledNode,
     content_origin_y: i32,
+    content_width: u32,
     cross_size: u32,
     wrap_reverse: bool,
 ) {
@@ -1570,16 +1572,42 @@ fn align_flex_lines(
         return;
     }
 
+    let column_gap = parse_length(node.style.get("column-gap"), content_width)
+        .or_else(|| parse_gap_shorthand(node.style.get("gap"), content_width, true))
+        .unwrap_or(0);
     let mut lines: Vec<Vec<usize>> = Vec::new();
+    let mut line_width = 0_u32;
+    let mut line_y = None;
     for (index, _) in indices {
-        let y = output.children[*index].rect.y;
-        if let Some(line) = lines
-            .iter_mut()
-            .find(|line| output.children[line[0]].rect.y == y)
-        {
+        let child = &output.children[*index];
+        let y = child.rect.y;
+        let outer_width = child
+            .rect
+            .width
+            .saturating_add(child.box_model.horizontal_outer());
+        let exceeds_width = !lines.is_empty()
+            && line_width
+                .saturating_add(if lines.last().is_some_and(|line| !line.is_empty()) {
+                    column_gap
+                } else {
+                    0
+                })
+                .saturating_add(outer_width)
+                > content_width;
+        if line_y.is_some_and(|current_y| current_y != y) || exceeds_width {
+            lines.push(Vec::new());
+            line_width = 0;
+            line_y = Some(y);
+        } else if lines.is_empty() {
+            lines.push(Vec::new());
+            line_y = Some(y);
+        }
+        if let Some(line) = lines.last_mut() {
+            if !line.is_empty() {
+                line_width = line_width.saturating_add(column_gap);
+            }
             line.push(*index);
-        } else {
-            lines.push(vec![*index]);
+            line_width = line_width.saturating_add(outer_width);
         }
     }
     if lines.len() < 2 {
@@ -2748,6 +2776,28 @@ mod tests {
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 500));
 
         assert_eq!(layout.children[0].rect.height, 50);
+    }
+
+    #[test]
+    fn flex_wrap_align_content_keeps_zero_height_lines_separate() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "display: flex; flex-wrap: wrap; align-content: space-between; width: 50px; height: 100px;",
+        );
+        for _ in 0..3 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "height: 0; flex: 0 0 30px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(50, 100));
+
+        assert_eq!(layout.children[0].rect.y, 0);
+        assert_eq!(layout.children[1].rect.y, 50);
+        assert_eq!(layout.children[2].rect.y, 100);
     }
 
     #[test]
