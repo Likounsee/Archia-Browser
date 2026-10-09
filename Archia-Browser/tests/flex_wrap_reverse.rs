@@ -113,3 +113,19 @@ fn minimum_dimensions_win_when_they_exceed_maximum_dimensions() {
     assert_eq!(layout.children[0].rect.width, 80);
     assert_eq!(layout.children[0].rect.height, 80);
 }
+
+#[test]
+fn flex_stretch_preserves_min_height_when_it_exceeds_max_height() {
+    let mut root = Node::element("div");
+    root.set_attribute(
+        "style",
+        "display: flex; align-items: stretch; width: 100px; height: 100px;",
+    );
+    let mut child = Node::element("div");
+    child.set_attribute("style", "min-height: 80px; max-height: 40px;");
+    root.append(child);
+
+    let layout = styled_layout(&root, 100, 100);
+
+    assert_eq!(layout.children[0].rect.height, 80);
+}
