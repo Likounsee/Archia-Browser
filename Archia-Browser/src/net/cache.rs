@@ -134,16 +134,20 @@ fn response_max_age(response: &Response) -> Option<u64> {
 fn has_cache_directive(header: Option<&str>, wanted: &str) -> bool {
     header.is_some_and(|value| {
         value.split(',').any(|directive| {
-            let name = directive.split_once('=').map_or(directive, |(name, _)| name);
+            let name = directive
+                .split_once('=')
+                .map_or(directive, |(name, _)| name);
             name.trim().eq_ignore_ascii_case(wanted)
         })
     })
 }
 
 fn has_pragma_no_cache(request: &Request) -> bool {
-    request
-        .header("pragma")
-        .is_some_and(|value| value.split(',').any(|d| d.trim().eq_ignore_ascii_case("no-cache")))
+    request.header("pragma").is_some_and(|value| {
+        value
+            .split(',')
+            .any(|d| d.trim().eq_ignore_ascii_case("no-cache"))
+    })
 }
 
 #[cfg(test)]
@@ -215,14 +219,15 @@ mod tests {
             .with_body(b"cached".to_vec());
         cache.store(&request, &response);
 
-        let conditional = request.clone().with_header("cache-control", "no-cache=\"etag\"");
+        let conditional = request
+            .clone()
+            .with_header("cache-control", "no-cache=\"etag\"");
         assert!(cache.get(&conditional).is_none());
 
         let mut cache = HttpCache::default();
         cache.store(
             &request,
-            &Response::new(200)
-                .with_header("cache-control", "max-age=60, no-cache=\"etag\""),
+            &Response::new(200).with_header("cache-control", "max-age=60, no-cache=\"etag\""),
         );
         assert_eq!(cache.len(), 0);
     }
