@@ -74,6 +74,20 @@ impl<T> ResourceCache<T> {
         Some(entry.value)
     }
 
+    /// Removes entries that do not satisfy `keep`, releasing their accounted bytes.
+    pub fn retain(&mut self, mut keep: impl FnMut(&CacheEntry<T>) -> bool) {
+        let mut used = self.used;
+        self.entries.retain(|entry| {
+            if keep(entry) {
+                true
+            } else {
+                used = used.saturating_sub(entry.bytes);
+                false
+            }
+        });
+        self.used = used;
+    }
+
     pub fn clear(&mut self) {
         self.entries.clear();
         self.used = 0;
@@ -141,6 +155,20 @@ mod tests {
         assert_eq!(cache.get("a"), None);
         assert_eq!(cache.get("b"), Some(&2));
         assert_eq!(cache.used(), 4);
+    }
+
+    #[test]
+    fn retain_releases_bytes_for_removed_entries() {
+        let mut cache = ResourceCache::new(10);
+        cache.insert("keep", 1, 4);
+        cache.insert("drop", 2, 5);
+
+        cache.retain(|entry| entry.key == "keep");
+
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache.used(), 4);
+        assert_eq!(cache.get("keep"), Some(&1));
+        assert_eq!(cache.get("drop"), None);
     }
 
     #[test]
