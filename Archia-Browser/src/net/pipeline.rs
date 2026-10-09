@@ -58,14 +58,23 @@ impl<P: RequestPolicyEngine> NetworkPipeline<P> {
         Self { policy }
     }
 
+    /// Enforce the current request policy independently of network I/O.
+    ///
+    /// Callers that can serve a response from a cache must still check policy
+    /// first; a cache hit must never bypass filtering or resource restrictions.
+    pub fn check_policy(&self, request: &Request) -> Result<(), TransportError> {
+        if self.policy.decide(request) == PolicyDecision::Block {
+            return Err(TransportError::BlockedByPolicy);
+        }
+        Ok(())
+    }
+
     pub fn execute<T: Transport>(
         &self,
         transport: &T,
         request: &Request,
     ) -> Result<Response, TransportError> {
-        if self.policy.decide(request) == PolicyDecision::Block {
-            return Err(TransportError::BlockedByPolicy);
-        }
+        self.check_policy(request)?;
         transport.send(request)
     }
 }
