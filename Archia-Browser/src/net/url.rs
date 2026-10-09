@@ -11,6 +11,10 @@ pub struct Url {
 
 impl Url {
     pub fn parse(input: &str) -> Result<Self, UrlError> {
+        if contains_unsafe_url_whitespace(input) {
+            return Err(UrlError::InvalidCharacter);
+        }
+
         let (scheme, remainder) = input.split_once("://").ok_or(UrlError::MissingScheme)?;
         let mut scheme_chars = scheme.chars();
         let valid_first = scheme_chars
@@ -126,6 +130,10 @@ impl Url {
     /// redirects and document links while keeping the URL type independent
     /// from the network layer.
     pub fn resolve(&self, reference: &str) -> Result<Self, UrlError> {
+        if contains_unsafe_url_whitespace(reference) {
+            return Err(UrlError::InvalidCharacter);
+        }
+
         if reference.contains("://") {
             return Self::parse(reference);
         }
@@ -170,6 +178,12 @@ impl Url {
             fragment: fragment.map(str::to_owned),
         })
     }
+}
+
+fn contains_unsafe_url_whitespace(value: &str) -> bool {
+    value
+        .bytes()
+        .any(|byte| byte.is_ascii_control() || byte == b' ')
 }
 
 fn has_reference_scheme(reference: &str) -> bool {
@@ -234,6 +248,7 @@ pub enum UrlError {
     MissingAuthority,
     UnsupportedReferenceScheme,
     UnsupportedFileAuthority,
+    InvalidCharacter,
 }
 
 impl fmt::Display for UrlError {
@@ -246,6 +261,7 @@ impl fmt::Display for UrlError {
                 "URL reference uses an unsupported non-hierarchical scheme"
             }
             Self::UnsupportedFileAuthority => "file URL uses an unsupported authority",
+            Self::InvalidCharacter => "URL contains whitespace or control characters",
         })
     }
 }
@@ -276,6 +292,23 @@ mod tests {
                 .unwrap()
                 .authority(),
             "localhost"
+        );
+    }
+
+    #[test]
+    fn rejects_spaces_and_control_characters_in_urls() {
+        assert_eq!(
+            Url::parse("https://example.org/a b").unwrap_err(),
+            UrlError::InvalidCharacter
+        );
+        assert_eq!(
+            Url::parse("https://example.org/\nheader-injection").unwrap_err(),
+            UrlError::InvalidCharacter
+        );
+        let base = Url::parse("https://example.org/path").unwrap();
+        assert_eq!(
+            base.resolve("next\r\nInjected: yes").unwrap_err(),
+            UrlError::InvalidCharacter
         );
     }
 
