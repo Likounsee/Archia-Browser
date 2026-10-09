@@ -233,6 +233,11 @@ where
         if document_url.scheme() != "file" && url.scheme() == "file" {
             return None;
         }
+        // HTTPS documents must not load active stylesheets over cleartext HTTP.
+        // Check the initial URL and every redirect hop to prevent mixed content.
+        if document_url.is_secure() && url.scheme() == "http" {
+            return None;
+        }
 
         let mut current = url;
 
@@ -244,6 +249,9 @@ where
             // Check every hop, not only the original URL: a remote server must
             // not redirect a stylesheet request into the local filesystem.
             if document_url.scheme() != "file" && current.scheme() == "file" {
+                return None;
+            }
+            if document_url.is_secure() && current.scheme() == "http" {
                 return None;
             }
 
@@ -1182,5 +1190,49 @@ mod tests {
         assert!(!should_switch_to_get(HttpMethod::Post, 307));
         assert!(!should_switch_to_get(HttpMethod::Put, 308));
         assert!(!should_switch_to_get(HttpMethod::Patch, 307));
+    }
+
+    #[test]
+    fn secure_documents_block_http_stylesheets_and_https_downgrade_redirects() {
+        #[derive(Debug)]
+        struct MixedContentTransport {
+            stylesheet_href: &'static str,
+        }
+
+        impl Transport for MixedContentTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                assert_eq!(request.url.scheme(), "https", "insecure request escaped guard");
+                if request.url.path() == "/" {
+                    let html = format!(
+                        "<html><head><link rel=\"stylesheet\" href=\"{}\"></head><body>Safe</body></html>",
+                        self.stylesheet_href
+                    );
+                    return Ok(Response::new(200)
+                        .with_header("content-type", "text/html")
+                        .with_body(html.into_bytes()));
+                }
+
+                assert_eq!(request.url.path(), "/style.css");
+                Ok(Response::new(302).with_header(
+                    "location",
+                    "http://example.org/style.css",
+                ))
+            }
+        }
+
+        for stylesheet_href in [
+            "http://example.org/style.css",
+            "https://example.org/style.css",
+        ] {
+            let loader = DocumentLoader::new(
+                NetworkPipeline::new(AllowAll),
+                MixedContentTransport { stylesheet_href },
+            );
+            let request = Request::new(Url::parse("https://example.org/").unwrap());
+            let page = loader
+                .load(&request, LayoutViewport::new(320, 200))
+                .unwrap();
+            assert_eq!(page.document.text_content(), "Safe");
+        }
     }
 }
