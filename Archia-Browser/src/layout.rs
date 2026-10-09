@@ -1232,15 +1232,36 @@ fn layout_flex_children(
                     .is_some_and(|value| !value.trim().eq_ignore_ascii_case("auto"));
                 if !has_explicit_height {
                     child.rect.height = cross_size.saturating_sub(child.box_model.vertical_outer());
+                    let child_border_box = child_style.is_some_and(|style| {
+                        style
+                            .get("box-sizing")
+                            .is_some_and(|value| value.trim().eq_ignore_ascii_case("border-box"))
+                    });
+                    let child_padding_border_y = child
+                        .box_model
+                        .padding_top
+                        .saturating_add(child.box_model.padding_bottom)
+                        .saturating_add(child.box_model.border_top)
+                        .saturating_add(child.box_model.border_bottom);
                     if let Some(max_height) = child_style
                         .and_then(|style| parse_length(style.get("max-height"), viewport_height))
                     {
-                        child.rect.height = child.rect.height.min(max_height);
+                        let max_content_height = if child_border_box {
+                            max_height.saturating_sub(child_padding_border_y)
+                        } else {
+                            max_height
+                        };
+                        child.rect.height = child.rect.height.min(max_content_height);
                     }
                     if let Some(min_height) = child_style
                         .and_then(|style| parse_length(style.get("min-height"), viewport_height))
                     {
-                        child.rect.height = child.rect.height.max(min_height);
+                        let min_content_height = if child_border_box {
+                            min_height.saturating_sub(child_padding_border_y)
+                        } else {
+                            min_height
+                        };
+                        child.rect.height = child.rect.height.max(min_content_height);
                     }
                 }
             }
@@ -3752,6 +3773,42 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.y, 15);
         assert_eq!(layout.children[1].rect.y, 25);
+    }
+
+    #[test]
+    fn flex_row_stretch_respects_border_box_max_height() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "display: flex; width: 100px; height: 40px;");
+        let mut child = Node::element("div");
+        child.set_attribute(
+            "style",
+            "width: 20px; box-sizing: border-box; max-height: 20px; padding: 5px 0;",
+        );
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.height, 10);
+    }
+
+    #[test]
+    fn flex_row_stretch_respects_border_box_min_height() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "display: flex; width: 100px; height: 5px;");
+        let mut child = Node::element("div");
+        child.set_attribute(
+            "style",
+            "width: 20px; box-sizing: border-box; min-height: 20px; padding: 5px 0;",
+        );
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.height, 10);
     }
 
     #[test]
