@@ -71,6 +71,12 @@ where
         }
 
         for redirect_count in 0..=self.max_redirects {
+            // A cached response is still subject to the current request policy.
+            // Never let cache hits bypass filtering decisions.
+            self.pipeline
+                .check_policy(&current)
+                .map_err(DocumentLoadError::Network)?;
+
             let cached_response = {
                 let mut cache = self.cache.lock().expect("HTTP cache poisoned");
                 cache.get(&current)
@@ -304,6 +310,9 @@ where
             {
                 request.headers.insert("cookie".into(), cookie);
             }
+
+            // Filtering must run even when this stylesheet is cached.
+            self.pipeline.check_policy(&request).ok()?;
 
             *request_budget -= 1;
             let cached_response = {
