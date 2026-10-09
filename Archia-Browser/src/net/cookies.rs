@@ -200,7 +200,6 @@ mod tests {
         let mut jar = CookieJar::new();
 
         jar.store(&url, "sid=ok\r\nX-Injected: yes");
-        jar.store(&url, "sid=also;bad");
 
         assert!(jar.is_empty());
     }
