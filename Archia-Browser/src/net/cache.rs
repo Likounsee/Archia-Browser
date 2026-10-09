@@ -66,13 +66,20 @@ impl HttpCache {
             self.entries.remove(&key);
             return;
         };
-        if max_age == 0 {
+        let Some(age) = response_age(response) else {
+            self.entries.remove(&key);
+            return;
+        };
+        let remaining_age = max_age.saturating_sub(age);
+        if remaining_age == 0 {
             self.entries.remove(&key);
             return;
         }
-        // Cache-Control is untrusted network input. Avoid overflowing Instant
-        // when a server advertises an unrealistically large max-age.
-        let Some(expires_at) = Instant::now().checked_add(Duration::from_secs(max_age)) else {
+        // Cache-Control and Age are untrusted network input. Avoid overflowing
+        // Instant when a server advertises an unrealistically large max-age.
+        let Some(expires_at) =
+            Instant::now().checked_add(Duration::from_secs(remaining_age))
+        else {
             self.entries.remove(&key);
             return;
         };
@@ -202,6 +209,21 @@ fn response_max_age(response: &Response) -> Option<u64> {
             }
             value.trim().trim_matches('"').parse().ok()
         })
+}
+
+
+fn response_age(response: &Response) -> Option<u64> {
+    let mut age_headers = response
+        .headers
+        .iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("age"));
+    let Some((_, value)) = age_headers.next() else {
+        return Some(0);
+    };
+    if age_headers.next().is_some() {
+        return None;
+    }
+    value.trim().parse().ok()
 }
 
 fn has_cache_max_age_zero(header: Option<&str>) -> bool {
@@ -467,6 +489,57 @@ mod tests {
             cache.store(&request, &response);
             assert_eq!(cache.len(), 0, "{name}: {value}");
         }
+    }
+
+
+    #[test]
+    fn response_age_reduces_remaining_cache_freshness() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/resource");
+        let response = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_header("age", "59")
+            .with_body(b"nearly stale".to_vec());
+
+        cache.store(&request, &response);
+
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache.get(&request).unwrap().body, b"nearly stale");
+    }
+
+    #[test]
+    fn response_at_or_beyond_max_age_is_not_cached() {
+        for age in ["60", "120"] {
+            let mut cache = HttpCache::default();
+            let request = make_request("https://example.org/resource");
+            let response = Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_header("Age", age);
+
+            cache.store(&request, &response);
+
+            assert_eq!(cache.len(), 0, "Age {age} must exhaust max-age");
+        }
+    }
+
+    #[test]
+    fn malformed_or_duplicate_age_headers_prevent_caching() {
+        let request = make_request("https://example.org/resource");
+        for age in ["unknown", "-1", "1, 2"] {
+            let mut cache = HttpCache::default();
+            let response = Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_header("age", age);
+            cache.store(&request, &response);
+            assert_eq!(cache.len(), 0, "invalid Age: {age}");
+        }
+
+        let mut cache = HttpCache::default();
+        let mut response = Response::new(200).with_header("cache-control", "max-age=60");
+        response.headers.insert("Age".into(), "1".into());
+        response.headers.insert("age".into(), "2".into());
+        cache.store(&request, &response);
+        assert_eq!(cache.len(), 0);
     }
 
     #[test]
