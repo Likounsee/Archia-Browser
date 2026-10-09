@@ -504,6 +504,9 @@ fn parse_http_response_for_method(
             matches!(method, crate::net::HttpMethod::Head) || matches!(response.status, 204 | 304);
 
         let body = if body_forbidden {
+            if !body_bytes.is_empty() {
+                return Err(TransportError::ConnectionFailed);
+            }
             Vec::new()
         } else if is_chunked {
             decode_chunked(body_bytes, max_response_size, max_header_size)?
@@ -515,10 +518,10 @@ fn parse_http_response_for_method(
             if length > max_response_size {
                 return Err(TransportError::ResponseTooLarge);
             }
-            body_bytes
-                .get(..length)
-                .ok_or(TransportError::ConnectionFailed)?
-                .to_vec()
+            if body_bytes.len() != length {
+                return Err(TransportError::ConnectionFailed);
+            }
+            body_bytes.to_vec()
         } else {
             body_bytes.to_vec()
         };
@@ -825,6 +828,34 @@ mod tests {
                 "encoding {encoding} must not be partially decoded"
             );
         }
+    }
+
+    #[test]
+    fn rejects_extra_bytes_after_content_length_body() {
+        let response =
+            b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nHelloextra";
+        assert_eq!(
+            parse_http_response(response, 1024, 1024),
+            Err(TransportError::ConnectionFailed)
+        );
+    }
+
+    #[test]
+    fn rejects_body_bytes_for_head_and_no_content_responses() {
+        let head = parse_http_response_for_method(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\nunexpected",
+            crate::net::HttpMethod::Head,
+            1024,
+            1024,
+        );
+        assert_eq!(head, Err(TransportError::ConnectionFailed));
+
+        let no_content = parse_http_response(
+            b"HTTP/1.1 204 No Content\r\n\r\nunexpected",
+            1024,
+            1024,
+        );
+        assert_eq!(no_content, Err(TransportError::ConnectionFailed));
     }
 
     #[test]
