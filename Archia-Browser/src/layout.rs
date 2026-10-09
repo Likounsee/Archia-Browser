@@ -3730,7 +3730,6 @@ mod tests {
     }
 
     #[test]
-        #[test]
     fn flex_column_percentage_row_gap_uses_container_height() {
         let mut root = Node::element("div");
         root.set_attribute(
@@ -3751,7 +3750,7 @@ mod tests {
         assert_eq!(layout.children[1].rect.y, 14);
     }
 
-fn flex_column_percentage_column_gap_uses_container_width() {
+    fn flex_column_percentage_column_gap_uses_container_width() {
         let mut root = Node::element("div");
         root.set_attribute(
             "style",
