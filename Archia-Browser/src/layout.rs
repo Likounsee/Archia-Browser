@@ -945,10 +945,15 @@ fn layout_flex_children(
         let should_wrap = wrap
             && wrap_limit.is_some_and(|limit| {
                 item_count > 0
-                    && main.saturating_add(main_gap).saturating_add(target_outer_main) > limit
+                    && main
+                        .saturating_add(main_gap)
+                        .saturating_add(target_outer_main)
+                        > limit
             });
         if should_wrap {
-            cross_cursor = cross_cursor.saturating_add(line_cross).saturating_add(cross_gap);
+            cross_cursor = cross_cursor
+                .saturating_add(line_cross)
+                .saturating_add(cross_gap);
             main = 0;
             item_count = 0;
             line_cross = 0;
