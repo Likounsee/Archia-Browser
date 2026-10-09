@@ -531,7 +531,12 @@ mod tests {
 
             cache.store(&request, &response);
 
-            assert_eq!(cache.len(), 0, "ambiguous Cache-Control: {:?}", response.headers);
+            assert_eq!(
+                cache.len(),
+                0,
+                "ambiguous Cache-Control: {:?}",
+                response.headers
+            );
         }
     }
 
