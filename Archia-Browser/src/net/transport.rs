@@ -106,9 +106,10 @@ impl HttpTransport {
             head.push_str(&host_header(request));
             head.push_str("\r\n");
         }
-        if request.header("connection").is_none() {
-            head.push_str("Connection: close\r\n");
-        }
+        // The response reader consumes until EOF. Force connection-close
+        // semantics rather than allowing a caller-supplied keep-alive header
+        // to make an otherwise complete response wait until the read timeout.
+        head.push_str("Connection: close\r\n");
         if request.has_body() && request.header("content-length").is_none() {
             head.push_str("Content-Length: ");
             head.push_str(&request.body.len().to_string());
@@ -116,6 +117,9 @@ impl HttpTransport {
         }
 
         for (name, value) in &request.headers {
+            if name.eq_ignore_ascii_case("connection") {
+                continue;
+            }
             head.push_str(name);
             head.push_str(": ");
             head.push_str(value);
@@ -954,6 +958,41 @@ mod tests {
             1024,
         );
         assert_eq!(result, Err(TransportError::ConnectionFailed));
+    }
+
+    #[test]
+    fn forces_connection_close_even_if_request_asks_for_keep_alive() {
+        #[derive(Debug, Default)]
+        struct CaptureStream {
+            written: Vec<u8>,
+        }
+
+        impl Read for CaptureStream {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                Ok(0)
+            }
+        }
+
+        impl Write for CaptureStream {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.written.extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let request = Request::new(Url::parse("http://example.org/").unwrap())
+            .with_header("connection", "keep-alive");
+        let transport = HttpTransport::new();
+        let mut stream = CaptureStream::default();
+        transport.write_request(&mut stream, &request).unwrap();
+
+        let head = String::from_utf8(stream.written).unwrap();
+        assert_eq!(head.matches("Connection: close").count(), 1);
+        assert!(!head.to_ascii_lowercase().contains("connection: keep-alive"));
     }
 
     #[test]
