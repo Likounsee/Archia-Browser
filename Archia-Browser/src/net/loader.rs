@@ -695,10 +695,10 @@ mod tests {
         assert_eq!(requests.load(Ordering::SeqCst), 1);
 
         blocked.store(true, Ordering::SeqCst);
-        assert_eq!(
+        assert!(matches!(
             loader.load(&request, viewport),
             Err(DocumentLoadError::Network(TransportError::BlockedByPolicy))
-        );
+        ));
         assert_eq!(requests.load(Ordering::SeqCst), 1);
     }
 
