@@ -888,9 +888,8 @@ fn layout_flex_children(
             main_gap.saturating_mul(bases.iter().flatten().count().saturating_sub(1) as u32),
         );
     let wrap_limit = if column {
-        node.style
-            .get("height")
-            .and_then(|_| Some(flex_basis_reference_height))
+        parse_length(node.style.get("height"), viewport_height)
+            .map(|_| flex_basis_reference_height)
     } else {
         Some(content_width)
     };
@@ -3729,6 +3728,28 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.y, 0);
         assert_eq!(layout.children[1].rect.y, 20);
+    }
+
+    #[test]
+    fn flex_column_wrap_uses_content_height_for_border_box() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "display: flex; flex-direction: column; flex-wrap: wrap; box-sizing: border-box; width: 100px; height: 40px; padding: 5px 0;",
+        );
+        for _ in 0..2 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 10px; height: 20px; flex: 0 0 20px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.x, 0);
+        assert_eq!(layout.children[1].rect.x, 10);
+        assert_eq!(layout.children[1].rect.y, 5);
     }
 
     #[test]
