@@ -64,7 +64,7 @@ impl<P: RequestPolicyEngine> NetworkPipeline<P> {
         request: &Request,
     ) -> Result<Response, TransportError> {
         if self.policy.decide(request) == PolicyDecision::Block {
-            return Err(TransportError::ConnectionFailed);
+            return Err(TransportError::BlockedByPolicy);
         }
         transport.send(request)
     }
@@ -131,7 +131,7 @@ mod tests {
 
         assert!(matches!(
             pipeline.execute(&transport, &request),
-            Err(TransportError::ConnectionFailed)
+            Err(TransportError::BlockedByPolicy)
         ));
     }
 }
