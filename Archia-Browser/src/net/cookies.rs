@@ -98,6 +98,13 @@ impl CookieJar {
             }
         }
 
+        // An insecure origin must not be able to plant a Secure cookie that
+        // will later be sent over HTTPS. This prevents HTTP interception from
+        // overwriting or shadowing a security-sensitive HTTPS cookie.
+        if cookie.secure && !url.is_secure() {
+            return;
+        }
+
         self.cookies.retain(|existing| {
             !(existing.name == cookie.name
                 && existing.domain == cookie.domain
@@ -293,6 +300,34 @@ mod tests {
         jar.store(&url, "sid=one");
         jar.store(&url, "sid=gone; Max-Age=0");
         assert!(jar.header_for(&url).is_none());
+    }
+
+    #[test]
+    fn rejects_secure_cookie_set_by_insecure_origin() {
+        let url = Url::parse("http://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&url, "sid=attacker; Secure");
+
+        assert!(jar.is_empty());
+        assert!(jar
+            .header_for(&Url::parse("https://example.org/").unwrap())
+            .is_none());
+    }
+
+    #[test]
+    fn insecure_origin_cannot_overwrite_existing_secure_cookie() {
+        let secure_url = Url::parse("https://example.org/").unwrap();
+        let insecure_url = Url::parse("http://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&secure_url, "sid=trusted; Secure");
+
+        jar.store(&insecure_url, "sid=attacker; Secure");
+
+        assert_eq!(
+            jar.header_for(&secure_url).as_deref(),
+            Some("sid=trusted")
+        );
     }
 
     #[test]
