@@ -1158,7 +1158,7 @@ fn layout_flex_children(
     } else {
         parse_length(node.style.get("height"), viewport_height).unwrap_or(cross)
     };
-    if matches!(align.as_str(), "center" | "flex-end" | "end" | "stretch") {
+    if !flex_indices.is_empty() {
         for (index, child_index) in &flex_indices {
             let child = &mut output.children[*index];
             let child_align = node
