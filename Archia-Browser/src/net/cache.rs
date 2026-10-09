@@ -202,6 +202,31 @@ fn response_can_store(response: &Response) -> bool {
         && !response_has_header(response, "vary")
 }
 
+fn cache_control_directives(value: &str) -> Vec<&str> {
+    let bytes = value.as_bytes();
+    let mut directives = Vec::new();
+    let mut start = 0;
+    let mut quoted = false;
+    let mut escaped = false;
+
+    for (index, byte) in bytes.iter().copied().enumerate() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if quoted && byte == b'\\\\' {
+            escaped = true;
+        } else if byte == b'"' {
+            quoted = !quoted;
+        } else if byte == b',' && !quoted {
+            directives.push(value[start..index].trim());
+            start = index + 1;
+        }
+    }
+    directives.push(value[start..].trim());
+    directives
+}
+
 fn response_max_age(response: &Response) -> Option<u64> {
     let mut max_age = None;
     for (_, value) in response
@@ -209,7 +234,7 @@ fn response_max_age(response: &Response) -> Option<u64> {
         .iter()
         .filter(|(name, _)| name.eq_ignore_ascii_case("cache-control"))
     {
-        for directive in value.split(',').map(str::trim) {
+        for directive in cache_control_directives(value) {
             let (name, value) = match directive.split_once('=') {
                 Some((name, value)) => (name.trim(), Some(value.trim())),
                 None => (directive, None),
@@ -222,7 +247,12 @@ fn response_max_age(response: &Response) -> Option<u64> {
             if max_age.is_some() {
                 return None;
             }
-            let value = value?.trim_matches('"');
+            let value = value?;
+            let value = if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
+                &value[1..value.len() - 1]
+            } else {
+                value
+            };
             max_age = Some(value.parse::<u64>().ok()?);
         }
     }
@@ -245,7 +275,7 @@ fn response_age(response: &Response) -> Option<u64> {
 
 fn has_cache_max_age_zero(header: Option<&str>) -> bool {
     header.is_some_and(|value| {
-        value.split(',').any(|directive| {
+        cache_control_directives(value).into_iter().any(|directive| {
             let Some((name, value)) = directive.split_once('=') else {
                 return false;
             };
@@ -537,6 +567,20 @@ mod tests {
                 response.headers
             );
         }
+    }
+
+    #[test]
+    fn ignores_commas_inside_quoted_cache_control_extensions() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/resource");
+        let response = Response::new(200)
+            .with_header("cache-control", r#"extension="text, max-age=0", max-age=60"#)
+            .with_body(b"cached".to_vec());
+
+        cache.store(&request, &response);
+
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache.get(&request).unwrap().body, b"cached");
     }
 
     #[test]
