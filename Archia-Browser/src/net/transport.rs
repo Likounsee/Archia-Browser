@@ -346,13 +346,17 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
 
     if matches!(request.url.scheme(), "http" | "https") {
         validate_http_authority(authority)?;
+        if request
+            .header("host")
+            .is_some_and(|host| !host.eq_ignore_ascii_case(&host_header(request)))
+        {
+            return Err(TransportError::InvalidRequest);
+        }
     }
 
     if request.headers.iter().any(|(name, value)| {
         name.is_empty()
-            || name
-                .bytes()
-                .any(|byte| byte.is_ascii_control() || matches!(byte, b' ' | b'\t' | b':'))
+            || !name.bytes().all(is_http_token_byte)
             || value.bytes().any(|byte| {
                 matches!(byte, b'\r' | b'\n') || byte.is_ascii_control() && byte != b'\t'
             })
@@ -993,6 +997,23 @@ mod tests {
         let head = String::from_utf8(stream.written).unwrap();
         assert_eq!(head.matches("Connection: close").count(), 1);
         assert!(!head.to_ascii_lowercase().contains("connection: keep-alive"));
+    }
+
+    #[test]
+    fn rejects_invalid_request_header_names_and_mismatched_host() {
+        let invalid_name = Request::new(Url::parse("http://example.org/").unwrap())
+            .with_header("Bad Header", "value");
+        assert_eq!(
+            validate_request(&invalid_name),
+            Err(TransportError::InvalidRequest)
+        );
+
+        let mismatched_host = Request::new(Url::parse("http://example.org/").unwrap())
+            .with_header("host", "attacker.example");
+        assert_eq!(
+            validate_request(&mismatched_host),
+            Err(TransportError::InvalidRequest)
+        );
     }
 
     #[test]
