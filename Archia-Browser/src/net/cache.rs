@@ -64,6 +64,11 @@ impl HttpCache {
         if max_age == 0 {
             return;
         }
+        // Cache-Control is untrusted network input. Avoid overflowing Instant
+        // when a server advertises an unrealistically large max-age.
+        let Some(expires_at) = Instant::now().checked_add(Duration::from_secs(max_age)) else {
+            return;
+        };
 
         let bytes = response.body.len()
             + response
@@ -77,7 +82,7 @@ impl HttpCache {
             cache_key(request),
             CachedResponse {
                 response: response.clone(),
-                expires_at: Instant::now() + Duration::from_secs(max_age),
+                expires_at,
             },
             bytes,
         );
@@ -248,6 +253,18 @@ mod tests {
 
         assert_eq!(cache.len(), 1);
         assert_eq!(cache.get(&request).unwrap().body, b"cached");
+    }
+
+    #[test]
+    fn ignores_unrepresentable_cache_max_age_without_panicking() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/resource");
+        let response = Response::new(200)
+            .with_header("cache-control", format!("max-age={}", u64::MAX));
+
+        cache.store(&request, &response);
+
+        assert_eq!(cache.len(), 0);
     }
 
     #[test]
