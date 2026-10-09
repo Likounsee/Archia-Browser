@@ -932,8 +932,9 @@ mod tests {
                 *calls += 1;
                 if *calls == 1 {
                     assert_eq!(request.url.scheme(), "https");
-                    return Ok(Response::new(302)
-                        .with_header("location", "http://other.example/landing"));
+                    return Ok(
+                        Response::new(302).with_header("location", "http://other.example/landing")
+                    );
                 }
 
                 assert_eq!(request.url.scheme(), "http");
@@ -952,10 +953,9 @@ mod tests {
             },
         );
         let mut request = Request::new(Url::parse("https://example.org/secret-path").unwrap());
-        request.headers.insert(
-            "referer".into(),
-            "https://example.org/private-page".into(),
-        );
+        request
+            .headers
+            .insert("referer".into(), "https://example.org/private-page".into());
         request.policy.referrer = Some(Url::parse("https://example.org/private-page").unwrap());
 
         let page = loader
