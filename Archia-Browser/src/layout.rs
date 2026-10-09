@@ -778,7 +778,20 @@ fn layout_flex_children(
     }) || flow_parts
         .iter()
         .any(|part| part == "wrap" || part == "wrap-reverse");
-    let gap = parse_length(node.style.get("gap"), content_width).unwrap_or(0);
+    let main_gap = if column {
+        parse_length(node.style.get("row-gap"), content_width)
+    } else {
+        parse_length(node.style.get("column-gap"), content_width)
+    }
+    .or_else(|| parse_length(node.style.get("gap"), content_width))
+    .unwrap_or(0);
+    let cross_gap = if column {
+        parse_length(node.style.get("column-gap"), content_width)
+    } else {
+        parse_length(node.style.get("row-gap"), content_width)
+    }
+    .or_else(|| parse_length(node.style.get("gap"), content_width))
+    .unwrap_or(0);
     let mut main = 0_u32;
     let mut cross = 0_u32;
     let mut item_count = 0_u32;
@@ -850,7 +863,7 @@ fn layout_flex_children(
         .map(|(base, _, _)| *base)
         .fold(0_u32, u32::saturating_add)
         .saturating_add(
-            gap.saturating_mul(bases.iter().flatten().count().saturating_sub(1) as u32),
+            main_gap.saturating_mul(bases.iter().flatten().count().saturating_sub(1) as u32),
         );
     let wrap_limit = if column {
         parse_length(node.style.get("height"), viewport_height)
@@ -931,15 +944,15 @@ fn layout_flex_children(
         });
         let should_wrap = wrap
             && wrap_limit.is_some_and(|limit| {
-                item_count > 0 && main.saturating_add(gap).saturating_add(target_outer_main) > limit
+                item_count > 0 && main.saturating_add(main_gap).saturating_add(target_outer_main) > limit
             });
         if should_wrap {
-            cross_cursor = cross_cursor.saturating_add(line_cross).saturating_add(gap);
+            cross_cursor = cross_cursor.saturating_add(line_cross).saturating_add(cross_gap);
             main = 0;
             item_count = 0;
             line_cross = 0;
         }
-        let main_position = main.saturating_add(if item_count > 0 { gap } else { 0 });
+        let main_position = main.saturating_add(if item_count > 0 { main_gap } else { 0 });
         let child_x = if column {
             content_origin_x
                 .saturating_add(cross_cursor as i32)
@@ -1007,7 +1020,7 @@ fn layout_flex_children(
                 .saturating_add(child_layout.box_model.vertical_outer())
         };
         main = main
-            .saturating_add(if item_count > 0 { gap } else { 0 })
+            .saturating_add(if item_count > 0 { main_gap } else { 0 })
             .saturating_add(outer_main);
         cross = cross.max(outer_cross);
         line_cross = line_cross.max(outer_cross);
@@ -1076,7 +1089,7 @@ fn layout_flex_children(
                         .width
                         .saturating_add(output.children[*index].box_model.horizontal_outer()),
                 )
-                .saturating_add(gap);
+                .saturating_add(main_gap);
         }
     } else if !wrap {
         let mut ordered_indices = flex_indices.clone();
@@ -1139,7 +1152,7 @@ fn layout_flex_children(
                         .height
                         .saturating_add(output.children[index].box_model.vertical_outer()),
                 )
-                .saturating_add(gap)
+                .saturating_add(main_gap)
                 .saturating_add(extra)
                 .saturating_add(if column {
                     0
@@ -3529,6 +3542,45 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.y, 30);
         assert_eq!(layout.children[1].rect.y, 50);
+    }
+
+    #[test]
+    fn flex_row_uses_column_gap_for_main_axis_spacing() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "display: flex; width: 100px; column-gap: 10px;");
+        for _ in 0..2 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 20px; height: 10px; flex: 0 0 20px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 50));
+
+        assert_eq!(layout.children[0].rect.x, 0);
+        assert_eq!(layout.children[1].rect.x, 30);
+    }
+
+    #[test]
+    fn flex_column_uses_row_gap_for_main_axis_spacing() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "display: flex; flex-direction: column; width: 100px; height: 100px; row-gap: 10px;",
+        );
+        for _ in 0..2 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 20px; height: 20px; flex: 0 0 20px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.y, 0);
+        assert_eq!(layout.children[1].rect.y, 30);
     }
 
     #[test]
