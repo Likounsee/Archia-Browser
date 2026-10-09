@@ -93,47 +93,93 @@ fn cache_key(request: &Request) -> String {
 }
 
 fn request_forces_cache_bypass(request: &Request) -> bool {
-    has_cache_directive(request.header("cache-control"), "no-cache")
-        || has_cache_directive(request.header("cache-control"), "no-store")
+    request
+        .headers
+        .iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("cache-control"))
+        .any(|(_, value)| {
+            has_cache_directive(Some(value), "no-cache")
+                || has_cache_directive(Some(value), "no-store")
+        })
         || has_pragma_no_cache(request)
 }
 
 fn request_can_use_cache(request: &Request) -> bool {
     matches!(request.method, HttpMethod::Get)
         && matches!(request.url.scheme(), "http" | "https")
-        && request.header("authorization").is_none()
-        && request.header("cookie").is_none()
-        && !has_cache_directive(request.header("cache-control"), "no-cache")
-        && !has_cache_directive(request.header("cache-control"), "no-store")
+        && !has_request_header(request, "authorization")
+        && !has_request_header(request, "cookie")
+        && !request
+            .headers
+            .iter()
+            .filter(|(name, _)| name.eq_ignore_ascii_case("cache-control"))
+            .any(|(_, value)| {
+                has_cache_directive(Some(value), "no-cache")
+                    || has_cache_directive(Some(value), "no-store")
+            })
         && !has_pragma_no_cache(request)
 }
 
 fn request_can_store(request: &Request) -> bool {
     matches!(request.method, HttpMethod::Get)
         && matches!(request.url.scheme(), "http" | "https")
-        && request.header("authorization").is_none()
-        && request.header("cookie").is_none()
-        && !has_cache_directive(request.header("cache-control"), "no-store")
+        && !has_request_header(request, "authorization")
+        && !has_request_header(request, "cookie")
+        && !request
+            .headers
+            .iter()
+            .filter(|(name, _)| name.eq_ignore_ascii_case("cache-control"))
+            .any(|(_, value)| {
+                has_cache_directive(Some(value), "no-store")
+                    || has_cache_directive(Some(value), "no-cache")
+            })
         && !has_pragma_no_cache(request)
+}
+
+fn has_request_header(request: &Request, wanted: &str) -> bool {
+    request
+        .headers
+        .keys()
+        .any(|name| name.eq_ignore_ascii_case(wanted))
+}
+
+fn response_has_header(response: &Response, wanted: &str) -> bool {
+    response
+        .headers
+        .keys()
+        .any(|name| name.eq_ignore_ascii_case(wanted))
 }
 
 fn response_can_store(response: &Response) -> bool {
     response.status == 200
         && response.set_cookie_headers().is_empty()
-        && !has_cache_directive(response.header("cache-control"), "no-store")
-        && !has_cache_directive(response.header("cache-control"), "no-cache")
-        && !response.header("pragma").is_some_and(|value| {
-            value
-                .split(',')
-                .any(|d| d.trim().eq_ignore_ascii_case("no-cache"))
-        })
-        && response.header("vary").is_none()
+        && !response_has_header(response, "set-cookie")
+        && !response
+            .headers
+            .iter()
+            .filter(|(name, _)| name.eq_ignore_ascii_case("cache-control"))
+            .any(|(_, value)| {
+                has_cache_directive(Some(value), "no-store")
+                    || has_cache_directive(Some(value), "no-cache")
+            })
+        && !response
+            .headers
+            .iter()
+            .filter(|(name, _)| name.eq_ignore_ascii_case("pragma"))
+            .any(|(_, value)| {
+                value
+                    .split(',')
+                    .any(|d| d.trim().eq_ignore_ascii_case("no-cache"))
+            })
+        && !response_has_header(response, "vary")
 }
 
 fn response_max_age(response: &Response) -> Option<u64> {
     response
-        .header("cache-control")?
-        .split(',')
+        .headers
+        .iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("cache-control"))
+        .flat_map(|(_, value)| value.split(','))
         .map(str::trim)
         .find_map(|directive| {
             let (name, value) = directive.split_once('=')?;
@@ -156,11 +202,15 @@ fn has_cache_directive(header: Option<&str>, wanted: &str) -> bool {
 }
 
 fn has_pragma_no_cache(request: &Request) -> bool {
-    request.header("pragma").is_some_and(|value| {
-        value
-            .split(',')
-            .any(|d| d.trim().eq_ignore_ascii_case("no-cache"))
-    })
+    request
+        .headers
+        .iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("pragma"))
+        .any(|(_, value)| {
+            value
+                .split(',')
+                .any(|d| d.trim().eq_ignore_ascii_case("no-cache"))
+        })
 }
 
 #[cfg(test)]
@@ -308,5 +358,55 @@ mod tests {
             &Response::new(404).with_header("cache-control", "max-age=60"),
         );
         assert_eq!(cache.len(), 0);
+    }
+
+    #[test]
+    fn mixed_case_credentials_never_enter_or_read_the_cache() {
+        for sensitive_header in ["Authorization", "aUtHoRiZaTiOn", "Cookie", "cOoKiE"] {
+            let mut cache = HttpCache::default();
+            let public_request = make_request("https://example.org/private");
+            let public_response = Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_body(b"public".to_vec());
+            cache.store(&public_request, &public_response);
+            assert_eq!(cache.len(), 1);
+
+            let mut private_request = public_request.clone();
+            private_request
+                .headers
+                .insert(sensitive_header.to_owned(), "secret".to_owned());
+            assert!(cache.get(&private_request).is_none(), "{sensitive_header}");
+            cache.store(&private_request, &public_response);
+            assert_eq!(cache.len(), 1, "{sensitive_header}");
+        }
+    }
+
+    #[test]
+    fn mixed_case_response_headers_preserve_cache_safety() {
+        for (name, value) in [
+            ("Set-Cookie", "sid=private"),
+            ("CACHE-Control", "no-store, max-age=60"),
+            ("Cache-Control", "no-cache, max-age=60"),
+            ("Vary", "Accept-Language"),
+            ("Pragma", "no-cache"),
+        ] {
+            let mut cache = HttpCache::default();
+            let request = make_request("https://example.org/resource");
+            let mut response = Response::new(200).with_body(b"body".to_vec());
+            response.headers.insert(name.to_owned(), value.to_owned());
+            cache.store(&request, &response);
+            assert_eq!(cache.len(), 0, "{name}: {value}");
+        }
+    }
+
+    #[test]
+    fn reads_mixed_case_cache_control_max_age() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/resource");
+        let mut response = Response::new(200).with_body(b"cached".to_vec());
+        response.headers.insert("Cache-Control".into(), "max-age=60".into());
+        cache.store(&request, &response);
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache.get(&request).unwrap().body, b"cached");
     }
 }
