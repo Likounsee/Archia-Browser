@@ -493,6 +493,19 @@ fn is_html_response(response: &Response) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn stylesheet_byte_budget_preserves_utf8_and_stops_at_limit() {
+        let mut output = String::new();
+        let mut remaining = 5;
+        append_css_with_budget(&mut output, "abécd", &mut remaining);
+        append_css_with_budget(&mut output, "ignored", &mut remaining);
+
+        assert_eq!(output, "abéc");
+        assert_eq!(remaining, 0);
+        assert!(output.len() <= 5);
+    }
+
+
     use super::*;
     use crate::net::{
         pipeline::{PolicyDecision, RequestPolicyEngine},
