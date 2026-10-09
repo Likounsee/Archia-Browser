@@ -46,6 +46,7 @@ impl CookieJar {
             host_only: true,
         };
         let mut delete_cookie = false;
+        let mut path_attribute_set = false;
 
         for attribute in parts {
             let mut pieces = attribute.splitn(2, '=');
@@ -73,6 +74,7 @@ impl CookieJar {
                         let value = value.trim();
                         if value.starts_with('/') {
                             cookie.path = value.to_owned();
+                            path_attribute_set = true;
                         }
                     }
                 }
@@ -106,6 +108,21 @@ impl CookieJar {
         // will later be sent over HTTPS. This prevents HTTP interception from
         // overwriting or shadowing a security-sensitive HTTPS cookie.
         if cookie.secure && !url.is_secure() {
+            return;
+        }
+
+        // Enforce the cookie prefixes used by browsers to prevent insecure
+        // origins and sibling subdomains from replacing sensitive cookies.
+        if cookie.name.starts_with("__Secure-") && (!cookie.secure || !url.is_secure()) {
+            return;
+        }
+        if cookie.name.starts_with("__Host-")
+            && (!cookie.secure
+                || !url.is_secure()
+                || !cookie.host_only
+                || cookie.path != "/"
+                || !path_attribute_set)
+        {
             return;
         }
 
@@ -481,6 +498,30 @@ mod tests {
         jar.store(&insecure_url, "sid=attacker; Secure");
 
         assert_eq!(jar.header_for(&secure_url).as_deref(), Some("sid=trusted"));
+    }
+
+    #[test]
+    fn enforces_secure_and_host_cookie_prefixes() {
+        let https = Url::parse("https://example.org/account").unwrap();
+        let http = Url::parse("http://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&http, "__Secure-sid=bad; Secure");
+        jar.store(&https, "__Secure-sid=good");
+        jar.store(&https, "__Host-sid=missing-secure; Path=/");
+        jar.store(&https, "__Host-sid=missing-path");
+        jar.store(&https, "__Host-sid=domain; Path=/; Secure; Domain=example.org");
+        assert_eq!(jar.len(), 0);
+
+        jar.store(&https, "__Secure-sid=good; Secure");
+        jar.store(
+            &Url::parse("https://example.org/").unwrap(),
+            "__Host-sid=host; Secure; Path=/",
+        );
+        assert_eq!(
+            jar.header_for(&Url::parse("https://example.org/").unwrap()).as_deref(),
+            Some("__Secure-sid=good; __Host-sid=host")
+        );
     }
 
     #[test]
