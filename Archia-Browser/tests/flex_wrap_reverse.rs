@@ -97,3 +97,19 @@ fn flex_align_items_stretches_auto_height_row_children() {
 
     assert_eq!(layout.children[0].rect.height, 100);
 }
+
+#[test]
+fn minimum_dimensions_win_when_they_exceed_maximum_dimensions() {
+    let mut root = Node::element("div");
+    let mut child = Node::element("div");
+    child.set_attribute(
+        "style",
+        "width: 10px; min-width: 80px; max-width: 40px; height: 10px; min-height: 80px; max-height: 40px;",
+    );
+    root.append(child);
+
+    let layout = styled_layout(&root, 100, 100);
+
+    assert_eq!(layout.children[0].rect.width, 80);
+    assert_eq!(layout.children[0].rect.height, 80);
+}
