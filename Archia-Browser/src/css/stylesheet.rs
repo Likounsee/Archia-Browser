@@ -218,7 +218,7 @@ fn parse_rule_blocks(input: &str) -> Vec<(String, String)> {
             if in_body { body.push(ch); } else { prelude.push(ch); }
             if escaped {
                 escaped = false;
-            } else if ch == '\\\\' {
+            } else if ch == '\\' {
                 escaped = true;
             } else if ch == active_quote {
                 quote = None;
@@ -293,7 +293,7 @@ fn split_selector_list(input: &str) -> Vec<String> {
             current.push(ch);
             if escaped {
                 escaped = false;
-            } else if ch == '\\\\' {
+            } else if ch == '\\' {
                 escaped = true;
             } else if ch == active_quote {
                 quote = None;
