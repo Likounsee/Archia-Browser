@@ -203,19 +203,30 @@ fn response_can_store(response: &Response) -> bool {
 }
 
 fn response_max_age(response: &Response) -> Option<u64> {
-    response
+    let mut max_age = None;
+    for (_, value) in response
         .headers
         .iter()
         .filter(|(name, _)| name.eq_ignore_ascii_case("cache-control"))
-        .flat_map(|(_, value)| value.split(','))
-        .map(str::trim)
-        .find_map(|directive| {
-            let (name, value) = directive.split_once('=')?;
-            if !name.trim().eq_ignore_ascii_case("max-age") {
+    {
+        for directive in value.split(',').map(str::trim) {
+            let (name, value) = match directive.split_once('=') {
+                Some((name, value)) => (name.trim(), Some(value.trim())),
+                None => (directive, None),
+            };
+            if !name.eq_ignore_ascii_case("max-age") {
+                continue;
+            }
+            // Duplicate or malformed freshness directives are ambiguous. Do
+            // not guess which lifetime the origin intended.
+            if max_age.is_some() {
                 return None;
             }
-            value.trim().trim_matches('"').parse().ok()
-        })
+            let value = value?.trim_matches('"');
+            max_age = Some(value.parse::<u64>().ok()?);
+        }
+    }
+    max_age
 }
 
 fn response_age(response: &Response) -> Option<u64> {
@@ -495,6 +506,44 @@ mod tests {
             cache.store(&request, &response);
             assert_eq!(cache.len(), 0, "{name}: {value}");
         }
+    }
+
+
+    #[test]
+    fn rejects_duplicate_or_malformed_response_max_age() {
+        let request = make_request("https://example.org/resource");
+        for headers in [
+            vec![("cache-control", "max-age=60, max-age=120")],
+            vec![("cache-control", "max-age=bad, max-age=60")],
+            vec![("cache-control", "max-age, max-age=60")],
+            vec![
+                ("cache-control", "public, max-age=60"),
+                ("Cache-Control", "max-age=120"),
+            ],
+            vec![("cache-control", "max-age=")],
+            vec![("cache-control", "max-age=-1")],
+        ] {
+            let mut cache = HttpCache::default();
+            let mut response = Response::new(200);
+            for (name, value) in headers {
+                response.headers.insert(name.to_owned(), value.to_owned());
+            }
+
+            cache.store(&request, &response);
+
+            assert_eq!(cache.len(), 0, "ambiguous Cache-Control: {:?}", response.headers);
+        }
+    }
+
+    #[test]
+    fn accepts_a_single_quoted_response_max_age() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/resource");
+        let response = Response::new(200).with_header("cache-control", "public, max-age=\"60\"");
+
+        cache.store(&request, &response);
+
+        assert_eq!(cache.len(), 1);
     }
 
     #[test]
