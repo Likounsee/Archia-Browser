@@ -344,9 +344,28 @@ fn content_type_for_path(path: &std::path::Path) -> &'static str {
     {
         Some("html" | "htm") => "text/html; charset=utf-8",
         Some("xhtml") => "application/xhtml+xml",
-        Some("css") => "text/css",
+        Some("css") => "text/css; charset=utf-8",
+        Some("js" | "mjs") => "text/javascript; charset=utf-8",
+        Some("json" | "map") => "application/json",
+        Some("xml") => "application/xml",
         Some("txt") => "text/plain; charset=utf-8",
+        Some("csv") => "text/csv; charset=utf-8",
         Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
+        Some("jpg" | "jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("ico") => "image/vnd.microsoft.icon",
+        Some("avif") => "image/avif",
+        Some("woff") => "font/woff",
+        Some("woff2") => "font/woff2",
+        Some("ttf") => "font/ttf",
+        Some("otf") => "font/otf",
+        Some("wasm") => "application/wasm",
+        Some("pdf") => "application/pdf",
+        Some("mp3") => "audio/mpeg",
+        Some("mp4") => "video/mp4",
+        Some("webm") => "video/webm",
         _ => "application/octet-stream",
     }
 }
@@ -776,6 +795,27 @@ fn decode_chunked(
 mod tests {
     use super::*;
     use crate::net::Url;
+
+    #[test]
+    fn detects_common_local_web_asset_content_types_case_insensitively() {
+        for (path, expected) in [
+            ("index.HTML", "text/html; charset=utf-8"),
+            ("app.js", "text/javascript; charset=utf-8"),
+            ("app.mjs", "text/javascript; charset=utf-8"),
+            ("data.json", "application/json"),
+            ("site.CSS", "text/css; charset=utf-8"),
+            ("image.PNG", "image/png"),
+            ("font.woff2", "font/woff2"),
+            ("module.wasm", "application/wasm"),
+            ("unknown.custom", "application/octet-stream"),
+        ] {
+            assert_eq!(
+                content_type_for_path(std::path::Path::new(path)),
+                expected,
+                "unexpected MIME type for {path}"
+            );
+        }
+    }
 
     #[test]
     fn creates_tls_server_names_for_dns_and_ip_hosts() {
