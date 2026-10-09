@@ -236,13 +236,31 @@ mod tests {
 fn find_raw_text_end(input: &str, start: usize, tag_name: &str) -> Option<(usize, usize)> {
     let lower = input[start..].to_ascii_lowercase();
     let marker = format!("</{tag_name}");
-    let relative = lower.find(&marker)?;
-    let text_end = start + relative;
-    let after_name = text_end + marker.len();
-    let close_end = input[after_name..]
-        .find('>')
-        .map(|offset| after_name + offset + 1)?;
-    Some((text_end, close_end))
+    let mut search_from = 0;
+
+    while let Some(relative) = lower[search_from..].find(&marker) {
+        let relative = search_from + relative;
+        let text_end = start + relative;
+        let after_name = text_end + marker.len();
+        let next = input.as_bytes().get(after_name).copied();
+
+        // A raw-text end tag must end its name here. Without this boundary
+        // check, </scripture> would incorrectly terminate a <script> block.
+        if next.is_some_and(|byte| {
+            byte == b'>' || byte == b'/' || byte.is_ascii_whitespace()
+        }) {
+            if let Some(offset) = input[after_name..].find('>') {
+                return Some((text_end, after_name + offset + 1));
+            }
+            return None;
+        }
+
+        search_from = relative + marker.len();
+        if search_from >= lower.len() {
+            return None;
+        }
+    }
+    None
 }
 
 fn decode_character_references(input: &str) -> String {
@@ -313,6 +331,19 @@ mod character_reference_tests {
         assert!(matches!(
             tokens.get(1),
             Some(HtmlToken::Text(value)) if value.contains("a < b")
+        ));
+    }
+
+    #[test]
+    fn raw_script_does_not_close_on_longer_tag_name_prefix() {
+        let tokens = HtmlTokenizer::tokenize("<script>const x = '</scripture>'; run();</script><p>after</p>");
+        assert!(matches!(
+            tokens.get(1),
+            Some(HtmlToken::Text(value)) if value.contains("</scripture>") && value.contains("run();")
+        ));
+        assert!(matches!(
+            tokens.get(2),
+            Some(HtmlToken::StartTag { name, .. }) if name == "p"
         ));
     }
 }
