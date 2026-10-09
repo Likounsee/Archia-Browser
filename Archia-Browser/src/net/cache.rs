@@ -219,7 +219,6 @@ fn response_max_age(response: &Response) -> Option<u64> {
         })
 }
 
-
 fn response_age(response: &Response) -> Option<u64> {
     let mut age_headers = response
         .headers
