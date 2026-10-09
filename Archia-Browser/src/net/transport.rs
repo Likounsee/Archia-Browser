@@ -360,7 +360,7 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
             || !name.bytes().all(is_http_token_byte)
             || value.bytes().any(|byte| {
                 matches!(byte, b'\r' | b'\n') || byte.is_ascii_control() && byte != b'\t'
-            )
+            })
             // HTTP field names are case-insensitive. Reject duplicate spellings
             // so framing/security checks cannot inspect a different value than
             // the one a downstream server chooses.
