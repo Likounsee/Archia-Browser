@@ -111,7 +111,13 @@ where
 
                 let mut next = current.clone();
                 let cross_origin = !same_origin(&current.url, &url);
+                let secure_downgrade =
+                    current.url.scheme() == "https" && url.scheme() == "http";
                 next.url = url;
+                if secure_downgrade {
+                    next.headers.remove("referer");
+                    next.policy.referrer = None;
+                }
                 next.headers.remove("cookie");
                 if cross_origin {
                     // Credentials and an explicit Host header must never leak to a
@@ -235,9 +241,13 @@ where
                 first_party: Some(document_url.clone()),
             };
             request.headers.insert("accept".into(), "text/css".into());
-            request
-                .headers
-                .insert("referer".into(), document_url.to_string());
+            if !(document_url.scheme() == "https" && current.scheme() == "http") {
+                request
+                    .headers
+                    .insert("referer".into(), document_url.to_string());
+            } else {
+                request.policy.referrer = None;
+            }
             if let Some(cookie) = self
                 .cookies
                 .lock()
