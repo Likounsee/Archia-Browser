@@ -1985,6 +1985,14 @@ mod whitespace_layout_tests {
     use crate::html::dom::Node;
 
     #[test]
+    fn length_percentages_accept_fractional_values() {
+        assert_eq!(parse_length(Some("12.5%"), 200), Some(25));
+        assert_eq!(parse_length(Some("12.5%"), 100), Some(12));
+        assert_eq!(parse_length(Some("-1.5%"), 100), None);
+        assert_eq!(parse_length(Some("NaN%"), 100), None);
+    }
+
+    #[test]
     fn line_height_accepts_fractional_percentages_and_pixels() {
         assert_eq!(parse_line_height(Some("125.5%"), 16), Some(20));
         assert_eq!(parse_line_height(Some("12.5px"), 16), Some(13));
@@ -2117,13 +2125,15 @@ fn parse_length(value: Option<&str>, containing_width: u32) -> Option<u32> {
         return parse_calc_length(&value[5..value.len() - 1], containing_width);
     }
     if let Some(percent) = value.strip_suffix('%') {
-        let percent = percent.trim().parse::<u32>().ok()?;
-        return Some(
-            containing_width
-                .saturating_mul(percent)
-                .checked_div(100)
-                .unwrap_or(0),
-        );
+        let percent = percent.trim().parse::<f64>().ok()?;
+        if !percent.is_finite() || percent < 0.0 {
+            return None;
+        }
+        let result = f64::from(containing_width) * percent / 100.0;
+        if !result.is_finite() || result > f64::from(u32::MAX) {
+            return None;
+        }
+        return Some(result.floor() as u32);
     }
     parse_px(Some(value))
 }
