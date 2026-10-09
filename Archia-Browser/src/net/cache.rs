@@ -85,8 +85,7 @@ impl HttpCache {
         }
         // Cache-Control and Age are untrusted network input. Avoid overflowing
         // Instant when a server advertises an unrealistically large max-age.
-        let Some(expires_at) =
-            Instant::now().checked_add(Duration::from_secs(remaining_age))
+        let Some(expires_at) = Instant::now().checked_add(Duration::from_secs(remaining_age))
         else {
             self.entries.remove(&key);
             return;
