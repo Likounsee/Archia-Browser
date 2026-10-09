@@ -32,15 +32,16 @@ impl<T> ResourceCache<T> {
             }
         }
 
-        while self.used.saturating_add(bytes) > self.capacity {
+        // Reject oversized entries before evicting unrelated cache entries.
+        if bytes > self.capacity {
+            return;
+        }
+
+        while bytes > self.capacity.saturating_sub(self.used) {
             let Some(oldest) = self.entries.pop_front() else {
                 break;
             };
             self.used = self.used.saturating_sub(oldest.bytes);
-        }
-
-        if bytes > self.capacity {
-            return;
         }
 
         self.used += bytes;
@@ -113,6 +114,33 @@ mod tests {
         assert_eq!(cache.remove("a"), Some(1));
         assert_eq!(cache.used(), 0);
         assert_eq!(cache.len(), 0);
+    }
+
+    #[test]
+    fn oversized_entry_does_not_evict_unrelated_entries() {
+        let mut cache = ResourceCache::new(10);
+        cache.insert("a", 1, 4);
+        cache.insert("b", 2, 4);
+
+        cache.insert("oversized", 3, 11);
+
+        assert_eq!(cache.get("a"), Some(&1));
+        assert_eq!(cache.get("b"), Some(&2));
+        assert_eq!(cache.get("oversized"), None);
+        assert_eq!(cache.used(), 8);
+    }
+
+    #[test]
+    fn oversized_replacement_removes_only_the_replaced_entry() {
+        let mut cache = ResourceCache::new(10);
+        cache.insert("a", 1, 4);
+        cache.insert("b", 2, 4);
+
+        cache.insert("a", 3, 11);
+
+        assert_eq!(cache.get("a"), None);
+        assert_eq!(cache.get("b"), Some(&2));
+        assert_eq!(cache.used(), 4);
     }
 
     #[test]
