@@ -192,11 +192,19 @@ where
             .unwrap_or_else(|| document_url.clone());
 
         let mut stylesheet = String::new();
+        // Bound the total number of stylesheet requests (including redirects
+        // and nested @imports) so one document cannot trigger unbounded work.
+        let mut request_budget = 64;
         for href in links {
+            if request_budget == 0 {
+                break;
+            }
             let Ok(url) = base_url.resolve(&href) else {
                 continue;
             };
-            let Some(css) = self.load_stylesheet_resource(document_url, url) else {
+            let Some(css) =
+                self.load_stylesheet_resource(document_url, url, &mut request_budget)
+            else {
                 continue;
             };
             if !stylesheet.is_empty() {
@@ -212,8 +220,9 @@ where
         &self,
         document_url: &super::Url,
         url: super::Url,
+        request_budget: &mut usize,
     ) -> Option<String> {
-        self.load_stylesheet_resource_at(document_url, url, 0)
+        self.load_stylesheet_resource_at(document_url, url, 0, request_budget)
     }
 
     fn load_stylesheet_resource_at(
@@ -221,9 +230,10 @@ where
         document_url: &super::Url,
         url: super::Url,
         import_depth: usize,
+        request_budget: &mut usize,
     ) -> Option<String> {
         const MAX_IMPORT_DEPTH: usize = 8;
-        if import_depth > MAX_IMPORT_DEPTH {
+        if import_depth > MAX_IMPORT_DEPTH || *request_budget == 0 {
             return None;
         }
 
@@ -241,7 +251,7 @@ where
         let mut current = url;
 
         for _ in 0..=MAX_REDIRECTS {
-            if !matches!(current.scheme(), "http" | "https" | "file") {
+            if *request_budget == 0 || !matches!(current.scheme(), "http" | "https" | "file") {
                 return None;
             }
 
@@ -277,6 +287,7 @@ where
                 request.headers.insert("cookie".into(), cookie);
             }
 
+            *request_budget -= 1;
             let cached_response = {
                 let mut cache = self.cache.lock().expect("HTTP cache poisoned");
                 cache.get(&request)
@@ -320,6 +331,7 @@ where
                 &current,
                 &css,
                 import_depth,
+                request_budget,
             ));
         }
 
@@ -332,6 +344,7 @@ where
         stylesheet_url: &super::Url,
         css: &str,
         import_depth: usize,
+        request_budget: &mut usize,
     ) -> String {
         let mut output = String::with_capacity(css.len());
         for statement in css.split_inclusive(';') {
@@ -343,7 +356,12 @@ where
 
             if let Ok(url) = stylesheet_url.resolve(&reference) {
                 if let Some(imported) =
-                    self.load_stylesheet_resource_at(document_url, url, import_depth + 1)
+                    self.load_stylesheet_resource_at(
+                        document_url,
+                        url,
+                        import_depth + 1,
+                        request_budget,
+                    )
                 {
                     output.push_str(&imported);
                     output.push('\n');
