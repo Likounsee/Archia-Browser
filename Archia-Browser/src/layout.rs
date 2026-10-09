@@ -888,8 +888,7 @@ fn layout_flex_children(
             main_gap.saturating_mul(bases.iter().flatten().count().saturating_sub(1) as u32),
         );
     let wrap_limit = if column {
-        parse_length(node.style.get("height"), viewport_height)
-            .map(|_| flex_basis_reference_height)
+        parse_length(node.style.get("height"), viewport_height).map(|_| flex_basis_reference_height)
     } else {
         Some(content_width)
     };
