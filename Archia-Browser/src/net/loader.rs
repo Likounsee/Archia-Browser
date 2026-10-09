@@ -254,7 +254,9 @@ where
             };
             request.headers.insert("accept".into(), "text/css".into());
             if let Some(referrer) = referrer {
-                request.headers.insert("referer".into(), referrer.to_string());
+                request
+                    .headers
+                    .insert("referer".into(), referrer.to_string());
             }
             if let Some(cookie) = self
                 .cookies
@@ -487,11 +489,15 @@ mod tests {
         let local_file = Url::parse("file:///home/user/private.html").unwrap();
 
         assert_eq!(
-            referrer_for_target(&source, &same_origin).unwrap().to_string(),
+            referrer_for_target(&source, &same_origin)
+                .unwrap()
+                .to_string(),
             "https://example.org/private/page?token=secret"
         );
         assert_eq!(
-            referrer_for_target(&source, &cross_origin).unwrap().to_string(),
+            referrer_for_target(&source, &cross_origin)
+                .unwrap()
+                .to_string(),
             "https://example.org/"
         );
         assert!(referrer_for_target(&source, &downgrade).is_none());
