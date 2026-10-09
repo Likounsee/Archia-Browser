@@ -548,6 +548,33 @@ mod tests {
         assert!(output.len() <= 5);
     }
 
+    #[test]
+    fn linked_stylesheets_are_capped_at_the_document_byte_budget() {
+        #[derive(Debug)]
+        struct OversizedStylesheetTransport;
+
+        impl Transport for OversizedStylesheetTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                assert_eq!(request.url.path(), "/style.css");
+                Ok(Response::new(200)
+                    .with_header("content-type", "text/css")
+                    .with_body(vec![b'a'; MAX_STYLESHEET_BYTES_PER_DOCUMENT + 128]))
+            }
+        }
+
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            OversizedStylesheetTransport,
+        );
+        let document_url = Url::parse("https://example.org/index.html").unwrap();
+        let css = loader.load_linked_stylesheets(
+            &document_url,
+            r#"<link rel="stylesheet" href="/style.css">"#,
+        );
+
+        assert_eq!(css.len(), MAX_STYLESHEET_BYTES_PER_DOCUMENT);
+    }
+
     #[derive(Debug, Default)]
     struct AllowAll;
 
