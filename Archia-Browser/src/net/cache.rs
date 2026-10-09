@@ -58,9 +58,10 @@ impl HttpCache {
         // still be allowed to use it under the origin's Cache-Control policy.
         if let Some(max_age) = request_max_age(request) {
             let too_old_for_request = self.entries.get(&key).is_some_and(|entry| {
-                entry.initial_age.saturating_add(
-                    now.saturating_duration_since(entry.stored_at).as_secs(),
-                ) > max_age
+                entry
+                    .initial_age
+                    .saturating_add(now.saturating_duration_since(entry.stored_at).as_secs())
+                    > max_age
             });
             if too_old_for_request {
                 return None;
