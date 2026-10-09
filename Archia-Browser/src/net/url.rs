@@ -23,12 +23,15 @@ impl Url {
         {
             return Err(UrlError::InvalidScheme);
         }
+        let normalized_scheme = scheme.to_ascii_lowercase();
         let authority_end = remainder.find(['/', '?', '#']).unwrap_or(remainder.len());
         let authority = &remainder[..authority_end];
-        if authority.is_empty() && scheme != "file" {
+        if authority.is_empty() && normalized_scheme != "file" {
             return Err(UrlError::MissingAuthority);
         }
-        if scheme == "file" && !authority.is_empty() && !authority.eq_ignore_ascii_case("localhost")
+        if normalized_scheme == "file"
+            && !authority.is_empty()
+            && !authority.eq_ignore_ascii_case("localhost")
         {
             return Err(UrlError::UnsupportedFileAuthority);
         }
@@ -42,7 +45,7 @@ impl Url {
             .split_once('?')
             .map_or((without_fragment, None), |(p, q)| (p, Some(q.to_owned())));
         Ok(Self {
-            scheme: scheme.to_ascii_lowercase(),
+            scheme: normalized_scheme,
             authority: authority.to_owned(),
             path: if path.is_empty() {
                 "/".into()
@@ -391,6 +394,18 @@ mod tests {
         assert_eq!(
             Url::parse("https://example.org").unwrap().to_string(),
             "https://example.org/"
+        );
+    }
+
+    #[test]
+    fn file_scheme_validation_is_case_insensitive() {
+        let local = Url::parse("FiLe:///tmp/index.html").unwrap();
+        assert_eq!(local.scheme(), "file");
+        assert_eq!(local.to_string(), "file:///tmp/index.html");
+
+        assert_eq!(
+            Url::parse("FILE://example.org/index.html").unwrap_err(),
+            UrlError::UnsupportedFileAuthority
         );
     }
 }
