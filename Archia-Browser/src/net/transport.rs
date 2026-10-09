@@ -777,9 +777,9 @@ mod tests {
     #[test]
     fn rejects_invalid_response_header_names_and_control_bytes() {
         for response in [
-            b"HTTP/1.1 200 OK\\r\\nBad Header: value\\r\\n\\r\\n".as_slice(),
-            b"HTTP/1.1 200 OK\\r\\nX-Test: safe\\x01value\\r\\n\\r\\n".as_slice(),
-            b"HTTP/1.1 200 OK\\r\\n: missing-name\\r\\n\\r\\n".as_slice(),
+            b"HTTP/1.1 200 OK\r\nBad Header: value\r\n\r\n".as_slice(),
+            b"HTTP/1.1 200 OK\r\nX-Test: safe\x01value\r\n\r\n".as_slice(),
+            b"HTTP/1.1 200 OK\r\n: missing-name\r\n\r\n".as_slice(),
         ] {
             assert_eq!(
                 parse_http_response(response, 1024, 1024),
