@@ -351,7 +351,11 @@ fn validate_http_authority(authority: &str) -> Result<(), TransportError> {
         let port = if suffix.is_empty() {
             None
         } else {
-            Some(suffix.strip_prefix(':').ok_or(TransportError::InvalidRequest)?)
+            Some(
+                suffix
+                    .strip_prefix(':')
+                    .ok_or(TransportError::InvalidRequest)?,
+            )
         };
         (host, port)
     } else {
