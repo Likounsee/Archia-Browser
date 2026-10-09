@@ -101,7 +101,11 @@ impl HttpTransport {
         }
         head.push_str(" HTTP/1.1\r\n");
 
-        if request.header("host").is_none() {
+        if !request
+            .headers
+            .keys()
+            .any(|name| name.eq_ignore_ascii_case("host"))
+        {
             head.push_str("Host: ");
             head.push_str(&host_header(request));
             head.push_str("\r\n");
@@ -347,8 +351,10 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
     if matches!(request.url.scheme(), "http" | "https") {
         validate_http_authority(authority)?;
         if request
-            .header("host")
-            .is_some_and(|host| !host.eq_ignore_ascii_case(&host_header(request)))
+            .headers
+            .iter()
+            .filter(|(name, _)| name.eq_ignore_ascii_case("host"))
+            .any(|(_, host)| !host.eq_ignore_ascii_case(&host_header(request)))
         {
             return Err(TransportError::InvalidRequest);
         }
@@ -1161,6 +1167,19 @@ mod tests {
             validate_request(&duplicate_length),
             Err(TransportError::InvalidRequest)
         );
+    }
+
+    #[test]
+    fn validates_mixed_case_host_headers_case_insensitively() {
+        let mut request = Request::new(Url::parse("http://example.org/").unwrap());
+        request.headers.insert("Host".into(), "attacker.example".into());
+        assert_eq!(
+            validate_request(&request),
+            Err(TransportError::InvalidRequest)
+        );
+
+        request.headers.insert("Host".into(), "example.org".into());
+        assert_eq!(validate_request(&request), Ok(()));
     }
 
     #[test]
