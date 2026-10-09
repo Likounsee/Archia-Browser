@@ -151,7 +151,21 @@ impl HttpCache {
 }
 
 fn cache_key(request: &Request) -> String {
-    format!("{} {}", request.method.as_str(), request.url)
+    // URL fragments are client-side identifiers and are never sent in an
+    // HTTP request target. Treat fragment-only navigations as the same
+    // network resource instead of keeping duplicate cache entries.
+    let mut key = format!(
+        "{} {}://{}{}",
+        request.method.as_str(),
+        request.url.scheme(),
+        request.url.authority(),
+        request.url.path()
+    );
+    if let Some(query) = request.url.query() {
+        key.push('?');
+        key.push_str(query);
+    }
+    key
 }
 
 fn request_forces_cache_bypass(request: &Request) -> bool {
@@ -401,6 +415,27 @@ mod tests {
 
         assert_eq!(cache.len(), 1);
         assert_eq!(cache.get(&request).unwrap().body, b"cached");
+    }
+
+    #[test]
+    fn fragment_only_url_changes_reuse_the_same_cached_resource() {
+        let mut cache = HttpCache::default();
+        let original = make_request("https://example.org/page?lang=fr#top");
+        let response = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_body(b"cached".to_vec());
+
+        cache.store(&original, &response);
+
+        let different_fragment = make_request("https://example.org/page?lang=fr#details");
+        assert_eq!(
+            cache.get(&different_fragment).unwrap().body,
+            b"cached"
+        );
+        assert_eq!(cache.len(), 1);
+
+        let different_query = make_request("https://example.org/page?lang=en#details");
+        assert!(cache.get(&different_query).is_none());
     }
 
     #[test]
