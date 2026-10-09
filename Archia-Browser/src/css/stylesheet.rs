@@ -31,7 +31,7 @@ impl StyleSheet {
             }
 
             let declarations = parse_declarations(&CssTokenizer::tokenize(&declaration_text));
-            rules.push(StyleRule { selectors, declarations });
+            rules.push(StyleRule {\n                selectors,\n                declarations,\n            });
         }
         Self { rules }
     }
@@ -215,7 +215,7 @@ fn parse_rule_blocks(input: &str) -> Vec<(String, String)> {
         }
 
         if let Some(active_quote) = quote {
-            if in_body { body.push(ch); } else { prelude.push(ch); }
+            if in_body {\n                body.push(ch);\n            } else {\n                prelude.push(ch);\n            }
             if escaped {
                 escaped = false;
             } else if ch == '\\' {
@@ -228,7 +228,7 @@ fn parse_rule_blocks(input: &str) -> Vec<(String, String)> {
 
         if ch == '"' || ch == '\'' {
             quote = Some(ch);
-            if in_body { body.push(ch); } else { prelude.push(ch); }
+            if in_body {\n            body.push(ch);\n        } else {\n            prelude.push(ch);\n        }
             continue;
         }
 
@@ -683,8 +683,22 @@ mod tests {
         );
         assert_eq!(sheet.rules.len(), 2);
         assert_eq!(sheet.rules[0].selectors.len(), 1);
-        assert_eq!(sheet.rules[0].declarations.iter().find(|p| p.name == "color").map(|p| p.value.as_str()), Some("red"));
-        assert_eq!(sheet.rules[1].declarations.iter().find(|p| p.name == "color").map(|p| p.value.as_str()), Some("blue"));
+        assert_eq!(
+            sheet.rules[0]
+                .declarations
+                .iter()
+                .find(|p| p.name == "color")
+                .map(|p| p.value.as_str()),
+            Some("red")
+        );
+        assert_eq!(
+            sheet.rules[1]
+                .declarations
+                .iter()
+                .find(|p| p.name == "color")
+                .map(|p| p.value.as_str()),
+            Some("blue")
+        );
     }
 
     #[test]
@@ -692,8 +706,18 @@ mod tests {
         let sheet = StyleSheet::parse(":is(.card, .panel), .fallback { color: red; }");
         assert_eq!(sheet.rules.len(), 1);
         assert_eq!(sheet.rules[0].selectors.len(), 2);
-        assert!(sheet.rules[0].selectors.iter().any(|selector| selector.parts[0].1.pseudo_classes.iter().any(|p| p.starts_with("is("))));
-        assert!(sheet.rules[0].selectors.iter().any(|selector| selector.parts[0].1.classes.contains(&"fallback".to_owned())));
+        assert!(sheet.rules[0]
+            .selectors
+            .iter()
+            .any(|selector| selector.parts[0]
+                .1
+                .pseudo_classes
+                .iter()
+                .any(|p| p.starts_with("is("))));
+        assert!(sheet.rules[0]
+            .selectors
+            .iter()
+            .any(|selector| selector.parts[0].1.classes.contains(&"fallback".to_owned())));
     }
 
     #[test]
