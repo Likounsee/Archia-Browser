@@ -3585,6 +3585,28 @@ mod tests {
     }
 
     #[test]
+    fn flex_axis_gaps_override_the_gap_shorthand() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "display: flex; flex-wrap: wrap; width: 40px; height: 100px; gap: 3px; row-gap: 5px; column-gap: 9px;",
+        );
+        for _ in 0..3 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 20px; height: 10px; flex: 0 0 20px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(40, 100));
+
+        assert_eq!(layout.children[0].rect.x, 0);
+        assert_eq!(layout.children[1].rect.x, 0);
+        assert_eq!(layout.children[2].rect.y, 15);
+    }
+
+    #[test]
     fn flex_row_uses_row_gap_between_wrapped_lines() {
         let mut root = Node::element("div");
         root.set_attribute(
