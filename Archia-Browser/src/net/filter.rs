@@ -79,7 +79,9 @@ impl FilterRule {
     }
 
     fn pattern_matches(&self, url: &str) -> bool {
-        url.contains(&self.pattern)
+        // An empty substring matches every URL; treating an accidental empty
+        // rule as valid could silently disable every request when blocking.
+        !self.pattern.is_empty() && url.contains(&self.pattern)
     }
     pub fn decision(&self) -> FilterDecision {
         self.decision
@@ -156,6 +158,17 @@ mod tests {
         );
         assert_eq!(
             filter.decide("https://example.org/app.js", Some(ResourceType::Script)),
+            FilterDecision::Allow
+        );
+    }
+
+    #[test]
+    fn empty_pattern_does_not_match_every_request() {
+        let mut filter = RequestFilter::default();
+        filter.add_rule(FilterRule::block(""));
+
+        assert_eq!(
+            filter.decide("https://example.org/", Some(ResourceType::Document)),
             FilterDecision::Allow
         );
     }
