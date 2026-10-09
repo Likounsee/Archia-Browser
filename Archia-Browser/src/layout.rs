@@ -3778,6 +3778,25 @@ mod tests {
     }
 
     #[test]
+    fn flex_shrink_weights_exclude_margins() {
+        let mut root = Node::element("div");
+        root.set_attribute("style", "display: flex; width: 100px;");
+        let mut first = Node::element("div");
+        first.set_attribute("style", "width: 60px; margin-left: 20px;");
+        root.append(first);
+        let mut second = Node::element("div");
+        second.set_attribute("style", "width: 60px;");
+        root.append(second);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+        assert_eq!(layout.children[0].rect.width, 40);
+        assert_eq!(layout.children[1].rect.width, 40);
+    }
+
+    #[test]
     fn flex_row_stretch_respects_border_box_max_height() {
         let mut root = Node::element("div");
         root.set_attribute("style", "display: flex; width: 100px; height: 40px;");
