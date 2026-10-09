@@ -625,7 +625,15 @@ fn decode_chunked(
         let line_end = cursor + relative_end;
         let line = std::str::from_utf8(&bytes[cursor..line_end])
             .map_err(|_| TransportError::ConnectionFailed)?;
-        let size_text = line.split(';').next().unwrap_or_default().trim();
+        if line.bytes().any(|byte| {
+            !byte.is_ascii() || (byte < 0x20 && byte != b'\t') || byte == 0x7f
+        }) {
+            return Err(TransportError::ConnectionFailed);
+        }
+        let size_text = line.split(';').next().unwrap_or_default();
+        if size_text.is_empty() || !size_text.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Err(TransportError::ConnectionFailed);
+        }
         let size =
             usize::from_str_radix(size_text, 16).map_err(|_| TransportError::ConnectionFailed)?;
         cursor = line_end + 2;
@@ -723,6 +731,20 @@ mod tests {
         .unwrap();
 
         assert_eq!(response.body, b"Hello");
+    }
+
+    #[test]
+    fn rejects_invalid_chunk_size_lines() {
+        for chunk_size in [" 5", "5 ", "+5", "5;bad\u{1}extension"] {
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n{chunk_size}\r\nHello\r\n0\r\n\r\n"
+            );
+            assert_eq!(
+                parse_http_response(response.as_bytes(), 1024, 1024),
+                Err(TransportError::ConnectionFailed),
+                "chunk size line must be rejected: {chunk_size:?}"
+            );
+        }
     }
 
     #[test]
