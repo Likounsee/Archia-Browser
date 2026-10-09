@@ -166,8 +166,12 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
                     value.push(ch);
                 }
             } else {
+                // Slashes are valid inside unquoted attribute values
+                // (for example, href=https://example.test/path). A slash
+                // only marks a self-closing tag when encountered between
+                // attributes, not while consuming a value.
                 while let Some(&ch) = chars.peek() {
-                    if ch.is_whitespace() || ch == '/' {
+                    if ch.is_whitespace() {
                         break;
                     }
                     value.push(ch);
@@ -210,6 +214,27 @@ mod tests {
                 HtmlToken::EndTag("body".into()),
                 HtmlToken::EndTag("html".into()),
             ]
+        );
+    }
+
+    #[test]
+    fn preserves_slashes_in_unquoted_attribute_values() {
+        let tokens = HtmlTokenizer::tokenize(
+            "<a href=https://example.test/path>link</a><img src=/assets/icon.svg>",
+        );
+        let HtmlToken::StartTag { attributes: link, .. } = &tokens[0] else {
+            panic!("expected anchor start tag");
+        };
+        assert_eq!(
+            link.get("href").map(String::as_str),
+            Some("https://example.test/path")
+        );
+        let HtmlToken::StartTag { attributes: image, .. } = &tokens[3] else {
+            panic!("expected image start tag");
+        };
+        assert_eq!(
+            image.get("src").map(String::as_str),
+            Some("/assets/icon.svg")
         );
     }
 
