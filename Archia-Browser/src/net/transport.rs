@@ -551,7 +551,8 @@ fn parse_http_response_for_method(
         };
 
         let body_forbidden =
-            matches!(method, crate::net::HttpMethod::Head) || matches!(response.status, 204 | 304);
+            matches!(method, crate::net::HttpMethod::Head)
+                || matches!(response.status, 204 | 205 | 304);
 
         let body = if body_forbidden {
             if !body_bytes.is_empty() {
@@ -889,6 +890,23 @@ mod tests {
             parse_http_response(response, 1024, 1024),
             Err(TransportError::ConnectionFailed)
         );
+    }
+
+    #[test]
+    fn reset_content_response_must_not_contain_body_bytes() {
+        let empty = parse_http_response(
+            b"HTTP/1.1 205 Reset Content\\r\\n\\r\\n",
+            1024,
+            1024,
+        );
+        assert_eq!(empty.unwrap().body, b"");
+
+        let with_body = parse_http_response(
+            b"HTTP/1.1 205 Reset Content\\r\\n\\r\\nunexpected",
+            1024,
+            1024,
+        );
+        assert_eq!(with_body, Err(TransportError::ConnectionFailed));
     }
 
     #[test]
