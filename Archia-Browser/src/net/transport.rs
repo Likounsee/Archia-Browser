@@ -483,17 +483,18 @@ fn parse_http_response_for_method(
         if transfer_encoding.is_some() && content_length.is_some() {
             return Err(TransportError::ConnectionFailed);
         }
+        let is_chunked = match transfer_encoding {
+            Some(value) if value.trim().eq_ignore_ascii_case("chunked") => true,
+            Some(_) => return Err(TransportError::ConnectionFailed),
+            None => false,
+        };
 
         let body_forbidden =
             matches!(method, crate::net::HttpMethod::Head) || matches!(response.status, 204 | 304);
 
         let body = if body_forbidden {
             Vec::new()
-        } else if transfer_encoding.is_some_and(|value| {
-            value
-                .split(',')
-                .any(|item| item.trim().eq_ignore_ascii_case("chunked"))
-        }) {
+        } else if is_chunked {
             decode_chunked(body_bytes, max_response_size)?
         } else if let Some(length) = content_length {
             let length = length
@@ -698,6 +699,20 @@ mod tests {
         )
         .unwrap();
         assert!(response.body.is_empty());
+    }
+
+    #[test]
+    fn rejects_unsupported_and_ambiguous_transfer_encodings() {
+        for encoding in ["gzip", "gzip, chunked", "chunked, gzip"] {
+            let response = format!(
+                "HTTP/1.1 200 OK\\r\\nTransfer-Encoding: {encoding}\\r\\n\\r\\n0\\r\\n\\r\\n"
+            );
+            assert_eq!(
+                parse_http_response(response.as_bytes(), 1024, 1024),
+                Err(TransportError::ConnectionFailed),
+                "encoding {encoding} must not be partially decoded"
+            );
+        }
     }
 
     #[test]
