@@ -430,7 +430,10 @@ fn socket_address(url: &super::Url) -> String {
 
 fn host_header(request: &Request) -> String {
     let host = request.url.host();
-    let default_port = request.url.effective_port() == 80 && request.url.scheme() == "http";
+    let default_port = matches!(
+        (request.url.scheme(), request.url.effective_port()),
+        ("http", 80) | ("https", 443)
+    );
     let host = if host.contains(':') {
         format!("[{host}]")
     } else {
@@ -870,6 +873,18 @@ mod tests {
     fn formats_ipv6_socket_addresses_with_brackets() {
         let url = Url::parse("http://[::1]:8080/").unwrap();
         assert_eq!(socket_address(&url), "[::1]:8080");
+    }
+
+    #[test]
+    fn omits_default_ports_from_http_and_https_host_headers() {
+        let http = Request::new(Url::parse("http://example.org:80/").unwrap());
+        assert_eq!(host_header(&http), "example.org");
+
+        let https = Request::new(Url::parse("https://example.org/").unwrap());
+        assert_eq!(host_header(&https), "example.org");
+
+        let explicit_https_port = Request::new(Url::parse("https://example.org:8443/").unwrap());
+        assert_eq!(host_header(&explicit_https_port), "example.org:8443");
     }
 
     #[test]
