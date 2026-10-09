@@ -159,6 +159,8 @@ impl HttpTransport {
 
 impl Transport for HttpTransport {
     fn send(&self, request: &Request) -> Result<Response, TransportError> {
+        // Reject malformed request targets before DNS lookup or socket creation.
+        validate_request(request)?;
         let mut stream = self.connect(request)?;
         self.write_request(&mut stream, request)?;
         self.read_response(&mut stream, request.method)
@@ -297,9 +299,8 @@ fn content_type_for_path(path: &std::path::Path) -> &'static str {
 }
 
 fn validate_request(request: &Request) -> Result<(), TransportError> {
-    if request
-        .url
-        .authority()
+    let authority = request.url.authority();
+    if authority
         .bytes()
         .any(|byte| byte.is_ascii_control() || matches!(byte, b' ' | b'\t'))
         || request
@@ -316,6 +317,10 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
         return Err(TransportError::InvalidRequest);
     }
 
+    if matches!(request.url.scheme(), "http" | "https") {
+        validate_http_authority(authority)?;
+    }
+
     if request.headers.iter().any(|(name, value)| {
         name.is_empty()
             || name
@@ -326,6 +331,62 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
             })
     }) {
         return Err(TransportError::InvalidRequest);
+    }
+
+    Ok(())
+}
+
+fn validate_http_authority(authority: &str) -> Result<(), TransportError> {
+    // User-info is not used by this browser and makes host parsing ambiguous.
+    if authority.is_empty() || authority.contains('@') {
+        return Err(TransportError::InvalidRequest);
+    }
+
+    let (host, port) = if let Some(bracketed) = authority.strip_prefix('[') {
+        let end = bracketed.find(']').ok_or(TransportError::InvalidRequest)?;
+        let host = &bracketed[..end];
+        host.parse::<std::net::Ipv6Addr>()
+            .map_err(|_| TransportError::InvalidRequest)?;
+        let suffix = &bracketed[end + 1..];
+        let port = if suffix.is_empty() {
+            None
+        } else {
+            Some(suffix.strip_prefix(':').ok_or(TransportError::InvalidRequest)?)
+        };
+        (host, port)
+    } else {
+        if authority.matches(':').count() > 1 {
+            return Err(TransportError::InvalidRequest);
+        }
+        match authority.rsplit_once(':') {
+            Some((host, port)) => (host, Some(port)),
+            None => (authority, None),
+        }
+    };
+
+    if host.is_empty()
+        || (!authority.starts_with('[')
+            && (host.starts_with('.')
+                || host == "."
+                || host.split('.').any(|label| {
+                    label.is_empty()
+                        || label.starts_with('-')
+                        || label.ends_with('-')
+                        || !label
+                            .bytes()
+                            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+                })))
+    {
+        return Err(TransportError::InvalidRequest);
+    }
+
+    if let Some(port) = port {
+        let parsed = port
+            .parse::<u16>()
+            .map_err(|_| TransportError::InvalidRequest)?;
+        if parsed == 0 {
+            return Err(TransportError::InvalidRequest);
+        }
     }
 
     Ok(())
@@ -691,6 +752,30 @@ mod tests {
             LocalFileTransport::new().send(&request).unwrap_err(),
             TransportError::UnsupportedScheme
         );
+    }
+
+    #[test]
+    fn rejects_malformed_ports_and_user_info_before_connecting() {
+        for input in [
+            "http://example.org:bad/",
+            "http://example.org:99999/",
+            "http://example.org:/",
+            "http://user@example.org/",
+            "http://example.org:80:90/",
+        ] {
+            let request = Request::new(Url::parse(input).unwrap());
+            assert_eq!(
+                HttpTransport::new().send(&request),
+                Err(TransportError::InvalidRequest),
+                "expected {input} to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn accepts_valid_ipv6_authorities() {
+        let request = Request::new(Url::parse("http://[::1]:8080/").unwrap());
+        assert_eq!(validate_request(&request), Ok(()));
     }
 
     #[test]
