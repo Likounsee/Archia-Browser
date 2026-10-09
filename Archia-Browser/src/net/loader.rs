@@ -105,10 +105,20 @@ where
                     .header("location")
                     .filter(|value| !value.trim().is_empty())
                     .ok_or(DocumentLoadError::InvalidRedirect)?;
-                let url = current
+                let mut url = current
                     .url
                     .resolve(location)
                     .map_err(|_| DocumentLoadError::InvalidRedirect)?;
+                // Per HTTP redirect semantics, a Location without a fragment
+                // inherits the fragment from the original URL. An explicit
+                // fragment in Location always takes precedence.
+                if url.fragment().is_none() {
+                    if let Some(fragment) = current.url.fragment() {
+                        url = url
+                            .resolve(&format!("#{fragment}"))
+                            .map_err(|_| DocumentLoadError::InvalidRedirect)?;
+                    }
+                }
 
                 // Remote content must never navigate the browser into the local
                 // filesystem through an HTTP redirect.
@@ -1047,6 +1057,47 @@ mod tests {
                 }
             )
         }));
+    }
+
+    #[test]
+    fn redirect_inherits_fragment_unless_location_overrides_it() {
+        #[derive(Debug)]
+        struct RecordingTransport {
+            responses: std::sync::Mutex<Vec<Response>>,
+            urls: std::sync::Mutex<Vec<String>>,
+        }
+
+        impl Transport for RecordingTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                self.urls.lock().unwrap().push(request.url.to_string());
+                Ok(self.responses.lock().unwrap().remove(0))
+            }
+        }
+
+        for (location, expected) in [
+            ("/final", "https://example.org/final#section"),
+            ("/final#destination", "https://example.org/final#destination"),
+        ] {
+            let transport = RecordingTransport {
+                responses: std::sync::Mutex::new(vec![
+                    Response::new(302).with_header("location", location),
+                    Response::new(200)
+                        .with_header("content-type", "text/html")
+                        .with_body(b"<body>safe</body>".to_vec()),
+                ]),
+                urls: std::sync::Mutex::new(Vec::new()),
+            };
+            let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
+            let request = Request::new(Url::parse("https://example.org/start#section").unwrap());
+
+            loader
+                .load(&request, LayoutViewport::new(320, 200))
+                .unwrap();
+
+            let urls = loader.transport.urls.lock().unwrap();
+            assert_eq!(urls.len(), 2);
+            assert_eq!(urls[1], expected);
+        }
     }
 
     #[test]
