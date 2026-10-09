@@ -31,11 +31,16 @@ impl HttpCache {
     }
 
     pub fn get(&mut self, request: &Request) -> Option<Response> {
+        let key = cache_key(request);
+        if request_forces_cache_bypass(request) {
+            // We cannot revalidate yet, so don't leave an older response
+            // available for a later request after an explicit bypass.
+            self.entries.remove(&key);
+            return None;
+        }
         if !request_can_use_cache(request) {
             return None;
         }
-
-        let key = cache_key(request);
         let expired = self
             .entries
             .get(&key)
@@ -85,6 +90,12 @@ impl HttpCache {
 
 fn cache_key(request: &Request) -> String {
     format!("{} {}", request.method.as_str(), request.url)
+}
+
+fn request_forces_cache_bypass(request: &Request) -> bool {
+    has_cache_directive(request.header("cache-control"), "no-cache")
+        || has_cache_directive(request.header("cache-control"), "no-store")
+        || has_pragma_no_cache(request)
 }
 
 fn request_can_use_cache(request: &Request) -> bool {
@@ -210,6 +221,29 @@ mod tests {
         assert!(cache.get(&no_cache).is_none());
         let no_store = request.with_header("cache-control", "no-store");
         assert!(cache.get(&no_store).is_none());
+    }
+
+    #[test]
+    fn explicit_bypass_evicts_previously_cached_response() {
+        for header in [
+            ("cache-control", "no-cache"),
+            ("cache-control", "no-store"),
+            ("pragma", "no-cache"),
+        ] {
+            let mut cache = HttpCache::default();
+            let request = make_request("https://example.org/resource");
+            cache.store(
+                &request,
+                &Response::new(200)
+                    .with_header("cache-control", "max-age=60")
+                    .with_body(b"old".to_vec()),
+            );
+            assert_eq!(cache.len(), 1);
+
+            let bypass = request.clone().with_header(header.0, header.1);
+            assert!(cache.get(&bypass).is_none());
+            assert_eq!(cache.len(), 0, "bypass {header:?} should evict old entry");
+        }
     }
 
     #[test]
