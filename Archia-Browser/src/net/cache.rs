@@ -428,10 +428,7 @@ mod tests {
         cache.store(&original, &response);
 
         let different_fragment = make_request("https://example.org/page?lang=fr#details");
-        assert_eq!(
-            cache.get(&different_fragment).unwrap().body,
-            b"cached"
-        );
+        assert_eq!(cache.get(&different_fragment).unwrap().body, b"cached");
         assert_eq!(cache.len(), 1);
 
         let different_query = make_request("https://example.org/page?lang=en#details");
