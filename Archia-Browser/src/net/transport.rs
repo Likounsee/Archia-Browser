@@ -739,8 +739,7 @@ mod tests {
 
     #[test]
     fn rejects_bytes_after_chunked_trailers() {
-        let response =
-            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\nunexpected";
+        let response = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\nunexpected";
         assert_eq!(
             parse_http_response(response, 1024, 1024),
             Err(TransportError::ConnectionFailed)
