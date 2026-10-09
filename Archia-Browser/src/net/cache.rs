@@ -214,7 +214,7 @@ fn cache_control_directives(value: &str) -> Vec<&str> {
             escaped = false;
             continue;
         }
-        if quoted && byte == b'\\\\' {
+        if quoted && byte == b'\\' {
             escaped = true;
         } else if byte == b'"' {
             quoted = !quoted;
