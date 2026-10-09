@@ -56,7 +56,11 @@ impl HttpCache {
         // A request's max-age is a stricter freshness limit than the
         // origin's lifetime. Do not evict the response: another request may
         // still be allowed to use it under the origin's Cache-Control policy.
-        if let Some(max_age) = request_max_age(request) {
+        let max_age = match request_cache_age_directive(request, "max-age") {
+            Ok(value) => value,
+            Err(()) => return None,
+        };
+        if let Some(max_age) = max_age {
             let too_old_for_request = self.entries.get(&key).is_some_and(|entry| {
                 entry
                     .initial_age
@@ -67,7 +71,11 @@ impl HttpCache {
                 return None;
             }
         }
-        if let Some(min_fresh) = request_min_fresh(request) {
+        let min_fresh = match request_cache_age_directive(request, "min-fresh") {
+            Ok(value) => value,
+            Err(()) => return None,
+        };
+        if let Some(min_fresh) = min_fresh {
             let insufficient_freshness = self.entries.get(&key).is_some_and(|entry| {
                 entry.expires_at.saturating_duration_since(now).as_secs() < min_fresh
             });
@@ -287,64 +295,39 @@ fn response_max_age(response: &Response) -> Option<u64> {
     max_age
 }
 
-fn request_max_age(request: &Request) -> Option<u64> {
-    let mut max_age = None;
+fn request_cache_age_directive(
+    request: &Request,
+    wanted: &str,
+) -> Result<Option<u64>, ()> {
+    let mut parsed = None;
     for (_, header) in request
         .headers
         .iter()
         .filter(|(name, _)| name.eq_ignore_ascii_case("cache-control"))
     {
         for directive in cache_control_directives(header) {
-            let Some((name, value)) = directive.split_once('=') else {
-                continue;
+            let (name, value) = match directive.split_once('=') {
+                Some((name, value)) => (name.trim(), Some(value.trim())),
+                None => (directive.trim(), None),
             };
-            if !name.trim().eq_ignore_ascii_case("max-age") {
+            if !name.eq_ignore_ascii_case(wanted) {
                 continue;
             }
-            // Multiple or malformed request max-age directives are ambiguous;
-            // avoid applying a guessed limit.
-            if max_age.is_some() {
-                return None;
+            // A malformed or repeated constraint must not silently become
+            // "no constraint", which could permit a stale cache hit.
+            if parsed.is_some() {
+                return Err(());
             }
-            let value = value.trim();
+            let value = value.ok_or(())?;
             let value = if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
                 &value[1..value.len() - 1]
             } else {
                 value
             };
-            max_age = Some(value.parse::<u64>().ok()?);
+            parsed = Some(value.parse::<u64>().map_err(|_| ())?);
         }
     }
-    max_age
-}
-
-fn request_min_fresh(request: &Request) -> Option<u64> {
-    let mut min_fresh = None;
-    for (_, header) in request
-        .headers
-        .iter()
-        .filter(|(name, _)| name.eq_ignore_ascii_case("cache-control"))
-    {
-        for directive in cache_control_directives(header) {
-            let Some((name, value)) = directive.split_once('=') else {
-                continue;
-            };
-            if !name.trim().eq_ignore_ascii_case("min-fresh") {
-                continue;
-            }
-            if min_fresh.is_some() {
-                return None;
-            }
-            let value = value.trim();
-            let value = if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
-                &value[1..value.len() - 1]
-            } else {
-                value
-            };
-            min_fresh = Some(value.parse::<u64>().ok()?);
-        }
-    }
-    min_fresh
+    Ok(parsed)
 }
 
 fn response_age(response: &Response) -> Option<u64> {
@@ -555,6 +538,34 @@ mod tests {
             1,
             "min-fresh must not evict a still-fresh entry"
         );
+    }
+
+    #[test]
+    fn malformed_or_duplicate_request_freshness_directives_never_use_cache() {
+        for directive in [
+            "max-age=invalid",
+            "max-age",
+            "max-age=30, max-age=60",
+            "min-fresh=invalid",
+            "min-fresh",
+            "min-fresh=30, min-fresh=60",
+        ] {
+            let mut cache = HttpCache::default();
+            let request = make_request("https://example.org/resource");
+            cache.store(
+                &request,
+                &Response::new(200)
+                    .with_header("cache-control", "max-age=300")
+                    .with_body(b"cached".to_vec()),
+            );
+
+            let constrained = request.clone().with_header("cache-control", directive);
+            assert!(
+                cache.get(&constrained).is_none(),
+                "malformed freshness directive must not permit a cache hit: {directive}"
+            );
+            assert_eq!(cache.len(), 1, "request constraints must not evict the entry");
+        }
     }
 
     #[test]
