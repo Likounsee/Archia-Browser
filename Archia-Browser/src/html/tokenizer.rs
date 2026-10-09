@@ -311,6 +311,55 @@ fn find_raw_text_end(input: &str, start: usize, tag_name: &str) -> Option<(usize
     None
 }
 
+fn decode_numeric_character_reference(codepoint: u32) -> char {
+    // HTML replaces null and invalid Unicode scalar values in numeric
+    // character references rather than preserving the source spelling.
+    if codepoint == 0 || char::from_u32(codepoint).is_none() {
+        return '\u{FFFD}';
+    }
+
+    // HTML's numeric-reference algorithm remaps these legacy Windows-1252
+    // control values to their printable characters.
+    const WINDOWS_1252_REPLACEMENTS: &[(u32, char)] = &[
+        (0x80, '€'),
+        (0x82, '‚'),
+        (0x83, 'ƒ'),
+        (0x84, '„'),
+        (0x85, '…'),
+        (0x86, '†'),
+        (0x87, '‡'),
+        (0x88, 'ˆ'),
+        (0x89, '‰'),
+        (0x8A, 'Š'),
+        (0x8B, '‹'),
+        (0x8C, 'Œ'),
+        (0x8E, 'Ž'),
+        (0x91, '‘'),
+        (0x92, '’'),
+        (0x93, '“'),
+        (0x94, '”'),
+        (0x95, '•'),
+        (0x96, '–'),
+        (0x97, '—'),
+        (0x98, '˜'),
+        (0x99, '™'),
+        (0x9A, 'š'),
+        (0x9B, '›'),
+        (0x9C, 'œ'),
+        (0x9E, 'ž'),
+        (0x9F, 'Ÿ'),
+    ];
+    if let Some((_, replacement)) = WINDOWS_1252_REPLACEMENTS
+        .iter()
+        .find(|(value, _)| *value == codepoint)
+    {
+        return *replacement;
+    }
+
+    // The remaining C1 controls are retained by the HTML algorithm.
+    char::from_u32(codepoint).unwrap_or('\u{FFFD}')
+}
+
 fn decode_character_references(input: &str) -> String {
     let mut output = String::with_capacity(input.len());
     let mut cursor = 0;
@@ -335,11 +384,12 @@ fn decode_character_references(input: &str) -> String {
             _ if reference.starts_with("#x") || reference.starts_with("#X") => {
                 u32::from_str_radix(&reference[2..], 16)
                     .ok()
-                    .and_then(char::from_u32)
+                    .map(decode_numeric_character_reference)
             }
-            _ if reference.starts_with('#') => {
-                reference[1..].parse::<u32>().ok().and_then(char::from_u32)
-            }
+            _ if reference.starts_with('#') => reference[1..]
+                .parse::<u32>()
+                .ok()
+                .map(decode_numeric_character_reference)
             _ => None,
         };
 
@@ -366,6 +416,19 @@ mod character_reference_tests {
             decode_character_references("&lt;div&gt; &amp; &#65; &#x1f600;"),
             "<div> & A 😀"
         );
+    }
+
+    #[test]
+    fn replaces_invalid_numeric_character_references() {
+        assert_eq!(
+            decode_character_references("&#0; &#xD800; &#x110000;"),
+            "\u{FFFD} \u{FFFD} \u{FFFD}"
+        );
+    }
+
+    #[test]
+    fn maps_legacy_numeric_control_references() {
+        assert_eq!(decode_character_references("&#x80; &#x91;"), "€ ‘");
     }
 
     #[test]
