@@ -354,14 +354,37 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
         }
     }
 
-    if request.headers.iter().any(|(name, value)| {
-        name.is_empty()
+    let mut seen_headers = std::collections::HashSet::new();
+    for (name, value) in &request.headers {
+        if name.is_empty()
             || !name.bytes().all(is_http_token_byte)
             || value.bytes().any(|byte| {
                 matches!(byte, b'\r' | b'\n') || byte.is_ascii_control() && byte != b'\t'
-            })
-    }) {
+            )
+            // HTTP field names are case-insensitive. Reject duplicate spellings
+            // so framing/security checks cannot inspect a different value than
+            // the one a downstream server chooses.
+            || !seen_headers.insert(name.to_ascii_lowercase())
+        {
+            return Err(TransportError::InvalidRequest);
+        }
+    }
+
+    // This transport writes request bodies verbatim and does not implement
+    // chunked request encoding. Reject transfer-encoding rather than sending
+    // a body whose framing disagrees with the declared protocol.
+    if request.header("transfer-encoding").is_some() {
         return Err(TransportError::InvalidRequest);
+    }
+
+    if let Some(length) = request.header("content-length") {
+        let length = length
+            .trim()
+            .parse::<usize>()
+            .map_err(|_| TransportError::InvalidRequest)?;
+        if length != request.body.len() {
+            return Err(TransportError::InvalidRequest);
+        }
     }
 
     Ok(())
@@ -1077,6 +1100,45 @@ mod tests {
             .with_header("host", "attacker.example");
         assert_eq!(
             validate_request(&mismatched_host),
+            Err(TransportError::InvalidRequest)
+        );
+    }
+
+    #[test]
+    fn rejects_ambiguous_request_body_framing() {
+        let url = Url::parse("http://example.org/").unwrap();
+
+        let short_length = Request::new(url.clone())
+            .with_method(crate::net::HttpMethod::Post)
+            .with_body(b"Hello".to_vec())
+            .with_header("content-length", "4");
+        assert_eq!(
+            validate_request(&short_length),
+            Err(TransportError::InvalidRequest)
+        );
+
+        let invalid_length = Request::new(url.clone())
+            .with_body(b"Hello".to_vec())
+            .with_header("content-length", "five");
+        assert_eq!(
+            validate_request(&invalid_length),
+            Err(TransportError::InvalidRequest)
+        );
+
+        let transfer_encoded = Request::new(url.clone())
+            .with_body(b"Hello".to_vec())
+            .with_header("transfer-encoding", "chunked");
+        assert_eq!(
+            validate_request(&transfer_encoded),
+            Err(TransportError::InvalidRequest)
+        );
+
+        let duplicate_length = Request::new(url)
+            .with_body(b"Hello".to_vec())
+            .with_header("Content-Length", "5")
+            .with_header("content-length", "5");
+        assert_eq!(
+            validate_request(&duplicate_length),
             Err(TransportError::InvalidRequest)
         );
     }
