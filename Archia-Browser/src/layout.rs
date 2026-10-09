@@ -1569,11 +1569,17 @@ fn parse_flex_shorthand(
     if parts.is_empty() || parts.len() > 3 {
         return None;
     }
-    let grow = parts[0].parse::<f32>().ok()?.max(0.0);
+    let grow = parts[0].parse::<f32>().ok()?;
+    if !grow.is_finite() || grow < 0.0 {
+        return None;
+    }
     if parts.len() == 1 {
         return Some((grow, 1.0, Some(0)));
     }
-    let shrink = parts[1].parse::<f32>().ok()?.max(0.0);
+    let shrink = parts[1].parse::<f32>().ok()?;
+    if !shrink.is_finite() || shrink < 0.0 {
+        return None;
+    }
     let basis = if parts.len() == 3 {
         if parts[2] == "auto" {
             None
@@ -3523,6 +3529,15 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.y, 30);
         assert_eq!(layout.children[1].rect.y, 50);
+    }
+
+    #[test]
+    fn flex_shorthand_rejects_non_finite_or_negative_factors() {
+        assert!(parse_flex_shorthand(Some("NaN 1 20px"), 100).is_none());
+        assert!(parse_flex_shorthand(Some("inf 1 20px"), 100).is_none());
+        assert!(parse_flex_shorthand(Some("1 -inf 20px"), 100).is_none());
+        assert!(parse_flex_shorthand(Some("-1 1 20px"), 100).is_none());
+        assert!(parse_flex_shorthand(Some("1 -1 20px"), 100).is_none());
     }
 
     #[test]
