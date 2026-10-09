@@ -88,6 +88,10 @@ impl HttpCache {
     }
 
     pub fn store(&mut self, request: &Request, response: &Response) {
+        let now = Instant::now();
+        // Expired entries should not consume the budget or force live entries
+        // out of the cache when a new response arrives.
+        self.entries.retain(|entry| now < entry.value.expires_at);
         let key = cache_key(request);
         if !request_can_store(request) {
             // Explicit cache-bypass directives invalidate the old entry, but
@@ -119,7 +123,7 @@ impl HttpCache {
         }
         // Cache-Control and Age are untrusted network input. Avoid overflowing
         // Instant when a server advertises an unrealistically large max-age.
-        let Some(expires_at) = Instant::now().checked_add(Duration::from_secs(remaining_age))
+        let Some(expires_at) = now.checked_add(Duration::from_secs(remaining_age))
         else {
             self.entries.remove(&key);
             return;
