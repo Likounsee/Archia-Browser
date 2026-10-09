@@ -116,12 +116,18 @@ where
                 }
 
                 let mut next = current.clone();
+                let had_referrer =
+                    next.headers.contains_key("referer") || next.policy.referrer.is_some();
                 let cross_origin = !same_origin(&current.url, &url);
-                let secure_downgrade = current.url.scheme() == "https" && url.scheme() == "http";
                 next.url = url;
-                if secure_downgrade {
-                    next.headers.remove("referer");
-                    next.policy.referrer = None;
+                if had_referrer {
+                    if let Some(referrer) = referrer_for_target(&current.url, &next.url) {
+                        next.headers.insert("referer".into(), referrer.to_string());
+                        next.policy.referrer = Some(referrer);
+                    } else {
+                        next.headers.remove("referer");
+                        next.policy.referrer = None;
+                    }
                 }
                 next.headers.remove("cookie");
                 if cross_origin {
@@ -239,19 +245,16 @@ where
             }
 
             let mut request = Request::new(current.clone());
+            let referrer = referrer_for_target(document_url, &current);
             request.policy = RequestPolicy {
                 priority: super::pipeline::RequestPriority::Normal,
                 resource_kind: ResourceKind::Stylesheet,
-                referrer: Some(document_url.clone()),
+                referrer: referrer.clone(),
                 first_party: Some(document_url.clone()),
             };
             request.headers.insert("accept".into(), "text/css".into());
-            if !(document_url.scheme() == "https" && current.scheme() == "http") {
-                request
-                    .headers
-                    .insert("referer".into(), document_url.to_string());
-            } else {
-                request.policy.referrer = None;
+            if let Some(referrer) = referrer {
+                request.headers.insert("referer".into(), referrer.to_string());
             }
             if let Some(cookie) = self
                 .cookies
@@ -410,6 +413,25 @@ fn same_origin(left: &super::Url, right: &super::Url) -> bool {
         && left.effective_port() == right.effective_port()
 }
 
+/// Apply a conservative strict-origin-when-cross-origin referrer policy.
+/// Never disclose a local file path to a network origin or send a secure
+/// referrer over an insecure connection.
+fn referrer_for_target(source: &super::Url, target: &super::Url) -> Option<super::Url> {
+    if source.scheme() == "https" && target.scheme() == "http" {
+        return None;
+    }
+    if (source.scheme() == "file") != (target.scheme() == "file") {
+        return None;
+    }
+
+    let reference = if same_origin(source, target) {
+        source.to_string().split('#').next()?.to_owned()
+    } else {
+        format!("{}://{}/", source.scheme(), source.authority())
+    };
+    super::Url::parse(&reference).ok()
+}
+
 fn should_switch_to_get(method: HttpMethod, status: u16) -> bool {
     matches!(status, 301 | 302 | 303) && !matches!(method, HttpMethod::Get | HttpMethod::Head)
 }
@@ -454,6 +476,26 @@ mod tests {
         fn send(&self, _: &Request) -> Result<Response, TransportError> {
             Ok(self.response.clone())
         }
+    }
+
+    #[test]
+    fn referrers_are_reduced_for_cross_origin_requests_and_never_downgraded() {
+        let source = Url::parse("https://example.org/private/page?token=secret#fragment").unwrap();
+        let same_origin = Url::parse("https://example.org/other").unwrap();
+        let cross_origin = Url::parse("https://cdn.example.net/style.css").unwrap();
+        let downgrade = Url::parse("http://example.org/").unwrap();
+        let local_file = Url::parse("file:///home/user/private.html").unwrap();
+
+        assert_eq!(
+            referrer_for_target(&source, &same_origin).unwrap().to_string(),
+            "https://example.org/private/page?token=secret"
+        );
+        assert_eq!(
+            referrer_for_target(&source, &cross_origin).unwrap().to_string(),
+            "https://example.org/"
+        );
+        assert!(referrer_for_target(&source, &downgrade).is_none());
+        assert!(referrer_for_target(&local_file, &cross_origin).is_none());
     }
 
     #[test]
