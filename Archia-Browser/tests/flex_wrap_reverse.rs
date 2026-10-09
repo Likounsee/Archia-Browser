@@ -63,3 +63,21 @@ fn flex_align_self_overrides_parent_flex_start() {
 
     assert_eq!(layout.children[0].rect.y, 40);
 }
+
+#[test]
+fn block_margins_do_not_collapse_across_inline_content() {
+    let mut root = Node::element("div");
+    let mut first = Node::element("div");
+    first.set_attribute("style", "height: 10px; margin-bottom: 20px;");
+    let mut inline = Node::element("span");
+    inline.append(Node::text("x"));
+    let mut second = Node::element("div");
+    second.set_attribute("style", "height: 10px; margin-top: 30px;");
+    root.append(first);
+    root.append(inline);
+    root.append(second);
+
+    let layout = styled_layout(&root, 100, 100);
+
+    assert_eq!(layout.children[2].rect.y, 76);
+}
