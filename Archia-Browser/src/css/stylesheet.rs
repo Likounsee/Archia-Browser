@@ -15,24 +15,23 @@ pub struct StyleSheet {
 impl StyleSheet {
     pub fn parse(input: &str) -> Self {
         let mut rules = Vec::new();
-        for block in input.split('}') {
-            let Some((selector_text, declaration_text)) = block.split_once('{') else {
+        for (selector_text, declaration_text) in parse_rule_blocks(input) {
+            // Nested at-rules (for example @media) are intentionally ignored until
+            // the engine implements their conditions; never misinterpret them as selectors.
+            if selector_text.trim_start().starts_with('@') {
                 continue;
-            };
+            }
 
-            let selectors = selector_text
-                .split(',')
+            let selectors = split_selector_list(&selector_text)
+                .into_iter()
                 .filter_map(Selector::parse)
                 .collect::<Vec<_>>();
             if selectors.is_empty() {
                 continue;
             }
 
-            let declarations = parse_declarations(&CssTokenizer::tokenize(declaration_text));
-            rules.push(StyleRule {
-                selectors,
-                declarations,
-            });
+            let declarations = parse_declarations(&CssTokenizer::tokenize(&declaration_text));
+            rules.push(StyleRule { selectors, declarations });
         }
         Self { rules }
     }
@@ -186,6 +185,144 @@ impl StyleSheet {
 
         inherited
     }
+}
+
+/// Scan only top-level qualified rules. Unlike splitting on braces, this respects
+/// comments, quoted strings, escaped characters and nested delimiters.
+fn parse_rule_blocks(input: &str) -> Vec<(String, String)> {
+    let mut blocks = Vec::new();
+    let mut prelude = String::new();
+    let mut body = String::new();
+    let mut in_body = false;
+    let mut brace_depth = 0usize;
+    let mut paren_depth = 0usize;
+    let mut bracket_depth = 0usize;
+    let mut quote = None;
+    let mut escaped = false;
+    let mut chars = input.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if quote.is_none() && ch == '/' && chars.peek() == Some(&'*') {
+            chars.next();
+            let mut previous_star = false;
+            for comment_char in chars.by_ref() {
+                if previous_star && comment_char == '/' {
+                    break;
+                }
+                previous_star = comment_char == '*';
+            }
+            continue;
+        }
+
+        if let Some(active_quote) = quote {
+            if in_body { body.push(ch); } else { prelude.push(ch); }
+            if escaped {
+                escaped = false;
+            } else if ch == '\\\\' {
+                escaped = true;
+            } else if ch == active_quote {
+                quote = None;
+            }
+            continue;
+        }
+
+        if ch == '"' || ch == '\'' {
+            quote = Some(ch);
+            if in_body { body.push(ch); } else { prelude.push(ch); }
+            continue;
+        }
+
+        match ch {
+            '(' => paren_depth += 1,
+            ')' => paren_depth = paren_depth.saturating_sub(1),
+            '[' => bracket_depth += 1,
+            ']' => bracket_depth = bracket_depth.saturating_sub(1),
+            '{' if paren_depth == 0 && bracket_depth == 0 => {
+                if in_body {
+                    brace_depth += 1;
+                    body.push(ch);
+                } else {
+                    in_body = true;
+                    brace_depth = 1;
+                    body.clear();
+                }
+                continue;
+            }
+            '}' if in_body && paren_depth == 0 && bracket_depth == 0 => {
+                brace_depth = brace_depth.saturating_sub(1);
+                if brace_depth == 0 {
+                    let selector = prelude.trim().to_owned();
+                    if !selector.is_empty() {
+                        blocks.push((selector, std::mem::take(&mut body)));
+                    }
+                    prelude.clear();
+                    body.clear();
+                    in_body = false;
+                } else {
+                    body.push(ch);
+                }
+                continue;
+            }
+            ';' if !in_body && paren_depth == 0 && bracket_depth == 0 => {
+                // Drop top-level at-rule statements such as @import; the document
+                // loader handles supported imports separately.
+                prelude.clear();
+                continue;
+            }
+            _ => {}
+        }
+
+        if in_body { body.push(ch); } else { prelude.push(ch); }
+    }
+
+    blocks
+}
+
+/// Split selector groups only on commas outside strings, attribute selectors and
+/// functional pseudo-class arguments (e.g. :is(.a, .b)).
+fn split_selector_list(input: &str) -> Vec<String> {
+    let mut selectors = Vec::new();
+    let mut current = String::new();
+    let mut paren_depth = 0usize;
+    let mut bracket_depth = 0usize;
+    let mut quote = None;
+    let mut escaped = false;
+
+    for ch in input.chars() {
+        if let Some(active_quote) = quote {
+            current.push(ch);
+            if escaped {
+                escaped = false;
+            } else if ch == '\\\\' {
+                escaped = true;
+            } else if ch == active_quote {
+                quote = None;
+            }
+            continue;
+        }
+        match ch {
+            '"' | '\'' => quote = Some(ch),
+            '(' => paren_depth += 1,
+            ')' => paren_depth = paren_depth.saturating_sub(1),
+            '[' => bracket_depth += 1,
+            ']' => bracket_depth = bracket_depth.saturating_sub(1),
+            ',' if paren_depth == 0 && bracket_depth == 0 => {
+                let selector = current.trim();
+                if !selector.is_empty() {
+                    selectors.push(selector.to_owned());
+                }
+                current.clear();
+                continue;
+            }
+            _ => {}
+        }
+        current.push(ch);
+    }
+    let selector = current.trim();
+    if !selector.is_empty() {
+        selectors.push(selector.to_owned());
+    }
+    selectors
 }
 
 fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
@@ -537,6 +674,32 @@ mod tests {
         assert_eq!(style.get("--accent"), Some("#123456"));
         assert_eq!(style.get("color"), Some("#123456"));
         assert_eq!(style.get("background-color"), Some("#123456"));
+    }
+
+    #[test]
+    fn parses_comments_and_braces_inside_quoted_values() {
+        let sheet = StyleSheet::parse(
+            "/* leading } comment */ .card { content: \"a } { /* not a comment */\"; color: red; } /* trailing { */ .next { color: blue; }",
+        );
+        assert_eq!(sheet.rules.len(), 2);
+        assert_eq!(sheet.rules[0].selectors.len(), 1);
+        assert_eq!(sheet.rules[0].declarations.iter().find(|p| p.name == "color").map(|p| p.value.as_str()), Some("red"));
+        assert_eq!(sheet.rules[1].declarations.iter().find(|p| p.name == "color").map(|p| p.value.as_str()), Some("blue"));
+    }
+
+    #[test]
+    fn selector_commas_inside_function_arguments_do_not_split_rule_groups() {
+        let sheet = StyleSheet::parse(":is(.card, .panel), .fallback { color: red; }");
+        assert_eq!(sheet.rules.len(), 1);
+        assert_eq!(sheet.rules[0].selectors.len(), 2);
+        assert!(sheet.rules[0].selectors.iter().any(|selector| selector.parts[0].1.pseudo_classes.iter().any(|p| p.starts_with("is("))));
+        assert!(sheet.rules[0].selectors.iter().any(|selector| selector.parts[0].1.classes.contains(&"fallback".to_owned())));
+    }
+
+    #[test]
+    fn ignores_unclosed_rules_instead_of_merging_them_into_following_rules() {
+        let sheet = StyleSheet::parse(".broken { color: red; .valid { color: blue; }");
+        assert!(sheet.rules.is_empty());
     }
 
     #[test]
