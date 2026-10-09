@@ -221,6 +221,12 @@ where
                 return None;
             }
 
+            // Check every hop, not only the original URL: a remote server must
+            // not redirect a stylesheet request into the local filesystem.
+            if document_url.scheme() != "file" && current.scheme() == "file" {
+                return None;
+            }
+
             let mut request = Request::new(current.clone());
             request.policy = RequestPolicy {
                 priority: super::pipeline::RequestPriority::Normal,
@@ -742,6 +748,48 @@ mod tests {
                 }
             )
         }));
+    }
+
+    #[test]
+    fn refuses_stylesheet_redirects_from_remote_origins_to_file_urls() {
+        #[derive(Debug)]
+        struct RedirectToFileTransport {
+            requests: std::sync::Mutex<Vec<String>>,
+        }
+
+        impl Transport for RedirectToFileTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                self.requests
+                    .lock()
+                    .unwrap()
+                    .push(request.url.to_string());
+                if request.policy.resource_kind == ResourceKind::Document {
+                    return Ok(Response::new(200)
+                        .with_header("content-type", "text/html")
+                        .with_body(
+                            br#"<link rel="stylesheet" href="https://cdn.example/site.css"><body>Safe</body>"#
+                                .to_vec(),
+                        ));
+                }
+
+                assert_eq!(request.url.scheme(), "https");
+                Ok(Response::new(302).with_header("location", "file:///tmp/private.css"))
+            }
+        }
+
+        let transport = RedirectToFileTransport {
+            requests: std::sync::Mutex::new(Vec::new()),
+        };
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
+        let request = Request::new(Url::parse("https://example.org/").unwrap());
+        let page = loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .unwrap();
+
+        assert_eq!(page.document.text_content(), "Safe");
+        let requests = loader.transport.requests.lock().unwrap();
+        assert_eq!(requests.len(), 2, "the file URL must never reach the transport");
+        assert!(requests.iter().all(|url| !url.starts_with("file:")));
     }
 
     #[test]
