@@ -241,7 +241,10 @@ mod tests {
         let tokens = HtmlTokenizer::tokenize(
             "<a href=https://example.test/path>link</a><img src=/assets/icon.svg>",
         );
-        let HtmlToken::StartTag { attributes: link, .. } = &tokens[0] else {
+        let HtmlToken::StartTag {
+            attributes: link, ..
+        } = &tokens[0]
+        else {
             panic!("expected anchor start tag");
         };
         assert_eq!(
