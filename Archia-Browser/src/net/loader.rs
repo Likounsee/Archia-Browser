@@ -524,7 +524,8 @@ fn is_html_response(response: &Response) -> bool {
         .map(str::trim)
         .unwrap_or_default();
 
-    matches!(media_type, "text/html" | "application/xhtml+xml")
+    media_type.eq_ignore_ascii_case("text/html")
+        || media_type.eq_ignore_ascii_case("application/xhtml+xml")
 }
 
 #[cfg(test)]
@@ -535,6 +536,23 @@ mod tests {
         pipeline::{PolicyDecision, RequestPolicyEngine},
         Response, Url,
     };
+
+    #[test]
+    fn html_content_type_is_case_insensitive() {
+        let html = Response::new(200).with_header("content-type", "TEXT/HTML; charset=UTF-8");
+        let xhtml =
+            Response::new(200).with_header("content-type", "Application/XHTML+XML");
+
+        assert!(is_html_response(&html));
+        assert!(is_html_response(&xhtml));
+    }
+
+    #[test]
+    fn non_html_content_type_is_not_accepted_as_document() {
+        let response = Response::new(200).with_header("content-type", "IMAGE/PNG");
+
+        assert!(!is_html_response(&response));
+    }
 
     #[test]
     fn stylesheet_byte_budget_preserves_utf8_and_stops_at_limit() {
