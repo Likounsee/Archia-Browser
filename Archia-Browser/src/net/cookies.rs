@@ -249,8 +249,8 @@ mod tests {
         let mut jar = CookieJar::new();
 
         jar.store(&url, "space=not allowed");
-        jar.store(&url, "tab=not\\tallowed");
-        jar.store(&url, "quoted=\\\"bad\\\\value\\\"");
+        jar.store(&url, "tab=not\tallowed");
+        jar.store(&url, "quoted=\"bad\\value\"");
 
         assert!(jar.is_empty());
     }
@@ -260,11 +260,11 @@ mod tests {
         let url = Url::parse("https://example.org/").unwrap();
         let mut jar = CookieJar::new();
 
-        jar.store(&url, "quoted=\\\"safe-value_123\\\"");
+        jar.store(&url, "quoted=\"safe-value_123\"");
 
         assert_eq!(
             jar.header_for(&url).as_deref(),
-            Some("quoted=\\\"safe-value_123\\\"")
+            Some("quoted=\"safe-value_123\"")
         );
     }
 
