@@ -543,11 +543,15 @@ fn validate_http_authority(authority: &str) -> Result<(), TransportError> {
         }
     };
 
+    // A single trailing dot is valid DNS absolute-name notation. Validate
+    // the labels without it, while preserving the original authority for the
+    // request target and Host header.
+    let hostname = host.strip_suffix('.').unwrap_or(host);
     if host.is_empty()
         || (!authority.starts_with('[')
-            && (host.starts_with('.')
-                || host == "."
-                || host.split('.').any(|label| {
+            && (hostname.is_empty()
+                || hostname.starts_with('.')
+                || hostname.split('.').any(|label| {
                     label.is_empty()
                         || label.starts_with('-')
                         || label.ends_with('-')
@@ -1202,6 +1206,25 @@ mod tests {
             let request = Request::new(Url::parse(input).unwrap());
             assert_eq!(
                 HttpTransport::new().send(&request),
+                Err(TransportError::InvalidRequest),
+                "expected {input} to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn accepts_absolute_dns_hostnames_with_one_trailing_dot() {
+        let request = Request::new(Url::parse("http://example.org./").unwrap());
+        assert_eq!(validate_request(&request), Ok(()));
+        assert_eq!(host_header(&request), "example.org.");
+    }
+
+    #[test]
+    fn rejects_empty_dns_labels_even_with_trailing_dots() {
+        for input in ["http://example.org../", "http://example..org./", "http://./"] {
+            let request = Request::new(Url::parse(input).unwrap());
+            assert_eq!(
+                validate_request(&request),
                 Err(TransportError::InvalidRequest),
                 "expected {input} to be rejected"
             );
