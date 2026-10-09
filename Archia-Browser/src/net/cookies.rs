@@ -221,8 +221,7 @@ impl CookieJar {
                 } else {
                     host == cookie.domain || host.ends_with(&format!(".{}", cookie.domain))
                 };
-                let path_matches = path == cookie.path
-                    || path.starts_with(&(cookie.path.trim_end_matches('/').to_owned() + "/"));
+                let path_matches = cookie_path_matches(path, &cookie.path);
                 domain_matches && path_matches && (!cookie.secure || secure)
             })
             .collect::<Vec<_>>();
@@ -381,6 +380,30 @@ mod tests {
         assert_eq!(
             jar.header_for(&Url::parse("http://example.org/account").unwrap()),
             None
+        );
+    }
+
+    #[test]
+    fn cookie_path_matching_respects_slash_boundaries() {
+        let origin = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&origin, "double=slash; Path=//");
+        jar.store(&origin, "account=path; Path=/account");
+
+        assert_eq!(
+            jar.header_for(&Url::parse("https://example.org/accounting").unwrap())
+                .as_deref(),
+            None
+        );
+        assert_eq!(
+            jar.header_for(&Url::parse("https://example.org/account/page").unwrap())
+                .as_deref(),
+            Some("account=path")
+        );
+        assert_eq!(
+            jar.header_for(&Url::parse("https://example.org//nested").unwrap())
+                .as_deref(),
+            Some("double=slash")
         );
     }
 
