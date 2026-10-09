@@ -55,7 +55,15 @@ impl HttpCache {
 
     pub fn store(&mut self, request: &Request, response: &Response) {
         let key = cache_key(request);
-        if !request_can_store(request) || !response_can_store(response) {
+        if !request_can_store(request) {
+            // Explicit cache-bypass directives invalidate the old entry, but
+            // a credentialed request must not evict an unrelated public copy.
+            if request_forces_cache_bypass(request) {
+                self.entries.remove(&key);
+            }
+            return;
+        }
+        if !response_can_store(response) {
             // A response that cannot be stored must not leave an older
             // representation available for a subsequent cache lookup.
             self.entries.remove(&key);
