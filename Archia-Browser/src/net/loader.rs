@@ -111,8 +111,7 @@ where
 
                 let mut next = current.clone();
                 let cross_origin = !same_origin(&current.url, &url);
-                let secure_downgrade =
-                    current.url.scheme() == "https" && url.scheme() == "http";
+                let secure_downgrade = current.url.scheme() == "https" && url.scheme() == "http";
                 next.url = url;
                 if secure_downgrade {
                     next.headers.remove("referer");
