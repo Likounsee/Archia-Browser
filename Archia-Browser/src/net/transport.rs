@@ -9,6 +9,7 @@ use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 use super::{Request, Response, Transport, TransportError};
 
 const MAX_REQUEST_HEADER_BYTES: usize = 64 * 1024;
+const MAX_INTERIM_RESPONSES: usize = 16;
 
 /// Minimal HTTP/1.1 transport with certificate-validated TLS for HTTPS origins.
 #[derive(Debug, Clone)]
@@ -617,11 +618,16 @@ fn parse_http_response_for_method(
     max_header_size: usize,
 ) -> Result<Response, TransportError> {
     let mut cursor = 0;
+    let mut interim_responses = 0;
 
     loop {
         let (response, body_start) = parse_http_response_head(&bytes[cursor..], max_header_size)?;
 
         if is_interim_response(response.status) {
+            interim_responses += 1;
+            if interim_responses > MAX_INTERIM_RESPONSES {
+                return Err(TransportError::ConnectionFailed);
+            }
             cursor = cursor
                 .checked_add(body_start)
                 .ok_or(TransportError::ConnectionFailed)?;
@@ -1075,6 +1081,20 @@ mod tests {
 
         assert_eq!(response.status, 200);
         assert_eq!(response.body, b"Hello");
+    }
+
+    #[test]
+    fn rejects_excessive_informational_responses() {
+        let mut bytes = Vec::new();
+        for _ in 0..=MAX_INTERIM_RESPONSES {
+            bytes.extend_from_slice(b"HTTP/1.1 103 Early Hints\r\n\r\n");
+        }
+        bytes.extend_from_slice(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+
+        assert_eq!(
+            parse_http_response(&bytes, 4096, 1024),
+            Err(TransportError::ConnectionFailed)
+        );
     }
 
     #[test]
