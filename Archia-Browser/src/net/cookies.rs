@@ -115,7 +115,7 @@ impl CookieJar {
             && self.cookies.iter().any(|existing| {
                 existing.secure
                     && existing.name == cookie.name
-                    && existing.domain == cookie.domain
+                    && domains_overlap(&existing.domain, &cookie.domain)
                     // Reject overlapping paths too: otherwise an HTTP cookie
                     // at "/" could shadow a Secure cookie scoped to "/account"
                     // (or vice versa) when both are sent on the same request.
@@ -203,6 +203,12 @@ impl CookieJar {
     pub fn is_empty(&self) -> bool {
         self.cookies.is_empty()
     }
+}
+
+fn domains_overlap(first: &str, second: &str) -> bool {
+    first == second
+        || first.ends_with(&format!(".{second}"))
+        || second.ends_with(&format!(".{first}"))
 }
 
 fn cookie_path_matches(request_path: &str, cookie_path: &str) -> bool {
@@ -424,6 +430,19 @@ mod tests {
 
         jar.store(&insecure_url, "sid=attacker; Path=/account");
 
+        assert_eq!(jar.header_for(&secure_url).as_deref(), Some("sid=trusted"));
+    }
+
+    #[test]
+    fn insecure_subdomain_cannot_shadow_parent_domain_secure_cookie() {
+        let secure_url = Url::parse("https://example.org/").unwrap();
+        let insecure_subdomain = Url::parse("http://sub.example.org/").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&secure_url, "sid=trusted; Domain=example.org; Secure");
+
+        jar.store(&insecure_subdomain, "sid=attacker");
+
+        assert_eq!(jar.header_for(&insecure_subdomain).as_deref(), None);
         assert_eq!(jar.header_for(&secure_url).as_deref(), Some("sid=trusted"));
     }
 
