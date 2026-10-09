@@ -67,6 +67,14 @@ impl HttpCache {
                 return None;
             }
         }
+        if let Some(min_fresh) = request_min_fresh(request) {
+            let insufficient_freshness = self.entries.get(&key).is_some_and(|entry| {
+                entry.expires_at.saturating_duration_since(now).as_secs() < min_fresh
+            });
+            if insufficient_freshness {
+                return None;
+            }
+        }
 
         self.entries.get(&key).map(|entry| entry.response.clone())
     }
@@ -310,6 +318,35 @@ fn request_max_age(request: &Request) -> Option<u64> {
     max_age
 }
 
+fn request_min_fresh(request: &Request) -> Option<u64> {
+    let mut min_fresh = None;
+    for (_, header) in request
+        .headers
+        .iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("cache-control"))
+    {
+        for directive in cache_control_directives(header) {
+            let Some((name, value)) = directive.split_once('=') else {
+                continue;
+            };
+            if !name.trim().eq_ignore_ascii_case("min-fresh") {
+                continue;
+            }
+            if min_fresh.is_some() {
+                return None;
+            }
+            let value = value.trim();
+            let value = if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
+                &value[1..value.len() - 1]
+            } else {
+                value
+            };
+            min_fresh = Some(value.parse::<u64>().ok()?);
+        }
+    }
+    min_fresh
+}
+
 fn response_age(response: &Response) -> Option<u64> {
     let mut age_headers = response
         .headers
@@ -495,6 +532,25 @@ mod tests {
         let strict = request.with_header("cache-control", "max-age=30");
         assert!(cache.get(&strict).is_none());
         assert_eq!(cache.len(), 1);
+    }
+
+    #[test]
+    fn request_min_fresh_requires_enough_remaining_freshness() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/resource");
+        cache.store(
+            &request,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_body(b"cached".to_vec()),
+        );
+
+        let acceptable = request.clone().with_header("cache-control", "min-fresh=30");
+        assert_eq!(cache.get(&acceptable).unwrap().body, b"cached");
+
+        let too_strict = request.with_header("cache-control", "min-fresh=120");
+        assert!(cache.get(&too_strict).is_none());
+        assert_eq!(cache.len(), 1, "min-fresh must not evict a still-fresh entry");
     }
 
     #[test]
