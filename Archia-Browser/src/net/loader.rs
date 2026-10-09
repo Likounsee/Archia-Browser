@@ -1007,8 +1007,7 @@ mod tests {
 
     #[test]
     fn refuses_remote_document_redirects_to_local_files() {
-        let response =
-            Response::new(302).with_header("location", "file:///etc/passwd");
+        let response = Response::new(302).with_header("location", "file:///etc/passwd");
         let loader =
             DocumentLoader::new(NetworkPipeline::new(AllowAll), MockTransport { response });
         let request = Request::new(Url::parse("https://example.org/").unwrap());
