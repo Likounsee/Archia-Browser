@@ -650,6 +650,9 @@ fn decode_chunked(
             if trailer_end > max_header_size {
                 return Err(TransportError::ResponseTooLarge);
             }
+            if trailer_end + 4 != trailer_bytes.len() {
+                return Err(TransportError::ConnectionFailed);
+            }
 
             let trailer_text = std::str::from_utf8(&trailer_bytes[..trailer_end])
                 .map_err(|_| TransportError::ConnectionFailed)?;
@@ -731,6 +734,16 @@ mod tests {
         .unwrap();
 
         assert_eq!(response.body, b"Hello");
+    }
+
+    #[test]
+    fn rejects_bytes_after_chunked_trailers() {
+        let response =
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\nunexpected";
+        assert_eq!(
+            parse_http_response(response, 1024, 1024),
+            Err(TransportError::ConnectionFailed)
+        );
     }
 
     #[test]
