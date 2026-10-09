@@ -759,10 +759,7 @@ mod tests {
 
         impl Transport for RedirectToFileTransport {
             fn send(&self, request: &Request) -> Result<Response, TransportError> {
-                self.requests
-                    .lock()
-                    .unwrap()
-                    .push(request.url.to_string());
+                self.requests.lock().unwrap().push(request.url.to_string());
                 if request.policy.resource_kind == ResourceKind::Document {
                     return Ok(Response::new(200)
                         .with_header("content-type", "text/html")
@@ -788,7 +785,11 @@ mod tests {
 
         assert_eq!(page.document.text_content(), "Safe");
         let requests = loader.transport.requests.lock().unwrap();
-        assert_eq!(requests.len(), 2, "the file URL must never reach the transport");
+        assert_eq!(
+            requests.len(),
+            2,
+            "the file URL must never reach the transport"
+        );
         assert!(requests.iter().all(|url| !url.starts_with("file:")));
     }
 
