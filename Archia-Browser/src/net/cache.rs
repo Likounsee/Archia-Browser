@@ -54,19 +54,26 @@ impl HttpCache {
     }
 
     pub fn store(&mut self, request: &Request, response: &Response) {
+        let key = cache_key(request);
         if !request_can_store(request) || !response_can_store(response) {
+            // A response that cannot be stored must not leave an older
+            // representation available for a subsequent cache lookup.
+            self.entries.remove(&key);
             return;
         }
 
         let Some(max_age) = response_max_age(response) else {
+            self.entries.remove(&key);
             return;
         };
         if max_age == 0 {
+            self.entries.remove(&key);
             return;
         }
         // Cache-Control is untrusted network input. Avoid overflowing Instant
         // when a server advertises an unrealistically large max-age.
         let Some(expires_at) = Instant::now().checked_add(Duration::from_secs(max_age)) else {
+            self.entries.remove(&key);
             return;
         };
 
@@ -79,7 +86,7 @@ impl HttpCache {
             + 64;
 
         self.entries.insert(
-            cache_key(request),
+            key,
             CachedResponse {
                 response: response.clone(),
                 expires_at,
@@ -460,6 +467,56 @@ mod tests {
             cache.store(&request, &response);
             assert_eq!(cache.len(), 0, "{name}: {value}");
         }
+    }
+
+
+    #[test]
+    fn unstorable_replacement_evicts_previous_cached_response() {
+        let request = make_request("https://example.org/resource");
+        let cached = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_body(b"old".to_vec());
+
+        for response in [
+            Response::new(200).with_header("cache-control", "no-store, max-age=60"),
+            Response::new(200).with_header("cache-control", "no-cache, max-age=60"),
+            Response::new(200).with_header("set-cookie", "sid=private"),
+            Response::new(200).with_header("vary", "accept-language"),
+            Response::new(200).with_header("cache-control", "max-age=0"),
+            Response::new(200),
+        ] {
+            let mut cache = HttpCache::default();
+            cache.store(&request, &cached);
+            assert_eq!(cache.len(), 1);
+
+            cache.store(&request, &response);
+
+            assert_eq!(cache.len(), 0, "unstorable response must evict old data");
+            assert!(cache.get(&request).is_none());
+        }
+    }
+
+    #[test]
+    fn request_that_cannot_be_stored_evicts_same_cache_key() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/resource");
+        cache.store(
+            &request,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_body(b"old".to_vec()),
+        );
+        assert_eq!(cache.len(), 1);
+
+        let private_request = request.clone().with_header("cache-control", "no-store");
+        cache.store(
+            &private_request,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_body(b"private".to_vec()),
+        );
+
+        assert_eq!(cache.len(), 0);
     }
 
     #[test]
