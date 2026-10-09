@@ -8,6 +8,8 @@ use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 
 use super::{Request, Response, Transport, TransportError};
 
+const MAX_REQUEST_HEADER_BYTES: usize = 64 * 1024;
+
 /// Minimal HTTP/1.1 transport with certificate-validated TLS for HTTPS origins.
 #[derive(Debug, Clone)]
 pub struct HttpTransport {
@@ -448,6 +450,61 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
         if length != request.body.len() {
             return Err(TransportError::InvalidRequest);
         }
+    }
+
+    // Bound the serialized request line and headers before connecting. Requests
+    // are caller-constructible, so a valid but enormous URL/header map must not
+    // make the transport allocate or write an unbounded HTTP header block.
+    let target_len = request
+        .url
+        .path()
+        .len()
+        .checked_add(request.url.query().map_or(0, |query| query.len() + 1))
+        .ok_or(TransportError::InvalidRequest)?;
+    let mut head_len = request
+        .method
+        .as_str()
+        .len()
+        .checked_add(target_len)
+        .and_then(|length| length.checked_add(12)) // spaces, HTTP version, CRLF
+        .ok_or(TransportError::InvalidRequest)?;
+    let has_host = request
+        .headers
+        .keys()
+        .any(|name| name.eq_ignore_ascii_case("host"));
+    if !has_host {
+        head_len = head_len
+            .checked_add(host_header(request).len() + 8) // "Host: " + CRLF
+            .ok_or(TransportError::InvalidRequest)?;
+    }
+    head_len = head_len
+        .checked_add(19) // "Connection: close\\r\\n"
+        .ok_or(TransportError::InvalidRequest)?;
+    if request.has_body()
+        && !request
+            .headers
+            .keys()
+            .any(|name| name.eq_ignore_ascii_case("content-length"))
+    {
+        head_len = head_len
+            .checked_add(16 + request.body.len().to_string().len() + 2)
+            .ok_or(TransportError::InvalidRequest)?;
+    }
+    for (name, value) in &request.headers {
+        if name.eq_ignore_ascii_case("connection") {
+            continue;
+        }
+        head_len = head_len
+            .checked_add(name.len())
+            .and_then(|length| length.checked_add(value.len()))
+            .and_then(|length| length.checked_add(4)) // ": " + CRLF
+            .ok_or(TransportError::InvalidRequest)?;
+    }
+    head_len = head_len
+        .checked_add(2) // final CRLF
+        .ok_or(TransportError::InvalidRequest)?;
+    if head_len > MAX_REQUEST_HEADER_BYTES {
+        return Err(TransportError::InvalidRequest);
     }
 
     Ok(())
@@ -1341,6 +1398,25 @@ mod tests {
             .insert("Content-Length".into(), "5".into());
         assert_eq!(
             validate_request(&duplicate_length),
+            Err(TransportError::InvalidRequest)
+        );
+    }
+
+    #[test]
+    fn rejects_oversized_request_header_block_before_connecting() {
+        let request = Request::new(Url::parse("http://example.org/").unwrap())
+            .with_header("x-large", "a".repeat(MAX_REQUEST_HEADER_BYTES));
+        assert_eq!(
+            validate_request(&request),
+            Err(TransportError::InvalidRequest)
+        );
+
+        let long_target = Request::new(
+            Url::parse(&format!("http://example.org/{}", "a".repeat(MAX_REQUEST_HEADER_BYTES)))
+                .unwrap(),
+        );
+        assert_eq!(
+            validate_request(&long_target),
             Err(TransportError::InvalidRequest)
         );
     }
