@@ -145,8 +145,27 @@ impl HttpCache {
         );
     }
 
+    /// Returns the number of cached HTTP responses.
     pub fn len(&self) -> usize {
         self.entries.len()
+    }
+
+    /// Returns whether the HTTP cache contains no entries.
+    pub fn is_empty(&self) -> bool {
+        self.entries.len() == 0
+    }
+
+    /// Returns the approximate memory budget currently occupied by cached entries.
+    ///
+    /// This accounts for response bodies, header text, and a small per-entry
+    /// overhead; it is a cache budget estimate, not an exact heap measurement.
+    pub fn used_bytes(&self) -> usize {
+        self.entries.used()
+    }
+
+    /// Removes all cached responses and releases the cache's accounted budget.
+    pub fn clear(&mut self) {
+        self.entries.clear();
     }
 }
 
@@ -409,6 +428,33 @@ mod tests {
 
     fn make_request(url: &str) -> Request {
         Request::new(Url::parse(url).unwrap())
+    }
+
+    #[test]
+    fn cache_management_reports_usage_and_clear_releases_entries() {
+        let mut cache = HttpCache::new(4096);
+        assert!(cache.is_empty());
+        assert_eq!(cache.used_bytes(), 0);
+
+        let request = make_request("https://example.org/resource");
+        cache.store(
+            &request,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_body(b"cached body".to_vec()),
+        );
+
+        assert_eq!(cache.len(), 1);
+        assert!(!cache.is_empty());
+        assert!(cache.used_bytes() > 0);
+        assert!(cache.get(&request).is_some());
+
+        cache.clear();
+
+        assert!(cache.is_empty());
+        assert_eq!(cache.len(), 0);
+        assert_eq!(cache.used_bytes(), 0);
+        assert!(cache.get(&request).is_none());
     }
 
     #[test]
