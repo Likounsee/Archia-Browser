@@ -1,3 +1,5 @@
+use std::time::{Duration, SystemTime};
+
 use crate::net::Url;
 
 const MAX_COOKIE_PAIR_BYTES: usize = 4096;
@@ -12,6 +14,7 @@ pub struct Cookie {
     pub path: String,
     pub secure: bool,
     pub host_only: bool,
+    pub expires_at: Option<SystemTime>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -25,6 +28,7 @@ impl CookieJar {
     }
 
     pub fn store(&mut self, url: &Url, set_cookie: &str) {
+        self.remove_expired();
         let mut parts = set_cookie.split(';').map(str::trim);
         let Some(pair) = parts.next() else {
             return;
@@ -51,8 +55,9 @@ impl CookieJar {
             path: default_cookie_path(url.path()),
             secure: false,
             host_only: true,
+            expires_at: None,
         };
-        let mut delete_cookie = false;
+        let mut max_age = None;
         let mut path_attribute_set = false;
 
         for attribute in parts {
@@ -86,10 +91,12 @@ impl CookieJar {
                     }
                 }
                 "max-age" => {
-                    delete_cookie = pieces
+                    if let Some(seconds) = pieces
                         .next()
                         .and_then(|value| value.trim().parse::<i64>().ok())
-                        .is_some_and(|seconds| seconds <= 0);
+                    {
+                        max_age = Some(seconds);
+                    }
                 }
                 "secure" => cookie.secure = true,
                 // Ignore extension attributes (including HttpOnly and
@@ -98,7 +105,7 @@ impl CookieJar {
             }
         }
 
-        if delete_cookie {
+        if max_age.is_some_and(|seconds| seconds <= 0) {
             // Cookie identity depends on the fully parsed Domain and Path, so
             // apply deletion only after all attributes have been processed.
             // An insecure origin also cannot delete an existing Secure cookie.
@@ -109,6 +116,9 @@ impl CookieJar {
                 !same_key || (!url.is_secure() && existing.secure)
             });
             return;
+        }
+        if let Some(seconds) = max_age.filter(|seconds| *seconds > 0) {
+            cookie.expires_at = SystemTime::now().checked_add(Duration::from_secs(seconds as u64));
         }
 
         // An insecure origin must not be able to plant a Secure cookie that
@@ -209,6 +219,7 @@ impl CookieJar {
     }
 
     pub fn header_for(&self, url: &Url) -> Option<String> {
+        let now = SystemTime::now();
         let host = url.host().to_ascii_lowercase();
         let path = url.path();
         let secure = url.is_secure();
@@ -216,6 +227,9 @@ impl CookieJar {
             .cookies
             .iter()
             .filter(|cookie| {
+                if cookie.expires_at.is_some_and(|expires_at| expires_at <= now) {
+                    return false;
+                }
                 let domain_matches = if cookie.host_only {
                     host == cookie.domain
                 } else {
@@ -233,6 +247,13 @@ impl CookieJar {
             .map(|cookie| format!("{}={}", cookie.name, cookie.value))
             .collect::<Vec<_>>();
         (!values.is_empty()).then(|| values.join("; "))
+    }
+
+    fn remove_expired(&mut self) {
+        let now = SystemTime::now();
+        self.cookies.retain(|cookie| {
+            !cookie.expires_at.is_some_and(|expires_at| expires_at <= now)
+        });
     }
 
     pub fn len(&self) -> usize {
@@ -445,6 +466,28 @@ mod tests {
         let mut jar = CookieJar::new();
         jar.store(&url, "sid=abc; Domain=example.org");
         assert_eq!(jar.header_for(&url).as_deref(), Some("sid=abc"));
+    }
+
+    #[test]
+    fn positive_max_age_expires_cookie() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&url, "short=life; Max-Age=1");
+        assert_eq!(jar.header_for(&url).as_deref(), Some("short=life"));
+
+        std::thread::sleep(Duration::from_millis(1100));
+
+        assert_eq!(jar.header_for(&url), None);
+        jar.store(&url, "fresh=value");
+        assert_eq!(jar.len(), 1, "expired cookies must be pruned before storage");
+    }
+
+    #[test]
+    fn last_valid_max_age_attribute_takes_precedence() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&url, "sid=alive; Max-Age=0; Max-Age=60");
+        assert_eq!(jar.header_for(&url).as_deref(), Some("sid=alive"));
     }
 
     #[test]
