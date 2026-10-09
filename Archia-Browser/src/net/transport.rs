@@ -834,8 +834,7 @@ mod tests {
 
     #[test]
     fn rejects_extra_bytes_after_content_length_body() {
-        let response =
-            b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nHelloextra";
+        let response = b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nHelloextra";
         assert_eq!(
             parse_http_response(response, 1024, 1024),
             Err(TransportError::ConnectionFailed)
@@ -852,11 +851,8 @@ mod tests {
         );
         assert_eq!(head, Err(TransportError::ConnectionFailed));
 
-        let no_content = parse_http_response(
-            b"HTTP/1.1 204 No Content\r\n\r\nunexpected",
-            1024,
-            1024,
-        );
+        let no_content =
+            parse_http_response(b"HTTP/1.1 204 No Content\r\n\r\nunexpected", 1024, 1024);
         assert_eq!(no_content, Err(TransportError::ConnectionFailed));
     }
 
