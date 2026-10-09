@@ -554,7 +554,9 @@ fn parse_http_response_head(
     let mut status_parts = status_line.splitn(3, ' ');
     let version = status_parts.next().unwrap_or_default();
     let status_text = status_parts.next().unwrap_or_default();
-    let reason = status_parts.next().unwrap_or_default();
+    let Some(reason) = status_parts.next() else {
+        return Err(TransportError::ConnectionFailed);
+    };
     if !matches!(version, "HTTP/1.0" | "HTTP/1.1")
         || status_text.len() != 3
         || !status_text.bytes().all(|byte| byte.is_ascii_digit())
@@ -921,6 +923,7 @@ mod tests {
         for status_line in [
             "HTTP/9.9 200 OK",
             "HTTP/1.1 20 OK",
+            "HTTP/1.1 200",
             "HTTP/1.1 600 Unknown",
             "HTTP/1.1 200 Bad\u{1}Reason",
         ] {
