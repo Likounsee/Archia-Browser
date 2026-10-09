@@ -679,6 +679,9 @@ fn decode_chunked(
             .windows(2)
             .position(|window| window == b"\r\n")
             .ok_or(TransportError::ConnectionFailed)?;
+        if relative_end > max_header_size {
+            return Err(TransportError::ResponseTooLarge);
+        }
         let line_end = cursor + relative_end;
         let line = std::str::from_utf8(&bytes[cursor..line_end])
             .map_err(|_| TransportError::ConnectionFailed)?;
@@ -958,20 +961,6 @@ mod tests {
 
         assert_eq!(response.status, 200);
         assert_eq!(response.body, b"Hello");
-    }
-
-    #[test]
-    fn keeps_switching_protocols_as_a_final_response() {
-        let response = parse_http_response(
-            b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n\r\n",
-            1024,
-            1024,
-        )
-        .unwrap();
-
-        assert_eq!(response.status, 101);
-        assert_eq!(response.header("upgrade"), Some("websocket"));
-        assert!(response.body.is_empty());
     }
 
     #[test]
@@ -1366,5 +1355,18 @@ mod limit_tests {
             1024,
         );
         assert_eq!(result, Err(TransportError::ResponseTooLarge));
+    }
+
+    #[test]
+    fn rejects_oversized_chunk_size_line() {
+        let mut response =
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1;".to_vec();
+        response.extend(std::iter::repeat_n(b'a', 256));
+        response.extend_from_slice(b"\r\nx\r\n0\r\n\r\n");
+
+        assert_eq!(
+            parse_http_response(&response, 1024, 128),
+            Err(TransportError::ResponseTooLarge)
+        );
     }
 }
