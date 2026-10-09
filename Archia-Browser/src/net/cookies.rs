@@ -84,8 +84,7 @@ impl CookieJar {
                         if domain.is_empty()
                             || domain.starts_with('.')
                             || domain.ends_with('.')
-                            || !(host == domain
-                                || (domain.contains('.') && host.ends_with(&format!(".{domain}"))))
+                            || !cookie_domain_matches(&host, &domain)
                         {
                             return;
                         }
@@ -255,7 +254,7 @@ impl CookieJar {
                 let domain_matches = if cookie.host_only {
                     host == cookie.domain
                 } else {
-                    host == cookie.domain || host.ends_with(&format!(".{}", cookie.domain))
+                    cookie_domain_matches(&host, &cookie.domain)
                 };
                 let path_matches = cookie_path_matches(path, &cookie.path);
                 domain_matches && path_matches && (!cookie.secure || secure)
@@ -289,10 +288,22 @@ impl CookieJar {
     }
 }
 
+fn cookie_domain_matches(host: &str, domain: &str) -> bool {
+    if host == domain {
+        return true;
+    }
+
+    // IP addresses are not DNS suffixes. Treating dotted IPv4 addresses as
+    // domain names would let a cookie scoped to "0.0.1" match "127.0.0.1".
+    if host.parse::<std::net::IpAddr>().is_ok() || domain.parse::<std::net::IpAddr>().is_ok() {
+        return false;
+    }
+
+    domain.contains('.') && host.ends_with(&format!(".{domain}"))
+}
+
 fn domains_overlap(first: &str, second: &str) -> bool {
-    first == second
-        || first.ends_with(&format!(".{second}"))
-        || second.ends_with(&format!(".{first}"))
+    cookie_domain_matches(first, second) || cookie_domain_matches(second, first)
 }
 
 fn cookie_path_matches(request_path: &str, cookie_path: &str) -> bool {
@@ -493,6 +504,25 @@ mod tests {
         jar.store(&url, "sid=bad; Domain=com");
 
         assert!(jar.is_empty());
+    }
+
+    #[test]
+    fn ip_cookie_domains_do_not_use_dns_suffix_matching() {
+        let url = Url::parse("https://127.0.0.1/").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&url, "sid=bad; Domain=0.0.1");
+        assert!(jar.is_empty());
+
+        jar.store(&url, "sid=exact; Domain=127.0.0.1");
+        assert_eq!(
+            jar.header_for(&url).as_deref(),
+            Some("sid=exact")
+        );
+        assert_eq!(
+            jar.header_for(&Url::parse("https://0.0.1/").unwrap()),
+            None
+        );
     }
 
     #[test]
