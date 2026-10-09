@@ -821,7 +821,9 @@ mod tests {
             .with_header("authorization", "Bearer secret")
             .with_header("proxy-authorization", "Basic secret")
             .with_header("host", "example.org");
-        loader.load(&request, LayoutViewport::new(320, 200)).unwrap();
+        loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .unwrap();
 
         let requests = loader.transport.requests.lock().unwrap();
         assert_eq!(requests.len(), 2);
