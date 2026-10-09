@@ -350,10 +350,7 @@ mod tests {
             base.resolve("/assets/a/../app.js").unwrap().path(),
             "/assets/app.js"
         );
-        assert_eq!(
-            base.resolve("/assets//").unwrap().path(),
-            "/assets//"
-        );
+        assert_eq!(base.resolve("/assets//").unwrap().path(), "/assets//");
     }
 
     #[test]
