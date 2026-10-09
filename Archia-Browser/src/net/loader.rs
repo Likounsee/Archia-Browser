@@ -110,8 +110,16 @@ where
                     .map_err(|_| DocumentLoadError::InvalidRedirect)?;
 
                 let mut next = current.clone();
+                let cross_origin = !same_origin(&current.url, &url);
                 next.url = url;
                 next.headers.remove("cookie");
+                if cross_origin {
+                    // Credentials and an explicit Host header must never leak to a
+                    // different origin through a redirect.
+                    next.headers.remove("authorization");
+                    next.headers.remove("proxy-authorization");
+                    next.headers.remove("host");
+                }
                 if let Some(cookie) = self
                     .cookies
                     .lock()
@@ -367,6 +375,12 @@ fn is_css_response(response: &Response) -> bool {
 
 fn is_redirect(status: u16) -> bool {
     matches!(status, 301 | 302 | 303 | 307 | 308)
+}
+
+fn same_origin(left: &super::Url, right: &super::Url) -> bool {
+    left.scheme().eq_ignore_ascii_case(right.scheme())
+        && left.host().eq_ignore_ascii_case(right.host())
+        && left.effective_port() == right.effective_port()
 }
 
 fn should_switch_to_get(method: HttpMethod, status: u16) -> bool {
@@ -776,6 +790,45 @@ mod tests {
             loader.load(&request, LayoutViewport::new(320, 200)),
             Err(DocumentLoadError::HttpStatus(500))
         ));
+    }
+
+    #[test]
+    fn strips_origin_credentials_on_cross_origin_redirects() {
+        #[derive(Debug)]
+        struct RecordingTransport {
+            responses: std::sync::Mutex<Vec<Response>>,
+            requests: std::sync::Mutex<Vec<Request>>,
+        }
+
+        impl Transport for RecordingTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                self.requests.lock().unwrap().push(request.clone());
+                Ok(self.responses.lock().unwrap().remove(0))
+            }
+        }
+
+        let transport = RecordingTransport {
+            responses: std::sync::Mutex::new(vec![
+                Response::new(302).with_header("location", "https://other.example/final"),
+                Response::new(200)
+                    .with_header("content-type", "text/html")
+                    .with_body(b"<body>safe</body>".to_vec()),
+            ]),
+            requests: std::sync::Mutex::new(Vec::new()),
+        };
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
+        let request = Request::new(Url::parse("https://example.org/start").unwrap())
+            .with_header("authorization", "Bearer secret")
+            .with_header("proxy-authorization", "Basic secret")
+            .with_header("host", "example.org");
+        loader.load(&request, LayoutViewport::new(320, 200)).unwrap();
+
+        let requests = loader.transport.requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0].header("authorization"), Some("Bearer secret"));
+        assert_eq!(requests[1].header("authorization"), None);
+        assert_eq!(requests[1].header("proxy-authorization"), None);
+        assert_eq!(requests[1].header("host"), None);
     }
 
     #[test]
