@@ -81,3 +81,19 @@ fn block_margins_do_not_collapse_across_inline_content() {
 
     assert_eq!(layout.children[2].rect.y, 76);
 }
+
+#[test]
+fn flex_align_items_stretches_auto_height_row_children() {
+    let mut root = Node::element("div");
+    root.set_attribute(
+        "style",
+        "display: flex; align-items: stretch; width: 100px; height: 100px;",
+    );
+    let mut child = Node::element("div");
+    child.set_attribute("style", "width: 20px;");
+    root.append(child);
+
+    let layout = styled_layout(&root, 100, 100);
+
+    assert_eq!(layout.children[0].rect.height, 100);
+}
