@@ -299,9 +299,7 @@ mod tests {
         );
         assert_eq!(cache.len(), 1);
 
-        let forced_refresh = request
-            .clone()
-            .with_header("cache-control", "max-age=0");
+        let forced_refresh = request.clone().with_header("cache-control", "max-age=0");
         assert!(cache.get(&forced_refresh).is_none());
         assert_eq!(cache.len(), 0);
     }
