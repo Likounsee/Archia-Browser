@@ -834,7 +834,9 @@ fn layout_flex_children(
         let base = if column {
             flex_shorthand
                 .and_then(|(_, _, basis)| basis)
-                .or_else(|| parse_length(child.style.get("flex-basis"), flex_basis_reference_height))
+                .or_else(|| {
+                    parse_length(child.style.get("flex-basis"), flex_basis_reference_height)
+                })
                 .or_else(|| parse_length(child.style.get("height"), flex_basis_reference_height))
                 .unwrap_or_else(|| intrinsic_inline_height(child))
         } else {
