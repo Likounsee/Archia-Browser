@@ -2778,8 +2778,14 @@ mod tests {
 
     #[test]
     fn flex_shorthand_rejects_invalid_basis_tokens() {
-        assert_eq!(parse_flex_shorthand(Some("1 1 auto"), 100), Some((1.0, 1.0, None)));
-        assert_eq!(parse_flex_shorthand(Some("1 1 25px"), 100), Some((1.0, 1.0, Some(25))));
+        assert_eq!(
+            parse_flex_shorthand(Some("1 1 auto"), 100),
+            Some((1.0, 1.0, None))
+        );
+        assert_eq!(
+            parse_flex_shorthand(Some("1 1 25px"), 100),
+            Some((1.0, 1.0, Some(25)))
+        );
         assert_eq!(parse_flex_shorthand(Some("1 1 nonsense"), 100), None);
         assert_eq!(parse_flex_shorthand(Some("1 1 -5px"), 100), None);
     }
