@@ -160,9 +160,18 @@ impl CookieJar {
     }
 
     fn valid_cookie_value(value: &str) -> bool {
-        !value
-            .bytes()
-            .any(|byte| matches!(byte, b'\r' | b'\n' | b';'))
+        // RFC 6265 cookie-octet excludes controls, whitespace, quotes,
+        // commas, semicolons, and backslashes. Quoted values may wrap the
+        // same restricted octets, but quotes are not allowed inside them.
+        let value = if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
+            &value[1..value.len() - 1]
+        } else {
+            value
+        };
+
+        value.bytes().all(|byte| {
+            matches!(byte, 0x21 | 0x23..=0x2B | 0x2D..=0x3A | 0x3C..=0x5B | 0x5D..=0x7E)
+        })
     }
 
     pub fn header_for(&self, url: &Url) -> Option<String> {
@@ -232,6 +241,31 @@ mod tests {
         jar.store(&url, "sid=ok\r\nX-Injected: yes");
 
         assert!(jar.is_empty());
+    }
+
+    #[test]
+    fn rejects_cookie_values_with_whitespace_or_invalid_quoted_octets() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&url, "space=not allowed");
+        jar.store(&url, "tab=not\\tallowed");
+        jar.store(&url, "quoted=\\\"bad\\\\value\\\"");
+
+        assert!(jar.is_empty());
+    }
+
+    #[test]
+    fn accepts_valid_quoted_cookie_values() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&url, "quoted=\\\"safe-value_123\\\"");
+
+        assert_eq!(
+            jar.header_for(&url).as_deref(),
+            Some("quoted=\\\"safe-value_123\\\"")
+        );
     }
 
     #[test]
