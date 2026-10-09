@@ -229,7 +229,10 @@ mod tests {
             link.get("href").map(String::as_str),
             Some("https://example.test/path")
         );
-        let HtmlToken::StartTag { attributes: image, .. } = &tokens[3] else {
+        let HtmlToken::StartTag {
+            attributes: image, ..
+        } = &tokens[3]
+        else {
             panic!("expected image start tag");
         };
         assert_eq!(
