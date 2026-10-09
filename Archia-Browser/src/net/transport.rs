@@ -498,7 +498,7 @@ fn parse_http_response_for_method(
         let body = if body_forbidden {
             Vec::new()
         } else if is_chunked {
-            decode_chunked(body_bytes, max_response_size)?
+            decode_chunked(body_bytes, max_response_size, max_header_size)?
         } else if let Some(length) = content_length {
             let length = length
                 .trim()
@@ -592,7 +592,11 @@ fn is_interim_response(status: u16) -> bool {
     (100..200).contains(&status) && status != 101
 }
 
-fn decode_chunked(bytes: &[u8], max_response_size: usize) -> Result<Vec<u8>, TransportError> {
+fn decode_chunked(
+    bytes: &[u8],
+    max_response_size: usize,
+    max_header_size: usize,
+) -> Result<Vec<u8>, TransportError> {
     let mut output = Vec::new();
     let mut cursor = 0;
 
@@ -614,16 +618,34 @@ fn decode_chunked(bytes: &[u8], max_response_size: usize) -> Result<Vec<u8>, Tra
             if trailer_bytes == b"\r\n" {
                 return Ok(output);
             }
-            if trailer_bytes.starts_with(b"\r\n") {
-                return Err(TransportError::ConnectionFailed);
-            }
             let trailer_end = trailer_bytes
                 .windows(4)
-                .position(|window| window == b"\r\n\r\n");
-            if trailer_end.is_some() {
-                return Ok(output);
+                .position(|window| window == b"\r\n\r\n")
+                .ok_or(TransportError::ConnectionFailed)?;
+            if trailer_end > max_header_size {
+                return Err(TransportError::ResponseTooLarge);
             }
-            return Err(TransportError::ConnectionFailed);
+
+            let trailer_text = std::str::from_utf8(&trailer_bytes[..trailer_end])
+                .map_err(|_| TransportError::ConnectionFailed)?;
+            for line in trailer_text.split("\r\n") {
+                let Some((name, value)) = line.split_once(':') else {
+                    return Err(TransportError::ConnectionFailed);
+                };
+                if name.is_empty()
+                    || !name.bytes().all(is_http_token_byte)
+                    || value
+                        .bytes()
+                        .any(|byte| (byte < 0x20 && byte != b'\t') || byte == 0x7f)
+                    || matches!(
+                        name.to_ascii_lowercase().as_str(),
+                        "content-length" | "transfer-encoding" | "host"
+                    )
+                {
+                    return Err(TransportError::ConnectionFailed);
+                }
+            }
+            return Ok(output);
         }
 
         let end = cursor
@@ -684,6 +706,25 @@ mod tests {
         .unwrap();
 
         assert_eq!(response.body, b"Hello");
+    }
+
+    #[test]
+    fn rejects_malformed_or_framing_chunked_trailers() {
+        for trailer in [
+            "Bad Header: value",
+            "Content-Length: 0",
+            "Transfer-Encoding: chunked",
+            "X-Test: bad\u{1}value",
+        ] {
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n{trailer}\r\n\r\n"
+            );
+            assert_eq!(
+                parse_http_response(response.as_bytes(), 1024, 1024),
+                Err(TransportError::ConnectionFailed),
+                "trailer must be rejected: {trailer}"
+            );
+        }
     }
 
     #[test]
