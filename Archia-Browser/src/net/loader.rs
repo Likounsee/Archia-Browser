@@ -1076,7 +1076,10 @@ mod tests {
 
         for (location, expected) in [
             ("/final", "https://example.org/final#section"),
-            ("/final#destination", "https://example.org/final#destination"),
+            (
+                "/final#destination",
+                "https://example.org/final#destination",
+            ),
         ] {
             let transport = RecordingTransport {
                 responses: std::sync::Mutex::new(vec![
