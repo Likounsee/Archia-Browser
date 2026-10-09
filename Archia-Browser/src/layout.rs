@@ -991,7 +991,11 @@ fn layout_flex_children(
         };
         let child_containing_width = if column { content_width } else { target_main };
         let mut flex_child = child.clone();
-        if grow_enabled || shrink_enabled {
+        if grow_enabled
+            || shrink_enabled
+            || flex_shorthand.is_some_and(|(_, _, basis)| basis.is_some())
+            || child.style.get("flex-basis").is_some()
+        {
             if column {
                 flex_child.style.set("height", target_main.to_string());
             } else {
