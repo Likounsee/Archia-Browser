@@ -1982,6 +1982,19 @@ mod whitespace_layout_tests {
     use crate::html::dom::Node;
 
     #[test]
+    fn line_height_accepts_fractional_percentages_and_pixels() {
+        assert_eq!(parse_line_height(Some("125.5%"), 16), Some(20));
+        assert_eq!(parse_line_height(Some("12.5px"), 16), Some(13));
+    }
+
+    #[test]
+    fn line_height_rejects_negative_or_non_finite_values() {
+        assert_eq!(parse_line_height(Some("-1.5"), 16), None);
+        assert_eq!(parse_line_height(Some("NaN%"), 16), None);
+        assert_eq!(parse_line_height(Some("infpx"), 16), None);
+    }
+
+    #[test]
     fn break_spaces_preserves_whitespace_for_intrinsic_measurement() {
         let styled =
             crate::style_tree::StyledNode::new(Node::text("a  b"), ComputedStyle::default());
@@ -2010,23 +2023,21 @@ fn used_inline_line_height(node: &crate::style_tree::StyledNode) -> u32 {
 
 fn parse_line_height(value: Option<&str>, font_size: u32) -> Option<u32> {
     let value = value?.trim();
-    if let Some(percent) = value.strip_suffix('%') {
-        let percent = percent.trim().parse::<u32>().ok()?;
-        return Some(
-            font_size
-                .saturating_mul(percent)
-                .checked_div(100)
-                .unwrap_or(0),
-        );
-    }
-    if let Some(px) = value.strip_suffix("px") {
-        return px.trim().parse().ok();
-    }
-    let multiplier = value.parse::<f32>().ok()?;
-    if !multiplier.is_finite() || multiplier < 0.0 {
+    let (amount, scale) = if let Some(percent) = value.strip_suffix('%') {
+        (percent.trim().parse::<f32>().ok()?, font_size as f32 / 100.0)
+    } else if let Some(px) = value.strip_suffix("px") {
+        (px.trim().parse::<f32>().ok()?, 1.0)
+    } else {
+        (value.parse::<f32>().ok()?, font_size as f32)
+    };
+    if !amount.is_finite() || amount < 0.0 {
         return None;
     }
-    Some((font_size as f32 * multiplier).round() as u32)
+    let result = amount * scale;
+    if !result.is_finite() {
+        return None;
+    }
+    Some(result.round().min(u32::MAX as f32) as u32)
 }
 
 fn intrinsic_inline_height(node: &crate::style_tree::StyledNode) -> u32 {
