@@ -1993,6 +1993,15 @@ mod whitespace_layout_tests {
     }
 
     #[test]
+    fn calc_lengths_accept_fractional_percentages() {
+        assert_eq!(parse_length(Some("calc(12.5%)"), 200), Some(25));
+        assert_eq!(parse_length(Some("calc(12.5% + 1px)"), 100), Some(13));
+        assert_eq!(parse_length(Some("calc(12.5% + 12.5%)"), 100), Some(25));
+        assert_eq!(parse_length(Some("calc(12.5% - 2px)"), 100), Some(10));
+        assert_eq!(parse_length(Some("calc(NaN% + 1px)"), 100), None);
+    }
+
+    #[test]
     fn line_height_accepts_fractional_percentages_and_pixels() {
         assert_eq!(parse_line_height(Some("125.5%"), 16), Some(20));
         assert_eq!(parse_line_height(Some("12.5px"), 16), Some(13));
@@ -2149,7 +2158,7 @@ fn parse_calc_length(expression: &str, containing_width: u32) -> Option<u32> {
 
     let bytes = expression.as_bytes();
     let mut index = 0usize;
-    let mut total = 0_i64;
+    let mut total = 0.0_f64;
     let mut add = true;
     let mut saw_term = false;
 
@@ -2172,22 +2181,27 @@ fn parse_calc_length(expression: &str, containing_width: u32) -> Option<u32> {
         }
 
         let value = if let Some(percent) = term.strip_suffix('%') {
-            let percent = percent.parse::<i64>().ok()?;
-            (i64::from(containing_width) * percent).checked_div(100)?
+            let percent = percent.parse::<f64>().ok()?;
+            if !percent.is_finite() {
+                return None;
+            }
+            f64::from(containing_width) * percent / 100.0
         } else {
             let px = term.strip_suffix("px")?;
-            px.parse::<i64>().ok()?
+            px.parse::<i64>().ok()? as f64
         };
 
-        total = if add {
-            total.checked_add(value)?
-        } else {
-            total.checked_sub(value)?
-        };
+        total = if add { total + value } else { total - value };
+        if !total.is_finite() {
+            return None;
+        }
         saw_term = true;
     }
 
-    u32::try_from(total).ok()
+    if total < 0.0 || total > f64::from(u32::MAX) {
+        return None;
+    }
+    Some(total.floor() as u32)
 }
 
 fn parse_px(value: Option<&str>) -> Option<u32> {
