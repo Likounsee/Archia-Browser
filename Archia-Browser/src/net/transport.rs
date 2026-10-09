@@ -562,7 +562,7 @@ fn parse_http_response_head(
             || !name.bytes().all(is_http_token_byte)
             || value
                 .bytes()
-                .any(|byte| (byte < 0x20 && byte != b'\\t') || byte == 0x7f)
+                .any(|byte| (byte < 0x20 && byte != b'\t') || byte == 0x7f)
         {
             return Err(TransportError::ConnectionFailed);
         }
