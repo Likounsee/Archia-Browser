@@ -895,14 +895,14 @@ mod tests {
     #[test]
     fn reset_content_response_must_not_contain_body_bytes() {
         let empty = parse_http_response(
-            b"HTTP/1.1 205 Reset Content\\r\\n\\r\\n",
+            b"HTTP/1.1 205 Reset Content\r\n\r\n",
             1024,
             1024,
         );
         assert_eq!(empty.unwrap().body, b"");
 
         let with_body = parse_http_response(
-            b"HTTP/1.1 205 Reset Content\\r\\n\\r\\nunexpected",
+            b"HTTP/1.1 205 Reset Content\r\n\r\nunexpected",
             1024,
             1024,
         );
