@@ -128,13 +128,18 @@ impl HttpCache {
             return;
         };
 
-        let bytes = response.body.len()
-            + response
-                .headers
-                .iter()
-                .map(|(name, value)| name.len() + value.len())
-                .sum::<usize>()
-            + 64;
+        // Response data can be constructed by callers as well as received
+        // from the bounded network transport. Saturate accounting arithmetic
+        // so an extreme size estimate cannot overflow and undercharge the cache.
+        let bytes = response
+            .headers
+            .iter()
+            .fold(response.body.len(), |total, (name, value)| {
+                total
+                    .saturating_add(name.len())
+                    .saturating_add(value.len())
+            })
+            .saturating_add(64);
 
         self.entries.insert(
             key,
