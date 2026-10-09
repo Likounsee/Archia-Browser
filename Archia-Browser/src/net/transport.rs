@@ -625,9 +625,10 @@ fn decode_chunked(
         let line_end = cursor + relative_end;
         let line = std::str::from_utf8(&bytes[cursor..line_end])
             .map_err(|_| TransportError::ConnectionFailed)?;
-        if line.bytes().any(|byte| {
-            !byte.is_ascii() || (byte < 0x20 && byte != b'\t') || byte == 0x7f
-        }) {
+        if line
+            .bytes()
+            .any(|byte| !byte.is_ascii() || (byte < 0x20 && byte != b'\t') || byte == 0x7f)
+        {
             return Err(TransportError::ConnectionFailed);
         }
         let size_text = line.split(';').next().unwrap_or_default();
