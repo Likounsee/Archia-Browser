@@ -289,12 +289,14 @@ fn has_cache_max_age_zero(header: Option<&str>) -> bool {
 
 fn has_cache_directive(header: Option<&str>, wanted: &str) -> bool {
     header.is_some_and(|value| {
-        cache_control_directives(value).into_iter().any(|directive| {
-            let name = directive
-                .split_once('=')
-                .map_or(directive, |(name, _)| name);
-            name.trim().eq_ignore_ascii_case(wanted)
-        })
+        cache_control_directives(value)
+            .into_iter()
+            .any(|directive| {
+                let name = directive
+                    .split_once('=')
+                    .map_or(directive, |(name, _)| name);
+                name.trim().eq_ignore_ascii_case(wanted)
+            })
     })
 }
 
