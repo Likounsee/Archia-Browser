@@ -2024,7 +2024,10 @@ fn used_inline_line_height(node: &crate::style_tree::StyledNode) -> u32 {
 fn parse_line_height(value: Option<&str>, font_size: u32) -> Option<u32> {
     let value = value?.trim();
     let (amount, scale) = if let Some(percent) = value.strip_suffix('%') {
-        (percent.trim().parse::<f32>().ok()?, font_size as f32 / 100.0)
+        (
+            percent.trim().parse::<f32>().ok()?,
+            font_size as f32 / 100.0,
+        )
     } else if let Some(px) = value.strip_suffix("px") {
         (px.trim().parse::<f32>().ok()?, 1.0)
     } else {
