@@ -1359,8 +1359,7 @@ mod limit_tests {
 
     #[test]
     fn rejects_oversized_chunk_size_line() {
-        let mut response =
-            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1;".to_vec();
+        let mut response = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1;".to_vec();
         response.extend(std::iter::repeat_n(b'a', 256));
         response.extend_from_slice(b"\r\nx\r\n0\r\n\r\n");
 
