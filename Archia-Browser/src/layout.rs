@@ -292,6 +292,15 @@ fn layout_styled_node(
             content_origin_x,
             content_origin_y,
             content_width,
+            explicit_height
+                .map(|height| {
+                    if border_box {
+                        height.saturating_sub(padding_border_y)
+                    } else {
+                        height
+                    }
+                })
+                .unwrap_or(viewport_height),
             viewport_width,
             viewport_height,
             child_abs_origin_x,
@@ -734,6 +743,7 @@ fn layout_flex_children(
     content_origin_x: i32,
     content_origin_y: i32,
     content_width: u32,
+    flex_basis_reference_height: u32,
     viewport_width: u32,
     viewport_height: u32,
     abs_origin_x: i32,
@@ -816,7 +826,7 @@ fn layout_flex_children(
         let flex_shorthand = parse_flex_shorthand(
             child.style.get("flex"),
             if column {
-                viewport_height
+                flex_basis_reference_height
             } else {
                 content_width
             },
@@ -824,8 +834,8 @@ fn layout_flex_children(
         let base = if column {
             flex_shorthand
                 .and_then(|(_, _, basis)| basis)
-                .or_else(|| parse_length(child.style.get("flex-basis"), viewport_height))
-                .or_else(|| parse_length(child.style.get("height"), viewport_height))
+                .or_else(|| parse_length(child.style.get("flex-basis"), flex_basis_reference_height))
+                .or_else(|| parse_length(child.style.get("height"), flex_basis_reference_height))
                 .unwrap_or_else(|| intrinsic_inline_height(child))
         } else {
             flex_shorthand
@@ -2640,6 +2650,25 @@ mod tests {
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
 
         assert_eq!(layout.children[1].rect.y, 30);
+    }
+
+    #[test]
+    fn flex_column_percentage_basis_uses_container_height() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "display: flex; flex-direction: column; width: 100px; height: 100px;",
+        );
+
+        let mut child = Node::element("div");
+        child.set_attribute("style", "flex: 0 0 50%;");
+        root.append(child);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 500));
+
+        assert_eq!(layout.children[0].rect.height, 50);
     }
 
     #[test]
