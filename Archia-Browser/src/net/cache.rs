@@ -9,6 +9,7 @@ const DEFAULT_CAPACITY: usize = 16 * 1024 * 1024;
 #[derive(Debug, Clone)]
 struct CachedResponse {
     response: Response,
+    stored_at: Instant,
     expires_at: Instant,
 }
 
@@ -41,13 +42,26 @@ impl HttpCache {
         if !request_can_use_cache(request) {
             return None;
         }
+        let now = Instant::now();
         let expired = self
             .entries
             .get(&key)
-            .is_some_and(|entry| Instant::now() >= entry.expires_at);
+            .is_some_and(|entry| now >= entry.expires_at);
         if expired {
             self.entries.remove(&key);
             return None;
+        }
+
+        // A request's max-age is a stricter freshness limit than the
+        // origin's lifetime. Do not evict the response: another request may
+        // still be allowed to use it under the origin's Cache-Control policy.
+        if let Some(max_age) = request_max_age(request) {
+            let too_old_for_request = self.entries.get(&key).is_some_and(|entry| {
+                now.saturating_duration_since(entry.stored_at).as_secs() > max_age
+            });
+            if too_old_for_request {
+                return None;
+            }
         }
 
         self.entries.get(&key).map(|entry| entry.response.clone())
@@ -103,6 +117,7 @@ impl HttpCache {
             key,
             CachedResponse {
                 response: response.clone(),
+                stored_at: Instant::now(),
                 expires_at,
             },
             bytes,
@@ -248,6 +263,37 @@ fn response_max_age(response: &Response) -> Option<u64> {
                 return None;
             }
             let value = value?;
+            let value = if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
+                &value[1..value.len() - 1]
+            } else {
+                value
+            };
+            max_age = Some(value.parse::<u64>().ok()?);
+        }
+    }
+    max_age
+}
+
+fn request_max_age(request: &Request) -> Option<u64> {
+    let mut max_age = None;
+    for (_, header) in request
+        .headers
+        .iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("cache-control"))
+    {
+        for directive in cache_control_directives(header) {
+            let Some((name, value)) = directive.split_once('=') else {
+                continue;
+            };
+            if !name.trim().eq_ignore_ascii_case("max-age") {
+                continue;
+            }
+            // Multiple or malformed request max-age directives are ambiguous;
+            // avoid applying a guessed limit.
+            if max_age.is_some() {
+                return None;
+            }
+            let value = value.trim();
             let value = if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
                 &value[1..value.len() - 1]
             } else {
