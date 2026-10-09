@@ -2002,6 +2002,16 @@ mod whitespace_layout_tests {
     }
 
     #[test]
+    fn css_lengths_accept_fractional_pixel_values_and_case_insensitive_units() {
+        assert_eq!(parse_length(Some("12.5px"), 100), Some(12));
+        assert_eq!(parse_length(Some("12.5PX"), 100), Some(12));
+        assert_eq!(parse_length(Some("calc(12.5px + 2px)"), 100), Some(14));
+        assert_eq!(parse_length(Some("calc(12.5PX + 2px)"), 100), Some(14));
+        assert_eq!(parse_length(Some("-1.5px"), 100), None);
+        assert_eq!(parse_length(Some("NaNpx"), 100), None);
+    }
+
+    #[test]
     fn line_height_accepts_fractional_percentages_and_pixels() {
         assert_eq!(parse_line_height(Some("125.5%"), 16), Some(20));
         assert_eq!(parse_line_height(Some("12.5px"), 16), Some(13));
@@ -2187,8 +2197,15 @@ fn parse_calc_length(expression: &str, containing_width: u32) -> Option<u32> {
             }
             f64::from(containing_width) * percent / 100.0
         } else {
-            let px = term.strip_suffix("px")?;
-            px.parse::<i64>().ok()? as f64
+            let px = term.get(..term.len().checked_sub(2)?)?;
+            if !term[term.len() - 2..].eq_ignore_ascii_case("px") {
+                return None;
+            }
+            let px = px.parse::<f64>().ok()?;
+            if !px.is_finite() {
+                return None;
+            }
+            px
         };
 
         total = if add { total + value } else { total - value };
@@ -2206,7 +2223,15 @@ fn parse_calc_length(expression: &str, containing_width: u32) -> Option<u32> {
 
 fn parse_px(value: Option<&str>) -> Option<u32> {
     let value = value?.trim();
-    value.strip_suffix("px")?.trim().parse().ok()
+    let number = value.get(..value.len().checked_sub(2)?)?;
+    if !value[value.len() - 2..].eq_ignore_ascii_case("px") {
+        return None;
+    }
+    let number = number.trim().parse::<f64>().ok()?;
+    if !number.is_finite() || number < 0.0 || number > f64::from(u32::MAX) {
+        return None;
+    }
+    Some(number.floor() as u32)
 }
 
 fn parse_signed_px(value: Option<&str>) -> Option<i32> {
