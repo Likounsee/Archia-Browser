@@ -1412,8 +1412,11 @@ mod tests {
         );
 
         let long_target = Request::new(
-            Url::parse(&format!("http://example.org/{}", "a".repeat(MAX_REQUEST_HEADER_BYTES)))
-                .unwrap(),
+            Url::parse(&format!(
+                "http://example.org/{}",
+                "a".repeat(MAX_REQUEST_HEADER_BYTES)
+            ))
+            .unwrap(),
         );
         assert_eq!(
             validate_request(&long_target),
