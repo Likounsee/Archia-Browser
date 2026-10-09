@@ -404,7 +404,9 @@ mod tests {
         let mut cache = HttpCache::default();
         let request = make_request("https://example.org/resource");
         let mut response = Response::new(200).with_body(b"cached".to_vec());
-        response.headers.insert("Cache-Control".into(), "max-age=60".into());
+        response
+            .headers
+            .insert("Cache-Control".into(), "max-age=60".into());
         cache.store(&request, &response);
         assert_eq!(cache.len(), 1);
         assert_eq!(cache.get(&request).unwrap().body, b"cached");
