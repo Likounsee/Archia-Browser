@@ -1221,7 +1221,11 @@ mod tests {
 
     #[test]
     fn rejects_empty_dns_labels_even_with_trailing_dots() {
-        for input in ["http://example.org../", "http://example..org./", "http://./"] {
+        for input in [
+            "http://example.org../",
+            "http://example..org./",
+            "http://./",
+        ] {
             let request = Request::new(Url::parse(input).unwrap());
             assert_eq!(
                 validate_request(&request),
