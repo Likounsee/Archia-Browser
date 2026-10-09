@@ -114,7 +114,12 @@ impl HttpTransport {
         // semantics rather than allowing a caller-supplied keep-alive header
         // to make an otherwise complete response wait until the read timeout.
         head.push_str("Connection: close\r\n");
-        if request.has_body() && request.header("content-length").is_none() {
+        if request.has_body()
+            && !request
+                .headers
+                .keys()
+                .any(|name| name.eq_ignore_ascii_case("content-length"))
+        {
             head.push_str("Content-Length: ");
             head.push_str(&request.body.len().to_string());
             head.push_str("\r\n");
@@ -1180,6 +1185,52 @@ mod tests {
 
         request.headers.insert("Host".into(), "example.org".into());
         assert_eq!(validate_request(&request), Ok(()));
+    }
+
+    #[test]
+    fn does_not_emit_duplicate_content_length_for_mixed_case_header() {
+        #[derive(Debug, Default)]
+        struct CaptureStream {
+            written: Vec<u8>,
+        }
+
+        impl Read for CaptureStream {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                Ok(0)
+            }
+        }
+
+        impl Write for CaptureStream {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.written.extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let mut request = Request::new(Url::parse("http://example.org/").unwrap())
+            .with_body(b"Hello".to_vec());
+        request
+            .headers
+            .insert("Content-Length".into(), "5".into());
+        let mut stream = CaptureStream::default();
+        HttpTransport::new()
+            .write_request(&mut stream, &request)
+            .unwrap();
+
+        let head = String::from_utf8(stream.written).unwrap();
+        assert_eq!(
+            head.lines()
+                .filter(|line| line.split_once(':').is_some_and(|(name, _)| {
+                    name.eq_ignore_ascii_case("content-length")
+                }))
+                .count(),
+            1,
+            "a mixed-case caller header must not trigger a second Content-Length"
+        );
     }
 
     #[test]
