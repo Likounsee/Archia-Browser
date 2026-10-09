@@ -24,7 +24,7 @@ impl StyleSheet {
 
             let selectors = split_selector_list(&selector_text)
                 .into_iter()
-                .filter_map(Selector::parse)
+                .filter_map(|selector| Selector::parse(&selector))
                 .collect::<Vec<_>>();
             if selectors.is_empty() {
                 continue;
