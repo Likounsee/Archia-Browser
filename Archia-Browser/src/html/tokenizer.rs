@@ -385,7 +385,7 @@ fn decode_character_references(input: &str) -> String {
                 u32::from_str_radix(&reference[2..], 16)
                     .ok()
                     .map(decode_numeric_character_reference)
-            },
+            }
             _ if reference.starts_with('#') => reference[1..]
                 .parse::<u32>()
                 .ok()
