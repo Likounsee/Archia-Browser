@@ -151,14 +151,22 @@ impl HttpCache {
 }
 
 fn cache_key(request: &Request) -> String {
+    // DNS host names are case-insensitive, and omitting an HTTP(S) default
+    // port is equivalent to spelling it explicitly. Normalize both so these
+    // URL spellings do not create duplicate entries for the same resource.
     // URL fragments are client-side identifiers and are never sent in an
-    // HTTP request target. Treat fragment-only navigations as the same
-    // network resource instead of keeping duplicate cache entries.
+    // HTTP request target, so they must not participate in the cache key.
+    let host = request.url.host().to_ascii_lowercase();
+    let authority = if host.contains(':') {
+        format!("[{host}]:{}", request.url.effective_port())
+    } else {
+        format!("{host}:{}", request.url.effective_port())
+    };
     let mut key = format!(
         "{} {}://{}{}",
         request.method.as_str(),
         request.url.scheme(),
-        request.url.authority(),
+        authority,
         request.url.path()
     );
     if let Some(query) = request.url.query() {
@@ -433,6 +441,50 @@ mod tests {
 
         let different_query = make_request("https://example.org/page?lang=en#details");
         assert!(cache.get(&different_query).is_none());
+    }
+
+    #[test]
+    fn equivalent_host_case_and_default_ports_share_cache_entries() {
+        for (stored_url, lookup_url) in [
+            ("https://EXAMPLE.org/resource", "https://example.org:443/resource"),
+            ("http://Example.org:80/resource", "http://example.org/resource"),
+            ("https://[2001:DB8::1]/resource", "https://[2001:db8::1]:443/resource"),
+        ] {
+            let mut cache = HttpCache::default();
+            let request = make_request(stored_url);
+            cache.store(
+                &request,
+                &Response::new(200)
+                    .with_header("cache-control", "max-age=60")
+                    .with_body(b"cached".to_vec()),
+            );
+
+            let equivalent = make_request(lookup_url);
+            assert_eq!(
+                cache.get(&equivalent).unwrap().body,
+                b"cached",
+                "{stored_url} should match {lookup_url}"
+            );
+            assert_eq!(cache.len(), 1);
+        }
+    }
+
+    #[test]
+    fn non_default_ports_remain_distinct_cache_entries() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org:8443/resource");
+        cache.store(
+            &request,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_body(b"alternate port".to_vec()),
+        );
+
+        assert!(cache.get(&make_request("https://example.org/resource")).is_none());
+        assert_eq!(
+            cache.get(&make_request("https://example.org:8443/resource")).unwrap().body,
+            b"alternate port"
+        );
     }
 
     #[test]
