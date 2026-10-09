@@ -212,7 +212,7 @@ impl CookieJar {
         let host = url.host().to_ascii_lowercase();
         let path = url.path();
         let secure = url.is_secure();
-        let values = self
+        let mut matching = self
             .cookies
             .iter()
             .filter(|cookie| {
@@ -225,6 +225,12 @@ impl CookieJar {
                     || path.starts_with(&(cookie.path.trim_end_matches('/').to_owned() + "/"));
                 domain_matches && path_matches && (!cookie.secure || secure)
             })
+            .collect::<Vec<_>>();
+        // RFC 6265 sends longer, more-specific paths first. Keep insertion
+        // order stable for cookies whose paths have equal lengths.
+        matching.sort_by(|first, second| second.path.len().cmp(&first.path.len()));
+        let values = matching
+            .into_iter()
             .map(|cookie| format!("{}={}", cookie.name, cookie.value))
             .collect::<Vec<_>>();
         (!values.is_empty()).then(|| values.join("; "))
@@ -375,6 +381,20 @@ mod tests {
         assert_eq!(
             jar.header_for(&Url::parse("http://example.org/account").unwrap()),
             None
+        );
+    }
+
+    #[test]
+    fn sends_longer_cookie_paths_before_root_path() {
+        let root = Url::parse("https://example.org/").unwrap();
+        let account = Url::parse("https://example.org/account/page").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&root, "sid=root; Path=/");
+        jar.store(&account, "sid=scoped; Path=/account");
+
+        assert_eq!(
+            jar.header_for(&account).as_deref(),
+            Some("sid=scoped; sid=root")
         );
     }
 
