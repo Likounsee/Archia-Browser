@@ -116,7 +116,11 @@ impl CookieJar {
                 existing.secure
                     && existing.name == cookie.name
                     && existing.domain == cookie.domain
-                    && existing.path == cookie.path
+                    // Reject overlapping paths too: otherwise an HTTP cookie
+                    // at "/" could shadow a Secure cookie scoped to "/account"
+                    // (or vice versa) when both are sent on the same request.
+                    && (cookie_path_matches(&existing.path, &cookie.path)
+                        || cookie_path_matches(&cookie.path, &existing.path))
             })
         {
             return;
@@ -190,6 +194,13 @@ impl CookieJar {
     pub fn is_empty(&self) -> bool {
         self.cookies.is_empty()
     }
+}
+
+fn cookie_path_matches(request_path: &str, cookie_path: &str) -> bool {
+    request_path == cookie_path
+        || (request_path.starts_with(cookie_path)
+            && (cookie_path.ends_with('/')
+                || request_path.as_bytes().get(cookie_path.len()) == Some(&b'/')))
 }
 
 fn default_cookie_path(request_path: &str) -> String {
@@ -349,6 +360,40 @@ mod tests {
         jar.store(&insecure_url, "sid=attacker");
 
         assert_eq!(jar.header_for(&secure_url).as_deref(), Some("sid=trusted"));
+    }
+
+    #[test]
+    fn insecure_origin_cannot_shadow_secure_cookie_with_overlapping_path() {
+        let secure_url = Url::parse("https://example.org/account/profile").unwrap();
+        let insecure_root = Url::parse("http://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&secure_url, "sid=trusted; Path=/account; Secure");
+
+        jar.store(&insecure_root, "sid=attacker; Path=/");
+
+        assert_eq!(
+            jar.header_for(&secure_url).as_deref(),
+            Some("sid=trusted")
+        );
+        assert_eq!(
+            jar.header_for(&Url::parse("https://example.org/other").unwrap()),
+            None
+        );
+    }
+
+    #[test]
+    fn insecure_origin_cannot_shadow_root_secure_cookie_with_narrow_path() {
+        let secure_url = Url::parse("https://example.org/account/profile").unwrap();
+        let insecure_url = Url::parse("http://example.org/account/").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&Url::parse("https://example.org/").unwrap(), "sid=trusted; Path=/; Secure");
+
+        jar.store(&insecure_url, "sid=attacker; Path=/account");
+
+        assert_eq!(
+            jar.header_for(&secure_url).as_deref(),
+            Some("sid=trusted")
+        );
     }
 
     #[test]
