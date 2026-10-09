@@ -118,7 +118,14 @@ impl CookieJar {
             return;
         }
         if let Some(seconds) = max_age.filter(|seconds| *seconds > 0) {
-            cookie.expires_at = SystemTime::now().checked_add(Duration::from_secs(seconds as u64));
+            // An overflowing Max-Age must not silently turn a persistent
+            // cookie into a session cookie (expires_at = None).
+            let Some(expires_at) =
+                SystemTime::now().checked_add(Duration::from_secs(seconds as u64))
+            else {
+                return;
+            };
+            cookie.expires_at = Some(expires_at);
         }
 
         // An insecure origin must not be able to plant a Secure cookie that
@@ -471,6 +478,16 @@ mod tests {
         let mut jar = CookieJar::new();
         jar.store(&url, "sid=abc; Domain=example.org");
         assert_eq!(jar.header_for(&url).as_deref(), Some("sid=abc"));
+    }
+
+    #[test]
+    fn overflowing_max_age_does_not_create_a_session_cookie() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&url, "sid=too-far; Max-Age=9223372036854775807");
+
+        assert!(jar.is_empty());
     }
 
     #[test]
