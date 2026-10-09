@@ -94,6 +94,7 @@ fn request_can_use_cache(request: &Request) -> bool {
         && request.header("cookie").is_none()
         && !has_cache_directive(request.header("cache-control"), "no-cache")
         && !has_cache_directive(request.header("cache-control"), "no-store")
+        && !has_pragma_no_cache(request)
 }
 
 fn request_can_store(request: &Request) -> bool {
@@ -102,6 +103,7 @@ fn request_can_store(request: &Request) -> bool {
         && request.header("authorization").is_none()
         && request.header("cookie").is_none()
         && !has_cache_directive(request.header("cache-control"), "no-store")
+        && !has_pragma_no_cache(request)
 }
 
 fn response_can_store(response: &Response) -> bool {
@@ -109,6 +111,9 @@ fn response_can_store(response: &Response) -> bool {
         && response.set_cookie_headers().is_empty()
         && !has_cache_directive(response.header("cache-control"), "no-store")
         && !has_cache_directive(response.header("cache-control"), "no-cache")
+        && !response
+            .header("pragma")
+            .is_some_and(|value| value.split(',').any(|d| d.trim().eq_ignore_ascii_case("no-cache")))
         && response.header("vary").is_none()
 }
 
@@ -128,10 +133,17 @@ fn response_max_age(response: &Response) -> Option<u64> {
 
 fn has_cache_directive(header: Option<&str>, wanted: &str) -> bool {
     header.is_some_and(|value| {
-        value
-            .split(',')
-            .any(|directive| directive.trim().eq_ignore_ascii_case(wanted))
+        value.split(',').any(|directive| {
+            let name = directive.split_once('=').map_or(directive, |(name, _)| name);
+            name.trim().eq_ignore_ascii_case(wanted)
+        })
     })
+}
+
+fn has_pragma_no_cache(request: &Request) -> bool {
+    request
+        .header("pragma")
+        .is_some_and(|value| value.split(',').any(|d| d.trim().eq_ignore_ascii_case("no-cache")))
 }
 
 #[cfg(test)]
@@ -192,6 +204,49 @@ mod tests {
         assert!(cache.get(&no_cache).is_none());
         let no_store = request.with_header("cache-control", "no-store");
         assert!(cache.get(&no_store).is_none());
+    }
+
+    #[test]
+    fn recognizes_parameterized_no_cache_directives() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/");
+        let response = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_body(b"cached".to_vec());
+        cache.store(&request, &response);
+
+        let conditional = request.clone().with_header("cache-control", "no-cache=\"etag\"");
+        assert!(cache.get(&conditional).is_none());
+
+        let mut cache = HttpCache::default();
+        cache.store(
+            &request,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=60, no-cache=\"etag\""),
+        );
+        assert_eq!(cache.len(), 0);
+    }
+
+    #[test]
+    fn pragma_no_cache_prevents_cache_reuse_and_storage() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/");
+        let response = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_body(b"cached".to_vec());
+        cache.store(&request, &response);
+
+        let pragma_request = request.clone().with_header("pragma", "no-cache");
+        assert!(cache.get(&pragma_request).is_none());
+
+        let mut cache = HttpCache::default();
+        cache.store(
+            &request,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_header("pragma", "no-cache"),
+        );
+        assert_eq!(cache.len(), 0);
     }
 
     #[test]
