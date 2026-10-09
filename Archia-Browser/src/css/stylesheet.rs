@@ -31,7 +31,10 @@ impl StyleSheet {
             }
 
             let declarations = parse_declarations(&CssTokenizer::tokenize(&declaration_text));
-            rules.push(StyleRule {\n                selectors,\n                declarations,\n            });
+            rules.push(StyleRule {
+                selectors,
+                declarations,
+            });
         }
         Self { rules }
     }
@@ -215,7 +218,11 @@ fn parse_rule_blocks(input: &str) -> Vec<(String, String)> {
         }
 
         if let Some(active_quote) = quote {
-            if in_body {\n                body.push(ch);\n            } else {\n                prelude.push(ch);\n            }
+            if in_body {
+                body.push(ch);
+            } else {
+                prelude.push(ch);
+            }
             if escaped {
                 escaped = false;
             } else if ch == '\\' {
@@ -228,7 +235,11 @@ fn parse_rule_blocks(input: &str) -> Vec<(String, String)> {
 
         if ch == '"' || ch == '\'' {
             quote = Some(ch);
-            if in_body {\n            body.push(ch);\n        } else {\n            prelude.push(ch);\n        }
+            if in_body {
+            body.push(ch);
+        } else {
+            prelude.push(ch);
+        }
             continue;
         }
 
