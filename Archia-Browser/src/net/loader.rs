@@ -109,6 +109,12 @@ where
                     .resolve(location)
                     .map_err(|_| DocumentLoadError::InvalidRedirect)?;
 
+                // Remote content must never navigate the browser into the local
+                // filesystem through an HTTP redirect.
+                if current.url.scheme() != "file" && url.scheme() == "file" {
+                    return Err(DocumentLoadError::InvalidRedirect);
+                }
+
                 let mut next = current.clone();
                 let cross_origin = !same_origin(&current.url, &url);
                 let secure_downgrade = current.url.scheme() == "https" && url.scheme() == "http";
@@ -997,6 +1003,20 @@ mod tests {
             page.url().map(ToString::to_string),
             Some("https://example.org/next".to_owned())
         );
+    }
+
+    #[test]
+    fn refuses_remote_document_redirects_to_local_files() {
+        let response =
+            Response::new(302).with_header("location", "file:///etc/passwd");
+        let loader =
+            DocumentLoader::new(NetworkPipeline::new(AllowAll), MockTransport { response });
+        let request = Request::new(Url::parse("https://example.org/").unwrap());
+
+        assert!(matches!(
+            loader.load(&request, LayoutViewport::new(320, 200)),
+            Err(DocumentLoadError::InvalidRedirect)
+        ));
     }
 
     #[test]
