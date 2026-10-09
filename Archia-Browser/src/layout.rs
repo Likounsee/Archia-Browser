@@ -308,6 +308,7 @@ fn layout_styled_node(
             }
 
             if matches!(child_display, Display::Inline | Display::InlineBlock) {
+                previous_block_margin_bottom = 0;
                 if is_line_break(child) {
                     let break_height = inline_line_height.max(used_inline_line_height(child));
                     let mut child_layout = layout_styled_node(
