@@ -3,6 +3,7 @@ use std::time::{Duration, SystemTime};
 use crate::net::Url;
 
 const MAX_COOKIE_PAIR_BYTES: usize = 4096;
+const MAX_COOKIE_HEADER_BYTES: usize = 8192;
 const MAX_COOKIES: usize = 3000;
 const MAX_COOKIES_PER_DOMAIN: usize = 180;
 
@@ -268,11 +269,24 @@ impl CookieJar {
         // RFC 6265 sends longer, more-specific paths first. Keep insertion
         // order stable for cookies whose paths have equal lengths.
         matching.sort_by(|first, second| second.path.len().cmp(&first.path.len()));
-        let values = matching
-            .into_iter()
-            .map(|cookie| format!("{}={}", cookie.name, cookie.value))
-            .collect::<Vec<_>>();
-        (!values.is_empty()).then(|| values.join("; "))
+        // Bound the request header independently from cookie count. A jar
+        // can contain many individually valid cookies, but emitting all of
+        // them can create multi-megabyte request headers.
+        let mut header = String::new();
+        for cookie in matching {
+            let pair_len = cookie.name.len() + 1 + cookie.value.len();
+            let separator_len = usize::from(!header.is_empty()) * 2;
+            if header.len() + separator_len + pair_len > MAX_COOKIE_HEADER_BYTES {
+                continue;
+            }
+            if !header.is_empty() {
+                header.push_str("; ");
+            }
+            header.push_str(&cookie.name);
+            header.push('=');
+            header.push_str(&cookie.value);
+        }
+        (!header.is_empty()).then_some(header)
     }
 
     fn remove_expired(&mut self) {
@@ -338,6 +352,21 @@ fn default_cookie_path(request_path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cookie_request_header_is_bounded_even_with_many_cookies() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+
+        for index in 0..MAX_COOKIES_PER_DOMAIN {
+            jar.store(&url, &format!("cookie{index}={}", "x".repeat(100)));
+        }
+
+        let header = jar.header_for(&url).unwrap();
+        assert!(header.len() <= MAX_COOKIE_HEADER_BYTES);
+        assert!(header.starts_with("cookie"));
+        assert!(header.contains("; "));
+    }
 
     #[test]
     fn rejects_cookie_values_that_could_inject_headers() {
