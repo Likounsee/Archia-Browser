@@ -72,8 +72,13 @@ impl CookieJar {
                     if let Some(value) = pieces.next() {
                         let domain = value.trim().trim_start_matches('.').to_ascii_lowercase();
                         let host = url.host().to_ascii_lowercase();
+                        // A Domain attribute must identify this host or a
+                        // dotted parent domain. Without the dot-boundary check,
+                        // a host such as "example.com" could set Domain=com and
+                        // leak that cookie to unrelated registrable domains.
                         if domain.is_empty()
-                            || !(host == domain || host.ends_with(&format!(".{domain}")))
+                            || !(host == domain
+                                || (domain.contains('.') && host.ends_with(&format!(".{domain}"))))
                         {
                             return;
                         }
@@ -470,6 +475,27 @@ mod tests {
         let mut jar = CookieJar::new();
         jar.store(&url, "sid=abc; Domain=evil.example");
         assert!(jar.is_empty());
+    }
+
+    #[test]
+    fn rejects_single_label_parent_domains() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&url, "sid=bad; Domain=org");
+        jar.store(&url, "sid=bad; Domain=com");
+
+        assert!(jar.is_empty());
+    }
+
+    #[test]
+    fn accepts_exact_single_label_host_domain() {
+        let url = Url::parse("https://localhost/").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&url, "sid=local; Domain=localhost");
+
+        assert_eq!(jar.header_for(&url).as_deref(), Some("sid=local"));
     }
 
     #[test]
