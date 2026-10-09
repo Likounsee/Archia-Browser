@@ -3594,7 +3594,7 @@ mod tests {
         let mut root = Node::element("div");
         root.set_attribute(
             "style",
-            "display: flex; flex-wrap: wrap; width: 40px; height: 100px; gap: 3px; row-gap: 5px; column-gap: 9px;",
+            "display: flex; flex-wrap: wrap; width: 49px; height: 100px; gap: 3px; row-gap: 5px; column-gap: 9px;",
         );
         for _ in 0..3 {
             let mut child = Node::element("div");
@@ -3604,10 +3604,10 @@ mod tests {
 
         let styled =
             crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
-        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(40, 100));
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(49, 100));
 
         assert_eq!(layout.children[0].rect.x, 0);
-        assert_eq!(layout.children[1].rect.x, 0);
+        assert_eq!(layout.children[1].rect.x, 29);
         assert_eq!(layout.children[2].rect.y, 15);
     }
 
