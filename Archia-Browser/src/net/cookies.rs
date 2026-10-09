@@ -109,6 +109,19 @@ impl CookieJar {
             return;
         }
 
+        // Plain HTTP cookies must not overwrite an HTTPS Secure cookie with
+        // the same storage key, even when the incoming cookie omits Secure.
+        if !url.is_secure()
+            && self.cookies.iter().any(|existing| {
+                existing.secure
+                    && existing.name == cookie.name
+                    && existing.domain == cookie.domain
+                    && existing.path == cookie.path
+            })
+        {
+            return;
+        }
+
         self.cookies.retain(|existing| {
             !(existing.name == cookie.name
                 && existing.domain == cookie.domain
@@ -324,6 +337,18 @@ mod tests {
         jar.store(&url, "sid=gone; Max-Age=0; Path=/");
 
         assert!(jar.header_for(&url).is_none());
+    }
+
+    #[test]
+    fn insecure_origin_cannot_overwrite_secure_cookie_without_secure_attribute() {
+        let secure_url = Url::parse("https://example.org/").unwrap();
+        let insecure_url = Url::parse("http://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&secure_url, "sid=trusted; Secure");
+
+        jar.store(&insecure_url, "sid=attacker");
+
+        assert_eq!(jar.header_for(&secure_url).as_deref(), Some("sid=trusted"));
     }
 
     #[test]
