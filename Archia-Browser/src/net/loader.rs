@@ -540,8 +540,7 @@ mod tests {
     #[test]
     fn html_content_type_is_case_insensitive() {
         let html = Response::new(200).with_header("content-type", "TEXT/HTML; charset=UTF-8");
-        let xhtml =
-            Response::new(200).with_header("content-type", "Application/XHTML+XML");
+        let xhtml = Response::new(200).with_header("content-type", "Application/XHTML+XML");
 
         assert!(is_html_response(&html));
         assert!(is_html_response(&xhtml));
