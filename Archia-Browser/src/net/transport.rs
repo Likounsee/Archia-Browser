@@ -704,9 +704,8 @@ mod tests {
     #[test]
     fn rejects_unsupported_and_ambiguous_transfer_encodings() {
         for encoding in ["gzip", "gzip, chunked", "chunked, gzip"] {
-            let response = format!(
-                "HTTP/1.1 200 OK\r\nTransfer-Encoding: {encoding}\r\n\r\n0\r\n\r\n"
-            );
+            let response =
+                format!("HTTP/1.1 200 OK\r\nTransfer-Encoding: {encoding}\r\n\r\n0\r\n\r\n");
             assert_eq!(
                 parse_http_response(response.as_bytes(), 1024, 1024),
                 Err(TransportError::ConnectionFailed),
