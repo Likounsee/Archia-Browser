@@ -275,13 +275,15 @@ fn response_age(response: &Response) -> Option<u64> {
 
 fn has_cache_max_age_zero(header: Option<&str>) -> bool {
     header.is_some_and(|value| {
-        cache_control_directives(value).into_iter().any(|directive| {
-            let Some((name, value)) = directive.split_once('=') else {
-                return false;
-            };
-            name.trim().eq_ignore_ascii_case("max-age")
-                && value.trim().trim_matches('"').parse::<u64>().ok() == Some(0)
-        })
+        cache_control_directives(value)
+            .into_iter()
+            .any(|directive| {
+                let Some((name, value)) = directive.split_once('=') else {
+                    return false;
+                };
+                name.trim().eq_ignore_ascii_case("max-age")
+                    && value.trim().trim_matches('"').parse::<u64>().ok() == Some(0)
+            })
     })
 }
 
@@ -574,7 +576,10 @@ mod tests {
         let mut cache = HttpCache::default();
         let request = make_request("https://example.org/resource");
         let response = Response::new(200)
-            .with_header("cache-control", r#"extension="text, max-age=0", max-age=60"#)
+            .with_header(
+                "cache-control",
+                r#"extension="text, max-age=0", max-age=60"#,
+            )
             .with_body(b"cached".to_vec());
 
         cache.store(&request, &response);
