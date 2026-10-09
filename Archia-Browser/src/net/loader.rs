@@ -500,7 +500,6 @@ mod tests {
         Response, Url,
     };
 
-
     #[test]
     fn stylesheet_byte_budget_preserves_utf8_and_stops_at_limit() {
         let mut output = String::new();
