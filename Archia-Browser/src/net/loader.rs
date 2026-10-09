@@ -703,6 +703,69 @@ mod tests {
     }
 
     #[test]
+    fn cached_stylesheets_still_obey_current_request_policy() {
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        struct StyleTogglePolicy(Arc<AtomicBool>);
+
+        impl RequestPolicyEngine for StyleTogglePolicy {
+            fn decide(&self, request: &Request) -> PolicyDecision {
+                if request.policy.resource_kind == ResourceKind::Stylesheet
+                    && self.0.load(Ordering::SeqCst)
+                {
+                    PolicyDecision::Block
+                } else {
+                    PolicyDecision::Allow
+                }
+            }
+        }
+
+        struct CountingStylesheetTransport(Arc<AtomicUsize>);
+
+        impl Transport for CountingStylesheetTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                if request.url.path() == "/page" {
+                    Ok(Response::new(200)
+                        .with_header("content-type", "text/html")
+                        .with_header("cache-control", "max-age=60")
+                        .with_body(
+                            br#"<link rel="stylesheet" href="/style.css"><body>Page</body>"#
+                                .to_vec(),
+                        ))
+                } else {
+                    assert_eq!(request.url.path(), "/style.css");
+                    Ok(Response::new(200)
+                        .with_header("content-type", "text/css")
+                        .with_header("cache-control", "max-age=60")
+                        .with_body(b"body { color: red; }".to_vec()))
+                }
+            }
+        }
+
+        let block_styles = Arc::new(AtomicBool::new(false));
+        let requests = Arc::new(AtomicUsize::new(0));
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(StyleTogglePolicy(Arc::clone(&block_styles))),
+            CountingStylesheetTransport(Arc::clone(&requests)),
+        );
+        let request = Request::new(Url::parse("https://example.org/page").unwrap());
+        let viewport = LayoutViewport::new(320, 200);
+
+        assert!(loader.load(&request, viewport).is_ok());
+        assert_eq!(requests.load(Ordering::SeqCst), 2);
+
+        block_styles.store(true, Ordering::SeqCst);
+        assert!(loader.load(&request, viewport).is_ok());
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            2,
+            "blocked cached stylesheet should not be fetched again"
+        );
+    }
+
+    #[test]
     fn document_loads_are_marked_as_document_resources() {
         #[derive(Debug)]
         struct InspectTransport;
