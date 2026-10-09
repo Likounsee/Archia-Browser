@@ -562,10 +562,8 @@ mod tests {
             }
         }
 
-        let loader = DocumentLoader::new(
-            NetworkPipeline::new(AllowAll),
-            OversizedStylesheetTransport,
-        );
+        let loader =
+            DocumentLoader::new(NetworkPipeline::new(AllowAll), OversizedStylesheetTransport);
         let document_url = Url::parse("https://example.org/index.html").unwrap();
         let css = loader.load_linked_stylesheets(
             &document_url,
