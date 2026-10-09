@@ -295,10 +295,7 @@ fn response_max_age(response: &Response) -> Option<u64> {
     max_age
 }
 
-fn request_cache_age_directive(
-    request: &Request,
-    wanted: &str,
-) -> Result<Option<u64>, ()> {
+fn request_cache_age_directive(request: &Request, wanted: &str) -> Result<Option<u64>, ()> {
     let mut parsed = None;
     for (_, header) in request
         .headers
@@ -564,7 +561,11 @@ mod tests {
                 cache.get(&constrained).is_none(),
                 "malformed freshness directive must not permit a cache hit: {directive}"
             );
-            assert_eq!(cache.len(), 1, "request constraints must not evict the entry");
+            assert_eq!(
+                cache.len(),
+                1,
+                "request constraints must not evict the entry"
+            );
         }
     }
 
