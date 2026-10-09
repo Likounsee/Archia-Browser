@@ -619,7 +619,9 @@ fn parse_http_response_head(
     let status = status_text
         .parse::<u16>()
         .map_err(|_| TransportError::ConnectionFailed)?;
-    if !(100..=599).contains(&status) {
+    if !(100..=599).contains(&status) || status == 101 {
+        // Protocol upgrades are not supported by this request/response transport.
+        // Do not expose upgraded protocol bytes to the document parser.
         return Err(TransportError::ConnectionFailed);
     }
 
@@ -761,6 +763,18 @@ mod tests {
         assert!(tls_server_name("127.0.0.1").is_ok());
         assert!(tls_server_name("::1").is_ok());
         assert!(tls_server_name("").is_err());
+    }
+
+    #[test]
+    fn rejects_unsupported_protocol_switching_responses() {
+        assert_eq!(
+            parse_http_response(
+                b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n",
+                1024,
+                1024,
+            ),
+            Err(TransportError::ConnectionFailed)
+        );
     }
 
     #[test]
