@@ -1342,22 +1342,41 @@ fn justify_flex_rows(
     content_width: u32,
     reverse_main: bool,
 ) {
-    let mut rows: Vec<Vec<(usize, usize)>> = Vec::new();
-    for &(index, child_index) in indices {
-        let y = output.children[index].rect.y;
-        if let Some(row) = rows
-            .iter_mut()
-            .find(|row| output.children[row[0].0].rect.y == y)
-        {
-            row.push((index, child_index));
-        } else {
-            rows.push(vec![(index, child_index)]);
-        }
-    }
-
     let gap = parse_length(node.style.get("column-gap"), content_width)
         .or_else(|| parse_length(node.style.get("gap"), content_width))
         .unwrap_or(0);
+    let mut rows: Vec<Vec<(usize, usize)>> = Vec::new();
+    let mut row_width = 0_u32;
+    let mut row_y = None;
+    for &(index, child_index) in indices {
+        let child = &output.children[index];
+        let y = child.rect.y;
+        let outer_width = child
+            .rect
+            .width
+            .saturating_add(child.box_model.horizontal_outer());
+        let exceeds_width = !rows.is_empty()
+            && !rows.last().is_some_and(Vec::is_empty)
+            && row_width
+                .saturating_add(gap)
+                .saturating_add(outer_width)
+                > content_width;
+        if row_y.is_some_and(|current_y| current_y != y) || exceeds_width {
+            rows.push(Vec::new());
+            row_width = 0;
+            row_y = Some(y);
+        } else if rows.is_empty() {
+            rows.push(Vec::new());
+            row_y = Some(y);
+        }
+        if let Some(row) = rows.last_mut() {
+            if !row.is_empty() {
+                row_width = row_width.saturating_add(gap);
+            }
+            row.push((index, child_index));
+            row_width = row_width.saturating_add(outer_width);
+        }
+    }
     let justify = node
         .style
         .get("justify-content")
@@ -3520,6 +3539,28 @@ mod tests {
         assert_eq!(layout.children[1].rect.y, 0);
         assert_eq!(layout.children[2].rect.x, 0);
         assert_eq!(layout.children[2].rect.y, 0);
+    }
+
+    #[test]
+    fn flex_wrap_justify_content_keeps_zero_height_lines_separate() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "display: flex; flex-wrap: wrap; justify-content: center; width: 50px;",
+        );
+        for _ in 0..3 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "height: 0; flex: 0 0 20px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(50, 100));
+
+        assert_eq!(layout.children[0].rect.x, 5);
+        assert_eq!(layout.children[1].rect.x, 25);
+        assert_eq!(layout.children[2].rect.x, 15);
     }
 
     #[test]
