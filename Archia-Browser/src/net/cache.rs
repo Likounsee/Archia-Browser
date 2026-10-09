@@ -487,7 +487,10 @@ mod tests {
         assert!(cache.invalidate(&first));
         assert!(!cache.invalidate(&first));
         assert_eq!(cache.len(), 1);
-        assert_eq!(cache.used_bytes(), response.body.len() + 64 + "cache-control".len() + "max-age=60".len());
+        assert_eq!(
+            cache.used_bytes(),
+            response.body.len() + 64 + "cache-control".len() + "max-age=60".len()
+        );
         assert!(cache.get(&first).is_none());
         assert!(cache.get(&second).is_some());
     }
