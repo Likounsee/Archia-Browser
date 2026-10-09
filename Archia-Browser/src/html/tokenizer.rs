@@ -179,7 +179,12 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
                 }
             }
         }
-        attributes.insert(attr_name, decode_character_references(&value));
+        // HTML ignores duplicate attributes after the first occurrence.
+        // Keeping the first value avoids parser differentials where policy
+        // checks and later DOM consumers could interpret different values.
+        attributes
+            .entry(attr_name)
+            .or_insert_with(|| decode_character_references(&value));
     }
     Some((name, attributes, self_closing))
 }
@@ -214,6 +219,20 @@ mod tests {
                 HtmlToken::EndTag("body".into()),
                 HtmlToken::EndTag("html".into()),
             ]
+        );
+    }
+
+    #[test]
+    fn keeps_first_duplicate_attribute_value() {
+        let tokens = HtmlTokenizer::tokenize(
+            r#"<a href="https://safe.example/" href="https://other.example/">link</a>"#,
+        );
+        let HtmlToken::StartTag { attributes, .. } = &tokens[0] else {
+            panic!("expected anchor start tag");
+        };
+        assert_eq!(
+            attributes.get("href").map(String::as_str),
+            Some("https://safe.example/")
         );
     }
 
