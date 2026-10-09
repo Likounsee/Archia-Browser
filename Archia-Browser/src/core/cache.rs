@@ -25,6 +25,10 @@ impl<T> ResourceCache<T> {
 
     pub fn insert(&mut self, key: impl Into<String>, value: T, bytes: usize) {
         let key = key.into();
+        // Even an empty payload occupies memory through its key and entry
+        // metadata. Charging at least one byte prevents unlimited zero-cost
+        // entries from bypassing the cache capacity.
+        let bytes = bytes.max(1);
 
         if let Some(position) = self.entries.iter().position(|entry| entry.key == key) {
             if let Some(previous) = self.entries.remove(position) {
@@ -97,6 +101,25 @@ impl<T> ResourceCache<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zero_byte_entries_still_consume_cache_capacity() {
+        let mut cache = ResourceCache::new(2);
+        cache.insert("a", 1, 0);
+        cache.insert("b", 2, 0);
+        cache.insert("c", 3, 0);
+
+        assert_eq!(cache.len(), 2);
+        assert_eq!(cache.used(), 2);
+        assert_eq!(cache.get("a"), None);
+        assert_eq!(cache.get("b"), Some(&2));
+        assert_eq!(cache.get("c"), Some(&3));
+
+        let mut zero_capacity = ResourceCache::new(0);
+        zero_capacity.insert("empty", (), 0);
+        assert_eq!(zero_capacity.len(), 0);
+        assert_eq!(zero_capacity.used(), 0);
+    }
 
     #[test]
     fn cache_get_promotes_recent_entries() {
