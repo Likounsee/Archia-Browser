@@ -246,9 +246,7 @@ fn find_raw_text_end(input: &str, start: usize, tag_name: &str) -> Option<(usize
 
         // A raw-text end tag must end its name here. Without this boundary
         // check, </scripture> would incorrectly terminate a <script> block.
-        if next.is_some_and(|byte| {
-            byte == b'>' || byte == b'/' || byte.is_ascii_whitespace()
-        }) {
+        if next.is_some_and(|byte| byte == b'>' || byte == b'/' || byte.is_ascii_whitespace()) {
             if let Some(offset) = input[after_name..].find('>') {
                 return Some((text_end, after_name + offset + 1));
             }
@@ -336,7 +334,9 @@ mod character_reference_tests {
 
     #[test]
     fn raw_script_does_not_close_on_longer_tag_name_prefix() {
-        let tokens = HtmlTokenizer::tokenize("<script>const x = '</scripture>'; run();</script><p>after</p>");
+        let tokens = HtmlTokenizer::tokenize(
+            "<script>const x = '</scripture>'; run();</script><p>after</p>",
+        );
         assert!(matches!(
             tokens.get(1),
             Some(HtmlToken::Text(value)) if value.contains("</scripture>") && value.contains("run();")
