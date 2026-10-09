@@ -1357,10 +1357,7 @@ fn justify_flex_rows(
             .saturating_add(child.box_model.horizontal_outer());
         let exceeds_width = !rows.is_empty()
             && !rows.last().is_some_and(Vec::is_empty)
-            && row_width
-                .saturating_add(gap)
-                .saturating_add(outer_width)
-                > content_width;
+            && row_width.saturating_add(gap).saturating_add(outer_width) > content_width;
         if row_y.is_some_and(|current_y| current_y != y) || exceeds_width {
             rows.push(Vec::new());
             row_width = 0;
