@@ -1005,9 +1005,9 @@ fn layout_flex_children(
             || child.style.get("flex-basis").is_some()
         {
             if column {
-                flex_child.style.set("height", target_main.to_string());
+                flex_child.style.set("height", format!("{target_main}px"));
             } else {
-                flex_child.style.set("width", target_main.to_string());
+                flex_child.style.set("width", format!("{target_main}px"));
             }
         }
         let child_layout = layout_styled_node(
