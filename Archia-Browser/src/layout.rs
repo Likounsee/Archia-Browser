@@ -1284,7 +1284,6 @@ fn layout_flex_children(
                 &flex_indices,
                 node,
                 content_origin_y,
-                cross,
                 parse_length(node.style.get("height"), viewport_height).unwrap_or(cross),
                 wrap_reverse,
             );
@@ -1499,7 +1498,6 @@ fn align_flex_lines(
     indices: &[(usize, usize)],
     node: &crate::style_tree::StyledNode,
     content_origin_y: i32,
-    line_cross: u32,
     cross_size: u32,
     wrap_reverse: bool,
 ) {
