@@ -146,6 +146,8 @@ pub enum TransportError {
     UnsupportedScheme,
     InvalidUrl(UrlError),
     InvalidRequest,
+    /// The request was rejected by the browser's request policy before transport.
+    BlockedByPolicy,
     ConnectionFailed,
     Timeout,
     TlsFailed,
