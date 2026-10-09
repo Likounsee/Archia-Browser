@@ -3730,7 +3730,28 @@ mod tests {
     }
 
     #[test]
-    fn flex_column_percentage_column_gap_uses_container_width() {
+        #[test]
+    fn flex_column_percentage_row_gap_uses_container_height() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "display: flex; flex-direction: column; width: 100px; height: 40px; row-gap: 10%;",
+        );
+        for _ in 0..2 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 10px; height: 10px; flex: 0 0 10px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 40));
+
+        assert_eq!(layout.children[0].rect.y, 0);
+        assert_eq!(layout.children[1].rect.y, 14);
+    }
+
+fn flex_column_percentage_column_gap_uses_container_width() {
         let mut root = Node::element("div");
         root.set_attribute(
             "style",
