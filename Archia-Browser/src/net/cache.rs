@@ -508,7 +508,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn rejects_duplicate_or_malformed_response_max_age() {
         let request = make_request("https://example.org/resource");
