@@ -236,10 +236,10 @@ fn parse_rule_blocks(input: &str) -> Vec<(String, String)> {
         if ch == '"' || ch == '\'' {
             quote = Some(ch);
             if in_body {
-            body.push(ch);
-        } else {
-            prelude.push(ch);
-        }
+                body.push(ch);
+            } else {
+                prelude.push(ch);
+            }
             continue;
         }
 
@@ -283,7 +283,11 @@ fn parse_rule_blocks(input: &str) -> Vec<(String, String)> {
             _ => {}
         }
 
-        if in_body { body.push(ch); } else { prelude.push(ch); }
+        if in_body {
+            body.push(ch);
+        } else {
+            prelude.push(ch);
+        }
     }
 
     blocks
