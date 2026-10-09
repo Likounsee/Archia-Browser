@@ -47,3 +47,19 @@ fn flex_column_wrap_reverse_places_first_column_at_cross_axis_end() {
     assert_eq!(layout.children[1].rect.x, 90);
     assert_eq!(layout.children[2].rect.x, 80);
 }
+
+#[test]
+fn flex_align_self_overrides_parent_flex_start() {
+    let mut root = Node::element("div");
+    root.set_attribute(
+        "style",
+        "display: flex; align-items: flex-start; width: 100px; height: 100px;",
+    );
+    let mut child = Node::element("div");
+    child.set_attribute("style", "width: 20px; height: 20px; align-self: center;");
+    root.append(child);
+
+    let layout = styled_layout(&root, 100, 100);
+
+    assert_eq!(layout.children[0].rect.y, 40);
+}
