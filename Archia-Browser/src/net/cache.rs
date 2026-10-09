@@ -259,8 +259,8 @@ mod tests {
     fn ignores_unrepresentable_cache_max_age_without_panicking() {
         let mut cache = HttpCache::default();
         let request = make_request("https://example.org/resource");
-        let response = Response::new(200)
-            .with_header("cache-control", format!("max-age={}", u64::MAX));
+        let response =
+            Response::new(200).with_header("cache-control", format!("max-age={}", u64::MAX));
 
         cache.store(&request, &response);
 
