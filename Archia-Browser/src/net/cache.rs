@@ -499,7 +499,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn response_age_reduces_remaining_cache_freshness() {
         let mut cache = HttpCache::default();
