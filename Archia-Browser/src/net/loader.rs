@@ -1024,12 +1024,17 @@ mod tests {
 
         let requests = loader.transport.requests.lock().unwrap();
         assert_eq!(requests.len(), 2);
-        for name in ["authorization", "proxy-authorization", "host", "referer"] {
+        for name in ["authorization", "proxy-authorization", "host"] {
             assert!(
                 !has_header_case_insensitive(&requests[1].headers, name),
                 "mixed-case {name} must not survive a cross-origin redirect"
             );
         }
+        assert_eq!(
+            requests[1].header("referer"),
+            Some("https://example.org/"),
+            "a mixed-case Referer must be reduced to the origin, not leaked verbatim"
+        );
     }
 
     #[test]
