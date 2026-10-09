@@ -370,14 +370,30 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
         }
     }
 
-    // This transport writes request bodies verbatim and does not implement
-    // chunked request encoding. Reject transfer-encoding rather than sending
-    // a body whose framing disagrees with the declared protocol.
-    if request.header("transfer-encoding").is_some() {
+    // Request.headers is public, so callers can bypass with_header()'s
+    // lowercase normalization. Framing checks must therefore be
+    // case-insensitive just like HTTP field names, or mixed-case fields can
+    // bypass validation while still being serialized onto the wire.
+    if request
+        .headers
+        .keys()
+        .any(|name| name.eq_ignore_ascii_case("transfer-encoding"))
+    {
+        // This transport writes bodies verbatim and does not implement
+        // chunked request encoding.
         return Err(TransportError::InvalidRequest);
     }
 
-    if let Some(length) = request.header("content-length") {
+    let content_lengths = request
+        .headers
+        .iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+        .map(|(_, value)| value.as_str())
+        .collect::<Vec<_>>();
+    if content_lengths.len() > 1 {
+        return Err(TransportError::InvalidRequest);
+    }
+    if let Some(length) = content_lengths.first() {
         let length = length
             .trim()
             .parse::<usize>()
@@ -1138,6 +1154,41 @@ mod tests {
             .with_header("content-length", "5");
         // Construct a malformed map directly: the public builder normalizes
         // names and would otherwise collapse this duplicate before validation.
+        duplicate_length
+            .headers
+            .insert("Content-Length".into(), "5".into());
+        assert_eq!(
+            validate_request(&duplicate_length),
+            Err(TransportError::InvalidRequest)
+        );
+    }
+
+    #[test]
+    fn rejects_mixed_case_request_framing_headers() {
+        let url = Url::parse("http://example.org/").unwrap();
+
+        let mut transfer_encoded = Request::new(url.clone()).with_body(b"Hello".to_vec());
+        transfer_encoded
+            .headers
+            .insert("Transfer-Encoding".into(), "chunked".into());
+        assert_eq!(
+            validate_request(&transfer_encoded),
+            Err(TransportError::InvalidRequest)
+        );
+
+        let mut invalid_length = Request::new(url.clone()).with_body(b"Hello".to_vec());
+        invalid_length
+            .headers
+            .insert("Content-Length".into(), "4".into());
+        assert_eq!(
+            validate_request(&invalid_length),
+            Err(TransportError::InvalidRequest)
+        );
+
+        let mut duplicate_length = Request::new(url).with_body(b"Hello".to_vec());
+        duplicate_length
+            .headers
+            .insert("content-length".into(), "5".into());
         duplicate_length
             .headers
             .insert("Content-Length".into(), "5".into());
