@@ -1294,7 +1294,9 @@ fn layout_flex_children(
                 &flex_indices,
                 node,
                 content_origin_y,
-                parse_length(node.style.get("height"), viewport_height).unwrap_or(cross),
+                parse_length(node.style.get("height"), viewport_height)
+                    .map(|_| flex_basis_reference_height)
+                    .unwrap_or(cross),
                 wrap_reverse,
             );
         }
@@ -3727,6 +3729,27 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.y, 0);
         assert_eq!(layout.children[1].rect.y, 20);
+    }
+
+    #[test]
+    fn flex_row_align_content_uses_content_height_for_border_box() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "display: flex; flex-wrap: wrap; align-content: flex-end; box-sizing: border-box; width: 20px; height: 40px; padding: 5px 0;",
+        );
+        for _ in 0..2 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "width: 20px; height: 10px; flex: 0 0 20px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(20, 100));
+
+        assert_eq!(layout.children[0].rect.y, 15);
+        assert_eq!(layout.children[1].rect.y, 25);
     }
 
     #[test]
