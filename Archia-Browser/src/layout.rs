@@ -993,7 +993,15 @@ fn layout_flex_children(
         let mut flex_child = child.clone();
         if grow_enabled
             || shrink_enabled
-            || flex_shorthand.is_some_and(|(_, _, basis)| basis.is_some())
+            || parse_flex_shorthand(
+                child.style.get("flex"),
+                if column {
+                    flex_basis_reference_height
+                } else {
+                    content_width
+                },
+            )
+            .is_some_and(|(_, _, basis)| basis.is_some())
             || child.style.get("flex-basis").is_some()
         {
             if column {
