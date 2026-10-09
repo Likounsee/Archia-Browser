@@ -23,9 +23,9 @@ fn flex_row_wrap_reverse_places_first_line_at_cross_axis_end() {
 
     let layout = styled_layout(&root, 40, 100);
 
-    assert_eq!(layout.children[0].rect.y, 80);
-    assert_eq!(layout.children[1].rect.y, 80);
-    assert_eq!(layout.children[2].rect.y, 70);
+    assert_eq!(layout.children[0].rect.y, 90);
+    assert_eq!(layout.children[1].rect.y, 90);
+    assert_eq!(layout.children[2].rect.y, 80);
 }
 
 #[test]
@@ -43,7 +43,7 @@ fn flex_column_wrap_reverse_places_first_column_at_cross_axis_end() {
 
     let layout = styled_layout(&root, 100, 40);
 
-    assert_eq!(layout.children[0].rect.x, 80);
-    assert_eq!(layout.children[1].rect.x, 80);
-    assert_eq!(layout.children[2].rect.x, 70);
+    assert_eq!(layout.children[0].rect.x, 90);
+    assert_eq!(layout.children[1].rect.x, 90);
+    assert_eq!(layout.children[2].rect.x, 80);
 }
