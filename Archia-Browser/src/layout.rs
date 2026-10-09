@@ -788,19 +788,29 @@ fn layout_flex_children(
     }) || flow_parts
         .iter()
         .any(|part| part == "wrap" || part == "wrap-reverse");
-    let main_gap = if column {
-        parse_length(node.style.get("row-gap"), content_width)
+    let main_gap_reference = if column {
+        flex_basis_reference_height
     } else {
-        parse_length(node.style.get("column-gap"), content_width)
+        content_width
+    };
+    let cross_gap_reference = if column {
+        content_width
+    } else {
+        flex_basis_reference_height
+    };
+    let main_gap = if column {
+        parse_length(node.style.get("row-gap"), main_gap_reference)
+    } else {
+        parse_length(node.style.get("column-gap"), main_gap_reference)
     }
-    .or_else(|| parse_length(node.style.get("gap"), content_width))
+    .or_else(|| parse_length(node.style.get("gap"), main_gap_reference))
     .unwrap_or(0);
     let cross_gap = if column {
-        parse_length(node.style.get("column-gap"), content_width)
+        parse_length(node.style.get("column-gap"), cross_gap_reference)
     } else {
-        parse_length(node.style.get("row-gap"), content_width)
+        parse_length(node.style.get("row-gap"), cross_gap_reference)
     }
-    .or_else(|| parse_length(node.style.get("gap"), content_width))
+    .or_else(|| parse_length(node.style.get("gap"), cross_gap_reference))
     .unwrap_or(0);
     let mut main = 0_u32;
     let mut cross = 0_u32;
