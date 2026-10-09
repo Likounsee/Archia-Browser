@@ -550,7 +550,11 @@ mod tests {
 
         let too_strict = request.with_header("cache-control", "min-fresh=120");
         assert!(cache.get(&too_strict).is_none());
-        assert_eq!(cache.len(), 1, "min-fresh must not evict a still-fresh entry");
+        assert_eq!(
+            cache.len(),
+            1,
+            "min-fresh must not evict a still-fresh entry"
+        );
     }
 
     #[test]
