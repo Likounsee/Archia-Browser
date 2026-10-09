@@ -1,5 +1,9 @@
 use crate::net::Url;
 
+const MAX_COOKIE_PAIR_BYTES: usize = 4096;
+const MAX_COOKIES: usize = 3000;
+const MAX_COOKIES_PER_DOMAIN: usize = 180;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Cookie {
     pub name: String,
@@ -25,6 +29,9 @@ impl CookieJar {
         let Some(pair) = parts.next() else {
             return;
         };
+        if pair.len() > MAX_COOKIE_PAIR_BYTES {
+            return;
+        }
         let Some((name, value)) = pair.split_once('=') else {
             return;
         };
@@ -148,6 +155,16 @@ impl CookieJar {
                 && existing.domain == cookie.domain
                 && existing.path == cookie.path)
         });
+        if self.cookies.len() >= MAX_COOKIES
+            || self
+                .cookies
+                .iter()
+                .filter(|existing| existing.domain == cookie.domain)
+                .count()
+                >= MAX_COOKIES_PER_DOMAIN
+        {
+            return;
+        }
         self.cookies.push(cookie);
     }
 
@@ -536,6 +553,20 @@ mod tests {
         assert!(jar
             .header_for(&Url::parse("http://example.org/").unwrap())
             .is_none());
+    }
+
+    #[test]
+    fn rejects_oversized_cookie_pairs_and_caps_per_domain_storage() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&url, &format!("large={}", "x".repeat(MAX_COOKIE_PAIR_BYTES)));
+        assert!(jar.is_empty());
+
+        for index in 0..=MAX_COOKIES_PER_DOMAIN {
+            jar.store(&url, &format!("cookie{index}=value"));
+        }
+        assert_eq!(jar.len(), MAX_COOKIES_PER_DOMAIN);
     }
 
     #[test]
