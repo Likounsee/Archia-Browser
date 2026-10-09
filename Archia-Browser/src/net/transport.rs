@@ -550,9 +550,8 @@ fn parse_http_response_for_method(
             None => false,
         };
 
-        let body_forbidden =
-            matches!(method, crate::net::HttpMethod::Head)
-                || matches!(response.status, 204 | 205 | 304);
+        let body_forbidden = matches!(method, crate::net::HttpMethod::Head)
+            || matches!(response.status, 204 | 205 | 304);
 
         let body = if body_forbidden {
             if !body_bytes.is_empty() {
@@ -894,18 +893,11 @@ mod tests {
 
     #[test]
     fn reset_content_response_must_not_contain_body_bytes() {
-        let empty = parse_http_response(
-            b"HTTP/1.1 205 Reset Content\r\n\r\n",
-            1024,
-            1024,
-        );
+        let empty = parse_http_response(b"HTTP/1.1 205 Reset Content\r\n\r\n", 1024, 1024);
         assert_eq!(empty.unwrap().body, b"");
 
-        let with_body = parse_http_response(
-            b"HTTP/1.1 205 Reset Content\r\n\r\nunexpected",
-            1024,
-            1024,
-        );
+        let with_body =
+            parse_http_response(b"HTTP/1.1 205 Reset Content\r\n\r\nunexpected", 1024, 1024);
         assert_eq!(with_body, Err(TransportError::ConnectionFailed));
     }
 
@@ -1195,7 +1187,9 @@ mod tests {
     #[test]
     fn validates_mixed_case_host_headers_case_insensitively() {
         let mut request = Request::new(Url::parse("http://example.org/").unwrap());
-        request.headers.insert("Host".into(), "attacker.example".into());
+        request
+            .headers
+            .insert("Host".into(), "attacker.example".into());
         assert_eq!(
             validate_request(&request),
             Err(TransportError::InvalidRequest)
@@ -1229,11 +1223,9 @@ mod tests {
             }
         }
 
-        let mut request = Request::new(Url::parse("http://example.org/").unwrap())
-            .with_body(b"Hello".to_vec());
-        request
-            .headers
-            .insert("Content-Length".into(), "5".into());
+        let mut request =
+            Request::new(Url::parse("http://example.org/").unwrap()).with_body(b"Hello".to_vec());
+        request.headers.insert("Content-Length".into(), "5".into());
         let mut stream = CaptureStream::default();
         HttpTransport::new()
             .write_request(&mut stream, &request)
@@ -1242,9 +1234,9 @@ mod tests {
         let head = String::from_utf8(stream.written).unwrap();
         assert_eq!(
             head.lines()
-                .filter(|line| line.split_once(':').is_some_and(|(name, _)| {
-                    name.eq_ignore_ascii_case("content-length")
-                }))
+                .filter(|line| line
+                    .split_once(':')
+                    .is_some_and(|(name, _)| { name.eq_ignore_ascii_case("content-length") }))
                 .count(),
             1,
             "a mixed-case caller header must not trigger a second Content-Length"
