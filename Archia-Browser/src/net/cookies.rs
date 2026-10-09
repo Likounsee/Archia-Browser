@@ -29,6 +29,11 @@ impl CookieJar {
 
     pub fn store(&mut self, url: &Url, set_cookie: &str) {
         self.remove_expired();
+        // Bound the complete attribute string, not just name=value: otherwise
+        // a tiny cookie pair can carry a huge Path or Domain allocation.
+        if set_cookie.len() > MAX_COOKIE_PAIR_BYTES {
+            return;
+        }
         let mut parts = set_cookie.split(';').map(str::trim);
         let Some(pair) = parts.next() else {
             return;
@@ -367,6 +372,17 @@ mod tests {
             jar.header_for(&url).as_deref(),
             Some("quoted=\"safe-value_123\"")
         );
+    }
+
+    #[test]
+    fn rejects_oversized_cookie_attributes() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+        let oversized_path = format!("sid=x; Path=/{}", "a".repeat(MAX_COOKIE_PAIR_BYTES));
+
+        jar.store(&url, &oversized_path);
+
+        assert!(jar.is_empty());
     }
 
     #[test]
