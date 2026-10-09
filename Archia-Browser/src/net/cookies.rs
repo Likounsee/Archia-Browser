@@ -405,10 +405,7 @@ mod tests {
 
         jar.store(&insecure_root, "sid=attacker; Path=/");
 
-        assert_eq!(
-            jar.header_for(&secure_url).as_deref(),
-            Some("sid=trusted")
-        );
+        assert_eq!(jar.header_for(&secure_url).as_deref(), Some("sid=trusted"));
         assert_eq!(
             jar.header_for(&Url::parse("https://example.org/other").unwrap()),
             None
@@ -420,14 +417,14 @@ mod tests {
         let secure_url = Url::parse("https://example.org/account/profile").unwrap();
         let insecure_url = Url::parse("http://example.org/account/").unwrap();
         let mut jar = CookieJar::new();
-        jar.store(&Url::parse("https://example.org/").unwrap(), "sid=trusted; Path=/; Secure");
+        jar.store(
+            &Url::parse("https://example.org/").unwrap(),
+            "sid=trusted; Path=/; Secure",
+        );
 
         jar.store(&insecure_url, "sid=attacker; Path=/account");
 
-        assert_eq!(
-            jar.header_for(&secure_url).as_deref(),
-            Some("sid=trusted")
-        );
+        assert_eq!(jar.header_for(&secure_url).as_deref(), Some("sid=trusted"));
     }
 
     #[test]
