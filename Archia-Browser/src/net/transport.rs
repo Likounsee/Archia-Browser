@@ -542,12 +542,21 @@ fn parse_http_response_head(
     let status_line = lines.next().ok_or(TransportError::ConnectionFailed)?;
     let mut status_parts = status_line.splitn(3, ' ');
     let version = status_parts.next().unwrap_or_default();
-    let status = status_parts
-        .next()
-        .and_then(|value| value.parse::<u16>().ok())
-        .ok_or(TransportError::ConnectionFailed)?;
-
-    if !version.starts_with("HTTP/") {
+    let status_text = status_parts.next().unwrap_or_default();
+    let reason = status_parts.next().unwrap_or_default();
+    if !matches!(version, "HTTP/1.0" | "HTTP/1.1")
+        || status_text.len() != 3
+        || !status_text.bytes().all(|byte| byte.is_ascii_digit())
+        || reason
+            .bytes()
+            .any(|byte| (byte < 0x20 && byte != b'\t') || byte == 0x7f)
+    {
+        return Err(TransportError::ConnectionFailed);
+    }
+    let status = status_text
+        .parse::<u16>()
+        .map_err(|_| TransportError::ConnectionFailed)?;
+    if !(100..=599).contains(&status) {
         return Err(TransportError::ConnectionFailed);
     }
 
@@ -829,6 +838,23 @@ mod tests {
             assert_eq!(
                 parse_http_response(response, 1024, 1024),
                 Err(TransportError::ConnectionFailed)
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_http_versions_and_status_codes() {
+        for status_line in [
+            "HTTP/9.9 200 OK",
+            "HTTP/1.1 20 OK",
+            "HTTP/1.1 600 Unknown",
+            "HTTP/1.1 200 Bad\u{1}Reason",
+        ] {
+            let response = format!("{status_line}\r\n\r\n");
+            assert_eq!(
+                parse_http_response(response.as_bytes(), 1024, 1024),
+                Err(TransportError::ConnectionFailed),
+                "status line must be rejected: {status_line:?}"
             );
         }
     }
