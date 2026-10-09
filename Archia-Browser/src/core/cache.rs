@@ -58,6 +58,10 @@ impl<T> ResourceCache<T> {
     pub fn used(&self) -> usize {
         self.used
     }
+
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
     pub fn len(&self) -> usize {
         self.entries.len()
     }
