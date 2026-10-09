@@ -100,6 +100,7 @@ fn request_forces_cache_bypass(request: &Request) -> bool {
         .any(|(_, value)| {
             has_cache_directive(Some(value), "no-cache")
                 || has_cache_directive(Some(value), "no-store")
+                || has_cache_max_age_zero(Some(value))
         })
         || has_pragma_no_cache(request)
 }
@@ -116,6 +117,7 @@ fn request_can_use_cache(request: &Request) -> bool {
             .any(|(_, value)| {
                 has_cache_directive(Some(value), "no-cache")
                     || has_cache_directive(Some(value), "no-store")
+                    || has_cache_max_age_zero(Some(value))
             })
         && !has_pragma_no_cache(request)
 }
@@ -188,6 +190,18 @@ fn response_max_age(response: &Response) -> Option<u64> {
             }
             value.trim().trim_matches('"').parse().ok()
         })
+}
+
+fn has_cache_max_age_zero(header: Option<&str>) -> bool {
+    header.is_some_and(|value| {
+        value.split(',').any(|directive| {
+            let Some((name, value)) = directive.split_once('=') else {
+                return false;
+            };
+            name.trim().eq_ignore_ascii_case("max-age")
+                && value.trim().trim_matches('"').parse::<u64>().ok() == Some(0)
+        })
+    })
 }
 
 fn has_cache_directive(header: Option<&str>, wanted: &str) -> bool {
@@ -271,6 +285,40 @@ mod tests {
         assert!(cache.get(&no_cache).is_none());
         let no_store = request.with_header("cache-control", "no-store");
         assert!(cache.get(&no_store).is_none());
+    }
+
+    #[test]
+    fn request_max_age_zero_bypasses_and_evicts_cached_response() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/resource");
+        cache.store(
+            &request,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_body(b"old".to_vec()),
+        );
+        assert_eq!(cache.len(), 1);
+
+        let forced_refresh = request
+            .clone()
+            .with_header("cache-control", "max-age=0");
+        assert!(cache.get(&forced_refresh).is_none());
+        assert_eq!(cache.len(), 0);
+    }
+
+    #[test]
+    fn request_max_age_nonzero_does_not_force_bypass() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/resource");
+        cache.store(
+            &request,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_body(b"cached".to_vec()),
+        );
+
+        let request = request.with_header("cache-control", "max-age=30");
+        assert_eq!(cache.get(&request).unwrap().body, b"cached");
     }
 
     #[test]
