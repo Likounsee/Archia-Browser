@@ -448,6 +448,31 @@ mod tests {
     }
 
     #[test]
+    fn request_max_age_limits_reuse_without_evicting_the_entry() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/resource");
+        let response = Response::new(200)
+            .with_header("cache-control", "max-age=300")
+            .with_body(b"cached".to_vec());
+        cache.entries.insert(
+            cache_key(&request),
+            CachedResponse {
+                response,
+                stored_at: Instant::now() - Duration::from_secs(45),
+                expires_at: Instant::now() + Duration::from_secs(255),
+            },
+            128,
+        );
+
+        let strict = request.clone().with_header("cache-control", "max-age=30");
+        assert!(cache.get(&strict).is_none());
+        assert_eq!(cache.len(), 1, "request freshness limits must not evict the entry");
+
+        let permissive = request.with_header("cache-control", "max-age=60");
+        assert_eq!(cache.get(&permissive).unwrap().body, b"cached");
+    }
+
+    #[test]
     fn request_max_age_nonzero_does_not_force_bypass() {
         let mut cache = HttpCache::default();
         let request = make_request("https://example.org/resource");
