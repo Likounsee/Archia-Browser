@@ -469,7 +469,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn unstorable_replacement_evicts_previous_cached_response() {
         let request = make_request("https://example.org/resource");
