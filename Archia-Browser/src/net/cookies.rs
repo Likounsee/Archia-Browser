@@ -332,10 +332,7 @@ mod tests {
 
         jar.store(&insecure_url, "sid=attacker; Secure");
 
-        assert_eq!(
-            jar.header_for(&secure_url).as_deref(),
-            Some("sid=trusted")
-        );
+        assert_eq!(jar.header_for(&secure_url).as_deref(), Some("sid=trusted"));
     }
 
     #[test]
