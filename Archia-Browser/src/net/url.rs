@@ -75,7 +75,8 @@ impl Url {
 
     pub fn same_document(&self, other: &Self) -> bool {
         self.scheme == other.scheme
-            && self.authority.eq_ignore_ascii_case(&other.authority)
+            && self.host().eq_ignore_ascii_case(other.host())
+            && self.effective_port() == other.effective_port()
             && self.path == other.path
             && self.query == other.query
     }
@@ -308,6 +309,16 @@ mod tests {
 
         assert!(first.same_document(&second));
         assert!(!first.same_document(&different_query));
+    }
+
+    #[test]
+    fn same_document_normalizes_default_ports_and_host_case() {
+        let implicit = Url::parse("https://EXAMPLE.org/page?q=1#top").unwrap();
+        let explicit = Url::parse("https://example.ORG:443/page?q=1#next").unwrap();
+        let other_port = Url::parse("https://example.org:8443/page?q=1").unwrap();
+
+        assert!(implicit.same_document(&explicit));
+        assert!(!implicit.same_document(&other_port));
     }
 
     #[test]
