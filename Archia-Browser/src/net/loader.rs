@@ -202,8 +202,7 @@ where
             let Ok(url) = base_url.resolve(&href) else {
                 continue;
             };
-            let Some(css) =
-                self.load_stylesheet_resource(document_url, url, &mut request_budget)
+            let Some(css) = self.load_stylesheet_resource(document_url, url, &mut request_budget)
             else {
                 continue;
             };
@@ -355,14 +354,12 @@ where
             };
 
             if let Ok(url) = stylesheet_url.resolve(&reference) {
-                if let Some(imported) =
-                    self.load_stylesheet_resource_at(
-                        document_url,
-                        url,
-                        import_depth + 1,
-                        request_budget,
-                    )
-                {
+                if let Some(imported) = self.load_stylesheet_resource_at(
+                    document_url,
+                    url,
+                    import_depth + 1,
+                    request_budget,
+                ) {
                     output.push_str(&imported);
                     output.push('\n');
                     continue;
