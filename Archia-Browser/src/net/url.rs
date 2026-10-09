@@ -75,7 +75,7 @@ impl Url {
 
     pub fn same_document(&self, other: &Self) -> bool {
         self.scheme == other.scheme
-            && self.authority == other.authority
+            && self.authority.eq_ignore_ascii_case(&other.authority)
             && self.path == other.path
             && self.query == other.query
     }
@@ -407,5 +407,17 @@ mod tests {
             Url::parse("FILE://example.org/index.html").unwrap_err(),
             UrlError::UnsupportedFileAuthority
         );
+    }
+
+    #[test]
+    fn same_document_ignores_host_case_but_not_path_or_query() {
+        let upper = Url::parse("https://EXAMPLE.org/page?x=1#first").unwrap();
+        let lower_same = Url::parse("https://example.org/page?x=1#second").unwrap();
+        let different_path = Url::parse("https://example.org/other?x=1").unwrap();
+        let different_query = Url::parse("https://example.org/page?x=2").unwrap();
+
+        assert!(upper.same_document(&lower_same));
+        assert!(!upper.same_document(&different_path));
+        assert!(!upper.same_document(&different_query));
     }
 }
