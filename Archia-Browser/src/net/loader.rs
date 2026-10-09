@@ -229,13 +229,7 @@ where
         request_budget: &mut usize,
         remaining_css_bytes: &mut usize,
     ) -> Option<String> {
-        self.load_stylesheet_resource_at(
-            document_url,
-            url,
-            0,
-            request_budget,
-            remaining_css_bytes,
-        )
+        self.load_stylesheet_resource_at(document_url, url, 0, request_budget, remaining_css_bytes)
     }
 
     fn load_stylesheet_resource_at(
