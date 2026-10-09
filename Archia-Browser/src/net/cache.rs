@@ -168,6 +168,14 @@ impl HttpCache {
         self.entries.capacity()
     }
 
+    /// Invalidates the cached response associated with a request URL and method.
+    ///
+    /// Returns whether an entry was removed. This is useful after a resource is
+    /// explicitly refreshed or modified by a higher-level browser component.
+    pub fn invalidate(&mut self, request: &Request) -> bool {
+        self.entries.remove(&cache_key(request)).is_some()
+    }
+
     /// Removes all cached responses and releases the cache's accounted budget.
     pub fn clear(&mut self) {
         self.entries.clear();
@@ -461,6 +469,27 @@ mod tests {
         assert_eq!(cache.len(), 0);
         assert_eq!(cache.used_bytes(), 0);
         assert!(cache.get(&request).is_none());
+    }
+
+    #[test]
+    fn invalidate_removes_only_the_requested_cache_entry() {
+        let mut cache = HttpCache::new(4096);
+        let first = make_request("https://example.org/first");
+        let second = make_request("https://example.org/second");
+        let response = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_body(b"cached".to_vec());
+
+        cache.store(&first, &response);
+        cache.store(&second, &response);
+        assert_eq!(cache.len(), 2);
+
+        assert!(cache.invalidate(&first));
+        assert!(!cache.invalidate(&first));
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache.used_bytes(), response.body.len() + 64 + "cache-control".len() + "max-age=60".len());
+        assert!(cache.get(&first).is_none());
+        assert!(cache.get(&second).is_some());
     }
 
     #[test]
