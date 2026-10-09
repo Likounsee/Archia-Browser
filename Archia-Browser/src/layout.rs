@@ -1723,7 +1723,7 @@ fn parse_flex_shorthand(
         if parts[2] == "auto" {
             None
         } else {
-            parse_length(Some(parts[2]), containing_size)
+            Some(parse_length(Some(parts[2]), containing_size)?)
         }
     } else {
         Some(0)
@@ -2774,6 +2774,14 @@ mod tests {
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
 
         assert_eq!(layout.children[1].rect.y, 30);
+    }
+
+    #[test]
+    fn flex_shorthand_rejects_invalid_basis_tokens() {
+        assert_eq!(parse_flex_shorthand(Some("1 1 auto"), 100), Some((1.0, 1.0, None)));
+        assert_eq!(parse_flex_shorthand(Some("1 1 25px"), 100), Some((1.0, 1.0, Some(25))));
+        assert_eq!(parse_flex_shorthand(Some("1 1 nonsense"), 100), None);
+        assert_eq!(parse_flex_shorthand(Some("1 1 -5px"), 100), None);
     }
 
     #[test]
