@@ -584,7 +584,11 @@ fn is_http_token_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric()
         || matches!(
             byte,
-            b'!' | b'#' | b'
+            33 | 35..=39 | 42..=43 | 45..=46 | 94..=96 | 124 | 126
+        )
+}
+
+fn is_interim_response(status: u16) -> bool {
     (100..200).contains(&status) && status != 101
 }
 
