@@ -510,7 +510,10 @@ mod tests {
         jar.store(&https, "__Secure-sid=good");
         jar.store(&https, "__Host-sid=missing-secure; Path=/");
         jar.store(&https, "__Host-sid=missing-path");
-        jar.store(&https, "__Host-sid=domain; Path=/; Secure; Domain=example.org");
+        jar.store(
+            &https,
+            "__Host-sid=domain; Path=/; Secure; Domain=example.org",
+        );
         assert_eq!(jar.len(), 0);
 
         jar.store(&https, "__Secure-sid=good; Secure");
@@ -519,7 +522,8 @@ mod tests {
             "__Host-sid=host; Secure; Path=/",
         );
         assert_eq!(
-            jar.header_for(&Url::parse("https://example.org/").unwrap()).as_deref(),
+            jar.header_for(&Url::parse("https://example.org/").unwrap())
+                .as_deref(),
             Some("__Secure-sid=good; __Host-sid=host")
         );
     }
