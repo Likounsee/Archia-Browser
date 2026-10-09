@@ -70,13 +70,20 @@ impl CookieJar {
             match key.as_str() {
                 "domain" => {
                     if let Some(value) = pieces.next() {
-                        let domain = value.trim().trim_start_matches('.').to_ascii_lowercase();
+                        let raw_domain = value.trim();
+                        // RFC 6265 ignores one leading dot, but accepting
+                        // repeated dots after trimming them all is too lenient.
+                        let domain = raw_domain
+                            .strip_prefix('.')
+                            .unwrap_or(raw_domain)
+                            .to_ascii_lowercase();
                         let host = url.host().to_ascii_lowercase();
-                        // A Domain attribute must identify this host or a
-                        // dotted parent domain. Without the dot-boundary check,
-                        // a host such as "example.com" could set Domain=com and
-                        // leak that cookie to unrelated registrable domains.
+                        // A trailing dot makes the Domain attribute invalid.
+                        // Also require a host boundary so "example.com" cannot
+                        // set Domain=com and leak cookies to unrelated hosts.
                         if domain.is_empty()
+                            || domain.starts_with('.')
+                            || domain.ends_with('.')
                             || !(host == domain
                                 || (domain.contains('.') && host.ends_with(&format!(".{domain}"))))
                         {
@@ -496,6 +503,32 @@ mod tests {
         jar.store(&url, "sid=local; Domain=localhost");
 
         assert_eq!(jar.header_for(&url).as_deref(), Some("sid=local"));
+    }
+
+    #[test]
+    fn ignores_one_leading_dot_in_domain_attribute() {
+        let url = Url::parse("https://sub.example.org/").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&url, "sid=valid; Domain=.example.org");
+
+        assert_eq!(jar.header_for(&url).as_deref(), Some("sid=valid"));
+        assert_eq!(
+            jar.header_for(&Url::parse("https://other.example.org/").unwrap())
+                .as_deref(),
+            Some("sid=valid")
+        );
+    }
+
+    #[test]
+    fn rejects_repeated_or_trailing_dots_in_domain_attribute() {
+        let url = Url::parse("https://sub.example.org/").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&url, "repeated=bad; Domain=..example.org");
+        jar.store(&url, "trailing=bad; Domain=example.org.");
+
+        assert!(jar.is_empty());
     }
 
     #[test]
