@@ -117,25 +117,28 @@ where
 
                 let mut next = current.clone();
                 let had_referrer =
-                    next.headers.contains_key("referer") || next.policy.referrer.is_some();
+                    has_header_case_insensitive(&next.headers, "referer")
+                        || next.policy.referrer.is_some();
                 let cross_origin = !same_origin(&current.url, &url);
                 next.url = url;
                 if had_referrer {
                     if let Some(referrer) = referrer_for_target(&current.url, &next.url) {
+                        remove_header_case_insensitive(&mut next.headers, "referer");
                         next.headers.insert("referer".into(), referrer.to_string());
                         next.policy.referrer = Some(referrer);
                     } else {
-                        next.headers.remove("referer");
+                        remove_header_case_insensitive(&mut next.headers, "referer");
                         next.policy.referrer = None;
                     }
                 }
-                next.headers.remove("cookie");
+                remove_header_case_insensitive(&mut next.headers, "cookie");
                 if cross_origin {
-                    // Credentials and an explicit Host header must never leak to a
-                    // different origin through a redirect.
-                    next.headers.remove("authorization");
-                    next.headers.remove("proxy-authorization");
-                    next.headers.remove("host");
+                    // Header names are case-insensitive. Request.headers is public,
+                    // so callers may have inserted mixed-case credentials directly.
+                    // Remove every spelling before following a cross-origin redirect.
+                    for name in ["authorization", "proxy-authorization", "host"] {
+                        remove_header_case_insensitive(&mut next.headers, name);
+                    }
                 }
                 if let Some(cookie) = self
                     .cookies
@@ -149,8 +152,8 @@ where
                 if should_switch_to_get(current.method, response.status) {
                     next.method = HttpMethod::Get;
                     next.body.clear();
-                    next.headers.remove("content-length");
-                    next.headers.remove("content-type");
+                    remove_header_case_insensitive(&mut next.headers, "content-length");
+                    remove_header_case_insensitive(&mut next.headers, "content-type");
                 }
                 current = next;
                 continue;
@@ -344,6 +347,20 @@ where
         }
         output
     }
+}
+
+fn has_header_case_insensitive(
+    headers: &std::collections::BTreeMap<String, String>,
+    name: &str,
+) -> bool {
+    headers.keys().any(|key| key.eq_ignore_ascii_case(name))
+}
+
+fn remove_header_case_insensitive(
+    headers: &mut std::collections::BTreeMap<String, String>,
+    name: &str,
+) {
+    headers.retain(|key, _| !key.eq_ignore_ascii_case(name));
 }
 
 fn collect_stylesheet_links(node: &Node, links: &mut Vec<String>) {
@@ -971,6 +988,48 @@ mod tests {
         assert_eq!(requests[1].header("authorization"), None);
         assert_eq!(requests[1].header("proxy-authorization"), None);
         assert_eq!(requests[1].header("host"), None);
+    }
+
+    #[test]
+    fn strips_mixed_case_sensitive_headers_on_cross_origin_redirects() {
+        #[derive(Debug)]
+        struct RecordingTransport {
+            responses: std::sync::Mutex<Vec<Response>>,
+            requests: std::sync::Mutex<Vec<Request>>,
+        }
+
+        impl Transport for RecordingTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                self.requests.lock().unwrap().push(request.clone());
+                Ok(self.responses.lock().unwrap().remove(0))
+            }
+        }
+
+        let transport = RecordingTransport {
+            responses: std::sync::Mutex::new(vec![
+                Response::new(302).with_header("location", "https://other.example/final"),
+                Response::new(200)
+                    .with_header("content-type", "text/html")
+                    .with_body(b"<body>safe</body>".to_vec()),
+            ]),
+            requests: std::sync::Mutex::new(Vec::new()),
+        };
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
+        let mut request = Request::new(Url::parse("https://example.org/start").unwrap());
+        request.headers.insert("Authorization".into(), "Bearer secret".into());
+        request.headers.insert("Proxy-Authorization".into(), "Basic secret".into());
+        request.headers.insert("Host".into(), "example.org".into());
+        request.headers.insert("Referer".into(), "https://example.org/private".into());
+        loader.load(&request, LayoutViewport::new(320, 200)).unwrap();
+
+        let requests = loader.transport.requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        for name in ["authorization", "proxy-authorization", "host", "referer"] {
+            assert!(
+                !has_header_case_insensitive(&requests[1].headers, name),
+                "mixed-case {name} must not survive a cross-origin redirect"
+            );
+        }
     }
 
     #[test]
