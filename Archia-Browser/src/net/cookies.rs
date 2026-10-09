@@ -560,7 +560,10 @@ mod tests {
         let url = Url::parse("https://example.org/").unwrap();
         let mut jar = CookieJar::new();
 
-        jar.store(&url, &format!("large={}", "x".repeat(MAX_COOKIE_PAIR_BYTES)));
+        jar.store(
+            &url,
+            &format!("large={}", "x".repeat(MAX_COOKIE_PAIR_BYTES)),
+        );
         assert!(jar.is_empty());
 
         for index in 0..=MAX_COOKIES_PER_DOMAIN {
