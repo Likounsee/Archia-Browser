@@ -2198,7 +2198,10 @@ fn parse_calc_length(expression: &str, containing_width: u32) -> Option<u32> {
             f64::from(containing_width) * percent / 100.0
         } else {
             let px = term.get(..term.len().checked_sub(2)?)?;
-            if !term.get(term.len().checked_sub(2)?..)?.eq_ignore_ascii_case("px") {
+            if !term
+                .get(term.len().checked_sub(2)?..)?
+                .eq_ignore_ascii_case("px")
+            {
                 return None;
             }
             let px = px.parse::<f64>().ok()?;
@@ -2224,7 +2227,10 @@ fn parse_calc_length(expression: &str, containing_width: u32) -> Option<u32> {
 fn parse_px(value: Option<&str>) -> Option<u32> {
     let value = value?.trim();
     let number = value.get(..value.len().checked_sub(2)?)?;
-    if !value.get(value.len().checked_sub(2)?..)?.eq_ignore_ascii_case("px") {
+    if !value
+        .get(value.len().checked_sub(2)?..)?
+        .eq_ignore_ascii_case("px")
+    {
         return None;
     }
     let number = number.trim().parse::<f64>().ok()?;
