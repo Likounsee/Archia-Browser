@@ -742,6 +742,9 @@ fn parse_gap_shorthand(value: Option<&str>, reference: u32, column_gap: bool) ->
     let mut parts = value.split_whitespace();
     let first = parts.next()?;
     let second = parts.next();
+    if parts.next().is_some() {
+        return None;
+    }
     let selected = match (column_gap, second) {
         (true, Some(second)) => second,
         (_, _) => first,
@@ -2834,6 +2837,14 @@ mod tests {
         assert_eq!(layout.children[0].rect.x, 0);
         assert_eq!(layout.children[1].rect.x, 52);
         assert_eq!(layout.children[2].rect.y, 14);
+    }
+
+    #[test]
+    fn gap_shorthand_rejects_more_than_two_values() {
+        assert_eq!(parse_gap_shorthand(Some("4px 8px 12px"), 100, false), None);
+        assert_eq!(parse_gap_shorthand(Some("4px 8px 12px"), 100, true), None);
+        assert_eq!(parse_gap_shorthand(Some("4px 8px"), 100, false), Some(4));
+        assert_eq!(parse_gap_shorthand(Some("4px 8px"), 100, true), Some(8));
     }
 
     #[test]
