@@ -861,7 +861,8 @@ fn layout_flex_children(
         } else {
             child_margin.horizontal_outer()
         };
-        let base = base.saturating_add(outer_margin);
+        let flex_base = base;
+        let outer_base = flex_base.saturating_add(outer_margin);
         let grow = flex_shorthand
             .map(|(grow, _, _)| grow)
             .unwrap_or_else(|| parse_flex_factor(child.style.get("flex-grow")));
@@ -875,14 +876,14 @@ fn layout_flex_children(
             })
             .unwrap_or(1.0);
         total_grow += grow;
-        total_shrink_weight += shrink * base as f32;
-        bases.push(Some((base, grow, shrink)));
+        total_shrink_weight += shrink * flex_base as f32;
+        bases.push(Some((outer_base, grow, shrink, flex_base)));
     }
 
     let base_main = bases
         .iter()
         .flatten()
-        .map(|(base, _, _)| *base)
+        .map(|(base, _, _, _)| *base)
         .fold(0_u32, u32::saturating_add)
         .saturating_add(
             main_gap.saturating_mul(bases.iter().flatten().count().saturating_sub(1) as u32),
@@ -948,13 +949,14 @@ fn layout_flex_children(
         let base = base_entry.0;
         let grow = base_entry.1;
         let shrink = base_entry.2;
+        let flex_base = base_entry.3;
         let extra = if grow_enabled {
             (free_space as f32 * grow / total_grow).floor() as u32
         } else {
             0
         };
         let reduction = if shrink_enabled {
-            (deficit as f32 * shrink * base as f32 / total_shrink_weight).floor() as u32
+            (deficit as f32 * shrink * flex_base as f32 / total_shrink_weight).floor() as u32
         } else {
             0
         };
