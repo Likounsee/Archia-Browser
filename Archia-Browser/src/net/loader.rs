@@ -654,6 +654,55 @@ mod tests {
     }
 
     #[test]
+    fn cached_documents_still_obey_current_request_policy() {
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        struct TogglePolicy(Arc<AtomicBool>);
+
+        impl RequestPolicyEngine for TogglePolicy {
+            fn decide(&self, _: &Request) -> PolicyDecision {
+                if self.0.load(Ordering::SeqCst) {
+                    PolicyDecision::Block
+                } else {
+                    PolicyDecision::Allow
+                }
+            }
+        }
+
+        struct CountingTransport(Arc<AtomicUsize>);
+
+        impl Transport for CountingTransport {
+            fn send(&self, _: &Request) -> Result<Response, TransportError> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Ok(Response::new(200)
+                    .with_header("content-type", "text/html")
+                    .with_header("cache-control", "max-age=60")
+                    .with_body(b"<body>Cached page</body>".to_vec()))
+            }
+        }
+
+        let blocked = Arc::new(AtomicBool::new(false));
+        let requests = Arc::new(AtomicUsize::new(0));
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(TogglePolicy(Arc::clone(&blocked))),
+            CountingTransport(Arc::clone(&requests)),
+        );
+        let request = Request::new(Url::parse("https://example.org/cached").unwrap());
+        let viewport = LayoutViewport::new(320, 200);
+
+        assert!(loader.load(&request, viewport).is_ok());
+        assert_eq!(requests.load(Ordering::SeqCst), 1);
+
+        blocked.store(true, Ordering::SeqCst);
+        assert_eq!(
+            loader.load(&request, viewport),
+            Err(DocumentLoadError::Network(TransportError::BlockedByPolicy))
+        );
+        assert_eq!(requests.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
     fn document_loads_are_marked_as_document_resources() {
         #[derive(Debug)]
         struct InspectTransport;
