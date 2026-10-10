@@ -7,6 +7,14 @@ const MAX_COOKIE_HEADER_BYTES: usize = 8192;
 const MAX_COOKIES: usize = 3000;
 const MAX_COOKIES_PER_DOMAIN: usize = 180;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SameSite {
+    Unspecified,
+    Strict,
+    Lax,
+    None,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Cookie {
     pub name: String,
@@ -14,6 +22,8 @@ pub struct Cookie {
     pub domain: String,
     pub path: String,
     pub secure: bool,
+    pub http_only: bool,
+    pub same_site: SameSite,
     pub host_only: bool,
     pub expires_at: Option<SystemTime>,
 }
@@ -60,6 +70,8 @@ impl CookieJar {
             domain: url.host().to_ascii_lowercase(),
             path: default_cookie_path(url.path()),
             secure: false,
+            http_only: false,
+            same_site: SameSite::Unspecified,
             host_only: true,
             expires_at: None,
         };
@@ -123,8 +135,21 @@ impl CookieJar {
                     }
                 }
                 "secure" => cookie.secure = true,
-                // Ignore extension attributes (including HttpOnly and
-                // SameSite) instead of rejecting an otherwise valid cookie.
+                "httponly" => cookie.http_only = true,
+                "samesite" => {
+                    cookie.same_site = match pieces
+                        .next()
+                        .map(str::trim)
+                        .unwrap_or_default()
+                        .to_ascii_lowercase()
+                        .as_str()
+                    {
+                        "strict" => SameSite::Strict,
+                        "lax" => SameSite::Lax,
+                        "none" => SameSite::None,
+                        _ => SameSite::Unspecified,
+                    };
+                }
                 _ => {}
             }
         }
@@ -165,12 +190,18 @@ impl CookieJar {
             cookie.expires_at = Some(expires_at);
         }
 
+        // SameSite=None is only valid for Secure cookies. Reject it rather
+        // than silently allowing cross-site use of a non-Secure cookie.
+        if cookie.same_site == SameSite::None && !cookie.secure {
+            return;
+        }
+
         // An insecure origin must not be able to plant a Secure cookie that
         // will later be sent over HTTPS. This prevents HTTP interception from
         // overwriting or shadowing a security-sensitive HTTPS cookie.
         if cookie.secure && !url.is_secure() {
             return;
-        }
+       }
 
         // Enforce the cookie prefixes used by browsers to prevent insecure
         // origins and sibling subdomains from replacing sensitive cookies.
@@ -292,6 +323,50 @@ impl CookieJar {
         // Bound the request header independently from cookie count. A jar
         // can contain many individually valid cookies, but emitting all of
         // them can create multi-megabyte request headers.
+        let mut header = String::new();
+        for cookie in matching {
+            let pair_len = cookie.name.len() + 1 + cookie.value.len();
+            let separator_len = usize::from(!header.is_empty()) * 2;
+            if header.len() + separator_len + pair_len > MAX_COOKIE_HEADER_BYTES {
+                continue;
+            }
+            if !header.is_empty() {
+                header.push_str("; ");
+            }
+            header.push_str(&cookie.name);
+            header.push('=');
+            header.push_str(&cookie.value);
+        }
+        (!header.is_empty()).then_some(header)
+    }
+
+    /// Return cookies visible to a document-cookie-style API. HttpOnly cookies
+    /// remain available to the network header path but are never exposed here.
+    ///
+    /// SameSite eligibility is intentionally not decided here: request callers
+    /// need top-level-site and navigation context to enforce that policy.
+    pub fn script_visible_header_for(&self, url: &Url) -> Option<String> {
+        let now = SystemTime::now();
+        let host = url.host().to_ascii_lowercase();
+        let path = url.path();
+        let secure = url.is_secure();
+        let mut matching = self
+            .cookies
+            .iter()
+            .filter(|cookie| {
+                !cookie.http_only
+                    && !cookie.expires_at.is_some_and(|expires_at| expires_at <= now)
+                    && (if cookie.host_only {
+                        host == cookie.domain
+                    } else {
+                        cookie_domain_matches(&host, &cookie.domain)
+                    })
+                    && cookie_path_matches(path, &cookie.path)
+                    && (!cookie.secure || secure)
+            })
+            .collect::<Vec<_>>();
+        matching.sort_by(|first, second| second.path.len().cmp(&first.path.len()));
+
         let mut header = String::new();
         for cookie in matching {
             let pair_len = cookie.name.len() + 1 + cookie.value.len();
@@ -624,13 +699,49 @@ mod tests {
     }
 
     #[test]
-    fn accepts_cookies_with_http_only_and_same_site_attributes() {
+    fn parses_http_only_and_same_site_without_exposing_http_only_to_scripts() {
         let url = Url::parse("https://example.org/").unwrap();
         let mut jar = CookieJar::new();
 
-        jar.store(&url, "sid=abc; HttpOnly; SameSite=Lax; Secure");
+        jar.store(&url, "session=secret; HttpOnly; SameSite=Lax; Secure");
+        jar.store(&url, "theme=dark; SameSite=Strict; Secure");
 
-        assert_eq!(jar.header_for(&url).as_deref(), Some("sid=abc"));
+        assert_eq!(jar.header_for(&url).as_deref(), Some("session=secret; theme=dark"));
+        assert_eq!(jar.script_visible_header_for(&url).as_deref(), Some("theme=dark"));
+        let session = jar.cookies.iter().find(|cookie| cookie.name == "session").unwrap();
+        assert!(session.http_only);
+        assert_eq!(session.same_site, SameSite::Lax);
+        let theme = jar.cookies.iter().find(|cookie| cookie.name == "theme").unwrap();
+        assert!(!theme.http_only);
+        assert_eq!(theme.same_site, SameSite::Strict);
+    }
+
+    #[test]
+    fn rejects_samesite_none_without_secure() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&url, "insecure=1; SameSite=None");
+        assert!(jar.is_empty());
+
+        jar.store(&url, "secure=1; SameSite=None; Secure");
+        assert_eq!(jar.header_for(&url).as_deref(), Some("secure=1"));
+    }
+
+    #[test]
+    fn script_visible_cookie_header_respects_scope() {
+        let root = Url::parse("https://example.org/").unwrap();
+        let account = Url::parse("https://example.org/account/page").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&root, "visible=root; Path=/");
+        jar.store(&account, "hidden=secret; HttpOnly; Path=/account");
+        jar.store(&account, "scoped=yes; Path=/account");
+
+        assert_eq!(jar.script_visible_header_for(&account).as_deref(), Some("scoped=yes; visible=root"));
+        assert_eq!(
+            jar.script_visible_header_for(&Url::parse("https://example.org/other").unwrap()).as_deref(),
+            Some("visible=root")
+        );
     }
 
     #[test]
