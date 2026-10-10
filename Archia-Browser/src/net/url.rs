@@ -262,7 +262,52 @@ fn valid_userinfo(userinfo: &str) -> bool {
         if !(byte.is_ascii_alphanumeric()
             || matches!(
                 byte,
-                b'-' | b'.' | b'_' | b'~' | b'!' | b'
+                45 | 46 | 95 | 126 | 33 | 36 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 59 | 61 | 58
+            ))
+        {
+            return false;
+        }
+        index += 1;
+    }
+    true
+}
+
+fn validate_dns_or_ipv4_host(host: &str) -> Result<(), UrlError> {
+    // This implementation intentionally accepts ASCII DNS names only. IDNs
+    // must be converted to their ASCII form (punycode) before parsing.
+    if !host.is_ascii() || host.len() > 253 {
+        return Err(UrlError::InvalidAuthority);
+    }
+    if host.bytes().any(|byte| {
+        !(byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-'))
+    }) {
+        return Err(UrlError::InvalidAuthority);
+    }
+
+    let without_trailing_dot = host.strip_suffix('.').unwrap_or(host);
+    if without_trailing_dot.is_empty() {
+        return Err(UrlError::InvalidAuthority);
+    }
+    let labels: Vec<&str> = without_trailing_dot.split('.').collect();
+    if labels.iter().any(|label| {
+        label.is_empty()
+            || label.len() > 63
+            || !label.as_bytes()[0].is_ascii_alphanumeric()
+            || !label.as_bytes()[label.len() - 1].is_ascii_alphanumeric()
+    }) {
+        return Err(UrlError::InvalidAuthority);
+    }
+
+    // Numeric dotted hosts are interpreted as IPv4 by many networking APIs.
+    // Reject invalid forms instead of allowing different parsers to normalize
+    // the same spelling to different destinations.
+    if labels.len() == 4 && labels.iter().all(|label| label.bytes().all(|b| b.is_ascii_digit()))
+        && host.parse::<std::net::Ipv4Addr>().is_err()
+    {
+        return Err(UrlError::InvalidAuthority);
+    }
+    Ok(())
+}
 
 fn contains_unsafe_url_whitespace(value: &str) -> bool {
     value
