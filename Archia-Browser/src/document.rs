@@ -575,6 +575,7 @@ b</textarea></form>"#,
         assert_eq!(page.url(), Some(&url));
     }
 
+    #[test]
     fn extracts_trimmed_document_title() {
         let page = Page::from_html(
             "<html><head><title>  Archia Browser  </title></head><body>Hello</body></html>",
