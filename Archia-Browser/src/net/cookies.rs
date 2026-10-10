@@ -100,16 +100,25 @@ impl CookieJar {
                         // A trailing dot makes the Domain attribute invalid.
                         // Also require a host boundary so "example.com" cannot
                         // set Domain=com and leak cookies to unrelated hosts.
+                        let public_suffix = is_public_suffix(&domain);
                         if domain.is_empty()
                             || domain.starts_with('.')
                             || domain.ends_with('.')
-                            || is_public_suffix(&domain)
+                            || (public_suffix && domain != host)
                             || !cookie_domain_matches(&host, &domain)
                         {
                             return;
                         }
-                        cookie.domain = domain;
-                        cookie.host_only = false;
+                        // RFC 6265: a Domain attribute equal to the request
+                        // host's public suffix is treated as host-only rather
+                        // than rejected or broadened to sibling hosts.
+                        if public_suffix {
+                            cookie.domain = host;
+                            cookie.host_only = true;
+                        } else {
+                            cookie.domain = domain;
+                            cookie.host_only = false;
+                        }
                     }
                 }
                 "path" => {
