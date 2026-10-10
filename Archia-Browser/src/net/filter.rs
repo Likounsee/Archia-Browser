@@ -81,7 +81,15 @@ impl FilterRule {
     fn pattern_matches(&self, url: &str) -> bool {
         // An empty substring matches every URL; treating an accidental empty
         // rule as valid could silently disable every request when blocking.
-        !self.pattern.is_empty() && url.contains(&self.pattern)
+        if self.pattern.is_empty() {
+            return false;
+        }
+
+        // Servers commonly treat percent-encoded unreserved ASCII bytes as
+        // their literal characters. Match that equivalent spelling as well,
+        // or a rule for "/blocked" could be bypassed with "/%62locked".
+        url.contains(&self.pattern)
+            || decode_unreserved_percent_escapes(url).contains(&self.pattern)
     }
     pub fn decision(&self) -> FilterDecision {
         self.decision
@@ -129,6 +137,40 @@ impl RequestFilter {
             FilterDecision::Allow
         }
     }
+}
+
+fn decode_unreserved_percent_escapes(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut output = String::with_capacity(input.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%'
+            && index + 2 < bytes.len()
+            && bytes[index + 1].is_ascii_hexdigit()
+            && bytes[index + 2].is_ascii_hexdigit()
+        {
+            let hex = |byte: u8| -> u8 {
+                match byte {
+                    b'0'..=b'9' => byte - b'0',
+                    b'a'..=b'f' => byte - b'a' + 10,
+                    b'A'..=b'F' => byte - b'A' + 10,
+                    _ => 0,
+                }
+            };
+            let decoded = (hex(bytes[index + 1]) << 4) | hex(bytes[index + 2]);
+            if decoded.is_ascii_alphanumeric() || matches!(decoded, b'-' | b'.' | b'_' | b'~') {
+                output.push(decoded as char);
+                index += 3;
+                continue;
+            }
+        }
+        // Percent escapes and UTF-8 bytes are ASCII-preserved here; append
+        // complete UTF-8 characters for non-ASCII input.
+        let character = input[index..].chars().next().expect("index stays on a character boundary");
+        output.push(character);
+        index += character.len_utf8();
+    }
+    output
 }
 
 fn party_context(url: &str, first_party: Option<&crate::net::Url>) -> Option<PartyContext> {
@@ -192,6 +234,22 @@ mod tests {
         assert_eq!(
             filter.decide("https://example.org/app.js", Some(ResourceType::Script)),
             FilterDecision::Allow
+        );
+    }
+
+    #[test]
+    fn filter_matches_percent_encoded_unreserved_path_characters() {
+        let mut filter = RequestFilter::default();
+        filter.add_rule(FilterRule::block("/blocked"));
+
+        assert_eq!(
+            filter.decide("https://example.org/%62locked/resource", Some(ResourceType::Document)),
+            FilterDecision::Block
+        );
+        assert_eq!(
+            filter.decide("https://example.org/%7Euser", Some(ResourceType::Document)),
+            FilterDecision::Allow,
+            "reserved policy patterns should not be broadened to unrelated paths"
         );
     }
 
