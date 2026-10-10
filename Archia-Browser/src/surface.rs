@@ -69,6 +69,27 @@ pub struct SoftwareSurface {
     pixels: Vec<u8>,
 }
 
+/// A software surface whose pixel allocation is held against a shared memory budget.
+#[derive(Debug)]
+pub struct BudgetedSoftwareSurface {
+    surface: SoftwareSurface,
+    _reservation: MemoryReservation,
+}
+
+impl std::ops::Deref for BudgetedSoftwareSurface {
+    type Target = SoftwareSurface;
+
+    fn deref(&self) -> &Self::Target {
+        &self.surface
+    }
+}
+
+impl std::ops::DerefMut for BudgetedSoftwareSurface {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.surface
+    }
+}
+
 impl SoftwareSurface {
     /// Create a bounded surface, falling back to an empty surface on failure.
     pub fn new(width: u32, height: u32) -> Self {
@@ -80,15 +101,15 @@ impl SoftwareSurface {
 
     /// Fallibly allocate a surface while reserving its pixel bytes from a shared budget.
     ///
-    /// The returned reservation must be retained for as long as the surface's pixel
-    /// storage is live. Dropping the reservation releases the accounted bytes.
+    /// The returned wrapper owns both the pixels and their reservation, so the budget
+    /// remains charged for exactly as long as the accounted surface is retained.
     /// Existing callers of `try_new` keep their per-surface cap but do not participate
     /// in a shared budget until they opt into this constructor.
     pub fn try_new_with_budget(
         width: u32,
         height: u32,
         budget: Arc<MemoryBudget>,
-    ) -> Option<(Self, MemoryReservation)> {
+    ) -> Option<BudgetedSoftwareSurface> {
         let byte_len = if width == 0 || height == 0 {
             0
         } else {
@@ -102,7 +123,10 @@ impl SoftwareSurface {
         }
         let reservation = MemoryReservation::try_new(budget, byte_len)?;
         let surface = Self::try_new(width, height)?;
-        Some((surface, reservation))
+        Some(BudgetedSoftwareSurface {
+            surface,
+            _reservation: reservation,
+        })
     }
 
     /// Fallibly allocate an RGBA surface with a 64 MiB pixel-storage limit.
@@ -530,7 +554,7 @@ mod tests {
     fn budgeted_surface_reserves_and_releases_pixel_storage() {
         let budget = Arc::new(MemoryBudget::new(8 * 4 * 4));
         {
-            let (surface, _reservation) =
+            let surface =
                 SoftwareSurface::try_new_with_budget(8, 4, Arc::clone(&budget)).unwrap();
             assert_eq!(surface.pixels().len(), 8 * 4 * 4);
             assert_eq!(budget.used(), 8 * 4 * 4);
