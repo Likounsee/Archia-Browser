@@ -2019,7 +2019,10 @@ mod limit_tests {
     #[test]
     fn tls_server_name_rejects_invalid_dns_names() {
         for host in ["", "bad host", "example.org/path", "example.org:443"] {
-            assert!(matches!(tls_server_name(host), Err(TransportError::TlsFailed)), "{host:?}");
+            assert!(
+                matches!(tls_server_name(host), Err(TransportError::TlsFailed)),
+                "{host:?}"
+            );
         }
     }
 
