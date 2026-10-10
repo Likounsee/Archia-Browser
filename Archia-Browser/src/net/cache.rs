@@ -573,9 +573,8 @@ mod tests {
     fn does_not_extend_freshness_of_response_with_old_date() {
         let mut cache = HttpCache::default();
         let request = make_request("https://example.org/stale");
-        let old_date = httpdate::fmt_http_date(
-            std::time::SystemTime::now() - Duration::from_secs(120),
-        );
+        let old_date =
+            httpdate::fmt_http_date(std::time::SystemTime::now() - Duration::from_secs(120));
         let response = Response::new(200)
             .with_header("cache-control", "public, max-age=60")
             .with_header("date", old_date)
