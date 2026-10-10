@@ -62,12 +62,27 @@ where
         request: &Request,
         viewport: LayoutViewport,
     ) -> Result<Page, DocumentLoadError> {
-        let mut current = request
-            .clone()
-            .with_cookies(&self.cookies.lock().expect("cookie jar poisoned"));
+        let mut current = request.clone();
         current.policy.resource_kind = ResourceKind::Document;
         if current.policy.first_party.is_none() {
             current.policy.first_party = Some(current.url.clone());
+        }
+        // Rebuild the jar-managed Cookie header after the navigation context is
+        // known, rather than attaching every matching cookie before SameSite
+        // policy can be evaluated.
+        remove_header_case_insensitive(&mut current.headers, "cookie");
+        if let Some(cookie) = self
+            .cookies
+            .lock()
+            .expect("cookie jar poisoned")
+            .header_for_context(
+                &current.url,
+                current.policy.first_party.as_ref(),
+                true,
+                current.method,
+            )
+        {
+            current.headers.insert("cookie".into(), cookie);
         }
 
         for redirect_count in 0..=self.max_redirects {
