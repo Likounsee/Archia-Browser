@@ -11,7 +11,7 @@ permissions:
 jobs:
   url-fuzz:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,6 +21,22 @@ jobs:
         run: rustup toolchain install nightly --profile minimal
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz --locked
-      - name: Fuzz URL parsing and resolution
-        run: cargo +nightly fuzz run url_parse_resolve -- -max_total_time=120 -print_final_stats=1
+      - name: Build all fuzz targets
+        run: cargo +nightly fuzz build
         working-directory: fuzz
+      - name: Fuzz URL parsing and resolution
+        run: cargo +nightly fuzz run url_parse_resolve -- -max_total_time=90 -print_final_stats=1
+        working-directory: fuzz
+      - name: Fuzz HTML tokenization and DOM parsing
+        run: cargo +nightly fuzz run html_tokenize_parse -- -max_total_time=90 -print_final_stats=1
+        working-directory: fuzz
+      - name: Fuzz CSS tokenization
+        run: cargo +nightly fuzz run css_tokenize -- -max_total_time=90 -print_final_stats=1
+        working-directory: fuzz
+      - name: Upload crashing fuzz inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: archia-browser-fuzz-artifacts
+          path: fuzz/artifacts/
+          if-no-files-found: ignore
