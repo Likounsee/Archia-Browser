@@ -811,7 +811,10 @@ fn valid_chunk_extensions(input: &str) -> bool {
     let mut cursor = 0;
 
     while cursor < bytes.len() {
-        while bytes.get(cursor).is_some_and(|byte| matches!(byte, b' ' | b'\t')) {
+        while bytes
+            .get(cursor)
+            .is_some_and(|byte| matches!(byte, b' ' | b'\t'))
+        {
             cursor += 1;
         }
         if bytes.get(cursor) != Some(&b';') {
@@ -823,7 +826,10 @@ fn valid_chunk_extensions(input: &str) -> bool {
         }
 
         let name_start = cursor;
-        while bytes.get(cursor).is_some_and(|byte| is_http_token_byte(*byte)) {
+        while bytes
+            .get(cursor)
+            .is_some_and(|byte| is_http_token_byte(*byte))
+        {
             cursor += 1;
         }
         if cursor == name_start {
@@ -835,7 +841,10 @@ fn valid_chunk_extensions(input: &str) -> bool {
         }
         if bytes.get(cursor) == Some(&b'=') {
             cursor += 1;
-            while bytes.get(cursor).is_some_and(|byte| matches!(byte, b' ' | b'\t')) {
+            while bytes
+                .get(cursor)
+                .is_some_and(|byte| matches!(byte, b' ' | b'\t'))
+            {
                 cursor += 1;
             }
 
@@ -867,7 +876,10 @@ fn valid_chunk_extensions(input: &str) -> bool {
                 }
             } else {
                 let value_start = cursor;
-                while bytes.get(cursor).is_some_and(|byte| is_http_token_byte(*byte)) {
+                while bytes
+                    .get(cursor)
+                    .is_some_and(|byte| is_http_token_byte(*byte))
+                {
                     cursor += 1;
                 }
                 if cursor == value_start {
@@ -1099,7 +1111,12 @@ mod tests {
 
     #[test]
     fn accepts_valid_chunk_extensions() {
-        for extension in ["name", "name=value", "name=\"quoted value\"", "name = token"] {
+        for extension in [
+            "name",
+            "name=value",
+            "name=\"quoted value\"",
+            "name = token",
+        ] {
             let response = format!(
                 "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5;{extension}\r\nHello\r\n0\r\n\r\n"
             );
