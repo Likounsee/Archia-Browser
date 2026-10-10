@@ -54,11 +54,10 @@ impl Url {
         Ok(Self {
             scheme: normalized_scheme,
             authority: normalize_ipv6_authority(authority),
-            path: if path.is_empty() {
-                "/".into()
-            } else {
-                path.into()
-            },
+            // Canonicalize dot segments at parse time too, not only while
+            // resolving relative references. Otherwise cache/filter code and
+            // origin servers can disagree about paths such as /a/../private.
+            path: normalize_path(if path.is_empty() { "/" } else { path }),
             query,
             fragment,
         })
@@ -386,22 +385,34 @@ fn has_reference_scheme(reference: &str) -> bool {
         })
 }
 
+fn dot_segment_kind(segment: &str) -> Option<u8> {
+    // Special-scheme URLs treat percent-encoded dots as dot segments too.
+    // Normalize all accepted hierarchical URLs conservatively so downstream
+    // servers and local-file handling cannot reinterpret traversal segments.
+    match segment.to_ascii_lowercase().as_str() {
+        "." | "%2e" => Some(1),
+        ".." | ".%2e" | "%2e." | "%2e%2e" => Some(2),
+        _ => None,
+    }
+}
+
 fn normalize_path(path: &str) -> String {
     let mut segments = Vec::new();
     let mut trailing_slash = path.ends_with('/');
     for (index, segment) in path.split('/').enumerate() {
-        match segment {
-            "" if index == 0 => {}
-            "" => segments.push(""),
-            "." => trailing_slash = true,
-            ".." => {
+        match dot_segment_kind(segment) {
+            None if segment.is_empty() && index == 0 => {}
+            None if segment.is_empty() => segments.push(""),
+            Some(1) => trailing_slash = true,
+            Some(2) => {
                 segments.pop();
                 trailing_slash = true;
             }
-            value => {
-                segments.push(value);
+            None => {
+                segments.push(segment);
                 trailing_slash = false;
             }
+            _ => unreachable!("dot segment kind is limited to one or two"),
         }
     }
 
@@ -625,6 +636,31 @@ mod tests {
         assert_eq!(
             Url::parse("http+custom://example.org").unwrap().scheme(),
             "http+custom"
+        );
+    }
+
+    #[test]
+    fn absolute_urls_normalize_literal_and_encoded_dot_segments() {
+        for input in [
+            "https://example.org/a/../private",
+            "https://example.org/a/%2e%2e/private",
+            "https://example.org/a/.%2E/private",
+            "https://example.org/a/%2e./private",
+            "https://example.org/a/%2E%2e/private",
+        ] {
+            let url = Url::parse(input).unwrap();
+            assert_eq!(
+                url.path(),
+                "/private",
+                "path must have one canonical interpretation: {input}"
+            );
+        }
+
+        assert_eq!(
+            Url::parse("file:///safe/%2e%2e/private.txt")
+                .unwrap()
+                .path(),
+            "/private.txt"
         );
     }
 
