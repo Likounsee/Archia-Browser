@@ -396,13 +396,38 @@ fn response_age(response: &Response) -> Option<u64> {
         .headers
         .iter()
         .filter(|(name, _)| name.eq_ignore_ascii_case("age"));
-    let Some((_, value)) = age_headers.next() else {
-        return Some(0);
+    let age_value = match age_headers.next() {
+        Some((_, value)) => {
+            if age_headers.next().is_some() {
+                return None;
+            }
+            value.trim().parse::<u64>().ok()?
+        }
+        None => 0,
     };
-    if age_headers.next().is_some() {
-        return None;
-    }
-    value.trim().parse().ok()
+
+    // Age is not the only measure of staleness. A response can arrive with an
+    // old Date and no Age header (for example from an intermediary); treating
+    // that response as age zero would extend its freshness by max-age again.
+    let mut date_headers = response
+        .headers
+        .iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("date"));
+    let apparent_age = match date_headers.next() {
+        Some((_, value)) => {
+            if date_headers.next().is_some() {
+                return None;
+            }
+            let date = httpdate::parse_http_date(value.trim()).ok()?;
+            std::time::SystemTime::now()
+                .duration_since(date)
+                .unwrap_or_default()
+                .as_secs()
+        }
+        None => 0,
+    };
+
+    Some(age_value.max(apparent_age))
 }
 
 fn has_cache_max_age_zero(header: Option<&str>) -> bool {
@@ -503,6 +528,24 @@ mod tests {
         );
         assert!(cache.get(&first).is_none());
         assert!(cache.get(&second).is_some());
+    }
+
+    #[test]
+    fn does_not_extend_freshness_of_response_with_old_date() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/stale");
+        let old_date = httpdate::fmt_http_date(
+            std::time::SystemTime::now() - Duration::from_secs(120),
+        );
+        let response = Response::new(200)
+            .with_header("cache-control", "public, max-age=60")
+            .with_header("date", old_date)
+            .with_body(b"must not be cached as fresh".to_vec());
+
+        cache.store(&request, &response);
+
+        assert!(cache.is_empty());
+        assert!(cache.get(&request).is_none());
     }
 
     #[test]
