@@ -362,9 +362,13 @@ fn validate_dns_or_ipv4_host(host: &str) -> Result<(), UrlError> {
 }
 
 fn contains_unsafe_url_whitespace(value: &str) -> bool {
+    // Backslashes are interpreted as path separators by several URL consumers
+    // (notably browsers and Windows-oriented code), but as ordinary bytes by
+    // this parser. Reject them rather than let policy, cache, and transport
+    // disagree about the URL being requested.
     value
         .bytes()
-        .any(|byte| byte.is_ascii_control() || byte == b' ')
+        .any(|byte| byte.is_ascii_control() || matches!(byte, b' ' | b'\\'))
 }
 
 fn has_reference_scheme(reference: &str) -> bool {
@@ -443,7 +447,9 @@ impl fmt::Display for UrlError {
                 "URL reference uses an unsupported non-hierarchical scheme"
             }
             Self::UnsupportedFileAuthority => "file URL uses an unsupported authority",
-            Self::InvalidCharacter => "URL contains whitespace or control characters",
+            Self::InvalidCharacter => {
+                "URL contains disallowed whitespace, control characters, or backslashes"
+            },
             Self::InvalidAuthority => "URL authority has an invalid host or port",
         })
     }
@@ -491,6 +497,27 @@ mod tests {
         let base = Url::parse("https://example.org/path").unwrap();
         assert_eq!(
             base.resolve("next\r\nInjected: yes").unwrap_err(),
+            UrlError::InvalidCharacter
+        );
+    }
+
+    #[test]
+    fn rejects_backslashes_that_can_be_interpreted_as_path_separators() {
+        for input in [
+            "https://example.org\\\\@evil.test/path",
+            "https://example.org/a\\\\..\\\\private",
+            "https://example.org/a?next=\\\\\\\\evil.test",
+        ] {
+            assert_eq!(
+                Url::parse(input).unwrap_err(),
+                UrlError::InvalidCharacter,
+                "backslashes must not have consumer-dependent URL semantics: {input}"
+            );
+        }
+
+        let base = Url::parse("https://example.org/docs/index.html").unwrap();
+        assert_eq!(
+            base.resolve("..\\\\private").unwrap_err(),
             UrlError::InvalidCharacter
         );
     }
