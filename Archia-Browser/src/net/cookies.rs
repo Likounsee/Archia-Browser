@@ -344,7 +344,7 @@ impl CookieJar {
                 domain_matches && path_matches && (!cookie.secure || secure) && same_site_allowed
             })
             .collect::<Vec<_>>();
-        matching.sort_by(|first, second| second.path.len().cmp(&first.path.len()));
+        matching.sort_by_key(|cookie| std::cmp::Reverse(cookie.path.len()));
         let mut header = String::new();
         for cookie in matching {
             let pair_len = cookie.name.len() + 1 + cookie.value.len();
