@@ -58,7 +58,10 @@ impl Url {
         // a path such as "/.//server/share" can become a double-leading-slash
         // path only after normalization and may be interpreted as a UNC share
         // by Windows filesystem APIs.
-        let normalized_path = normalize_path(if path.is_empty() { "/" } else { path });
+        let normalized_path = normalize_path_for_scheme(
+            if path.is_empty() { "/" } else { path },
+            &normalized_scheme,
+        );
         // The local-file transport percent-decodes paths before filesystem
         // access. Encoded separators could therefore create new path segments
         // after URL policy and dot-segment normalization have already run.
@@ -199,13 +202,13 @@ impl Url {
         }
 
         let resolved_path = if path.starts_with('/') {
-            normalize_path(path)
+            normalize_path_for_scheme(path, &self.scheme)
         } else {
             let base = self
                 .path
                 .rsplit_once('/')
                 .map_or("/", |(directory, _)| directory);
-            normalize_path(&format!("{base}/{path}"))
+            normalize_path_for_scheme(&format!("{base}/{path}"), &self.scheme)
         };
         if self.scheme == "file" && resolved_path.starts_with("//") {
             return Err(UrlError::InvalidCharacter);
@@ -454,6 +457,32 @@ fn dot_segment_kind(segment: &str) -> Option<u8> {
     }
 }
 
+fn normalize_path_for_scheme(path: &str, scheme: &str) -> String {
+    // Windows file URLs are converted to drive paths by the file transport.
+    // Keep the drive prefix rooted while collapsing dot segments so a path
+    // above C:/ cannot become /Windows and point at a different filesystem path.
+    let bytes = path.as_bytes();
+    let has_windows_drive = scheme == "file"
+        && bytes.len() >= 3
+        && bytes[0] == b'/'
+        && bytes[1].is_ascii_alphabetic()
+        && bytes[2] == b':'
+        && (bytes.len() == 3 || bytes[3] == b'/');
+
+    if has_windows_drive {
+        let drive = &path[1..3];
+        let remainder = &path[3..];
+        let normalized_remainder = normalize_path(if remainder.is_empty() {
+            "/"
+        } else {
+            remainder
+        });
+        format!("/{drive}{normalized_remainder}")
+    } else {
+        normalize_path(path)
+    }
+}
+
 fn normalize_path(path: &str) -> String {
     let mut segments = Vec::new();
     let mut trailing_slash = path.ends_with('/');
@@ -537,6 +566,22 @@ mod tests {
         assert_eq!(url.authority(), "");
         assert_eq!(url.path(), "/tmp/index.html");
         assert_eq!(url.to_string(), "file:///tmp/index.html");
+    }
+
+    #[test]
+    fn file_url_dot_segments_cannot_escape_a_windows_drive_root() {
+        let url = Url::parse("file:///C:/../Windows/system.ini").unwrap();
+        assert_eq!(url.path(), "/C:/Windows/system.ini");
+
+        let base = Url::parse("file:///D:/Users/example/index.html").unwrap();
+        assert_eq!(
+            base.resolve("../../../../Windows/system.ini").unwrap().path(),
+            "/D:/Windows/system.ini"
+        );
+        assert_eq!(
+            base.resolve("/E:/folder/../Windows").unwrap().path(),
+            "/E:/Windows"
+        );
     }
 
     #[test]
