@@ -784,6 +784,12 @@ fn parse_http_response_head(
         response = response.with_header(name, value);
     }
 
+    // Transfer-Encoding is an HTTP/1.1 framing mechanism. Accepting it on an
+    // HTTP/1.0 response risks disagreement with peers that ignore the field.
+    if version == "HTTP/1.0" && response.header("transfer-encoding").is_some() {
+        return Err(TransportError::ConnectionFailed);
+    }
+
     Ok((response, separator + 4))
 }
 
@@ -1515,6 +1521,15 @@ mod tests {
         assert_eq!(
             validate_request(&request),
             Err(TransportError::InvalidRequest)
+        );
+    }
+
+    #[test]
+    fn rejects_transfer_encoding_on_http_10_responses() {
+        let response = b"HTTP/1.0 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n";
+        assert_eq!(
+            parse_http_response(response, 1024, 1024),
+            Err(TransportError::ConnectionFailed)
         );
     }
 
