@@ -62,6 +62,7 @@ where
         request: &Request,
         viewport: LayoutViewport,
     ) -> Result<Page, DocumentLoadError> {
+        let cookie_first_party = request.policy.first_party.clone();
         let mut current = request.clone();
         current.policy.resource_kind = ResourceKind::Document;
         if current.policy.first_party.is_none() {
@@ -77,7 +78,7 @@ where
             .expect("cookie jar poisoned")
             .header_for_context(
                 &current.url,
-                current.policy.first_party.as_ref(),
+                cookie_first_party.as_ref(),
                 true,
                 current.method,
             )
@@ -183,7 +184,7 @@ where
                     .expect("cookie jar poisoned")
                     .header_for_context(
                         &next.url,
-                        next.policy.first_party.as_ref(),
+                        cookie_first_party.as_ref(),
                         true,
                         next.method,
                     )
