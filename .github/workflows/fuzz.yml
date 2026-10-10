@@ -1,5 +1,9 @@
 name: Archia Browser URL fuzzing
 
+concurrency:
+  group: archia-browser-fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_dispatch:
   schedule:
