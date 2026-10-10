@@ -227,6 +227,24 @@ fn request_forces_cache_bypass(request: &Request) -> bool {
         || has_pragma_no_cache(request)
 }
 
+/// Whether a request explicitly forbids network access on a cache miss.
+///
+/// RFC cache directives are comma-separated, but commas inside quoted values
+/// are not separators; reuse the cache-control tokenizer for consistent parsing.
+pub(crate) fn request_only_if_cached(request: &Request) -> bool {
+    request
+        .headers
+        .iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("cache-control"))
+        .flat_map(|(_, value)| cache_control_directives(value))
+        .any(|directive| {
+            let name = directive
+                .split_once('=')
+                .map_or(directive, |(name, _)| name);
+            trim_http_ows(name).eq_ignore_ascii_case("only-if-cached")
+        })
+}
+
 fn request_can_use_cache(request: &Request) -> bool {
     matches!(request.method, HttpMethod::Get)
         && matches!(request.url.scheme(), "http" | "https")
@@ -1217,5 +1235,16 @@ mod tests {
         cache.store(&request, &response);
         assert_eq!(cache.len(), 1);
         assert_eq!(cache.get(&request).unwrap().body, b"cached");
+    }
+
+    #[test]
+    fn only_if_cached_is_detected_without_matching_quoted_values() {
+        let request = make_request("https://example.org/resource")
+            .with_header("cache-control", "private="only-if-cached, no-store", only-if-cached");
+        assert!(request_only_if_cached(&request));
+
+        let ordinary = make_request("https://example.org/resource")
+            .with_header("cache-control", "private="only-if-cached"");
+        assert!(!request_only_if_cached(&ordinary));
     }
 }
