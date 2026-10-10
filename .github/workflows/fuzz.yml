@@ -10,6 +10,7 @@ on:
       - "fuzz/**"
       - "Archia-Browser/src/net/url.rs"
       - "Archia-Browser/src/net/cookies.rs"
+      - "Archia-Browser/src/net/transport.rs"
       - "Archia-Browser/src/html/**"
       - "Archia-Browser/src/css/**"
       - ".github/workflows/fuzz.yml"
@@ -32,6 +33,9 @@ jobs:
         run: cargo install cargo-fuzz --locked
       - name: Build all fuzz targets
         run: cargo +nightly fuzz build
+        working-directory: fuzz
+      - name: Fuzz HTTP response framing
+        run: cargo +nightly fuzz run http_response -- -max_total_time=90 -print_final_stats=1
         working-directory: fuzz
       - name: Fuzz URL parsing and resolution
         run: cargo +nightly fuzz run url_parse_resolve -- -max_total_time=90 -print_final_stats=1
