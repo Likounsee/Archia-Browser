@@ -49,21 +49,20 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
     // quadratic or creating a tree too deep for recursive DOM consumers.
     // Once the limit is reached, discard that subtree until its matching
     // end tag; tokenization already bounds the total input and token count.
-    let mut suppressed: Vec<String> = Vec::new();
+    // Track only nesting depth while discarding an over-depth subtree.
+    // Retaining/searching tag names here would recreate an attacker-controlled
+    // quadratic scan precisely on the path intended to bound hostile input.
+    let mut suppressed_depth = 0usize;
 
     for token in tokens.iter().take(MAX_DOM_TOKENS) {
-        if !suppressed.is_empty() {
+        if suppressed_depth > 0 {
             match token {
-                HtmlToken::StartTag { name, self_closing: _, .. }
+                HtmlToken::StartTag { name, .. }
                     if !VOID_ELEMENTS.contains(&name.as_str()) =>
                 {
-                    suppressed.push(name.clone());
+                    suppressed_depth = suppressed_depth.saturating_add(1);
                 }
-                HtmlToken::EndTag(name) => {
-                    if let Some(position) = suppressed.iter().rposition(|open| open == name) {
-                        suppressed.truncate(position);
-                    }
-                }
+                HtmlToken::EndTag(_) => suppressed_depth -= 1,
                 _ => {}
             }
             continue;
@@ -106,7 +105,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 if VOID_ELEMENTS.contains(&name.as_str()) {
                     append_node(&mut root, &mut stack, node);
                 } else if stack.len() >= MAX_DOM_DEPTH {
-                    suppressed.push(name.clone());
+                    suppressed_depth = 1;
                 } else {
                     stack.push(node);
                 }
