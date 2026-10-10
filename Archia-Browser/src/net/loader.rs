@@ -572,7 +572,7 @@ fn referrer_for_target(source: &super::Url, target: &super::Url) -> Option<super
 }
 
 fn should_switch_to_get(method: HttpMethod, status: u16) -> bool {
-    matches!(status, 301 | 302 | 303) && !matches!(method, HttpMethod::Get | HttpMethod::Head)
+    matches!(status, 301..=303) && !matches!(method, HttpMethod::Get | HttpMethod::Head)
 }
 
 fn is_html_response(response: &Response) -> bool {
@@ -1089,10 +1089,6 @@ mod tests {
         let document = Response::new(200)
             .with_header("content-type", "text/html")
             .with_body(html.into_bytes());
-        let loader = DocumentLoader::new(
-            NetworkPipeline::new(AllowAll),
-            super::super::LocalFileTransport::new(),
-        );
         let request = Request::new(Url::parse("file:///local/index.html").unwrap());
 
         struct RootTransport {
