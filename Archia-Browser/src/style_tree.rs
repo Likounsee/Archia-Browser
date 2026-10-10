@@ -84,6 +84,24 @@ mod tests {
     use crate::html::Node;
 
     #[test]
+    fn child_style_inherits_parent_custom_properties_without_recomputing_ancestors() {
+        let mut parent = Node::element("section");
+        parent.set_attribute("class", "parent");
+        let mut child = Node::element("span");
+        child.set_attribute("class", "child");
+        parent.append(child);
+
+        let sheet = StyleSheet::parse(
+            ".parent { --accent: blue; color: red; } .parent > .child { color: var(--accent); margin-left: 4px; }",
+        );
+        let styled = StyleEngine::style(&parent, &sheet);
+
+        assert_eq!(styled.style.get("color"), Some("red"));
+        assert_eq!(styled.children[0].style.get("color"), Some("blue"));
+        assert_eq!(styled.children[0].style.get("margin-left"), Some("4px"));
+    }
+
+    #[test]
     fn computes_styles_per_dom_node() {
         let mut body = Node::element("body");
         let mut first = Node::element("div");
