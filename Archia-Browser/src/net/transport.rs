@@ -1001,7 +1001,25 @@ fn decode_chunked(
                     || !seen_trailers.insert(name.to_ascii_lowercase())
                     || matches!(
                         name.to_ascii_lowercase().as_str(),
-                        "content-length" | "transfer-encoding" | "host"
+                        // Trailer fields must not override message framing,
+                        // routing, authentication, or metadata that changes
+                        // how the already-decoded representation is handled.
+                        "content-length"
+                            | "transfer-encoding"
+                            | "host"
+                            | "trailer"
+                            | "authorization"
+                            | "proxy-authorization"
+                            | "cache-control"
+                            | "content-encoding"
+                            | "content-type"
+                            | "content-range"
+                            | "max-forwards"
+                            | "te"
+                            | "expires"
+                            | "location"
+                            | "retry-after"
+                            | "vary"
                     )
                 {
                     return Err(TransportError::ConnectionFailed);
@@ -1152,6 +1170,28 @@ mod tests {
                     .unwrap()
                     .body,
                 b"Hello"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_chunked_trailers_that_change_representation_metadata() {
+        for trailer in [
+            "Content-Type: text/html",
+            "Content-Encoding: gzip",
+            "Content-Range: bytes 0-4/5",
+            "Cache-Control: no-store",
+            "Location: https://attacker.example/",
+            "Authorization: Basic dGVzdA==",
+            "Trailer: X-Other",
+        ] {
+            let response = format!(
+                "HTTP/1.1 200 OK\\r\\nTransfer-Encoding: chunked\\r\\n\\r\\n0\\r\\n{trailer}\\r\\n\\r\\n"
+            );
+            assert_eq!(
+                parse_http_response(response.as_bytes(), 1024, 1024),
+                Err(TransportError::ConnectionFailed),
+                "representation-changing trailer must be rejected: {trailer}"
             );
         }
     }
