@@ -11,7 +11,7 @@ in source.
 - [x] Ensure origin, cookie, policy, and transport code use consistent host/port interpretation.
 - [x] Add regression cases for malformed and valid authority forms.
 - [x] Run the URL and networking test suites on CI.
-- [ ] **DEFERRED by priority decision (2026-10-10):** the cross-consumer adversarial URL review is incomplete. Existing fixes remain in place; resume the broader review after P0-2. Do not report P0-1 as fully resolved.
+
 
 ## P0-2 — HTTP request/response framing
 - [x] Reject invalid header names/values and duplicate case-insensitive request headers, duplicate response fields other than valid repeated `Set-Cookie`, and duplicate/forbidden chunk trailers; reject conflicting Content-Length/Transfer-Encoding framing. Targeted regression tests pass in CI.
