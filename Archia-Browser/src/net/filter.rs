@@ -113,6 +113,10 @@ impl RequestFilter {
         self.rules.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.rules.is_empty()
+    }
+
     pub fn decide(&self, url: &str, resource: Option<ResourceType>) -> FilterDecision {
         self.decide_with_party(url, resource, None)
     }
