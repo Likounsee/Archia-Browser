@@ -248,7 +248,13 @@ impl Transport for LocalFileTransport {
         }
 
         let path = file_url_path(request.url.path())?;
-        let metadata = std::fs::metadata(&path).map_err(|_| TransportError::ConnectionFailed)?;
+        // Inspect the opened handle, not the pathname: metadata(path) followed by
+        // open(path) can validate one filesystem object and then read another if
+        // the path is replaced between those operations.
+        let file = std::fs::File::open(&path).map_err(|_| TransportError::ConnectionFailed)?;
+        let metadata = file
+            .metadata()
+            .map_err(|_| TransportError::ConnectionFailed)?;
         if !metadata.is_file() || metadata.len() > self.max_file_size as u64 {
             return Err(if metadata.len() > self.max_file_size as u64 {
                 TransportError::ResponseTooLarge
@@ -260,7 +266,6 @@ impl Transport for LocalFileTransport {
         let body = if request.method == super::HttpMethod::Head {
             Vec::new()
         } else {
-            let file = std::fs::File::open(&path).map_err(|_| TransportError::ConnectionFailed)?;
             let read_limit = u64::try_from(self.max_file_size)
                 .unwrap_or(u64::MAX)
                 .saturating_add(1);
@@ -1528,6 +1533,37 @@ mod tests {
         assert_eq!(head_response.header("content-length"), Some("18"));
         assert!(head_response.body.is_empty());
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn local_file_transport_enforces_size_limit_for_get_and_head() {
+        let path = std::env::temp_dir().join(format!(
+            "archia-browser-local-limit-{}.txt",
+            std::process::id()
+        ));
+        std::fs::write(&path, b"12345").unwrap();
+        let url = if cfg!(windows) {
+            format!("file:///{}", path.display())
+        } else {
+            format!("file://{}", path.display())
+        };
+        let request = Request::new(super::super::Url::parse(&url).unwrap());
+        let transport = LocalFileTransport::new().with_max_file_size(4);
+        assert_eq!(transport.send(&request), Err(TransportError::ResponseTooLarge));
+        let head = request.clone().with_method(crate::net::HttpMethod::Head);
+        assert_eq!(transport.send(&head), Err(TransportError::ResponseTooLarge));
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn local_file_transport_rejects_malformed_percent_encoding() {
+        for path in ["/tmp/%", "/tmp/%2", "/tmp/%GG", "/tmp/%FF"] {
+            assert!(
+                file_url_path(path).is_err(),
+                "malformed file URL path should be rejected: {path}"
+            );
+        }
+        assert!(file_url_path("/tmp/%00secret").is_err());
     }
 
     #[test]
