@@ -3,12 +3,10 @@ version = 2
 confidence-threshold = 0.90
 allow = [
     "Apache-2.0",
-    "BSD-2-Clause",
     "BSD-3-Clause",
     "CC0-1.0",
+    # webpki-roots distributes CA root-certificate data under this permissive data license.
+    "CDLA-Permissive-2.0",
     "ISC",
     "MIT",
-    "MPL-2.0",
-    "Unicode-3.0",
-    "Zlib",
 ]
