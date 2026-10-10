@@ -70,7 +70,6 @@ impl Transport for PooledTransport {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -99,7 +98,9 @@ mod tests {
         pool.add(Arc::new(OkConnection));
 
         let request = Request::new(Url::parse("https://example.org/").unwrap());
-        let response = PooledTransport::new(Arc::clone(&pool)).send(&request).unwrap();
+        let response = PooledTransport::new(Arc::clone(&pool))
+            .send(&request)
+            .unwrap();
         assert_eq!(response.status, 200);
         assert_eq!(pool.len(), 1);
     }
