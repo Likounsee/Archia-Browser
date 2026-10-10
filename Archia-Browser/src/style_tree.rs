@@ -36,6 +36,7 @@ impl StyleEngine {
             &mut sibling_lists,
             &mut sibling_positions,
             0,
+            &ComputedStyle::default(),
         )
     }
 }
@@ -47,10 +48,12 @@ fn style_node<'a>(
     sibling_lists: &mut Vec<&'a [Node]>,
     sibling_positions: &mut Vec<usize>,
     position: usize,
+    inherited: &ComputedStyle,
 ) -> StyledNode {
     path.push(node);
     sibling_positions.push(position);
-    let style = sheet.compute_style_path_with_siblings(path, sibling_lists, sibling_positions);
+    let style =
+        sheet.compute_style_node_with_siblings(path, sibling_lists, sibling_positions, inherited);
     let children_slice = node.children.as_slice();
     let mut children = Vec::with_capacity(node.children.len());
     for (child_position, child) in node.children.iter().enumerate() {
@@ -62,6 +65,7 @@ fn style_node<'a>(
             sibling_lists,
             sibling_positions,
             child_position,
+            &style,
         ));
         sibling_lists.pop();
     }
