@@ -19,6 +19,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "cookie_parse"
+path = "fuzz_targets/cookie_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "css_tokenize"
 path = "fuzz_targets/css_tokenize.rs"
 test = false
