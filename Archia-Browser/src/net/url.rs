@@ -54,23 +54,23 @@ impl Url {
         let (path, query) = without_fragment
             .split_once('?')
             .map_or((without_fragment, None), |(p, q)| (p, Some(q.to_owned())));
+        // Canonicalize dot segments before checking the local-file path:
+        // a path such as "/.//server/share" can become a double-leading-slash
+        // path only after normalization and may be interpreted as a UNC share
+        // by Windows filesystem APIs.
+        let normalized_path = normalize_path(if path.is_empty() { "/" } else { path });
         // The local-file transport percent-decodes paths before filesystem
         // access. Encoded separators could therefore create new path segments
         // after URL policy and dot-segment normalization have already run.
         if normalized_scheme == "file"
-            && (path.starts_with("//") || contains_encoded_path_separator(path))
+            && (normalized_path.starts_with("//") || contains_encoded_path_separator(path))
         {
-            // On Windows, a double-leading-slash path can become a UNC share
-            // after filesystem conversion even though the URL authority is empty.
             return Err(UrlError::InvalidCharacter);
         }
         Ok(Self {
             scheme: normalized_scheme,
             authority: normalize_ipv6_authority(authority),
-            // Canonicalize dot segments at parse time too, not only while
-            // resolving relative references. Otherwise cache/filter code and
-            // origin servers can disagree about paths such as /a/../private.
-            path: normalize_path(if path.is_empty() { "/" } else { path }),
+            path: normalized_path,
             query,
             fragment,
         })
@@ -537,6 +537,20 @@ mod tests {
         assert_eq!(url.authority(), "");
         assert_eq!(url.path(), "/tmp/index.html");
         assert_eq!(url.to_string(), "file:///tmp/index.html");
+    }
+
+    #[test]
+    fn rejects_file_paths_that_normalize_into_unc_prefixes() {
+        for input in [
+            "file:///.//server/share",
+            "file:///%2e//server/share",
+        ] {
+            assert_eq!(
+                Url::parse(input).unwrap_err(),
+                UrlError::InvalidCharacter,
+                "normalized UNC-like file path must be rejected: {input}"
+            );
+        }
     }
 
     #[test]
