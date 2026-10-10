@@ -62,7 +62,16 @@ where
         request: &Request,
         viewport: LayoutViewport,
     ) -> Result<Page, DocumentLoadError> {
-        let cookie_first_party = request.policy.first_party.clone();
+        // A direct navigation without an explicit initiator is same-site
+        // with its destination. Preserve an explicit first-party URL when the
+        // caller supplies one, and reuse that context across redirect hops.
+        let cookie_first_party = Some(
+            request
+                .policy
+                .first_party
+                .clone()
+                .unwrap_or_else(|| request.url.clone()),
+        );
         let mut current = request.clone();
         current.policy.resource_kind = ResourceKind::Document;
         if current.policy.first_party.is_none() {
@@ -839,6 +848,41 @@ mod tests {
             2,
             "blocked cached stylesheet should not be fetched again"
         );
+    }
+
+    #[test]
+    fn direct_navigation_sends_same_site_strict_cookies_without_explicit_initiator() {
+        #[derive(Debug)]
+        struct CookieInspectTransport;
+
+        impl Transport for CookieInspectTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                assert_eq!(
+                    request.headers.get("cookie").map(String::as_str),
+                    Some("session=secret"),
+                    "a direct navigation should use its destination as the first-party site"
+                );
+                Ok(Response::new(200)
+                    .with_header("content-type", "text/html")
+                    .with_body(b"<body>Welcome</body>".to_vec()))
+            }
+        }
+
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            CookieInspectTransport,
+        );
+        let url = Url::parse("https://example.org/account").unwrap();
+        loader
+            .cookies
+            .lock()
+            .unwrap()
+            .store(&url, "session=secret; Secure; SameSite=Strict");
+
+        let request = Request::new(url);
+        assert!(loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .is_ok());
     }
 
     #[test]
