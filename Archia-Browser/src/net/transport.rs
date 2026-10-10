@@ -1008,7 +1008,8 @@ mod tests {
                 crate::net::HttpMethod::Get,
             ),
             (
-                b"HTTP/1.1 304 Not Modified\r\nContent-Length: \xC2\xA05\xC2\xA0\r\n\r\n".as_slice(),
+                b"HTTP/1.1 304 Not Modified\r\nContent-Length: \xC2\xA05\xC2\xA0\r\n\r\n"
+                    .as_slice(),
                 crate::net::HttpMethod::Get,
             ),
         ] {
