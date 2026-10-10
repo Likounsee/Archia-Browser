@@ -33,6 +33,9 @@ impl Url {
         if authority.is_empty() && normalized_scheme != "file" {
             return Err(UrlError::MissingAuthority);
         }
+        if !authority.is_empty() && normalized_scheme != "file" {
+            validate_authority(authority)?;
+        }
         if normalized_scheme == "file"
             && !authority.is_empty()
             && !authority.eq_ignore_ascii_case("localhost")
@@ -180,6 +183,56 @@ impl Url {
     }
 }
 
+fn validate_authority(authority: &str) -> Result<(), UrlError> {
+    // Validate the host/port boundary before the transport interprets it.
+    // User information, when present, is not part of the host.
+    let host_port = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host);
+    if host_port.is_empty() {
+        return Err(UrlError::InvalidAuthority);
+    }
+
+    let (host, port) = if let Some(bracketed) = host_port.strip_prefix('[') {
+        let end = bracketed.find(']').ok_or(UrlError::InvalidAuthority)?;
+        let host = &bracketed[..end];
+        host.parse::<std::net::Ipv6Addr>()
+            .map_err(|_| UrlError::InvalidAuthority)?;
+        let suffix = &bracketed[end + 1..];
+        let port = if suffix.is_empty() {
+            None
+        } else {
+            Some(suffix.strip_prefix(':').ok_or(UrlError::InvalidAuthority)?)
+        };
+        (host, port)
+    } else {
+        if host_port.contains(['[', ']']) {
+            return Err(UrlError::InvalidAuthority);
+        }
+        match host_port.matches(':').count() {
+            0 => (host_port, None),
+            1 => {
+                let (host, port) = host_port.rsplit_once(':').ok_or(UrlError::InvalidAuthority)?;
+                (host, Some(port))
+            }
+            _ => return Err(UrlError::InvalidAuthority),
+        }
+    };
+
+    if host.is_empty() {
+        return Err(UrlError::InvalidAuthority);
+    }
+    if let Some(port) = port {
+        if port.is_empty()
+            || !port.bytes().all(|byte| byte.is_ascii_digit())
+            || port.parse::<u16>().is_err()
+        {
+            return Err(UrlError::InvalidAuthority);
+        }
+    }
+    Ok(())
+}
+
 fn contains_unsafe_url_whitespace(value: &str) -> bool {
     value
         .bytes()
@@ -249,6 +302,7 @@ pub enum UrlError {
     UnsupportedReferenceScheme,
     UnsupportedFileAuthority,
     InvalidCharacter,
+    InvalidAuthority,
 }
 
 impl fmt::Display for UrlError {
@@ -262,6 +316,7 @@ impl fmt::Display for UrlError {
             }
             Self::UnsupportedFileAuthority => "file URL uses an unsupported authority",
             Self::InvalidCharacter => "URL contains whitespace or control characters",
+            Self::InvalidAuthority => "URL authority has an invalid host or port",
         })
     }
 }
@@ -310,6 +365,34 @@ mod tests {
             base.resolve("next\r\nInjected: yes").unwrap_err(),
             UrlError::InvalidCharacter
         );
+    }
+
+    #[test]
+    fn rejects_malformed_authority_ports_and_ipv6_hosts() {
+        for input in [
+            "https://example.org:abc/path",
+            "https://example.org:/path",
+            "https://example.org:65536/path",
+            "https://[not-an-ipv6-address]/path",
+            "https://2001:db8::1/path",
+            "https://[]/path",
+        ] {
+            assert_eq!(
+                Url::parse(input).unwrap_err(),
+                UrlError::InvalidAuthority,
+                "expected malformed authority to be rejected: {input}"
+            );
+        }
+    }
+
+    #[test]
+    fn accepts_valid_ipv6_authorities_and_numeric_ports() {
+        let ipv6 = Url::parse("https://[2001:db8::1]:8443/path").unwrap();
+        assert_eq!(ipv6.host(), "2001:db8::1");
+        assert_eq!(ipv6.port(), Some(8443));
+
+        let explicit_default = Url::parse("https://example.org:443/path").unwrap();
+        assert_eq!(explicit_default.port(), Some(443));
     }
 
     #[test]
