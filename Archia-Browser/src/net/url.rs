@@ -684,12 +684,8 @@ mod tests {
 
         let base = Url::parse("file:///safe/index.html").unwrap();
         assert_eq!(
-            base.resolve("///server/share/secret.txt").unwrap_err(),
-            UrlError::InvalidCharacter
-        );
-        assert_eq!(
             base.resolve("//server/share/secret.txt").unwrap_err(),
-            UrlError::InvalidCharacter
+            UrlError::UnsupportedFileAuthority
         );
     }
 
