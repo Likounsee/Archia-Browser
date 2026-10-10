@@ -967,17 +967,24 @@ mod tests {
         assert!(!page.display_list.commands().is_empty());
     }
 
+    // Keep URL syntax independent from the platform's native path separator.
+    // The URL parser intentionally rejects backslashes as ambiguous separators.
+    fn local_file_test_url(path: &std::path::Path) -> String {
+        let path = path.to_string_lossy().replace('\\', "/");
+        if cfg!(windows) {
+            format!("file:///{}", path)
+        } else {
+            format!("file://{}", path)
+        }
+    }
+
     #[test]
     fn loads_a_local_file_through_the_document_pipeline() {
         let path =
             std::env::temp_dir().join(format!("archia-browser-loader-{}.html", std::process::id()));
         std::fs::write(&path, b"<title>Local</title><body><h1>Hello</h1></body>").unwrap();
 
-        let url = if cfg!(windows) {
-            format!("file:///{}", path.display())
-        } else {
-            format!("file://{}", path.display())
-        };
+        let url = local_file_test_url(&path);
         let request = Request::new(Url::parse(&url).unwrap());
         let loader = DocumentLoader::new(
             NetworkPipeline::new(AllowAll),
