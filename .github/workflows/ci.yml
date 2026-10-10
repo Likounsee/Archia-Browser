@@ -1,5 +1,9 @@
 name: Archia Browser CI
 
+concurrency:
+  group: archia-browser-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: ["Archia-Browser"]
