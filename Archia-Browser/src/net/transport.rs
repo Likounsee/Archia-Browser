@@ -627,6 +627,14 @@ fn parse_http_response_for_method(
         let (response, body_start) = parse_http_response_head(&bytes[cursor..], max_header_size)?;
 
         if is_interim_response(response.status) {
+            // Informational responses cannot carry message framing fields.
+            // Reject them rather than letting a peer disagree about where the
+            // next response starts.
+            if response.header("content-length").is_some()
+                || response.header("transfer-encoding").is_some()
+            {
+                return Err(TransportError::ConnectionFailed);
+            }
             interim_responses += 1;
             if interim_responses > MAX_INTERIM_RESPONSES {
                 return Err(TransportError::ConnectionFailed);
@@ -643,6 +651,11 @@ fn parse_http_response_for_method(
         let body_bytes = &bytes[cursor + body_start..];
         let transfer_encoding = response.header("transfer-encoding");
         let content_length = response.header("content-length");
+        if response.status == 204
+            && (transfer_encoding.is_some() || content_length.is_some())
+        {
+            return Err(TransportError::ConnectionFailed);
+        }
         if transfer_encoding.is_some() && content_length.is_some() {
             return Err(TransportError::ConnectionFailed);
         }
@@ -1035,7 +1048,7 @@ mod tests {
     #[test]
     fn no_content_response_has_no_body() {
         let response = parse_http_response(
-            b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n",
+            b"HTTP/1.1 204 No Content\r\n\r\n",
             1024,
             1024,
         )
@@ -1116,6 +1129,21 @@ mod tests {
 
         assert_eq!(response.status, 200);
         assert_eq!(response.body, b"Hello");
+    }
+
+    #[test]
+    fn rejects_framing_headers_on_informational_and_204_responses() {
+        for response in [
+            b"HTTP/1.1 100 Continue\r\nContent-Length: 0\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".as_slice(),
+            b"HTTP/1.1 103 Early Hints\r\nTransfer-Encoding: chunked\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".as_slice(),
+            b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n".as_slice(),
+            b"HTTP/1.1 204 No Content\r\nTransfer-Encoding: chunked\r\n\r\n".as_slice(),
+        ] {
+            assert_eq!(
+                parse_http_response(response, 1024, 1024),
+                Err(TransportError::ConnectionFailed)
+            );
+        }
     }
 
     #[test]
