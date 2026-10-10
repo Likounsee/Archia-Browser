@@ -255,14 +255,12 @@ mod tests {
 
     #[test]
     fn parser_caps_direct_token_input_even_without_the_tokenizer() {
-        let mut tokens = vec![HtmlToken::Text("kept".to_owned())];
-        tokens.extend(
-            (0..MAX_DOM_TOKENS).map(|_| HtmlToken::Text("discarded".to_owned())),
-        );
+        let mut tokens = vec![HtmlToken::Text("x".to_owned()); MAX_DOM_TOKENS];
+        tokens.push(HtmlToken::Text("discarded".to_owned()));
 
         let root = parse(&tokens);
 
-        assert_eq!(root.text_content(), "kept");
+        assert_eq!(root.text_content(), "x".repeat(MAX_DOM_TOKENS));
     }
 
     #[test]
