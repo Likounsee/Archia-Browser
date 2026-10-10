@@ -134,9 +134,14 @@ impl RequestFilter {
 fn party_context(url: &str, first_party: Option<&crate::net::Url>) -> Option<PartyContext> {
     let first_party = first_party?;
     let requested = crate::net::Url::parse(url).ok()?;
-    let same_origin = requested.scheme() == first_party.scheme()
+    // Url values do not carry document opaque-origin identity. Conservatively
+    // classify file URLs as cross-origin instead of collapsing all local files
+    // into the same empty-host tuple.
+    let same_origin = requested.scheme() != "file"
+        && first_party.scheme() != "file"
+        && requested.scheme() == first_party.scheme()
         && requested.host().eq_ignore_ascii_case(first_party.host())
-        && requested.effective_port() == first_party.effective_port();
+        && origin_port(&requested) == origin_port(first_party);
     Some(if same_origin {
         PartyContext::FirstParty
     } else {
@@ -144,9 +149,37 @@ fn party_context(url: &str, first_party: Option<&crate::net::Url>) -> Option<Par
     })
 }
 
+fn origin_port(url: &crate::net::Url) -> Option<u16> {
+    url.port().or(match url.scheme() {
+        "http" => Some(80),
+        "https" => Some(443),
+        _ => None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn party_context_keeps_opaque_files_and_missing_ports_cross_origin() {
+        let first_file = crate::net::Url::parse("file:///private/first.html").unwrap();
+        assert_eq!(
+            party_context("file:///private/second.html", Some(&first_file)),
+            Some(PartyContext::ThirdParty)
+        );
+
+        let implicit = crate::net::Url::parse("custom://example.org/resource").unwrap();
+        assert_eq!(
+            party_context("custom://example.org:0/resource", Some(&implicit)),
+            Some(PartyContext::ThirdParty)
+        );
+        let implicit_https = crate::net::Url::parse("https://example.org/resource").unwrap();
+        assert_eq!(
+            party_context("https://example.org:443/resource", Some(&implicit_https)),
+            Some(PartyContext::FirstParty)
+        );
+    }
 
     #[test]
     fn blocks_matching_request() {
