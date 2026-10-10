@@ -1,5 +1,5 @@
 use crate::css::{ComputedStyle, StyleSheet};
-use crate::html::Node;
+use crate::html::{Node, NodeKind};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StyledNode {
@@ -18,7 +18,18 @@ impl StyledNode {
     }
 
     pub fn text_content(&self) -> String {
-        self.node.text_content()
+        let mut output = String::new();
+        self.append_text_content(&mut output);
+        output
+    }
+
+    fn append_text_content(&self, output: &mut String) {
+        if let NodeKind::Text(text) = &self.node.kind {
+            output.push_str(text);
+        }
+        for child in &self.children {
+            child.append_text_content(output);
+        }
     }
 }
 
@@ -72,7 +83,7 @@ fn style_node<'a>(
     sibling_positions.pop();
     path.pop();
     StyledNode {
-        node: node.clone(),
+        node: node.shallow_clone(),
         style,
         children,
     }
@@ -82,6 +93,20 @@ fn style_node<'a>(
 mod tests {
     use super::*;
     use crate::html::Node;
+
+    #[test]
+    fn styled_tree_keeps_text_content_without_deep_dom_clones() {
+        let mut parent = Node::element("div");
+        let mut child = Node::element("span");
+        child.append(Node::text("safe"));
+        parent.append(child);
+
+        let styled = StyleEngine::style(&parent, &StyleSheet::default());
+
+        assert!(styled.node.children.is_empty());
+        assert_eq!(styled.text_content(), "safe");
+        assert_eq!(styled.children[0].text_content(), "safe");
+    }
 
     #[test]
     fn child_style_inherits_parent_custom_properties_without_recomputing_ancestors() {
