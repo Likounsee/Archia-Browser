@@ -97,6 +97,21 @@ impl Url {
         self.fragment.as_deref()
     }
 
+    /// Compare tuple origins for network URLs.
+    ///
+    /// Local-file URLs are deliberately treated as opaque here: this URL type
+    /// has no per-document opaque-origin identity, so equating two file paths
+    /// would be an unsafe assumption for security-sensitive decisions.
+    pub fn same_origin(&self, other: &Self) -> bool {
+        if self.scheme == "file" || other.scheme == "file" {
+            return false;
+        }
+
+        self.scheme == other.scheme
+            && self.host().eq_ignore_ascii_case(other.host())
+            && self.origin_port() == other.origin_port()
+    }
+
     pub fn same_document(&self, other: &Self) -> bool {
         self.scheme == other.scheme
             && self.host().eq_ignore_ascii_case(other.host())
@@ -589,6 +604,28 @@ impl std::error::Error for UrlError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn same_origin_normalizes_hosts_and_default_ports_but_not_schemes() {
+        let cases = [
+            ("http://example.org/a", "http://EXAMPLE.org:80/b", true),
+            ("https://example.org/a", "https://example.org:443/b", true),
+            ("http://example.org/", "https://example.org/", false),
+            ("http://example.org/", "http://example.org:8080/", false),
+            ("http://[::1]/", "http://[0:0:0:0:0:0:0:1]:80/", true),
+            ("file:///tmp/a", "file:///tmp/a", false),
+            ("file:///tmp/a", "file:///tmp/b", false),
+        ];
+        for (left, right, expected) in cases {
+            let left = Url::parse(left).unwrap();
+            let right = Url::parse(right).unwrap();
+            assert_eq!(
+                left.same_origin(&right),
+                expected,
+                "unexpected origin comparison: {left} vs {right}"
+            );
+        }
+    }
 
     #[test]
     fn parses_local_file_urls_without_authority() {
