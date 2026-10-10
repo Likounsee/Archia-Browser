@@ -88,8 +88,12 @@ impl FilterRule {
         // Servers commonly treat percent-encoded unreserved ASCII bytes as
         // their literal characters. Match that equivalent spelling as well,
         // or a rule for "/blocked" could be bypassed with "/%62locked".
+        let normalized_url = decode_unreserved_percent_escapes(url);
+        let normalized_pattern = decode_unreserved_percent_escapes(&self.pattern);
         url.contains(&self.pattern)
-            || decode_unreserved_percent_escapes(url).contains(&self.pattern)
+            || url.contains(&normalized_pattern)
+            || normalized_url.contains(&self.pattern)
+            || normalized_url.contains(&normalized_pattern)
     }
     pub fn decision(&self) -> FilterDecision {
         self.decision
@@ -256,6 +260,17 @@ mod tests {
             filter.decide("https://example.org/%7Euser", Some(ResourceType::Document)),
             FilterDecision::Allow,
             "reserved policy patterns should not be broadened to unrelated paths"
+        );
+    }
+
+    #[test]
+    fn filter_normalizes_unreserved_escapes_in_patterns_too() {
+        let mut filter = RequestFilter::default();
+        filter.add_rule(FilterRule::block("/%62locked"));
+
+        assert_eq!(
+            filter.decide("https://example.org/blocked/resource", Some(ResourceType::Document)),
+            FilterDecision::Block
         );
     }
 
