@@ -149,6 +149,45 @@ mod tests {
     }
 
     #[test]
+    fn reservation_accounting_stays_balanced_over_one_thousand_cycles() {
+        let budget = Arc::new(MemoryBudget::new(4096));
+        for iteration in 0..1_000 {
+            let bytes = iteration % 512 + 1;
+            let reservation = MemoryReservation::try_new(Arc::clone(&budget), bytes).unwrap();
+            assert_eq!(budget.used(), bytes);
+            drop(reservation);
+            assert_eq!(budget.used(), 0);
+        }
+    }
+
+    #[test]
+    fn concurrent_reservations_never_overcommit_the_budget() {
+        use std::sync::Barrier;
+
+        let budget = Arc::new(MemoryBudget::new(1024));
+        let barrier = Arc::new(Barrier::new(16));
+        let mut workers = Vec::new();
+        for _ in 0..16 {
+            let budget = Arc::clone(&budget);
+            let barrier = Arc::clone(&barrier);
+            workers.push(std::thread::spawn(move || {
+                let reserved = budget.try_reserve(128);
+                barrier.wait();
+                if reserved {
+                    budget.release(128);
+                }
+                reserved
+            }));
+        }
+
+        let mut successful_reservations = 0;
+        for worker in workers {
+            successful_reservations += usize::from(worker.join().unwrap());
+        }
+        assert!(successful_reservations <= 8);
+        assert_eq!(budget.used(), 0);
+    }
+    #[test]
     fn over_release_does_not_erase_existing_reservations() {
         let budget = MemoryBudget::new(1024);
         assert!(budget.try_reserve(700));
