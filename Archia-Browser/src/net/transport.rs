@@ -921,7 +921,10 @@ fn decode_chunked(
         };
         if size_text.is_empty()
             || !size_text.bytes().all(|byte| byte.is_ascii_hexdigit())
-            || extensions.is_some_and(|extensions| !valid_chunk_extensions(extensions))
+            || extensions.is_some_and(|extensions| {
+                let extensions = format!(";{extensions}");
+                !valid_chunk_extensions(&extensions)
+            })
         {
             return Err(TransportError::ConnectionFailed);
         }
