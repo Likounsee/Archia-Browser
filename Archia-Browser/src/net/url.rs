@@ -541,10 +541,7 @@ mod tests {
 
     #[test]
     fn rejects_file_paths_that_normalize_into_unc_prefixes() {
-        for input in [
-            "file:///.//server/share",
-            "file:///%2e//server/share",
-        ] {
+        for input in ["file:///.//server/share", "file:///%2e//server/share"] {
             assert_eq!(
                 Url::parse(input).unwrap_err(),
                 UrlError::InvalidCharacter,
