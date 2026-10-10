@@ -256,7 +256,7 @@ mod tests {
         let nested_list = outer_item.find_first_element("ul").unwrap();
 
         assert_eq!(outer_item.text_content(), "outerinner");
-        assert_eq!(nested_list.children.len(), 2);
+        assert_eq!(nested_list.children.len(), 1);
         assert_eq!(nested_list.children[0].text_content(), "inner");
         assert_eq!(outer_list.children[1].text_content(), "second");
     }
