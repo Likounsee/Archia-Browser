@@ -60,6 +60,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn resource_id_exhaustion_releases_the_failed_reservation() {
+        let mut manager = ResourceManager::new(4096);
+        manager.next_id = u64::MAX;
+
+        assert!(manager.allocate(1024).is_none());
+        assert_eq!(manager.memory().used(), 0);
+        assert_eq!(manager.memory().available(), 4096);
+        assert!(manager.memory().try_reserve(4096));
+        manager.memory().release(4096);
+    }
+
+    #[test]
     fn resources_consume_and_release_budget() {
         let mut manager = ResourceManager::new(4096);
         let resource = manager.allocate(1024).unwrap();
