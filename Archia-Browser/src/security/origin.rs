@@ -120,7 +120,11 @@ mod tests {
             ("http://example.com/", "http://other.example/", false),
             ("http://example.com/", "http://sub.example.com/", false),
             ("http://example.com:80/", "http://example.com:81/", false),
-            ("https://example.com:443/", "https://example.com:444/", false),
+            (
+                "https://example.com:443/",
+                "https://example.com:444/",
+                false,
+            ),
             ("http://example.com:0/", "http://example.com/", false),
             ("custom://example.com/", "custom://example.com:0/", false),
             ("http://127.0.0.1/", "http://127.0.0.2/", false),
@@ -128,9 +132,17 @@ mod tests {
             ("http://example.com/", "custom://example.com/", false),
             ("file:///private/a.html", "file:///private/a.html", false),
             ("file:///private/a.html", "file:///private/b.html", false),
-            ("file://localhost/private/a.html", "file:///private/a.html", false),
+            (
+                "file://localhost/private/a.html",
+                "file:///private/a.html",
+                false,
+            ),
             ("file:///C:/Users/a.html", "file:///C:/Users/a.html", false),
-            ("http://example.com:8080/", "http://example.com:8081/", false),
+            (
+                "http://example.com:8080/",
+                "http://example.com:8081/",
+                false,
+            ),
             ("https://example.com/", "https://example.org/", false),
             ("custom://example.com:1/", "custom://example.com:2/", false),
             ("http://example.com/", "http://example.com:443/", false),
@@ -147,5 +159,4 @@ mod tests {
             );
         }
     }
-
 }
