@@ -1240,11 +1240,11 @@ mod tests {
     #[test]
     fn only_if_cached_is_detected_without_matching_quoted_values() {
         let request = make_request("https://example.org/resource")
-            .with_header("cache-control", "private="only-if-cached, no-store", only-if-cached");
+            .with_header("cache-control", r#"private="only-if-cached, no-store", only-if-cached"#);
         assert!(request_only_if_cached(&request));
 
         let ordinary = make_request("https://example.org/resource")
-            .with_header("cache-control", "private="only-if-cached"");
+            .with_header("cache-control", r#"private="only-if-cached""#);
         assert!(!request_only_if_cached(&ordinary));
     }
 }
