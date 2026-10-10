@@ -253,10 +253,7 @@ mod tests {
             FilterDecision::Block
         );
         assert_eq!(
-            filter.decide(
-                "https://example.org/%7Euser",
-                Some(ResourceType::Document)
-            ),
+            filter.decide("https://example.org/%7Euser", Some(ResourceType::Document)),
             FilterDecision::Allow,
             "reserved policy patterns should not be broadened to unrelated paths"
         );
