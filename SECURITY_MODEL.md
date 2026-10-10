@@ -36,7 +36,7 @@ The current implementation does **not** provide a usable JavaScript runtime or a
 These controls are implemented in source but still require ongoing regression testing and independent review:
 
 - URL parsing validates authority/ports and percent encoding; file paths reject encoded separators and encoded Windows drive-colon ambiguity. Origin comparisons are centralized; file URLs are treated as opaque for same-origin checks.
-- HTTP transport validates request headers and framing, rejects conflicting `Content-Length` / `Transfer-Encoding`, limits headers and response bytes, validates chunking/trailers, and rejects protocol upgrades.
+- HTTP transport validates request headers and framing, rejects conflicting `Content-Length` / `Transfer-Encoding`, limits headers and response bytes, validates chunking/trailers, and rejects protocol upgrades. Regression tests now verify exact response-body/header-size boundaries on Linux and Windows (`985391947de0fa7ab057a65c210fdffda1a25d30`); coverage of every individual limit at N−1/N/N+1 remains open.
 - HTTPS uses rustls with trusted roots and server-name validation.
 - Document redirects are bounded; cross-origin redirects remove arbitrary/credential-bearing headers; remote-to-file redirects are rejected.
 - Local file transport opens the file before inspecting its handle, requires a regular file, bounds file size, rejects malformed percent escapes and NUL; Windows UNC and drive-relative paths are rejected.
