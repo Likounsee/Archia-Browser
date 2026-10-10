@@ -962,11 +962,15 @@ fn layout_flex_children(
         }
 
         let child_margin = box_model_from_style(&child.style, content_width);
-        let base_entry = bases[child_index].expect("flex base exists for in-flow child");
-        let base = base_entry.0;
-        let grow = base_entry.1;
-        let shrink = base_entry.2;
-        let flex_base = base_entry.3;
+        // Every in-flow child receives a base during the first pass. Keep
+        // layout resilient if a future refactor breaks that correspondence:
+        // an absent base becomes a zero-sized, non-growing item rather than a
+        // panic while processing document-controlled structure.
+        let (base, grow, shrink, flex_base) = bases
+            .get(child_index)
+            .copied()
+            .flatten()
+            .unwrap_or((0, 0.0, 1.0, 0));
         let extra = if grow_enabled {
             (free_space as f32 * grow / total_grow).floor() as u32
         } else {
