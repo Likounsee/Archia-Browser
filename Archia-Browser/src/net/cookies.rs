@@ -306,10 +306,7 @@ impl CookieJar {
     ) -> Option<String> {
         let same_site = first_party.is_some_and(|party| same_site_url(url, party));
         let safe_navigation = top_level_navigation
-            && matches!(
-                method,
-                super::HttpMethod::Get | super::HttpMethod::Head
-            );
+            && matches!(method, super::HttpMethod::Get | super::HttpMethod::Head);
         let now = SystemTime::now();
         let host = url.host().to_ascii_lowercase();
         let path = url.path();
@@ -318,7 +315,10 @@ impl CookieJar {
             .cookies
             .iter()
             .filter(|cookie| {
-                if cookie.expires_at.is_some_and(|expires_at| expires_at <= now) {
+                if cookie
+                    .expires_at
+                    .is_some_and(|expires_at| expires_at <= now)
+                {
                     return false;
                 }
                 let domain_matches = if cookie.host_only {
@@ -415,7 +415,9 @@ impl CookieJar {
             .iter()
             .filter(|cookie| {
                 !cookie.http_only
-                    && !cookie.expires_at.is_some_and(|expires_at| expires_at <= now)
+                    && !cookie
+                        .expires_at
+                        .is_some_and(|expires_at| expires_at <= now)
                     && (if cookie.host_only {
                         host == cookie.domain
                     } else {
@@ -488,7 +490,10 @@ fn same_site_url(first: &Url, second: &Url) -> bool {
         let registrant = prefix.rsplit('.').next()?;
         Some(format!("{registrant}.{suffix}"))
     }
-    match (registrable_domain(&first_host), registrable_domain(&second_host)) {
+    match (
+        registrable_domain(&first_host),
+        registrable_domain(&second_host),
+    ) {
         (Some(first), Some(second)) => first == second,
         _ => false,
     }
@@ -587,13 +592,8 @@ mod tests {
             Some("none=n")
         );
         assert_eq!(
-            jar.header_for_context(
-                &origin,
-                Some(&origin),
-                false,
-                super::super::HttpMethod::Get
-            )
-            .as_deref(),
+            jar.header_for_context(&origin, Some(&origin), false, super::super::HttpMethod::Get)
+                .as_deref(),
             Some("strict=s; lax=l; default=d; none=n")
         );
     }
@@ -780,7 +780,8 @@ mod tests {
         jar.store(&url, "sid=shared; Domain=example.co.uk");
 
         assert_eq!(
-            jar.header_for(&Url::parse("https://cdn.example.co.uk/").unwrap()).as_deref(),
+            jar.header_for(&Url::parse("https://cdn.example.co.uk/").unwrap())
+                .as_deref(),
             Some("sid=shared")
         );
     }
