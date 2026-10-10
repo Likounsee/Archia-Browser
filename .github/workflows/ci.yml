@@ -20,6 +20,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Resolve and print lockfile for reproducible dependency pinning
+        if: runner.os == 'Linux'
+        run: |
+          cargo generate-lockfile
+          echo "ARCHIA_LOCKFILE_BEGIN"
+          cat Cargo.lock
+          echo "ARCHIA_LOCKFILE_END"
       - run: cargo fmt --all -- --check
       - run: cargo test --workspace
       - run: cargo build --workspace
