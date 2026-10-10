@@ -631,8 +631,11 @@ fn host_header(request: &Request) -> String {
     }
 }
 
-#[cfg(test)]
-fn parse_http_response(
+/// Parse one complete HTTP/1.1 response using caller-supplied byte limits.
+///
+/// This entry point is useful for offline validation of untrusted response bytes;
+/// it performs no network I/O.
+pub fn parse_http_response(
     bytes: &[u8],
     max_response_size: usize,
     max_header_size: usize,
