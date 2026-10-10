@@ -5,6 +5,7 @@ use crate::style_tree::StyledNode;
 use crate::surface::{Color, SoftwareSurface};
 
 const MAX_DISPLAY_COMMANDS: usize = 200_000;
+const MAX_DISPLAY_TEXT_BYTES: usize = 4 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct CornerRadius {
@@ -46,6 +47,7 @@ pub enum PaintCommand {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DisplayList {
     commands: Vec<PaintCommand>,
+    text_bytes: usize,
 }
 
 impl DisplayList {
@@ -53,15 +55,25 @@ impl DisplayList {
         Self::default()
     }
 
-    /// Append a paint command unless the per-frame command budget is exhausted.
+    /// Append a paint command unless the per-frame command or text budget is exhausted.
     ///
-    /// The display list is built from untrusted document content, so stop
-    /// accepting commands before its metadata and retained text can grow without
-    /// bound. A truncated list remains safe to rasterize.
+    /// The display list is built from untrusted document content, so bound both
+    /// command metadata and retained text. A truncated list remains safe to rasterize.
     pub fn push(&mut self, command: PaintCommand) {
         if self.commands.len() >= MAX_DISPLAY_COMMANDS {
             return;
         }
+        let text_bytes = match &command {
+            PaintCommand::DrawText { text, .. } => text.len(),
+            _ => 0,
+        };
+        let Some(next_text_bytes) = self.text_bytes.checked_add(text_bytes) else {
+            return;
+        };
+        if next_text_bytes > MAX_DISPLAY_TEXT_BYTES {
+            return;
+        }
+        self.text_bytes = next_text_bytes;
         self.commands.push(command);
     }
 
@@ -774,6 +786,27 @@ mod tests {
         assert_eq!(list.len(), MAX_DISPLAY_COMMANDS);
     }
 
+    #[test]
+    fn display_list_bounds_total_retained_text_bytes() {
+        let mut list = DisplayList::new();
+        let half_budget = MAX_DISPLAY_TEXT_BYTES / 2;
+        for _ in 0..2 {
+            list.push(PaintCommand::DrawText {
+                x: 0,
+                y: 0,
+                text: "x".repeat(half_budget),
+                color: 0,
+            });
+        }
+        assert_eq!(list.len(), 2);
+        list.push(PaintCommand::DrawText {
+            x: 0,
+            y: 0,
+            text: String::from("x"),
+            color: 0,
+        });
+        assert_eq!(list.len(), 2);
+    }
     #[test]
     fn opacity_applies_to_vertical_border_sides() {
         let mut root = Node::element("div");
