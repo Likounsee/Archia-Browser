@@ -11,7 +11,7 @@ pub struct Url {
 
 impl Url {
     pub fn parse(input: &str) -> Result<Self, UrlError> {
-        if contains_unsafe_url_whitespace(input) {
+        if contains_unsafe_url_whitespace(input) || !has_valid_percent_encoding(input) {
             return Err(UrlError::InvalidCharacter);
         }
 
@@ -156,7 +156,7 @@ impl Url {
     /// redirects and document links while keeping the URL type independent
     /// from the network layer.
     pub fn resolve(&self, reference: &str) -> Result<Self, UrlError> {
-        if contains_unsafe_url_whitespace(reference) {
+        if contains_unsafe_url_whitespace(reference) || !has_valid_percent_encoding(reference) {
             return Err(UrlError::InvalidCharacter);
         }
 
@@ -379,6 +379,25 @@ fn validate_dns_or_ipv4_host(host: &str) -> Result<(), UrlError> {
     Ok(())
 }
 
+fn has_valid_percent_encoding(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] != b'%' {
+            index += 1;
+            continue;
+        }
+        if index + 2 >= bytes.len()
+            || !bytes[index + 1].is_ascii_hexdigit()
+            || !bytes[index + 2].is_ascii_hexdigit()
+        {
+            return false;
+        }
+        index += 3;
+    }
+    true
+}
+
 fn contains_encoded_path_separator(path: &str) -> bool {
     let bytes = path.as_bytes();
     bytes.windows(3).any(|sequence| {
@@ -526,6 +545,34 @@ mod tests {
                 .authority(),
             "localhost"
         );
+    }
+
+    #[test]
+    fn rejects_malformed_percent_escapes_in_all_url_components() {
+        for input in [
+            "https://example.org/percent%",
+            "https://example.org/percent%2",
+            "https://example.org/percent%GG",
+            "https://example.org/?query=%",
+            "https://example.org/#fragment%XZ",
+        ] {
+            assert_eq!(
+                Url::parse(input).unwrap_err(),
+                UrlError::InvalidCharacter,
+                "malformed percent escape must be rejected: {input}"
+            );
+        }
+
+        let base = Url::parse("https://example.org/path").unwrap();
+        for reference in ["next%", "?query=%GG", "#fragment%2"] {
+            assert_eq!(
+                base.resolve(reference).unwrap_err(),
+                UrlError::InvalidCharacter,
+                "malformed relative-reference escape must be rejected: {reference}"
+            );
+        }
+
+        assert!(Url::parse("https://user%40name@example.org/%2e%2e/safe").is_ok());
     }
 
     #[test]
