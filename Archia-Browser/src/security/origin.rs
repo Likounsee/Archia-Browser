@@ -100,4 +100,52 @@ mod tests {
         assert!(!a.same_origin(&c));
         assert!(a.same_origin(&explicit));
     }
+
+    #[test]
+    fn origin_comparison_matrix_covers_scheme_host_port_and_opaque_files() {
+        let cases = [
+            ("http://example.com/a", "http://example.com/b", true),
+            ("http://example.com/", "http://example.com:80/", true),
+            ("https://example.com/", "https://example.com:443/", true),
+            ("HTTP://EXAMPLE.COM/a", "http://example.com/b", true),
+            ("https://example.com/", "https://EXAMPLE.COM:443/x", true),
+            ("https://[2001:db8::1]/", "https://[2001:0db8:0:0:0:0:0:1]/x", true),
+            ("custom://example.com/a", "custom://example.com/b", true),
+            ("http://user@example.com/a", "http://example.com/b", true),
+            ("http://example.com:8080/", "http://example.com:8080/x", true),
+            ("https://example.com:444/", "https://example.com:444/x", true),
+            ("http://127.0.0.1/", "http://127.0.0.1:80/x", true),
+            ("https://[::1]/", "https://[0:0:0:0:0:0:0:1]:443/x", true),
+            ("http://example.com/", "https://example.com/", false),
+            ("http://example.com/", "http://other.example/", false),
+            ("http://example.com/", "http://sub.example.com/", false),
+            ("http://example.com:80/", "http://example.com:81/", false),
+            ("https://example.com:443/", "https://example.com:444/", false),
+            ("http://example.com:0/", "http://example.com/", false),
+            ("custom://example.com/", "custom://example.com:0/", false),
+            ("http://127.0.0.1/", "http://127.0.0.2/", false),
+            ("https://[2001:db8::1]/", "https://[2001:db8::2]/", false),
+            ("http://example.com/", "custom://example.com/", false),
+            ("file:///private/a.html", "file:///private/a.html", false),
+            ("file:///private/a.html", "file:///private/b.html", false),
+            ("file://localhost/private/a.html", "file:///private/a.html", false),
+            ("file:///C:/Users/a.html", "file:///C:/Users/a.html", false),
+            ("http://example.com:8080/", "http://example.com:8081/", false),
+            ("https://example.com/", "https://example.org/", false),
+            ("custom://example.com:1/", "custom://example.com:2/", false),
+            ("http://example.com/", "http://example.com:443/", false),
+        ];
+
+        assert_eq!(cases.len(), 30);
+        for (left, right, expected) in cases {
+            let left = Origin::from_url(&Url::parse(left).unwrap());
+            let right = Origin::from_url(&Url::parse(right).unwrap());
+            assert_eq!(
+                left.same_origin(&right),
+                expected,
+                "unexpected origin comparison for {left:?} and {right:?}"
+            );
+        }
+    }
+
 }
