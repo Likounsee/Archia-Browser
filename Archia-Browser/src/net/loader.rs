@@ -1,3 +1,4 @@
+use super::cache::request_only_if_cached;
 use super::{
     pipeline::{NetworkPipeline, RequestPolicy, ResourceKind},
     HttpMethod, Request, Response, Transport, TransportError,
@@ -121,6 +122,10 @@ where
             };
             let response = if let Some(response) = cached_response {
                 response
+            } else if request_only_if_cached(&current) {
+                // Cache-only requests must not fall through to the transport.
+                // 504 is the HTTP-defined result when no usable cached response exists.
+                return Err(DocumentLoadError::HttpStatus(504));
             } else {
                 let response = self
                     .pipeline
@@ -676,6 +681,38 @@ mod tests {
             loader.load(&request, LayoutViewport::new(320, 200)),
             Err(DocumentLoadError::InternalStatePoisoned)
         ));
+    }
+
+    #[test]
+    fn only_if_cached_miss_returns_504_without_network_access() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+
+        struct CountingTransport(Arc<AtomicUsize>);
+        impl Transport for CountingTransport {
+            fn send(&self, _: &Request) -> Result<Response, TransportError> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Ok(Response::new(200)
+                    .with_header("content-type", "text/html")
+                    .with_body(b"<html>network</html>".to_vec()))
+            }
+        }
+
+        let sends = Arc::new(AtomicUsize::new(0));
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            CountingTransport(Arc::clone(&sends)),
+        );
+        let request = Request::new(Url::parse("https://example.org/missing").unwrap())
+            .with_header("cache-control", "only-if-cached");
+
+        assert!(matches!(
+            loader.load(&request, LayoutViewport::new(320, 200)),
+            Err(DocumentLoadError::HttpStatus(504))
+        ));
+        assert_eq!(sends.load(Ordering::SeqCst), 0);
     }
 
     #[test]
