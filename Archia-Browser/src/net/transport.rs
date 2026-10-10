@@ -729,28 +729,25 @@ fn parse_http_response_head(
     }
 
     let mut response = Response::new(status);
+    let mut seen_headers = std::collections::HashSet::new();
     for line in lines {
         let Some((name, value)) = line.split_once(':') else {
             return Err(TransportError::ConnectionFailed);
         };
         // Field names must be HTTP tokens; trimming malformed names can turn
-        // an invalid response into a different, accepted header.
+        // an invalid response into a different, accepted header. Reject
+        // duplicates case-insensitively so consumers cannot observe a
+        // merged/overwritten value different from the validated sequence.
         if name.is_empty()
             || !name.bytes().all(is_http_token_byte)
             || value
                 .bytes()
-                .any(|byte| (byte < 0x20 && byte != b'\t') || byte == 0x7f)
+                .any(|byte| (byte < 0x20 && byte != b'\\t') || byte == 0x7f)
+            || !seen_headers.insert(name.to_ascii_lowercase())
         {
             return Err(TransportError::ConnectionFailed);
         }
         let value = value.trim();
-        if matches!(
-            name.to_ascii_lowercase().as_str(),
-            "content-length" | "transfer-encoding"
-        ) && response.header(name).is_some()
-        {
-            return Err(TransportError::ConnectionFailed);
-        }
         response = response.with_header(name, value);
     }
 
@@ -1058,20 +1055,18 @@ mod tests {
     }
 
     #[test]
-    fn rejects_duplicate_framing_headers() {
-        let result = parse_http_response(
-            b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nContent-Length: 5\r\n\r\nHello",
-            1024,
-            1024,
-        );
-        assert_eq!(result, Err(TransportError::ConnectionFailed));
-
-        let result = parse_http_response(
-            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n",
-            1024,
-            1024,
-        );
-        assert_eq!(result, Err(TransportError::ConnectionFailed));
+    fn rejects_duplicate_response_headers_case_insensitively() {
+        for response in [
+            b"HTTP/1.1 200 OK\\r\\nContent-Length: 5\\r\\nContent-Length: 5\\r\\n\\r\\nHello".as_slice(),
+            b"HTTP/1.1 200 OK\\r\\nTransfer-Encoding: chunked\\r\\nTransfer-Encoding: chunked\\r\\n\\r\\n0\\r\\n\\r\\n".as_slice(),
+            b"HTTP/1.1 200 OK\\r\\nContent-Type: text/plain\\r\\ncontent-type: text/html\\r\\n\\r\\n".as_slice(),
+            b"HTTP/1.1 200 OK\\r\\nSet-Cookie: a=1\\r\\nset-cookie: b=2\\r\\n\\r\\n".as_slice(),
+        ] {
+            assert_eq!(
+                parse_http_response(response, 1024, 1024),
+                Err(TransportError::ConnectionFailed)
+            );
+        }
     }
 
     #[test]
