@@ -617,9 +617,12 @@ mod tests {
 
     #[test]
     fn redirect_loops_are_rejected_before_repeating_the_request() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
 
-        struct LoopTransport(AtomicUsize);
+        struct LoopTransport(Arc<AtomicUsize>);
 
         impl Transport for LoopTransport {
             fn send(&self, _: &Request) -> Result<Response, TransportError> {
@@ -628,15 +631,18 @@ mod tests {
             }
         }
 
-        let transport = LoopTransport(AtomicUsize::new(0));
-        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), &transport);
+        let sends = Arc::new(AtomicUsize::new(0));
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            LoopTransport(Arc::clone(&sends)),
+        );
         let request = Request::new(Url::parse("https://example.org/loop").unwrap());
 
         assert!(matches!(
             loader.load(&request, LayoutViewport::new(320, 200)),
             Err(DocumentLoadError::RedirectLoopDetected)
         ));
-        assert_eq!(transport.0.load(Ordering::SeqCst), 1);
+        assert_eq!(sends.load(Ordering::SeqCst), 1);
     }
 
     #[test]
