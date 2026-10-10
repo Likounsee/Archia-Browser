@@ -401,7 +401,10 @@ fn response_age(response: &Response) -> Option<u64> {
             if age_headers.next().is_some() {
                 return None;
             }
-            value.trim().parse::<u64>().ok()?
+            value
+                .trim_matches(|character| character == ' ' || character == '\t')
+                .parse::<u64>()
+                .ok()?
         }
         None => 0,
     };
@@ -418,7 +421,10 @@ fn response_age(response: &Response) -> Option<u64> {
             if date_headers.next().is_some() {
                 return None;
             }
-            let date = httpdate::parse_http_date(value.trim()).ok()?;
+            let date = httpdate::parse_http_date(
+                value.trim_matches(|character| character == ' ' || character == '\t'),
+            )
+            .ok()?;
             std::time::SystemTime::now()
                 .duration_since(date)
                 .unwrap_or_default()
@@ -528,6 +534,21 @@ mod tests {
         );
         assert!(cache.get(&first).is_none());
         assert!(cache.get(&second).is_some());
+    }
+
+    #[test]
+    fn refuses_non_ascii_whitespace_in_age_header() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/invalid-age");
+        let response = Response::new(200)
+            .with_header("cache-control", "public, max-age=60")
+            .with_header("age", "\\u{00a0}0\\u{00a0}")
+            .with_body(b"ambiguous age".to_vec());
+
+        cache.store(&request, &response);
+
+        assert!(cache.is_empty());
+        assert!(cache.get(&request).is_none());
     }
 
     #[test]
