@@ -1077,11 +1077,11 @@ mod tests {
             " 5",
             "5 ",
             "+5",
-            "5;bad\\u{1}extension",
+            "5;bad\u{1}extension",
             "5;",
             "5;=value",
             "5;name=",
-            "5;name=\\"unterminated",
+            r#"5;name="unterminated"#,
         ] {
             let response = format!(
                 "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n{chunk_size}\r\nHello\r\n0\r\n\r\n"
