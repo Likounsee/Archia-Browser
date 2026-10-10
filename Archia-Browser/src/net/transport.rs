@@ -631,6 +631,7 @@ fn host_header(request: &Request) -> String {
     }
 }
 
+#[cfg(test)]
 fn parse_http_response(
     bytes: &[u8],
     max_response_size: usize,
@@ -972,7 +973,7 @@ fn decode_chunked(
         }
         let (size_text, extensions) = match line.split_once(';') {
             Some((size, extensions)) => (
-                size.trim_end_matches(|character| character == ' ' || character == '\t'),
+                size.trim_end_matches([' ', '\t']),
                 Some(extensions),
             ),
             None => (line, None),
