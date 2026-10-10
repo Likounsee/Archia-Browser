@@ -765,7 +765,8 @@ fn parse_http_response_head(
             || value
                 .bytes()
                 .any(|byte| (byte < 0x20 && byte != b'\t') || byte == 0x7f)
-            || !seen_headers.insert(name.to_ascii_lowercase())
+            || (!seen_headers.insert(name.to_ascii_lowercase())
+                && !name.eq_ignore_ascii_case("set-cookie"))
         {
             return Err(TransportError::ConnectionFailed);
         }
