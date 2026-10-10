@@ -1550,10 +1550,14 @@ mod tests {
     #[test]
     fn request_body_limit_accepts_exact_boundary_and_rejects_one_byte_over() {
         let url = Url::parse("https://example.org/upload").unwrap();
-        let exact = Request::new(url.clone()).with_body(vec![b'x'; MAX_REQUEST_BODY_BYTES]);
+        let exact = Request::new(url.clone())
+            .with_method(super::super::HttpMethod::Post)
+            .with_body(vec![b'x'; MAX_REQUEST_BODY_BYTES]);
         assert_eq!(validate_request(&exact), Ok(()));
 
-        let oversized = Request::new(url).with_body(vec![b'x'; MAX_REQUEST_BODY_BYTES + 1]);
+        let oversized = Request::new(url)
+            .with_method(super::super::HttpMethod::Post)
+            .with_body(vec![b'x'; MAX_REQUEST_BODY_BYTES + 1]);
         assert_eq!(
             validate_request(&oversized),
             Err(TransportError::InvalidRequest)
@@ -1946,7 +1950,9 @@ mod tests {
         }
 
         let mut request =
-            Request::new(Url::parse("http://example.org/").unwrap()).with_body(b"Hello".to_vec());
+            Request::new(Url::parse("http://example.org/").unwrap())
+                .with_method(super::super::HttpMethod::Post)
+                .with_body(b"Hello".to_vec());
         request.headers.insert("Content-Length".into(), "5".into());
         let mut stream = CaptureStream::default();
         HttpTransport::new()
@@ -1969,7 +1975,9 @@ mod tests {
     fn content_length_uses_only_http_ascii_optional_whitespace() {
         let url = Url::parse("http://example.org/").unwrap();
 
-        let mut request = Request::new(url.clone()).with_body(b"Hello".to_vec());
+        let mut request = Request::new(url.clone())
+            .with_method(super::super::HttpMethod::Post)
+            .with_body(b"Hello".to_vec());
         request
             .headers
             .insert("Content-Length".into(), "\u{00a0}5\u{00a0}".into());
@@ -1980,6 +1988,7 @@ mod tests {
         );
 
         let valid_ows = Request::new(url)
+            .with_method(super::super::HttpMethod::Post)
             .with_body(b"Hello".to_vec())
             .with_header("content-length", "\t5 \t");
         assert_eq!(validate_request(&valid_ows), Ok(()));
