@@ -80,6 +80,15 @@ impl HtmlTokenizer {
                         cursor = close_end;
                         continue;
                     }
+
+                    // Script/style contents remain raw text through EOF when
+                    // the closing tag is missing. Re-tokenizing the remainder
+                    // as markup can create a parser differential on malformed
+                    // or attacker-controlled documents.
+                    if end + 1 < input.len() {
+                        tokens.push(HtmlToken::Text(input[end + 1..].to_owned()));
+                    }
+                    break;
                 }
             }
             cursor = end + 1;
@@ -442,6 +451,19 @@ mod character_reference_tests {
         assert!(matches!(
             tokens.get(1),
             Some(HtmlToken::Text(value)) if value.contains("a < b")
+        ));
+    }
+
+    #[test]
+    fn unterminated_raw_text_element_consumes_remainder_as_text() {
+        let tokens = HtmlTokenizer::tokenize("<script>if (a < b) { const x = '<p>not markup</p>';");
+
+        assert!(matches!(
+            tokens.as_slice(),
+            [
+                HtmlToken::StartTag { name, .. },
+                HtmlToken::Text(value)
+            ] if name == "script" && value.contains("<p>not markup</p>")
         ));
     }
 
