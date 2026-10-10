@@ -557,9 +557,10 @@ fn is_css_response(response: &Response) -> bool {
 
 fn redirect_loop_key(url: &super::Url) -> String {
     let serialized = url.to_string();
-    serialized
-        .split_once('#')
-        .map_or_else(|| serialized.clone(), |(without_fragment, _)| without_fragment.to_owned())
+    match serialized.split_once('#') {
+        Some((without_fragment, _)) => without_fragment.to_owned(),
+        None => serialized,
+    }
 }
 
 fn is_redirect(status: u16) -> bool {
