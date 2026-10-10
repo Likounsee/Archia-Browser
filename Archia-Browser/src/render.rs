@@ -4,6 +4,8 @@ use crate::html::{Node, NodeKind};
 use crate::style_tree::StyledNode;
 use crate::surface::{Color, SoftwareSurface};
 
+const MAX_DISPLAY_COMMANDS: usize = 200_000;
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct CornerRadius {
     x: u32,
@@ -51,7 +53,15 @@ impl DisplayList {
         Self::default()
     }
 
+    /// Append a paint command unless the per-frame command budget is exhausted.
+    ///
+    /// The display list is built from untrusted document content, so stop
+    /// accepting commands before its metadata and retained text can grow without
+    /// bound. A truncated list remains safe to rasterize.
     pub fn push(&mut self, command: PaintCommand) {
+        if self.commands.len() >= MAX_DISPLAY_COMMANDS {
+            return;
+        }
         self.commands.push(command);
     }
 
@@ -755,6 +765,14 @@ mod tests {
     use super::*;
     use crate::layout::{LayoutEngine, LayoutViewport};
 
+    #[test]
+    fn display_list_stops_accepting_commands_at_its_budget() {
+        let mut list = DisplayList::new();
+        for _ in 0..=MAX_DISPLAY_COMMANDS {
+            list.push(PaintCommand::PopClip);
+        }
+        assert_eq!(list.len(), MAX_DISPLAY_COMMANDS);
+    }
     #[test]
     fn opacity_applies_to_vertical_border_sides() {
         let mut root = Node::element("div");
