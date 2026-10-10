@@ -445,6 +445,7 @@ fn retain_safe_cross_origin_headers(
             "content-type",
             "dnt",
             "pragma",
+            "referer",
             "user-agent",
             "upgrade-insecure-requests",
         ]
