@@ -928,7 +928,10 @@ fn decode_chunked(
             return Err(TransportError::ConnectionFailed);
         }
         let (size_text, extensions) = match line.split_once(';') {
-            Some((size, extensions)) => (trim_http_ows(size), Some(extensions)),
+            Some((size, extensions)) => (
+                size.trim_end_matches(|character| character == ' ' || character == '\t'),
+                Some(extensions),
+            ),
             None => (line, None),
         };
         if size_text.is_empty()
@@ -1090,6 +1093,7 @@ mod tests {
     fn rejects_invalid_chunk_size_lines() {
         for chunk_size in [
             " 5",
+            " 5;name",
             "5 ",
             "+5",
             "5;bad\u{1}extension",
