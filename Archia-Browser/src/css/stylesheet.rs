@@ -726,7 +726,7 @@ mod tests {
     fn stylesheet_parser_caps_rule_count() {
         let input = ".item { color: red; }".repeat(MAX_STYLE_RULES + 20);
         let sheet = StyleSheet::parse(&input);
-        assert_eq!(sheet.rules.len(), MAX_STYLE_RULES);
+        assert_eq!(sheet.rules.len(), MAX_STYLE_RULES.min(MAX_TOTAL_SELECTORS));
     }
 
     #[test]
