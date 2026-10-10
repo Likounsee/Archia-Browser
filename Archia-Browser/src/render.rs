@@ -807,6 +807,7 @@ mod tests {
         });
         assert_eq!(list.len(), 2);
     }
+
     #[test]
     fn opacity_applies_to_vertical_border_sides() {
         let mut root = Node::element("div");
