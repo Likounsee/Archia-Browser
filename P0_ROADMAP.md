@@ -44,3 +44,10 @@ in source.
 - Keep this roadmap updated as new release-blocking defects are found. P1 standards completeness,
   JavaScript, UI polish, and broader web compatibility are outside this P0 checklist unless they
   expose a concrete crash, security boundary failure, or resource-exhaustion issue.
+
+## Current execution log (2026-10-10)
+
+- Created this roadmap on branch \`Archia-Browser\`.
+- Added URL-authority checks for ASCII DNS/IPv4 host syntax and percent-encoded userinfo, and regression cases for malformed hosts, malformed userinfo, and valid userinfo with a trailing-dot hostname.
+- Related commits: \`a92390e2331ea7d2b842899b19dac79331441e4e\` (roadmap), \`4080baec6e6d039a7934f9514f28397a167da7cb\`, \`aaa7ec90f4e879a21e09d38f0d821deabe2e227a\`, \`a7bf89b1810b1d978b10c7e7992dc54d80f0ac47\`.
+- **Verification pending:** this environment cannot resolve GitHub for a local checkout, and the available workflow lookup returned no runs for these commits. Do not mark the URL item Done until formatting, tests, and build pass on CI.
