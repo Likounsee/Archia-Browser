@@ -408,7 +408,10 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
     // GET and HEAD bodies have no interoperable semantics and would make the
     // URL-only HTTP cache key unsafe for requests whose bodies differ.
     if request.has_body()
-        && matches!(request.method, super::HttpMethod::Get | super::HttpMethod::Head)
+        && matches!(
+            request.method,
+            super::HttpMethod::Get | super::HttpMethod::Head
+        )
     {
         return Err(TransportError::InvalidRequest);
     }
