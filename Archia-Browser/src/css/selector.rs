@@ -919,7 +919,7 @@ mod tests {
         let node = Node::element("div");
 
         assert!(!selector.matches_path(&[&node]));
-        assert!(!selector.matches_path_with_siblings(&[&node], &[&[]], &[0]));
+        assert!(!selector.matches_path_with_siblings(&[&node], &[&[] as &[Node]], &[0]));
     }
 
     #[test]
