@@ -1,0 +1,57 @@
+name: Archia Browser P0 extended fuzz campaign
+
+# This dedicated run accumulates 7 × 3.5 hours of target fuzzing (24.5
+# target-hours) in parallel. It is intentionally separate from the short
+# per-push smoke fuzz workflow. Keep this campaign on Archia-Browser only.
+concurrency:
+  group: archia-browser-p0-extended-fuzz-${{ github.ref }}
+  cancel-in-progress: false
+
+on:
+  push:
+    branches: ["Archia-Browser"]
+    paths:
+      - ".github/workflows/p0-long-fuzz.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: "Fuzz ${{ matrix.target }} (3.5 hours)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - http_response
+          - url_parse_resolve
+          - html_tokenize_parse
+          - css_tokenize
+          - css_stylesheet
+          - css_selector
+          - cookie_parse
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: Archia-Browser
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install nightly for cargo-fuzz
+        run: rustup toolchain install nightly --profile minimal
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      - name: Build target
+        run: cargo +nightly fuzz build "${{ matrix.target }}"
+        working-directory: fuzz
+      - name: Fuzz target for 3.5 hours
+        run: cargo +nightly fuzz run "${{ matrix.target }}" -- -max_total_time=12600 -timeout=10 -rss_limit_mb=4096 -print_final_stats=1
+        working-directory: fuzz
+      - name: Upload crashing fuzz inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: archia-browser-p0-fuzz-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}/
+          if-no-files-found: ignore
