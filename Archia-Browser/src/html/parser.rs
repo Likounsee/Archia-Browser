@@ -257,7 +257,14 @@ mod tests {
 
     #[test]
     fn p_auto_closes_before_additional_html_block_elements() {
-        for tag in ["details", "figcaption", "figure", "hgroup", "main", "search"] {
+        for tag in [
+            "details",
+            "figcaption",
+            "figure",
+            "hgroup",
+            "main",
+            "search",
+        ] {
             let markup = format!("<p>before<{tag}>inside</{tag}>");
             let tokens = HtmlTokenizer::tokenize(&markup);
             let root = parse(&tokens);
