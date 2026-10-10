@@ -54,3 +54,5 @@ in source.
 
 - Continued P0-2: response parsing now rejects duplicate HTTP header names case-insensitively, including non-framing headers such as `Content-Type` and `Set-Cookie`; regression cases added. Commit: `233a3d7c6a54bdd199576572cf1482406d79617f`.
 - **Verification still pending:** source-level regression tests are committed, but they have not been executed in this environment. P0-1 and P0-2 remain open until the corresponding CI checks pass.
+- Extended P0-2 to reject duplicate chunked trailer fields case-insensitively and added an adversarial regression fixture. Commits: `43afbfebfc9694a4ef863ccd7452678eb0235d6b`, `7f3737d01dabce14ba81c1298d8281d49f780dac`, `ee7afb81c53784778c4a010f1477101648a0955e` (fixture and escape corrections).
+- Latest GitHub combined-status lookup returned no status checks for these commits; this is **not** evidence of a passing build. Local compilation/testing remains unavailable here.
