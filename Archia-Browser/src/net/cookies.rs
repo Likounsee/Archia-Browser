@@ -64,6 +64,7 @@ impl CookieJar {
             expires_at: None,
         };
         let mut max_age = None;
+        let mut expires_attribute = None;
         let mut path_attribute_set = false;
 
         for attribute in parts {
@@ -108,6 +109,11 @@ impl CookieJar {
                         }
                     }
                 }
+                "expires" => {
+                    if let Some(value) = pieces.next() {
+                        expires_attribute = httpdate::parse_http_date(value.trim()).ok();
+                    }
+                }
                 "max-age" => {
                     if let Some(seconds) = pieces
                         .next()
@@ -143,6 +149,19 @@ impl CookieJar {
             else {
                 return;
             };
+            cookie.expires_at = Some(expires_at);
+        } else if let Some(expires_at) = expires_attribute {
+            if expires_at <= SystemTime::now() {
+                // Expires is a deletion signal when Max-Age is absent or
+                // invalid. Preserve Secure cookies against insecure deletion.
+                self.cookies.retain(|existing| {
+                    let same_key = existing.name == cookie.name
+                        && existing.domain == cookie.domain
+                        && existing.path == cookie.path;
+                    !same_key || (!url.is_secure() && existing.secure)
+                });
+                return;
+            }
             cookie.expires_at = Some(expires_at);
         }
 
@@ -435,6 +454,35 @@ mod tests {
         jar.store(&url, "bad;name=value");
 
         assert!(jar.is_empty());
+    }
+
+    #[test]
+    fn expired_expires_attribute_deletes_existing_cookie() {
+        let url = Url::parse("https://example.org/account").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&url, "sid=old; Path=/");
+
+        jar.store(
+            &url,
+            "sid=expired; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+        );
+
+        assert!(jar.header_for(&url).is_none());
+        assert!(jar.is_empty());
+    }
+
+    #[test]
+    fn max_age_takes_precedence_over_expires() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(
+            &url,
+            "sid=live; Max-Age=3600; Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+        );
+
+        assert_eq!(jar.header_for(&url).as_deref(), Some("sid=live"));
+        assert!(jar.cookies[0].expires_at.is_some());
     }
 
     #[test]
