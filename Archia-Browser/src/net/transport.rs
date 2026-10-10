@@ -1055,6 +1055,18 @@ mod tests {
     use super::*;
     use crate::net::Url;
 
+    // URL paths always use forward slashes, including Windows drive paths.
+    // Path::display() alone emits backslashes on Windows, which the URL parser
+    // correctly rejects as ambiguous separators.
+    fn local_file_test_url(path: &std::path::Path) -> String {
+        let path = path.to_string_lossy().replace('\\', "/");
+        if cfg!(windows) {
+            format!("file:///{}", path)
+        } else {
+            format!("file://{}", path)
+        }
+    }
+
     #[test]
     fn detects_common_local_web_asset_content_types_case_insensitively() {
         for (path, expected) in [
@@ -1511,11 +1523,7 @@ mod tests {
         let path =
             std::env::temp_dir().join(format!("archia-browser-local-{}.html", std::process::id()));
         std::fs::write(&path, b"<body>Local</body>").unwrap();
-        let url = if cfg!(windows) {
-            format!("file:///{}", path.display())
-        } else {
-            format!("file://{}", path.display())
-        };
+        let url = local_file_test_url(&path);
         let request = Request::new(super::super::Url::parse(&url).unwrap());
         let response = LocalFileTransport::new().send(&request).unwrap();
         assert_eq!(response.status, 200);
@@ -1541,11 +1549,7 @@ mod tests {
             std::process::id()
         ));
         std::fs::write(&path, b"12345").unwrap();
-        let url = if cfg!(windows) {
-            format!("file:///{}", path.display())
-        } else {
-            format!("file://{}", path.display())
-        };
+        let url = local_file_test_url(&path);
         let request = Request::new(super::super::Url::parse(&url).unwrap());
         let transport = LocalFileTransport::new().with_max_file_size(4);
         assert_eq!(transport.send(&request), Err(TransportError::ResponseTooLarge));
@@ -1568,11 +1572,7 @@ mod tests {
     #[test]
     fn local_file_transport_rejects_directories() {
         let path = std::env::temp_dir();
-        let url = if cfg!(windows) {
-            format!("file:///{}", path.display())
-        } else {
-            format!("file://{}", path.display())
-        };
+        let url = local_file_test_url(&path);
         let request = Request::new(super::super::Url::parse(&url).unwrap());
         assert_eq!(
             LocalFileTransport::new().send(&request),
