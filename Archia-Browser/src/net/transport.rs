@@ -1585,7 +1585,9 @@ mod tests {
         let url = Url::parse("https://example.org/").unwrap();
         let mut exact = Request::new(url.clone());
         for index in 0..MAX_REQUEST_HEADER_COUNT {
-            exact.headers.insert(format!("x-test-{index}"), "v".to_owned());
+            exact
+                .headers
+                .insert(format!("x-test-{index}"), "v".to_owned());
         }
         assert_eq!(validate_request(&exact), Ok(()));
 
