@@ -29,6 +29,13 @@ impl ConnectionPool {
             .expect("connection pool poisoned")
             .len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.connections
+            .lock()
+            .expect("connection pool poisoned")
+            .is_empty()
+    }
 }
 
 pub struct PooledTransport {
