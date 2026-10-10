@@ -1,0 +1,1 @@
+@media screen { .card { color: red; } } .ok { color: blue; }
