@@ -186,16 +186,14 @@ impl Url {
 fn validate_authority(authority: &str) -> Result<(), UrlError> {
     // Split user information exactly once. A second literal '@' is invalid:
     // accepting it can make URL consumers disagree about where the host starts.
-    let (userinfo, host_port) = match authority.split_once('@') {
-        Some((userinfo, host_port)) => {
-            if userinfo.contains('@') || !valid_userinfo(userinfo) {
-                return Err(UrlError::InvalidAuthority);
-            }
-            (Some(userinfo), host_port)
+    let host_port = if let Some((userinfo, host_port)) = authority.split_once('@') {
+        if userinfo.contains('@') || !valid_userinfo(userinfo) {
+            return Err(UrlError::InvalidAuthority);
         }
-        None => (None, authority),
+        host_port
+    } else {
+        authority
     };
-    let _ = userinfo;
     if host_port.is_empty() {
         return Err(UrlError::InvalidAuthority);
     }
