@@ -1472,8 +1472,12 @@ mod tests {
 
         let requests = loader.transport.requests.lock().unwrap();
         assert_eq!(requests.len(), 2);
-        assert_eq!(requests[0].header("x-api-key"), Some("secret-key"));
-        assert_eq!(requests[0].header("x-private-token"), Some("secret-token"));
+        assert!(requests[0].headers.iter().any(|(name, value)| {
+            name.eq_ignore_ascii_case("x-api-key") && value == "secret-key"
+        }));
+        assert!(requests[0].headers.iter().any(|(name, value)| {
+            name.eq_ignore_ascii_case("x-private-token") && value == "secret-token"
+        }));
         for name in ["x-api-key", "x-private-token", "origin"] {
             assert!(
                 !has_header_case_insensitive(&requests[1].headers, name),
