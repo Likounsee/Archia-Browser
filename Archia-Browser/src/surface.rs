@@ -441,6 +441,35 @@ mod tests {
     }
 
     #[test]
+    fn fallible_surface_constructor_rejects_oversized_dimensions_before_allocating() {
+        assert!(SoftwareSurface::try_new(u32::MAX, u32::MAX).is_none());
+        assert!(SoftwareSurface::try_new(8192, 2049).is_none());
+    }
+
+    #[test]
+    fn oversized_surface_constructor_fails_closed_to_empty() {
+        let surface = SoftwareSurface::new(u32::MAX, u32::MAX);
+        assert_eq!((surface.width(), surface.height()), (0, 0));
+        assert!(surface.pixels().is_empty());
+        assert_eq!(surface.pixel(0, 0), None);
+    }
+
+    #[test]
+    fn zero_dimension_surface_is_normalized_to_empty() {
+        let surface = SoftwareSurface::new(0, u32::MAX);
+        assert_eq!((surface.width(), surface.height()), (0, 0));
+        assert!(surface.pixels().is_empty());
+    }
+
+    #[test]
+    fn surface_pixel_count_saturates_instead_of_overflowing() {
+        let surface = Surface::new(u32::MAX, u32::MAX);
+        assert_eq!(
+            surface.pixel_count(),
+            (u32::MAX as usize).saturating_mul(u32::MAX as usize)
+        );
+    }
+    #[test]
     fn draw_text_rasterizes_glyphs() {
         let mut surface = SoftwareSurface::new(8, 8);
         surface.draw_text(0, 0, "A", Color::BLACK);
