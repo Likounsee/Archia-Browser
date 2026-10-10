@@ -91,7 +91,14 @@ pub struct MemoryReservation {
 
 impl MemoryReservation {
     pub fn try_new(budget: Arc<MemoryBudget>, bytes: usize) -> Option<Self> {
-        budget.try_reserve(bytes).then_some(Self { budget, bytes })
+        // Do not use bool::then_some here: its argument is evaluated eagerly,
+        // so a failed reservation would construct and drop a reservation,
+        // releasing bytes that were never acquired and corrupting accounting.
+        if budget.try_reserve(bytes) {
+            Some(Self { budget, bytes })
+        } else {
+            None
+        }
     }
 
     pub const fn bytes(&self) -> usize {
@@ -127,6 +134,18 @@ mod tests {
         assert!(!budget.try_reserve(1));
         budget.release(1024);
         assert_eq!(budget.available(), 1024);
+    }
+
+    #[test]
+    fn failed_reservation_does_not_release_bytes_owned_by_another_reservation() {
+        let budget = Arc::new(MemoryBudget::new(1024));
+        assert!(budget.try_reserve(700));
+
+        assert!(MemoryReservation::try_new(Arc::clone(&budget), 400).is_none());
+
+        assert_eq!(budget.used(), 700);
+        assert_eq!(budget.available(), 324);
+        assert!(!budget.try_reserve(325));
     }
 
     #[test]
