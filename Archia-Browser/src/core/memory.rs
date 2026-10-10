@@ -153,8 +153,7 @@ mod tests {
         let budget = Arc::new(MemoryBudget::new(4096));
         for iteration in 0..1_000 {
             let bytes = iteration % 512 + 1;
-            let reservation =
-                MemoryReservation::try_new(Arc::clone(&budget), bytes).unwrap();
+            let reservation = MemoryReservation::try_new(Arc::clone(&budget), bytes).unwrap();
             assert_eq!(budget.used(), bytes);
             drop(reservation);
             assert_eq!(budget.used(), 0);
