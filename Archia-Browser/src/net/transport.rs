@@ -405,6 +405,13 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
     if request.body.len() > MAX_REQUEST_BODY_BYTES {
         return Err(TransportError::InvalidRequest);
     }
+    // GET and HEAD bodies have no interoperable semantics and would make the
+    // URL-only HTTP cache key unsafe for requests whose bodies differ.
+    if request.has_body()
+        && matches!(request.method, super::HttpMethod::Get | super::HttpMethod::Head)
+    {
+        return Err(TransportError::InvalidRequest);
+    }
 
     let authority = request.url.authority();
     if authority
@@ -1536,6 +1543,26 @@ mod tests {
         assert_eq!(
             validate_request(&oversized),
             Err(TransportError::InvalidRequest)
+        );
+    }
+
+    #[test]
+    fn rejects_bodies_on_get_and_head_requests() {
+        let url = Url::parse("https://example.org/resource").unwrap();
+        for method in [crate::net::HttpMethod::Get, crate::net::HttpMethod::Head] {
+            let request = Request::new(url.clone())
+                .with_method(method)
+                .with_body(b"ambiguous request body".to_vec());
+            assert_eq!(
+                validate_request(&request),
+                Err(TransportError::InvalidRequest),
+                "{method:?} requests must not carry a body"
+            );
+        }
+        assert_eq!(
+            validate_request(&Request::new(url)),
+            Ok(()),
+            "bodyless GET remains valid"
         );
     }
 
