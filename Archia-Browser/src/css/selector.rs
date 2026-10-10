@@ -108,7 +108,7 @@ impl Selector {
                     '>' => Combinator::Child,
                     '+' => Combinator::AdjacentSibling,
                     '~' => Combinator::GeneralSibling,
-                    _ => unreachable!(),
+                    _ => return None,
                 });
                 i += 1;
                 while i < chars.len() && chars[i].is_whitespace() {
@@ -437,7 +437,7 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
                                 '^' => AttributeOperator::Prefix,
                                 '$' => AttributeOperator::Suffix,
                                 '*' => AttributeOperator::Substring,
-                                _ => unreachable!(),
+                                _ => return None,
                             }
                         }
                         _ => return None,

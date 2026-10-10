@@ -570,7 +570,11 @@ fn normalize_path(path: &str) -> String {
                 segments.push(segment);
                 trailing_slash = false;
             }
-            _ => unreachable!("dot segment kind is limited to one or two"),
+            // Treat unexpected future helper values as ordinary path segments.
+            Some(_) => {
+                segments.push(segment);
+                trailing_slash = false;
+            }
         }
     }
 
