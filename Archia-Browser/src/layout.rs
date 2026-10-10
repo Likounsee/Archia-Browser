@@ -144,6 +144,7 @@ impl LayoutEngine {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn layout_styled_node(
     node: &crate::style_tree::StyledNode,
     x: i32,
@@ -752,6 +753,7 @@ fn parse_gap_shorthand(value: Option<&str>, reference: u32, column_gap: bool) ->
     parse_length(Some(selected), reference)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn layout_flex_children(
     node: &crate::style_tree::StyledNode,
     output: &mut LayoutNode,
@@ -1466,7 +1468,7 @@ fn align_flex_columns(
     node: &crate::style_tree::StyledNode,
     content_origin_x: i32,
     content_width: u32,
-    line_cross: u32,
+    _line_cross: u32,
     wrap_reverse: bool,
 ) {
     if indices.len() < 2 {
@@ -4109,6 +4111,7 @@ mod tests {
         assert_eq!(layout.children[1].rect.y, 14);
     }
 
+    #[test]
     fn flex_column_percentage_column_gap_uses_container_width() {
         let mut root = Node::element("div");
         root.set_attribute(
