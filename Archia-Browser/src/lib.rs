@@ -14,6 +14,7 @@ pub mod surface;
 pub enum LinkActivationError {
     NotAnchor,
     MissingHref,
+    BlockedLocalFileNavigation,
     Url(net::UrlError),
 }
 
@@ -234,6 +235,11 @@ impl Browser {
             .cloned()
             .ok_or(LinkActivationError::Url(net::UrlError::MissingAuthority))?;
         let url = base.resolve(href).map_err(LinkActivationError::from)?;
+        // A remote document must not be able to initiate local-file navigation.
+        // Direct navigation to a file from an already-local document remains valid.
+        if base.scheme() != "file" && url.scheme() == "file" {
+            return Err(LinkActivationError::BlockedLocalFileNavigation);
+        }
         let opens_new_tab = link
             .attribute("target")
             .is_some_and(|target| target.trim().eq_ignore_ascii_case("_blank"));
@@ -265,6 +271,11 @@ impl Browser {
         let url = page
             .resolve_reference(href)
             .map_err(LinkActivationError::from)?;
+        // Check the document's actual origin, not only its <base href>: an
+        // attacker-controlled base element must not grant file-navigation access.
+        if page.url().is_some_and(|base| base.scheme() != "file") && url.scheme() == "file" {
+            return Err(LinkActivationError::BlockedLocalFileNavigation);
+        }
         let opens_new_tab = link
             .attribute("target")
             .is_some_and(|target| target.trim().eq_ignore_ascii_case("_blank"));
@@ -697,6 +708,38 @@ mod tests {
             Err(LinkActivationError::Url(
                 net::UrlError::UnsupportedReferenceScheme
             ))
+        );
+    }
+
+    #[test]
+    fn browser_blocks_remote_anchor_navigation_to_local_files() {
+        let mut browser = Browser::new();
+        browser.navigate(net::Url::parse("https://example.org/").unwrap(), None);
+
+        let mut link = crate::html::Node::element("a");
+        link.set_attribute("href", "file:///etc/passwd");
+        assert_eq!(
+            browser.activate_link(&link, None),
+            Err(LinkActivationError::BlockedLocalFileNavigation)
+        );
+        assert_eq!(browser.current_url().unwrap().to_string(), "https://example.org/");
+        assert_eq!(browser.tabs().len(), 1);
+    }
+
+    #[test]
+    fn remote_page_base_href_cannot_enable_local_file_navigation() {
+        let mut browser = Browser::new();
+        let page = crate::document::Page::from_html_at(
+            Some(net::Url::parse("https://example.org/").unwrap()),
+            r#"<base href="file:///tmp/"><a href="secret.txt">secret</a>"#,
+            "",
+            crate::layout::LayoutViewport::new(320, 200),
+        );
+        let mut link = crate::html::Node::element("a");
+        link.set_attribute("href", "secret.txt");
+        assert_eq!(
+            browser.activate_link_from_page(&page, &link, None),
+            Err(LinkActivationError::BlockedLocalFileNavigation)
         );
     }
 
