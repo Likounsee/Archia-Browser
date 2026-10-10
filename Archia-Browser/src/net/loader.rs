@@ -504,9 +504,24 @@ fn is_redirect(status: u16) -> bool {
 }
 
 fn same_origin(left: &super::Url, right: &super::Url) -> bool {
+    // Url values do not carry a document's opaque-origin identity. Treat file
+    // URLs as cross-origin here rather than collapsing all file:/// paths into
+    // one tuple origin.
+    if left.scheme() == "file" || right.scheme() == "file" {
+        return false;
+    }
+
     left.scheme().eq_ignore_ascii_case(right.scheme())
         && left.host().eq_ignore_ascii_case(right.host())
-        && left.effective_port() == right.effective_port()
+        && origin_port(left) == origin_port(right)
+}
+
+fn origin_port(url: &super::Url) -> Option<u16> {
+    url.port().or(match url.scheme() {
+        "http" => Some(80),
+        "https" => Some(443),
+        _ => None,
+    })
 }
 
 /// Apply a conservative strict-origin-when-cross-origin referrer policy.
@@ -516,7 +531,9 @@ fn referrer_for_target(source: &super::Url, target: &super::Url) -> Option<super
     if source.scheme() == "https" && target.scheme() == "http" {
         return None;
     }
-    if (source.scheme() == "file") != (target.scheme() == "file") {
+    // Local-file URLs have opaque origins here; do not synthesize a referrer
+    // from their paths or authority, including for file-to-file requests.
+    if source.scheme() == "file" || target.scheme() == "file" {
         return None;
     }
 
@@ -627,6 +644,21 @@ mod tests {
         fn send(&self, _: &Request) -> Result<Response, TransportError> {
             Ok(self.response.clone())
         }
+    }
+
+    #[test]
+    fn file_urls_are_not_collapsed_into_a_shared_loader_origin() {
+        let first = Url::parse("file:///private/first.html").unwrap();
+        let second = Url::parse("file:///private/second.html").unwrap();
+        assert!(!same_origin(&first, &second));
+        assert!(referrer_for_target(&first, &second).is_none());
+    }
+
+    #[test]
+    fn non_http_origin_comparison_distinguishes_missing_port_from_zero() {
+        let implicit = Url::parse("custom://example.org/resource").unwrap();
+        let explicit_zero = Url::parse("custom://example.org:0/resource").unwrap();
+        assert!(!same_origin(&implicit, &explicit_zero));
     }
 
     #[test]
