@@ -119,8 +119,12 @@ impl Url {
     }
 
     pub fn effective_port(&self) -> u16 {
-        self.port()
-            .unwrap_or(if self.is_secure() { 443 } else { 80 })
+        self.port().unwrap_or(match self.scheme.as_str() {
+            "http" => 80,
+            "https" => 443,
+            // Non-HTTP schemes have no implicit HTTP port.
+            _ => 0,
+        })
     }
 
     pub fn is_secure(&self) -> bool {
@@ -693,6 +697,16 @@ mod tests {
             Url::parse("FILE://example.org/index.html").unwrap_err(),
             UrlError::UnsupportedFileAuthority
         );
+    }
+
+    #[test]
+    fn custom_schemes_do_not_inherit_http_default_ports() {
+        let implicit = Url::parse("custom://example.org/resource").unwrap();
+        let explicit_http_port = Url::parse("custom://example.org:80/resource").unwrap();
+
+        assert_eq!(implicit.effective_port(), 0);
+        assert_eq!(explicit_http_port.effective_port(), 80);
+        assert!(!implicit.same_document(&explicit_http_port));
     }
 
     #[test]
