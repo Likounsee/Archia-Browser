@@ -306,7 +306,7 @@ impl CookieJar {
     ) -> Option<String> {
         let same_site = first_party.is_some_and(|party| same_site_url(url, party));
         let safe_navigation = top_level_navigation
-            && matches!(method, super::HttpMethod::Get | super::HttpMethod::Head | super::HttpMethod::Options | super::HttpMethod::Trace);
+            && matches!(method, super::HttpMethod::Get | super::HttpMethod::Head);
         let now = SystemTime::now();
         let host = url.host().to_ascii_lowercase();
         let path = url.path();
