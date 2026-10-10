@@ -1723,6 +1723,60 @@ mod tests {
     }
 
     #[test]
+    fn cross_origin_301_switches_post_to_get_and_removes_entity_headers() {
+        #[derive(Debug)]
+        struct RecordingTransport {
+            responses: std::sync::Mutex<Vec<Response>>,
+            requests: std::sync::Mutex<Vec<Request>>,
+        }
+
+        impl Transport for RecordingTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                self.requests.lock().unwrap().push(request.clone());
+                Ok(self.responses.lock().unwrap().remove(0))
+            }
+        }
+
+        let transport = RecordingTransport {
+            responses: std::sync::Mutex::new(vec![
+                Response::new(301).with_header("location", "https://other.example/landing"),
+                Response::new(200)
+                    .with_header("content-type", "text/html")
+                    .with_body(b"<body>landed</body>".to_vec()),
+            ]),
+            requests: std::sync::Mutex::new(Vec::new()),
+        };
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
+        let request = Request::new(Url::parse("https://example.org/submit").unwrap())
+            .with_method(HttpMethod::Post)
+            .with_body(b"private payload".to_vec())
+            .with_header("content-type", "application/octet-stream")
+            .with_header("authorization", "Bearer secret")
+            .with_header("x-custom-secret", "secret")
+            .with_header("accept", "text/html");
+
+        loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .unwrap();
+
+        let requests = loader.transport.requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0].method, HttpMethod::Post);
+        assert_eq!(requests[1].method, HttpMethod::Get);
+        assert!(requests[1].body.is_empty());
+        for name in ["content-type", "content-length", "authorization", "x-custom-secret"] {
+            assert!(
+                !has_header_case_insensitive(&requests[1].headers, name),
+                "{name} must not survive this redirect"
+            );
+        }
+        assert!(requests[1]
+            .headers
+            .iter()
+            .any(|(name, value)| name.eq_ignore_ascii_case("accept") && value == "text/html"));
+    }
+
+    #[test]
     fn non_get_methods_are_preserved_for_307_and_308() {
         assert!(!should_switch_to_get(HttpMethod::Post, 307));
         assert!(!should_switch_to_get(HttpMethod::Put, 308));
