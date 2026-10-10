@@ -243,7 +243,8 @@ mod tests {
 
     #[test]
     fn raw_text_cannot_push_token_count_over_limit() {
-        let input = format!("{}x<script>payload</script>", "<b></b>".repeat((MAX_HTML_TOKENS - 1) / 2));
+        let repeated_tags = "<b></b>".repeat((MAX_HTML_TOKENS - 1) / 2);
+        let input = format!("{repeated_tags}x<script>payload</script>");
         let tokens = HtmlTokenizer::tokenize(&input);
         assert_eq!(tokens.len(), MAX_HTML_TOKENS);
     }
