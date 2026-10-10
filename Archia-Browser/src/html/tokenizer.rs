@@ -88,7 +88,7 @@ impl HtmlTokenizer {
 
                 if is_raw_text && !self_closing {
                     if let Some((text_end, close_end)) = find_raw_text_end(input, end + 1, &name) {
-                        if text_end > end + 1 {
+                        if text_end > end + 1 && tokens.len() < MAX_HTML_TOKENS {
                             tokens.push(HtmlToken::Text(input[end + 1..text_end].to_owned()));
                         }
                         cursor = close_end;
@@ -99,7 +99,7 @@ impl HtmlTokenizer {
                     // the closing tag is missing. Re-tokenizing the remainder
                     // as markup can create a parser differential on malformed
                     // or attacker-controlled documents.
-                    if end + 1 < input.len() {
+                    if end + 1 < input.len() && tokens.len() < MAX_HTML_TOKENS {
                         tokens.push(HtmlToken::Text(input[end + 1..].to_owned()));
                     }
                     break;
@@ -237,6 +237,13 @@ mod tests {
     #[test]
     fn token_count_is_bounded_for_many_small_tags() {
         let input = "<b></b>".repeat(MAX_HTML_TOKENS);
+        let tokens = HtmlTokenizer::tokenize(&input);
+        assert_eq!(tokens.len(), MAX_HTML_TOKENS);
+    }
+
+    #[test]
+    fn raw_text_cannot_push_token_count_over_limit() {
+        let input = format!("{}x<script>payload</script>", "<b></b>".repeat((MAX_HTML_TOKENS - 1) / 2));
         let tokens = HtmlTokenizer::tokenize(&input);
         assert_eq!(tokens.len(), MAX_HTML_TOKENS);
     }
