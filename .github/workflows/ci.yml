@@ -20,3 +20,8 @@ jobs:
       - run: cargo test --workspace
       - run: cargo build --workspace
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Audit Rust dependencies against RustSec advisories
+        if: runner.os == 'Linux'
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit --deny warnings
