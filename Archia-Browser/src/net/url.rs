@@ -202,7 +202,17 @@ impl Url {
         }
 
         let resolved_path = if path.starts_with('/') {
-            normalize_path_for_scheme(path, &self.scheme)
+            // A root-relative reference inside a Windows file URL stays on
+            // the base drive (file:///C:/dir/page + /asset -> /C:/asset).
+            let absolute_path = if self.scheme == "file"
+                && has_windows_drive_prefix(&self.path)
+                && !has_windows_drive_prefix(path)
+            {
+                format!("{}{}", &self.path[..3], path)
+            } else {
+                path.to_owned()
+            };
+            normalize_path_for_scheme(&absolute_path, &self.scheme)
         } else {
             let base = self
                 .path
@@ -457,17 +467,20 @@ fn dot_segment_kind(segment: &str) -> Option<u8> {
     }
 }
 
+fn has_windows_drive_prefix(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    bytes.len() >= 3
+        && bytes[0] == b'/'
+        && bytes[1].is_ascii_alphabetic()
+        && bytes[2] == b':'
+        && (bytes.len() == 3 || bytes[3] == b'/')
+}
+
 fn normalize_path_for_scheme(path: &str, scheme: &str) -> String {
     // Windows file URLs are converted to drive paths by the file transport.
     // Keep the drive prefix rooted while collapsing dot segments so a path
     // above C:/ cannot become /Windows and point at a different filesystem path.
-    let bytes = path.as_bytes();
-    let has_windows_drive = scheme == "file"
-        && bytes.len() >= 3
-        && bytes[0] == b'/'
-        && bytes[1].is_ascii_alphabetic()
-        && bytes[2] == b':'
-        && (bytes.len() == 3 || bytes[3] == b'/');
+    let has_windows_drive = scheme == "file" && has_windows_drive_prefix(path);
 
     if has_windows_drive {
         let drive = &path[1..3];
@@ -581,6 +594,10 @@ mod tests {
         assert_eq!(
             base.resolve("/E:/folder/../Windows").unwrap().path(),
             "/E:/Windows"
+        );
+        assert_eq!(
+            base.resolve("/assets/app.css").unwrap().path(),
+            "/D:/assets/app.css"
         );
     }
 
