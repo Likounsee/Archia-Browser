@@ -657,6 +657,31 @@ mod tests {
     }
 
     #[test]
+    fn poisoned_cookie_state_fails_closed_without_panicking() {
+        use std::panic::{catch_unwind, AssertUnwindSafe};
+
+        struct NeverTransport;
+        impl Transport for NeverTransport {
+            fn send(&self, _: &Request) -> Result<Response, TransportError> {
+                panic!("transport must not be reached after state poisoning");
+            }
+        }
+
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), NeverTransport);
+        let poisoned = catch_unwind(AssertUnwindSafe(|| {
+            let _guard = loader.cookies.lock().unwrap();
+            panic!("simulate an interrupted cookie-state update");
+        }));
+        assert!(poisoned.is_err());
+
+        let request = Request::new(Url::parse("https://example.org/").unwrap());
+        assert!(matches!(
+            loader.load(&request, LayoutViewport::new(320, 200)),
+            Err(DocumentLoadError::InternalStatePoisoned)
+        ));
+    }
+
+    #[test]
     fn html_content_type_is_case_insensitive() {
         let html = Response::new(200).with_header("content-type", "TEXT/HTML; charset=UTF-8");
         let xhtml = Response::new(200).with_header("content-type", "Application/XHTML+XML");
