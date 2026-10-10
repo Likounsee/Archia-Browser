@@ -9,6 +9,7 @@ use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 use super::{Request, Response, Transport, TransportError};
 
 const MAX_REQUEST_HEADER_BYTES: usize = 64 * 1024;
+const MAX_REQUEST_BODY_BYTES: usize = 8 * 1024 * 1024;
 const MAX_RESPONSE_HEADER_COUNT: usize = 256;
 const MAX_INTERIM_RESPONSES: usize = 16;
 
@@ -400,6 +401,11 @@ fn content_type_for_path(path: &std::path::Path) -> &'static str {
 }
 
 fn validate_request(request: &Request) -> Result<(), TransportError> {
+    // Bound caller-supplied uploads before DNS lookup or socket creation.
+    if request.body.len() > MAX_REQUEST_BODY_BYTES {
+        return Err(TransportError::InvalidRequest);
+    }
+
     let authority = request.url.authority();
     if authority
         .bytes()
@@ -1518,6 +1524,20 @@ mod tests {
     #[test]
     fn rejects_malformed_status() {
         assert!(parse_http_response(b"not-http\r\n\r\nbody", 1024, 1024).is_err());
+    }
+
+    #[test]
+    fn request_body_limit_accepts_exact_boundary_and_rejects_one_byte_over() {
+        let url = Url::parse("https://example.org/upload").unwrap();
+        let exact = Request::new(url.clone()).with_body(vec![b'x'; MAX_REQUEST_BODY_BYTES]);
+        assert_eq!(validate_request(&exact), Ok(()));
+
+        let oversized =
+            Request::new(url).with_body(vec![b'x'; MAX_REQUEST_BODY_BYTES + 1]);
+        assert_eq!(
+            validate_request(&oversized),
+            Err(TransportError::InvalidRequest)
+        );
     }
 
     #[test]
