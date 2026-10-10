@@ -1552,7 +1552,7 @@ mod tests {
     }
 
     #[test]
-    fn strips_referrer_on_https_to_http_redirects() {
+    fn rejects_https_to_http_redirect_without_sending_referrer_or_second_request() {
         #[derive(Debug)]
         struct DowngradeTransport {
             calls: std::sync::Mutex<usize>,
@@ -1562,38 +1562,30 @@ mod tests {
             fn send(&self, request: &Request) -> Result<Response, TransportError> {
                 let mut calls = self.calls.lock().unwrap();
                 *calls += 1;
-                if *calls == 1 {
-                    assert_eq!(request.url.scheme(), "https");
-                    return Ok(
-                        Response::new(302).with_header("location", "http://other.example/landing")
-                    );
-                }
-
-                assert_eq!(request.url.scheme(), "http");
-                assert!(request.header("referer").is_none());
-                assert!(request.policy.referrer.is_none());
-                Ok(Response::new(200)
-                    .with_header("content-type", "text/html")
-                    .with_body(b"<body>Safe</body>".to_vec()))
+                assert_eq!(request.url.scheme(), "https");
+                Ok(Response::new(302).with_header("location", "http://other.example/landing"))
             }
         }
 
-        let loader = DocumentLoader::new(
-            NetworkPipeline::new(AllowAll),
-            DowngradeTransport {
-                calls: std::sync::Mutex::new(0),
-            },
-        );
+        let transport = DowngradeTransport {
+            calls: std::sync::Mutex::new(0),
+        };
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
         let mut request = Request::new(Url::parse("https://example.org/secret-path").unwrap());
         request
             .headers
             .insert("referer".into(), "https://example.org/private-page".into());
         request.policy.referrer = Some(Url::parse("https://example.org/private-page").unwrap());
 
-        let page = loader
-            .load(&request, LayoutViewport::new(320, 200))
-            .unwrap();
-        assert_eq!(page.document.text_content(), "Safe");
+        assert!(matches!(
+            loader.load(&request, LayoutViewport::new(320, 200)),
+            Err(DocumentLoadError::InvalidRedirect)
+        ));
+        assert_eq!(
+            *loader.transport.calls.lock().unwrap(),
+            1,
+            "the HTTP destination must not receive a request"
+        );
     }
 
     #[test]
