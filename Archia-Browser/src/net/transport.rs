@@ -1440,7 +1440,8 @@ mod tests {
             "non-ASCII whitespace must not be silently stripped from wire framing"
         );
 
-        let valid_ows = Request::new(url).with_body(b"Hello".to_vec())
+        let valid_ows = Request::new(url)
+            .with_body(b"Hello".to_vec())
             .with_header("content-length", "\t5 \t");
         assert_eq!(validate_request(&valid_ows), Ok(()));
 
