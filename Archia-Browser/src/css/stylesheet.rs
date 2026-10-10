@@ -553,9 +553,9 @@ fn expand_border_shorthand(value: &str) -> Option<(String, String, String)> {
     let mut color = None;
 
     for token in value.split_whitespace() {
-        if width.is_none() && matches!(token, "thin" | "medium" | "thick") {
-            width = Some(token.to_owned());
-        } else if width.is_none() && parse_px_token(token).is_some() {
+        if width.is_none()
+            && (matches!(token, "thin" | "medium" | "thick") || parse_px_token(token).is_some())
+        {
             width = Some(token.to_owned());
         } else if style.is_none()
             && matches!(
