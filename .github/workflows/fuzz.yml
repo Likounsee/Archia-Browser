@@ -11,11 +11,17 @@ on:
   push:
     branches: ["Archia-Browser"]
     paths:
+      - "Cargo.lock"
       - "fuzz/Cargo.toml"
       - "fuzz/fuzz_targets/**"
       - "Archia-Browser/src/net/url.rs"
+      - "Archia-Browser/src/net/loader.rs"
+      - "Archia-Browser/src/net/pipeline.rs"
+      - "Archia-Browser/src/net/cache.rs"
       - "Archia-Browser/src/net/cookies.rs"
       - "Archia-Browser/src/net/transport.rs"
+      - "Archia-Browser/src/security/**"
+      - "Archia-Browser/src/core/cache.rs"
       - "Archia-Browser/src/html/**"
       - "Archia-Browser/src/css/**"
       - ".github/workflows/fuzz.yml"
