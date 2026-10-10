@@ -647,7 +647,7 @@ fn parse_http_response_for_method(
             return Err(TransportError::ConnectionFailed);
         }
         let is_chunked = match transfer_encoding {
-            Some(value) if value.trim().eq_ignore_ascii_case("chunked") => true,
+            Some(value) if trim_http_ows(value).eq_ignore_ascii_case("chunked") => true,
             Some(_) => return Err(TransportError::ConnectionFailed),
             None => false,
         };
@@ -663,8 +663,7 @@ fn parse_http_response_for_method(
         } else if is_chunked {
             decode_chunked(body_bytes, max_response_size, max_header_size)?
         } else if let Some(length) = content_length {
-            let length = length
-                .trim()
+            let length = trim_http_ows(length)
                 .parse::<usize>()
                 .map_err(|_| TransportError::ConnectionFailed)?;
             if length > max_response_size {
