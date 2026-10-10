@@ -6,6 +6,7 @@ const VOID_ELEMENTS: &[&str] = &[
 ];
 
 const MAX_DOM_DEPTH: usize = 256;
+const MAX_DOM_TOKENS: usize = 100_000;
 
 const BLOCK_CLOSES_P: &[&str] = &[
     "address",
@@ -50,7 +51,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
     // end tag; tokenization already bounds the total input and token count.
     let mut suppressed: Vec<String> = Vec::new();
 
-    for token in tokens {
+    for token in tokens.iter().take(MAX_DOM_TOKENS) {
         if !suppressed.is_empty() {
             match token {
                 HtmlToken::StartTag { name, self_closing: _, .. }
@@ -250,6 +251,18 @@ mod tests {
 
         assert_eq!(root.text_content(), "visible");
         assert_eq!(root.children[0].children[1].children[0].tag_name(), Some("p"));
+    }
+
+    #[test]
+    fn parser_caps_direct_token_input_even_without_the_tokenizer() {
+        let mut tokens = vec![HtmlToken::Text("kept".to_owned())];
+        tokens.extend(
+            (0..MAX_DOM_TOKENS).map(|_| HtmlToken::Text("discarded".to_owned())),
+        );
+
+        let root = parse(&tokens);
+
+        assert_eq!(root.text_content(), "kept");
     }
 
     #[test]
