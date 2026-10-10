@@ -49,8 +49,7 @@ mod tests {
     #[test]
     fn equivalent_ipv6_spellings_have_the_same_origin() {
         let compressed = Origin::from_url(&Url::parse("https://[2001:db8::1]/a").unwrap());
-        let expanded =
-            Origin::from_url(&Url::parse("https://[2001:0DB8:0:0:0:0:0:1]/b").unwrap());
+        let expanded = Origin::from_url(&Url::parse("https://[2001:0DB8:0:0:0:0:0:1]/b").unwrap());
 
         assert!(compressed.same_origin(&expanded));
         assert_eq!(compressed.host(), "2001:db8::1");
