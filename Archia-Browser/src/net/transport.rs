@@ -2106,6 +2106,41 @@ mod limit_tests {
     }
 
     #[test]
+    fn response_body_limit_accepts_exact_boundary_and_rejects_one_byte_over() {
+        let exact = b"HTTP/1.1 200 OK\\r\\nContent-Length: 3\\r\\n\\r\\nabc";
+        let response = parse_http_response(exact, 3, 1024).unwrap();
+        assert_eq!(response.body, b"abc");
+        assert_eq!(
+            parse_http_response(exact, 2, 1024),
+            Err(TransportError::ResponseTooLarge)
+        );
+
+        let over = b"HTTP/1.1 200 OK\\r\\nContent-Length: 4\\r\\n\\r\\nabcd";
+        assert_eq!(
+            parse_http_response(over, 3, 1024),
+            Err(TransportError::ResponseTooLarge)
+        );
+    }
+
+    #[test]
+    fn response_header_limit_accepts_exact_boundary_and_rejects_one_byte_under() {
+        let response = b"HTTP/1.1 200 OK\\r\\nContent-Length: 0\\r\\n\\r\\n";
+        let separator = response
+            .windows(4)
+            .position(|window| window == b"\\r\\n\\r\\n")
+            .unwrap();
+
+        assert_eq!(
+            parse_http_response(response, 1024, separator).unwrap().status,
+            200
+        );
+        assert_eq!(
+            parse_http_response(response, 1024, separator - 1),
+            Err(TransportError::ResponseTooLarge)
+        );
+    }
+
+    #[test]
     fn rejects_oversized_chunk_size_line() {
         let mut response = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1;".to_vec();
         response.extend(std::iter::repeat_n(b'a', 256));
