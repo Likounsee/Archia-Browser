@@ -10,9 +10,12 @@ const BLOCK_CLOSES_P: &[&str] = &[
     "article",
     "aside",
     "blockquote",
+    "details",
     "div",
     "dl",
     "fieldset",
+    "figcaption",
+    "figure",
     "footer",
     "form",
     "h1",
@@ -22,12 +25,15 @@ const BLOCK_CLOSES_P: &[&str] = &[
     "h5",
     "h6",
     "header",
+    "hgroup",
     "hr",
+    "main",
     "menu",
     "nav",
     "ol",
     "p",
     "pre",
+    "search",
     "section",
     "table",
     "ul",
@@ -247,6 +253,20 @@ mod tests {
         let div = &body.children[0];
         assert_eq!(div.children[0].tag_name(), Some("br"));
         assert_eq!(div.children[1].text_content(), "after");
+    }
+
+    #[test]
+    fn p_auto_closes_before_additional_html_block_elements() {
+        for tag in ["details", "figcaption", "figure", "hgroup", "main", "search"] {
+            let markup = format!("<p>before<{tag}>inside</{tag}>");
+            let tokens = HtmlTokenizer::tokenize(&markup);
+            let root = parse(&tokens);
+            let body = &root.children[0].children[1];
+
+            assert_eq!(body.children[0].tag_name(), Some("p"), "tag: {tag}");
+            assert_eq!(body.children[0].text_content(), "before", "tag: {tag}");
+            assert_eq!(body.children[1].tag_name(), Some(tag), "tag: {tag}");
+        }
     }
 
     #[test]
