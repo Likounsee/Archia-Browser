@@ -704,14 +704,21 @@ mod tests {
             .collect::<Vec<_>>()
             .join(" ");
         let sheet = StyleSheet::parse(&input);
-        let total = sheet.rules.iter().map(|rule| rule.selectors.len()).sum::<usize>();
+        let total = sheet
+            .rules
+            .iter()
+            .map(|rule| rule.selectors.len())
+            .sum::<usize>();
 
         assert_eq!(total, MAX_TOTAL_SELECTORS);
 
-        let too_complex = format!("{} {{ color: red; }}", (0..MAX_SELECTOR_PARTS + 2)
-            .map(|_| "div")
-            .collect::<Vec<_>>()
-            .join(" "));
+        let too_complex = format!(
+            "{} {{ color: red; }}",
+            (0..MAX_SELECTOR_PARTS + 2)
+                .map(|_| "div")
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
         assert!(StyleSheet::parse(&too_complex).rules.is_empty());
     }
 
@@ -724,7 +731,10 @@ mod tests {
 
     #[test]
     fn stylesheet_parser_caps_direct_input_bytes() {
-        let input = format!("{} .late {{ color: red; }}", " ".repeat(MAX_STYLESHEET_BYTES));
+        let input = format!(
+            "{} .late {{ color: red; }}",
+            " ".repeat(MAX_STYLESHEET_BYTES)
+        );
         let sheet = StyleSheet::parse(&input);
         assert!(sheet.rules.is_empty());
     }
