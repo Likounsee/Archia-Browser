@@ -53,7 +53,7 @@ impl Url {
             .map_or((without_fragment, None), |(p, q)| (p, Some(q.to_owned())));
         Ok(Self {
             scheme: normalized_scheme,
-            authority: authority.to_owned(),
+            authority: normalize_ipv6_authority(authority),
             path: if path.is_empty() {
                 "/".into()
             } else {
@@ -185,6 +185,34 @@ impl Url {
             fragment: fragment.map(str::to_owned),
         })
     }
+}
+
+fn normalize_ipv6_authority(authority: &str) -> String {
+    let (userinfo, host_port) = authority
+        .split_once('@')
+        .map_or((None, authority), |(userinfo, host_port)| {
+            (Some(userinfo), host_port)
+        });
+    let Some(bracketed) = host_port.strip_prefix('[') else {
+        return authority.to_owned();
+    };
+    let Some(end) = bracketed.find(']') else {
+        return authority.to_owned();
+    };
+    let Ok(address) = bracketed[..end].parse::<std::net::Ipv6Addr>() else {
+        return authority.to_owned();
+    };
+
+    let mut normalized = String::new();
+    if let Some(userinfo) = userinfo {
+        normalized.push_str(userinfo);
+        normalized.push('@');
+    }
+    normalized.push('[');
+    normalized.push_str(&address.to_string());
+    normalized.push(']');
+    normalized.push_str(&bracketed[end + 1..]);
+    normalized
 }
 
 fn validate_authority(authority: &str) -> Result<(), UrlError> {
@@ -480,6 +508,11 @@ mod tests {
         let ipv6 = Url::parse("https://[2001:db8::1]:8443/path").unwrap();
         assert_eq!(ipv6.host(), "2001:db8::1");
         assert_eq!(ipv6.port(), Some(8443));
+
+        let equivalent = Url::parse("https://[2001:0DB8:0:0:0:0:0:1]:8443/path").unwrap();
+        assert_eq!(equivalent.host(), ipv6.host());
+        assert_eq!(equivalent.authority(), ipv6.authority());
+        assert!(equivalent.same_document(&ipv6));
 
         let explicit_default = Url::parse("https://example.org:443/path").unwrap();
         assert_eq!(explicit_default.port(), Some(443));
