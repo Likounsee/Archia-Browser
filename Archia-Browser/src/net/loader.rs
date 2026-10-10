@@ -113,7 +113,10 @@ where
                 .map_err(DocumentLoadError::Network)?;
 
             let cached_response = {
-                let mut cache = self.cache.lock().map_err(|_| DocumentLoadError::InternalStatePoisoned)?;
+                let mut cache = self
+                    .cache
+                    .lock()
+                    .map_err(|_| DocumentLoadError::InternalStatePoisoned)?;
                 cache.get(&current)
             };
             let response = if let Some(response) = cached_response {
@@ -345,12 +348,12 @@ where
                     .headers
                     .insert("referer".into(), referrer.to_string());
             }
-            if let Some(cookie) = self
-                .cookies
-                .lock()
-                .ok()?
-                .header_for_context(&current, Some(document_url), false, HttpMethod::Get)
-            {
+            if let Some(cookie) = self.cookies.lock().ok()?.header_for_context(
+                &current,
+                Some(document_url),
+                false,
+                HttpMethod::Get,
+            ) {
                 request.headers.insert("cookie".into(), cookie);
             }
 
@@ -369,18 +372,12 @@ where
                     Ok(response) => response,
                     Err(_) => return None,
                 };
-                self.cache
-                    .lock()
-                    .ok()?
-                    .store(&request, &response);
+                self.cache.lock().ok()?.store(&request, &response);
                 response
             };
 
             for set_cookie in response.set_cookie_headers() {
-                self.cookies
-                    .lock()
-                    .ok()?
-                    .store(&current, set_cookie);
+                self.cookies.lock().ok()?.store(&current, set_cookie);
             }
 
             if is_redirect(response.status) {
