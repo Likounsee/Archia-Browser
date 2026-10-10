@@ -47,11 +47,9 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
     let mut stack: Vec<Node> = Vec::new();
     // Keep malformed hostile nesting from making open-element searches
     // quadratic or creating a tree too deep for recursive DOM consumers.
-    // Once the limit is reached, discard that subtree until its matching
-    // end tag; tokenization already bounds the total input and token count.
-    // Track only nesting depth while discarding an over-depth subtree.
-    // Retaining/searching tag names here would recreate an attacker-controlled
-    // quadratic scan precisely on the path intended to bound hostile input.
+    // Once the limit is reached, discard a bounded-depth subtree. Track only
+    // nesting depth here: retaining/searching tag names would recreate an
+    // attacker-controlled quadratic scan on this hostile-input path.
     let mut suppressed_depth = 0usize;
 
     for token in tokens.iter().take(MAX_DOM_TOKENS) {
