@@ -1,6 +1,11 @@
 use super::{parse_declarations, ComputedStyle, CssTokenizer, Property, Selector, Specificity};
 use crate::html::Node;
 
+const MAX_STYLESHEET_BYTES: usize = 256 * 1024;
+const MAX_STYLE_RULES: usize = 256;
+const MAX_SELECTOR_BYTES: usize = 512;
+const MAX_SELECTORS_PER_RULE: usize = 32;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StyleRule {
     pub selectors: Vec<Selector>,
@@ -14,16 +19,33 @@ pub struct StyleSheet {
 
 impl StyleSheet {
     pub fn parse(input: &str) -> Self {
+        // CSS can be supplied directly by callers as well as through the
+        // document loader. Bound both scanned bytes and retained rule/selector
+        // complexity so a hostile stylesheet cannot multiply work per DOM node.
+        let input = if input.len() > MAX_STYLESHEET_BYTES {
+            let mut end = MAX_STYLESHEET_BYTES;
+            while !input.is_char_boundary(end) {
+                end -= 1;
+            }
+            &input[..end]
+        } else {
+            input
+        };
         let mut rules = Vec::new();
-        for (selector_text, declaration_text) in parse_rule_blocks(input) {
+        for (selector_text, declaration_text) in
+            parse_rule_blocks(input).into_iter().take(MAX_STYLE_RULES)
+        {
             // Nested at-rules (for example @media) are intentionally ignored until
             // the engine implements their conditions; never misinterpret them as selectors.
-            if selector_text.trim_start().starts_with('@') {
+            if selector_text.trim_start().starts_with('@')
+                || selector_text.len() > MAX_SELECTOR_BYTES
+            {
                 continue;
             }
 
-            let selectors = split_selector_list(&selector_text)
+            let selectors = split_selector_list(&selector_text, MAX_SELECTORS_PER_RULE)
                 .into_iter()
+                .filter(|selector| selector.len() <= MAX_SELECTOR_BYTES)
                 .filter_map(|selector| Selector::parse(&selector))
                 .collect::<Vec<_>>();
             if selectors.is_empty() {
@@ -314,7 +336,7 @@ fn parse_rule_blocks(input: &str) -> Vec<(String, String)> {
 
 /// Split selector groups only on commas outside strings, attribute selectors and
 /// functional pseudo-class arguments (e.g. :is(.a, .b)).
-fn split_selector_list(input: &str) -> Vec<String> {
+fn split_selector_list(input: &str, max_selectors: usize) -> Vec<String> {
     let mut selectors = Vec::new();
     let mut current = String::new();
     let mut paren_depth = 0usize;
@@ -344,6 +366,9 @@ fn split_selector_list(input: &str) -> Vec<String> {
                 let selector = current.trim();
                 if !selector.is_empty() {
                     selectors.push(selector.to_owned());
+                    if selectors.len() >= max_selectors {
+                        return selectors;
+                    }
                 }
                 current.clear();
                 continue;
@@ -353,7 +378,7 @@ fn split_selector_list(input: &str) -> Vec<String> {
         current.push(ch);
     }
     let selector = current.trim();
-    if !selector.is_empty() {
+    if !selector.is_empty() && selectors.len() < max_selectors {
         selectors.push(selector.to_owned());
     }
     selectors
@@ -617,6 +642,32 @@ fn normalize_declaration_value(value: &str) -> (String, bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stylesheet_parser_caps_rule_count() {
+        let input = ".item { color: red; }".repeat(MAX_STYLE_RULES + 20);
+        let sheet = StyleSheet::parse(&input);
+        assert_eq!(sheet.rules.len(), MAX_STYLE_RULES);
+    }
+
+    #[test]
+    fn stylesheet_parser_caps_direct_input_bytes() {
+        let input = format!("{} .late {{ color: red; }}", " ".repeat(MAX_STYLESHEET_BYTES));
+        let sheet = StyleSheet::parse(&input);
+        assert!(sheet.rules.is_empty());
+    }
+
+    #[test]
+    fn stylesheet_parser_caps_selector_list_complexity() {
+        let selectors = (0..MAX_SELECTORS_PER_RULE + 10)
+            .map(|index| format!(".item{index}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sheet = StyleSheet::parse(&format!("{selectors} {{ color: red; }}"));
+
+        assert_eq!(sheet.rules.len(), 1);
+        assert_eq!(sheet.rules[0].selectors.len(), MAX_SELECTORS_PER_RULE);
+    }
 
     #[test]
     fn parses_rules_and_applies_cascade_order() {
