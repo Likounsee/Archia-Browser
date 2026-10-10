@@ -453,7 +453,8 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
                     }
 
                     let start_value = i;
-                    while i < chars.len() && chars[i] != ']' && quote.is_none_or(|q| chars[i] != q) {
+                    while i < chars.len() && chars[i] != ']' && quote.is_none_or(|q| chars[i] != q)
+                    {
                         i += 1;
                     }
                     if start_value == i {
