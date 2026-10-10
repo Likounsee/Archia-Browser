@@ -166,7 +166,10 @@ fn decode_unreserved_percent_escapes(input: &str) -> String {
         }
         // Percent escapes and UTF-8 bytes are ASCII-preserved here; append
         // complete UTF-8 characters for non-ASCII input.
-        let character = input[index..].chars().next().expect("index stays on a character boundary");
+        let character = input[index..]
+            .chars()
+            .next()
+            .expect("index stays on a character boundary");
         output.push(character);
         index += character.len_utf8();
     }
@@ -243,11 +246,17 @@ mod tests {
         filter.add_rule(FilterRule::block("/blocked"));
 
         assert_eq!(
-            filter.decide("https://example.org/%62locked/resource", Some(ResourceType::Document)),
+            filter.decide(
+                "https://example.org/%62locked/resource",
+                Some(ResourceType::Document)
+            ),
             FilterDecision::Block
         );
         assert_eq!(
-            filter.decide("https://example.org/%7Euser", Some(ResourceType::Document)),
+            filter.decide(
+                "https://example.org/%7Euser",
+                Some(ResourceType::Document)
+            ),
             FilterDecision::Allow,
             "reserved policy patterns should not be broadened to unrelated paths"
         );
