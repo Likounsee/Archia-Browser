@@ -297,9 +297,13 @@ fn response_can_store(response: &Response) -> bool {
             .any(|(_, value)| {
                 value
                     .split(',')
-                    .any(|d| d.trim().eq_ignore_ascii_case("no-cache"))
+                    .any(|d| trim_http_ows(d).eq_ignore_ascii_case("no-cache"))
             })
         && !response_has_header(response, "vary")
+}
+
+fn trim_http_ows(value: &str) -> &str {
+    value.trim_matches(|character| character == ' ' || character == '\t')
 }
 
 fn cache_control_directives(value: &str) -> Vec<&str> {
@@ -319,11 +323,11 @@ fn cache_control_directives(value: &str) -> Vec<&str> {
         } else if byte == b'"' {
             quoted = !quoted;
         } else if byte == b',' && !quoted {
-            directives.push(value[start..index].trim());
+            directives.push(trim_http_ows(&value[start..index]));
             start = index + 1;
         }
     }
-    directives.push(value[start..].trim());
+    directives.push(trim_http_ows(&value[start..]));
     directives
 }
 
@@ -336,7 +340,7 @@ fn response_max_age(response: &Response) -> Option<u64> {
     {
         for directive in cache_control_directives(value) {
             let (name, value) = match directive.split_once('=') {
-                Some((name, value)) => (name.trim(), Some(value.trim())),
+                Some((name, value)) => (trim_http_ows(name), Some(trim_http_ows(value))),
                 None => (directive, None),
             };
             if !name.eq_ignore_ascii_case("max-age") {
@@ -368,8 +372,8 @@ fn request_cache_age_directive(request: &Request, wanted: &str) -> Result<Option
     {
         for directive in cache_control_directives(header) {
             let (name, value) = match directive.split_once('=') {
-                Some((name, value)) => (name.trim(), Some(value.trim())),
-                None => (directive.trim(), None),
+                Some((name, value)) => (trim_http_ows(name), Some(trim_http_ows(value))),
+                None => (trim_http_ows(directive), None),
             };
             if !name.eq_ignore_ascii_case(wanted) {
                 continue;
@@ -444,8 +448,8 @@ fn has_cache_max_age_zero(header: Option<&str>) -> bool {
                 let Some((name, value)) = directive.split_once('=') else {
                     return false;
                 };
-                name.trim().eq_ignore_ascii_case("max-age")
-                    && value.trim().trim_matches('"').parse::<u64>().ok() == Some(0)
+                trim_http_ows(name).eq_ignore_ascii_case("max-age")
+                    && trim_http_ows(value).trim_matches('"').parse::<u64>().ok() == Some(0)
             })
     })
 }
@@ -458,7 +462,7 @@ fn has_cache_directive(header: Option<&str>, wanted: &str) -> bool {
                 let name = directive
                     .split_once('=')
                     .map_or(directive, |(name, _)| name);
-                name.trim().eq_ignore_ascii_case(wanted)
+                trim_http_ows(name).eq_ignore_ascii_case(wanted)
             })
     })
 }
@@ -471,7 +475,7 @@ fn has_pragma_no_cache(request: &Request) -> bool {
         .any(|(_, value)| {
             value
                 .split(',')
-                .any(|d| d.trim().eq_ignore_ascii_case("no-cache"))
+                .any(|d| trim_http_ows(d).eq_ignore_ascii_case("no-cache"))
         })
 }
 
@@ -534,6 +538,20 @@ mod tests {
         );
         assert!(cache.get(&first).is_none());
         assert!(cache.get(&second).is_some());
+    }
+
+    #[test]
+    fn refuses_non_ascii_whitespace_in_max_age_header() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/invalid-max-age");
+        let response = Response::new(200)
+            .with_header("cache-control", "public, max-age=\u{00a0}60\u{00a0}")
+            .with_body(b"ambiguous max-age".to_vec());
+
+        cache.store(&request, &response);
+
+        assert!(cache.is_empty());
+        assert!(cache.get(&request).is_none());
     }
 
     #[test]
