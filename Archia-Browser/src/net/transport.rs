@@ -817,6 +817,7 @@ fn decode_chunked(
 
             let trailer_text = std::str::from_utf8(&trailer_bytes[..trailer_end])
                 .map_err(|_| TransportError::ConnectionFailed)?;
+            let mut seen_trailers = std::collections::HashSet::new();
             for line in trailer_text.split("\r\n") {
                 let Some((name, value)) = line.split_once(':') else {
                     return Err(TransportError::ConnectionFailed);
@@ -826,6 +827,7 @@ fn decode_chunked(
                     || value
                         .bytes()
                         .any(|byte| (byte < 0x20 && byte != b'\t') || byte == 0x7f)
+                    || !seen_trailers.insert(name.to_ascii_lowercase())
                     || matches!(
                         name.to_ascii_lowercase().as_str(),
                         "content-length" | "transfer-encoding" | "host"
@@ -960,6 +962,7 @@ mod tests {
             "Content-Length: 0",
             "Transfer-Encoding: chunked",
             "X-Test: bad\u{1}value",
+            "X-Test: one\\r\\nx-test: two",
         ] {
             let response = format!(
                 "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n{trailer}\r\n\r\n"
