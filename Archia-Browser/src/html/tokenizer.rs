@@ -250,6 +250,17 @@ mod tests {
     }
 
     #[test]
+    fn many_small_raw_text_elements_preserve_each_body() {
+        let input = "<script>a</script><style>b</style>".repeat(2_000);
+        let tokens = HtmlTokenizer::tokenize(&input);
+        assert_eq!(tokens.len(), 4_000);
+        assert!(matches!(&tokens[0], HtmlToken::StartTag { name, .. } if name == "script"));
+        assert_eq!(tokens[1], HtmlToken::Text("a".to_owned()));
+        assert!(matches!(&tokens[2], HtmlToken::StartTag { name, .. } if name == "style"));
+        assert_eq!(tokens[3], HtmlToken::Text("b".to_owned()));
+    }
+
+    #[test]
     fn tokenizes_basic_document() {
         let tokens = HtmlTokenizer::tokenize("<html><body>Hello</body></html>");
         assert_eq!(
@@ -334,15 +345,22 @@ mod tests {
 }
 
 fn find_raw_text_end(input: &str, start: usize, tag_name: &str) -> Option<(usize, usize)> {
-    let lower = input[start..].to_ascii_lowercase();
+    let bytes = input.as_bytes();
     let marker = format!("</{tag_name}");
-    let mut search_from = 0;
+    let marker_bytes = marker.as_bytes();
+    let mut search_from = start;
 
-    while let Some(relative) = lower[search_from..].find(&marker) {
-        let relative = search_from + relative;
-        let text_end = start + relative;
-        let after_name = text_end + marker.len();
-        let next = input.as_bytes().get(after_name).copied();
+    // Search the original bytes instead of lowercasing the entire remaining
+    // document for every <script>/<style>. With many small raw-text elements,
+    // repeated tail allocations/copies made this otherwise bounded tokenizer
+    // quadratic in total input size.
+    while search_from <= bytes.len().saturating_sub(marker_bytes.len()) {
+        let relative = bytes[search_from..]
+            .windows(marker_bytes.len())
+            .position(|window| window.eq_ignore_ascii_case(marker_bytes))?;
+        let text_end = search_from + relative;
+        let after_name = text_end + marker_bytes.len();
+        let next = bytes.get(after_name).copied();
 
         // A raw-text end tag must end its name here. Without this boundary
         // check, </scripture> would incorrectly terminate a <script> block.
@@ -353,10 +371,7 @@ fn find_raw_text_end(input: &str, start: usize, tag_name: &str) -> Option<(usize
             return None;
         }
 
-        search_from = relative + marker.len();
-        if search_from >= lower.len() {
-            return None;
-        }
+        search_from = after_name;
     }
     None
 }
