@@ -55,9 +55,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
     for token in tokens.iter().take(MAX_DOM_TOKENS) {
         if suppressed_depth > 0 {
             match token {
-                HtmlToken::StartTag { name, .. }
-                    if !VOID_ELEMENTS.contains(&name.as_str()) =>
-                {
+                HtmlToken::StartTag { name, .. } if !VOID_ELEMENTS.contains(&name.as_str()) => {
                     suppressed_depth = suppressed_depth.saturating_add(1);
                 }
                 HtmlToken::EndTag(_) => suppressed_depth -= 1,
@@ -247,7 +245,10 @@ mod tests {
         let root = parse(&HtmlTokenizer::tokenize(&html));
 
         assert_eq!(root.text_content(), "visible");
-        assert_eq!(root.children[0].children[1].children[0].tag_name(), Some("p"));
+        assert_eq!(
+            root.children[0].children[1].children[0].tag_name(),
+            Some("p")
+        );
     }
 
     #[test]
