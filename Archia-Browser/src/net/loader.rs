@@ -7,7 +7,7 @@ use crate::{
     html::{parse, HtmlTokenizer, Node},
     layout::LayoutViewport,
 };
-use std::sync::Mutex;
+use std::{collections::HashSet, sync::Mutex};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DocumentLoadError {
@@ -15,6 +15,7 @@ pub enum DocumentLoadError {
     HttpStatus(u16),
     UnsupportedContentType,
     RedirectLimitExceeded,
+    RedirectLoopDetected,
     InvalidRedirect,
     NoCurrentDocument,
 }
@@ -95,7 +96,15 @@ where
             current.headers.insert("cookie".into(), cookie);
         }
 
+        let mut visited_redirect_targets = HashSet::new();
         for redirect_count in 0..=self.max_redirects {
+            // Fragments are not sent in HTTP request targets. Exclude them from
+            // loop detection so a server cannot evade the guard by alternating
+            // fragment-only redirects.
+            if !visited_redirect_targets.insert(redirect_loop_key(&current.url)) {
+                return Err(DocumentLoadError::RedirectLoopDetected);
+            }
+
             // A cached response is still subject to the current request policy.
             // Never let cache hits bypass filtering decisions.
             self.pipeline
@@ -542,6 +551,13 @@ fn is_css_response(response: &Response) -> bool {
     media_type.eq_ignore_ascii_case("text/css")
 }
 
+fn redirect_loop_key(url: &super::Url) -> String {
+    let serialized = url.to_string();
+    serialized
+        .split_once('#')
+        .map_or(serialized.clone(), |(without_fragment, _)| without_fragment.to_owned())
+}
+
 fn is_redirect(status: u16) -> bool {
     matches!(status, 301 | 302 | 303 | 307 | 308)
 }
@@ -598,6 +614,30 @@ mod tests {
         pipeline::{PolicyDecision, RequestPolicyEngine},
         Response, Url,
     };
+
+    #[test]
+    fn redirect_loops_are_rejected_before_repeating_the_request() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        struct LoopTransport(AtomicUsize);
+
+        impl Transport for LoopTransport {
+            fn send(&self, _: &Request) -> Result<Response, TransportError> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Ok(Response::new(302).with_header("location", "/loop"))
+            }
+        }
+
+        let transport = LoopTransport(AtomicUsize::new(0));
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), &transport);
+        let request = Request::new(Url::parse("https://example.org/loop").unwrap());
+
+        assert!(matches!(
+            loader.load(&request, LayoutViewport::new(320, 200)),
+            Err(DocumentLoadError::RedirectLoopDetected)
+        ));
+        assert_eq!(transport.0.load(Ordering::SeqCst), 1);
+    }
 
     #[test]
     fn html_content_type_is_case_insensitive() {
