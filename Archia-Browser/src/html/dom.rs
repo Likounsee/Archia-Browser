@@ -53,6 +53,15 @@ impl Node {
         self.children.push(child);
     }
 
+    /// Clone this node's kind and attributes without recursively cloning its
+    /// descendants. StyledNode stores descendants in its own parallel tree.
+    pub(crate) fn shallow_clone(&self) -> Self {
+        Self {
+            kind: self.kind.clone(),
+            children: Vec::new(),
+        }
+    }
+
     pub fn insert_child(&mut self, index: usize, child: Node) -> Result<(), Node> {
         if index > self.children.len() {
             return Err(child);
