@@ -722,7 +722,10 @@ mod tests {
             browser.activate_link(&link, None),
             Err(LinkActivationError::BlockedLocalFileNavigation)
         );
-        assert_eq!(browser.current_url().unwrap().to_string(), "https://example.org/");
+        assert_eq!(
+            browser.current_url().unwrap().to_string(),
+            "https://example.org/"
+        );
         assert_eq!(browser.tabs().len(), 1);
     }
 
