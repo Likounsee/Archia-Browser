@@ -77,16 +77,25 @@ impl SoftwareSurface {
     /// Fallibly allocate an RGBA surface with a 64 MiB pixel-storage limit.
     pub fn try_new(width: u32, height: u32) -> Option<Self> {
         if width == 0 || height == 0 {
-            return Some(Self { surface: Surface::new(0, 0), pixels: Vec::new() });
+            return Some(Self {
+                surface: Surface::new(0, 0),
+                pixels: Vec::new(),
+            });
         }
-        let byte_len = usize::try_from(width).ok()?
+        let byte_len = usize::try_from(width)
+            .ok()?
             .checked_mul(usize::try_from(height).ok()?)?
             .checked_mul(4)?;
-        if byte_len > MAX_SOFTWARE_SURFACE_BYTES { return None; }
+        if byte_len > MAX_SOFTWARE_SURFACE_BYTES {
+            return None;
+        }
         let mut pixels = Vec::new();
         pixels.try_reserve_exact(byte_len).ok()?;
         pixels.resize(byte_len, 0);
-        Some(Self { surface: Surface::new(width, height), pixels })
+        Some(Self {
+            surface: Surface::new(width, height),
+            pixels,
+        })
     }
 
     pub fn surface(&self) -> Surface {
@@ -299,9 +308,15 @@ impl SoftwareSurface {
                     .checked_mul(self.surface.width as usize)
                     .and_then(|row| row.checked_add(px as usize))
                     .and_then(|pixel| pixel.checked_mul(4))
-                else { continue; };
-                let Some(pixel) = index.checked_add(4).and_then(|end| self.pixels.get_mut(index..end))
-                else { continue; };
+                else {
+                    continue;
+                };
+                let Some(pixel) = index
+                    .checked_add(4)
+                    .and_then(|end| self.pixels.get_mut(index..end))
+                else {
+                    continue;
+                };
                 pixel.copy_from_slice(&[color.0, color.1, color.2, color.3]);
             }
         }
@@ -469,6 +484,7 @@ mod tests {
             (u32::MAX as usize).saturating_mul(u32::MAX as usize)
         );
     }
+
     #[test]
     fn draw_text_rasterizes_glyphs() {
         let mut surface = SoftwareSurface::new(8, 8);
