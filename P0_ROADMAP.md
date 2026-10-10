@@ -7,10 +7,10 @@ execution status is tracked separately and must not be inferred from tests merel
 in source.
 
 ## P0-1 — URL and origin parsing
-- [ ] Reject malformed URL authorities (invalid host characters, malformed userinfo, ports, and IPv6).
-- [ ] Ensure origin, cookie, policy, and transport code use consistent host/port interpretation.
-- [ ] Add regression cases for malformed and valid authority forms.
-- [ ] Run the URL and networking test suites on CI.
+- [x] Reject malformed URL authorities (invalid host characters, malformed userinfo, ports, and IPv6).
+- [x] Ensure origin, cookie, policy, and transport code use consistent host/port interpretation.
+- [x] Add regression cases for malformed and valid authority forms.
+- [x] Run the URL and networking test suites on CI.
 
 ## P0-2 — HTTP request/response framing
 - [ ] Reject invalid header names/values, duplicate case-insensitive headers, and ambiguous message framing.
@@ -60,3 +60,6 @@ in source.
 - **Verification pending:** these regression tests are committed but not executed here; P0-3 remains open until CI confirms formatting, tests, and build. No CI status checks were available from the current GitHub status lookup.
 - Continued P0-4: cache lookup and storage now refuse URLs containing user-info. Previously the cache key normalized only host/port/path, so a URL such as `https://alice:secret@example.org/account` could alias a public entry before the transport rejected user-info. Added a regression test ensuring it neither reads nor replaces the public entry. Commit: `d704110bffd465270b747ade1b4997faeffd11ec`.
 - **Verification pending:** no test execution or successful CI run has been confirmed in this session; P0-4 remains open.
+
+
+- **P0-1 completed on 2026-10-10:** hardened URL authority parsing already in place, rejected ambiguous legacy numeric IPv4 spellings, aligned effective-port semantics with HTTP/HTTPS defaults, and canonicalized equivalent IPv6 literal spellings so origin/cookie/policy/transport consumers see the same host. Added URL and Origin regression tests. Commits: `21ac72fa7d52a4286e780959dc9c67ff86cace61`, `2d643e276b368094843fa2642c60d1542667efd3`, `58cad9b6e16e869914abbc5c136af80cdc5e043d`, `86af7a2a830f20acc1d4b99be58ba0b701491b61`. Final CI: https://github.com/Likounsee/Archia-Browser/actions/runs/38060115071 — formatting, workspace tests (439 passed, 0 failed), and workspace build succeeded. An intermediate formatting-only failure was corrected in the final commit.
