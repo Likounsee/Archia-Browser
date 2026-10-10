@@ -508,7 +508,7 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
             .ok_or(TransportError::InvalidRequest)?;
     }
     head_len = head_len
-        .checked_add(19) // "Connection: close\\r\\n"
+        .checked_add(19) // "Connection: close\r\n"
         .ok_or(TransportError::InvalidRequest)?;
     if request.has_body()
         && !request
@@ -1369,9 +1369,9 @@ mod tests {
     #[test]
     fn rejects_duplicate_response_headers_case_insensitively() {
         for response in [
-            b"HTTP/1.1 200 OK\\r\\nContent-Length: 5\\r\\nContent-Length: 5\\r\\n\\r\\nHello".as_slice(),
-            b"HTTP/1.1 200 OK\\r\\nTransfer-Encoding: chunked\\r\\nTransfer-Encoding: chunked\\r\\n\\r\\n0\\r\\n\\r\\n".as_slice(),
-            b"HTTP/1.1 200 OK\\r\\nContent-Type: text/plain\\r\\ncontent-type: text/html\\r\\n\\r\\n".as_slice(),
+            b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nContent-Length: 5\r\n\r\nHello".as_slice(),
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n".as_slice(),
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\ncontent-type: text/html\r\n\r\n".as_slice(),
         ] {
             assert_eq!(
                 parse_http_response(response, 1024, 1024),
@@ -2032,7 +2032,7 @@ mod limit_tests {
     #[test]
     fn rejects_head_response_with_unexpected_wire_body() {
         let result = parse_http_response_for_method(
-            b"HTTP/1.1 200 OK\\r\\nContent-Length: 5\\r\\n\\r\\nHello",
+            b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nHello",
             super::super::HttpMethod::Head,
             1024,
             1024,
@@ -2043,7 +2043,7 @@ mod limit_tests {
     #[test]
     fn rejects_zero_content_length_mismatch_and_truncated_fixed_body() {
         let result = parse_http_response(
-            b"HTTP/1.1 200 OK\\r\\nContent-Length: 5\\r\\n\\r\\nHell",
+            b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nHell",
             1024,
             1024,
         );
@@ -2053,7 +2053,7 @@ mod limit_tests {
     #[test]
     fn rejects_body_forbidden_status_with_wire_body() {
         for status in [204, 205, 304] {
-            let response = format!("HTTP/1.1 {status} No Content\\r\\n\\r\\nunexpected");
+            let response = format!("HTTP/1.1 {status} No Content\r\n\r\nunexpected");
             assert_eq!(
                 parse_http_response(response.as_bytes(), 1024, 1024),
                 Err(TransportError::ConnectionFailed),
@@ -2066,9 +2066,9 @@ mod limit_tests {
     fn rejects_excessive_interim_responses() {
         let mut response = Vec::new();
         for _ in 0..=MAX_INTERIM_RESPONSES {
-            response.extend_from_slice(b"HTTP/1.1 100 Continue\\r\\n\\r\\n");
+            response.extend_from_slice(b"HTTP/1.1 100 Continue\r\n\r\n");
         }
-        response.extend_from_slice(b"HTTP/1.1 200 OK\\r\\nContent-Length: 0\\r\\n\\r\\n");
+        response.extend_from_slice(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
         assert_eq!(
             parse_http_response(&response, 1024, 1024),
             Err(TransportError::ConnectionFailed)
@@ -2107,7 +2107,7 @@ mod limit_tests {
 
     #[test]
     fn response_body_limit_accepts_exact_boundary_and_rejects_one_byte_over() {
-        let exact = b"HTTP/1.1 200 OK\\r\\nContent-Length: 3\\r\\n\\r\\nabc";
+        let exact = b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nabc";
         let response = parse_http_response(exact, 3, 1024).unwrap();
         assert_eq!(response.body, b"abc");
         assert_eq!(
@@ -2115,7 +2115,7 @@ mod limit_tests {
             Err(TransportError::ResponseTooLarge)
         );
 
-        let over = b"HTTP/1.1 200 OK\\r\\nContent-Length: 4\\r\\n\\r\\nabcd";
+        let over = b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\nabcd";
         assert_eq!(
             parse_http_response(over, 3, 1024),
             Err(TransportError::ResponseTooLarge)
@@ -2124,10 +2124,10 @@ mod limit_tests {
 
     #[test]
     fn response_header_limit_accepts_exact_boundary_and_rejects_one_byte_under() {
-        let response = b"HTTP/1.1 200 OK\\r\\nContent-Length: 0\\r\\n\\r\\n";
+        let response = b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
         let separator = response
             .windows(4)
-            .position(|window| window == b"\\r\\n\\r\\n")
+            .position(|window| window == b"\r\n\r\n")
             .unwrap();
 
         assert_eq!(
