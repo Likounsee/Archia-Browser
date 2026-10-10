@@ -1,0 +1,1 @@
+:is(.card, [data-x='a,b']):not(:where(#main)) > span:nth-child(2n+1)
