@@ -293,6 +293,63 @@ impl CookieJar {
         )
     }
 
+    /// Build a Cookie header while enforcing SameSite against the request's
+    /// first-party URL and navigation context. Unknown first-party context is
+    /// treated as cross-site; Lax cookies remain eligible for safe top-level
+    /// navigations, as required by the default browser policy.
+    pub fn header_for_context(
+        &self,
+        url: &Url,
+        first_party: Option<&Url>,
+        top_level_navigation: bool,
+        method: super::HttpMethod,
+    ) -> Option<String> {
+        let same_site = first_party.is_some_and(|party| same_site_url(url, party));
+        let safe_navigation = top_level_navigation
+            && matches!(method, super::HttpMethod::Get | super::HttpMethod::Head | super::HttpMethod::Options | super::HttpMethod::Trace);
+        let now = SystemTime::now();
+        let host = url.host().to_ascii_lowercase();
+        let path = url.path();
+        let secure = url.is_secure();
+        let mut matching = self
+            .cookies
+            .iter()
+            .filter(|cookie| {
+                if cookie.expires_at.is_some_and(|expires_at| expires_at <= now) {
+                    return false;
+                }
+                let domain_matches = if cookie.host_only {
+                    host == cookie.domain
+                } else {
+                    cookie_domain_matches(&host, &cookie.domain)
+                };
+                let path_matches = cookie_path_matches(path, &cookie.path);
+                let same_site_allowed = match cookie.same_site {
+                    SameSite::Strict => same_site,
+                    SameSite::Lax | SameSite::Unspecified => same_site || safe_navigation,
+                    SameSite::None => true,
+                };
+                domain_matches && path_matches && (!cookie.secure || secure) && same_site_allowed
+            })
+            .collect::<Vec<_>>();
+        matching.sort_by(|first, second| second.path.len().cmp(&first.path.len()));
+        let mut header = String::new();
+        for cookie in matching {
+            let pair_len = cookie.name.len() + 1 + cookie.value.len();
+            let separator_len = usize::from(!header.is_empty()) * 2;
+            if header.len() + separator_len + pair_len > MAX_COOKIE_HEADER_BYTES {
+                continue;
+            }
+            if !header.is_empty() {
+                header.push_str("; ");
+            }
+            header.push_str(&cookie.name);
+            header.push('=');
+            header.push_str(&cookie.value);
+        }
+        (!header.is_empty()).then_some(header)
+    }
+
     pub fn header_for(&self, url: &Url) -> Option<String> {
         let now = SystemTime::now();
         let host = url.host().to_ascii_lowercase();
@@ -402,6 +459,38 @@ impl CookieJar {
     }
 }
 
+fn same_site_url(first: &Url, second: &Url) -> bool {
+    // Schemeful same-site checks avoid treating HTTP and HTTPS as equivalent.
+    if first.scheme() != second.scheme() {
+        return false;
+    }
+    let first_host = first.host().trim_end_matches('.').to_ascii_lowercase();
+    let second_host = second.host().trim_end_matches('.').to_ascii_lowercase();
+    if first_host.is_empty() || second_host.is_empty() {
+        return false;
+    }
+    if first_host.parse::<std::net::IpAddr>().is_ok()
+        || second_host.parse::<std::net::IpAddr>().is_ok()
+    {
+        return first_host == second_host;
+    }
+    if first_host == second_host {
+        return true;
+    }
+    fn registrable_domain(host: &str) -> Option<String> {
+        let suffix = psl::suffix(host.as_bytes())?;
+        let suffix = std::str::from_utf8(suffix.as_bytes()).ok()?;
+        let prefix = host.strip_suffix(suffix)?;
+        let prefix = prefix.strip_suffix('.')?;
+        let registrant = prefix.rsplit('.').next()?;
+        Some(format!("{registrant}.{suffix}"))
+    }
+    match (registrable_domain(&first_host), registrable_domain(&second_host)) {
+        (Some(first), Some(second)) => first == second,
+        _ => false,
+    }
+}
+
 fn is_public_suffix(domain: &str) -> bool {
     // Fail closed if the PSL cannot classify the supplied domain. Without
     // this check, Domain=co.uk on shop.example.co.uk would leak a cookie to
@@ -472,6 +561,52 @@ mod tests {
         assert!(header.len() <= MAX_COOKIE_HEADER_BYTES);
         assert!(header.starts_with("cookie"));
         assert!(header.contains("; "));
+    }
+
+    #[test]
+    fn same_site_policy_blocks_cross_site_strict_and_lax_subresources() {
+        let origin = Url::parse("https://shop.example.com/").unwrap();
+        let cross_site = Url::parse("https://attacker.test/").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&origin, "strict=s; SameSite=Strict");
+        jar.store(&origin, "lax=l; SameSite=Lax");
+        jar.store(&origin, "default=d");
+        jar.store(&origin, "none=n; SameSite=None; Secure");
+
+        assert_eq!(
+            jar.header_for_context(&origin, Some(&cross_site), false, super::super::HttpMethod::Get).as_deref(),
+            Some("none=n")
+        );
+        assert_eq!(
+            jar.header_for_context(&origin, Some(&origin), false, super::super::HttpMethod::Get).as_deref(),
+            Some("strict=s; lax=l; default=d; none=n")
+        );
+    }
+
+    #[test]
+    fn lax_cookies_are_allowed_on_cross_site_safe_top_level_navigation_only() {
+        let origin = Url::parse("https://shop.example.com/").unwrap();
+        let cross_site = Url::parse("https://attacker.test/").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&origin, "strict=s; SameSite=Strict");
+        jar.store(&origin, "lax=l; SameSite=Lax");
+        jar.store(&origin, "default=d");
+
+        assert_eq!(
+            jar.header_for_context(&origin, Some(&cross_site), true, super::super::HttpMethod::Get).as_deref(),
+            Some("lax=l; default=d")
+        );
+        assert_eq!(
+            jar.header_for_context(&origin, Some(&cross_site), true, super::super::HttpMethod::Post),
+            None
+        );
+    }
+
+    #[test]
+    fn schemeful_same_site_does_not_equate_http_and_https() {
+        let https = Url::parse("https://shop.example.com/").unwrap();
+        let http = Url::parse("http://news.example.com/").unwrap();
+        assert!(!same_site_url(&https, &http));
     }
 
     #[test]
