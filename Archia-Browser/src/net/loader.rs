@@ -886,6 +886,43 @@ mod tests {
     }
 
     #[test]
+    fn cross_site_top_level_navigation_sends_lax_but_not_strict_cookies() {
+        #[derive(Debug)]
+        struct CookieInspectTransport;
+
+        impl Transport for CookieInspectTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                assert_eq!(
+                    request.headers.get("cookie").map(String::as_str),
+                    Some("lax=allowed"),
+                    "cross-site safe navigation must exclude Strict cookies"
+                );
+                Ok(Response::new(200)
+                    .with_header("content-type", "text/html")
+                    .with_body(b"<body>Welcome</body>".to_vec()))
+            }
+        }
+
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            CookieInspectTransport,
+        );
+        let destination = Url::parse("https://example.org/account").unwrap();
+        let initiator = Url::parse("https://attacker.test/").unwrap();
+        {
+            let mut jar = loader.cookies.lock().unwrap();
+            jar.store(&destination, "strict=blocked; Secure; SameSite=Strict");
+            jar.store(&destination, "lax=allowed; Secure; SameSite=Lax");
+        }
+
+        let mut request = Request::new(destination);
+        request.policy.first_party = Some(initiator);
+        assert!(loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .is_ok());
+    }
+
+    #[test]
     fn document_loads_are_marked_as_document_resources() {
         #[derive(Debug)]
         struct InspectTransport;
