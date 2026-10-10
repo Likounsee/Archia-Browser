@@ -651,9 +651,7 @@ fn parse_http_response_for_method(
         let body_bytes = &bytes[cursor + body_start..];
         let transfer_encoding = response.header("transfer-encoding");
         let content_length = response.header("content-length");
-        if response.status == 204
-            && (transfer_encoding.is_some() || content_length.is_some())
-        {
+        if response.status == 204 && (transfer_encoding.is_some() || content_length.is_some()) {
             return Err(TransportError::ConnectionFailed);
         }
         if transfer_encoding.is_some() && content_length.is_some() {
@@ -1047,12 +1045,7 @@ mod tests {
 
     #[test]
     fn no_content_response_has_no_body() {
-        let response = parse_http_response(
-            b"HTTP/1.1 204 No Content\r\n\r\n",
-            1024,
-            1024,
-        )
-        .unwrap();
+        let response = parse_http_response(b"HTTP/1.1 204 No Content\r\n\r\n", 1024, 1024).unwrap();
         assert!(response.body.is_empty());
     }
 
