@@ -607,6 +607,8 @@ mod tests {
 
     #[test]
     fn same_origin_normalizes_hosts_and_default_ports_but_not_schemes() {
+        // Keep this table broad: every security-sensitive URL consumer uses
+        // this comparison, so origin behavior must be explicit and regression-tested.
         let cases = [
             ("http://example.org/a", "http://EXAMPLE.org:80/b", true),
             ("https://example.org/a", "https://example.org:443/b", true),
@@ -615,6 +617,31 @@ mod tests {
             ("http://[::1]/", "http://[0:0:0:0:0:0:0:1]:80/", true),
             ("file:///tmp/a", "file:///tmp/a", false),
             ("file:///tmp/a", "file:///tmp/b", false),
+            ("http://example.org/a?x=1", "http://example.org/b?x=2", true),
+            ("http://example.org/#a", "http://example.org/#b", true),
+            ("http://example.org/", "http://sub.example.org/", false),
+            ("http://sub.example.org/", "http://example.org/", false),
+            ("http://example.org/", "http://example.net/", false),
+            ("http://example.org:81/", "http://example.org:81/a", true),
+            ("http://example.org:81/", "http://example.org:82/", false),
+            ("https://example.org:444/", "https://example.org:444/a", true),
+            ("https://example.org:444/", "https://example.org:443/", false),
+            ("http://127.0.0.1/", "http://127.0.0.1:80/a", true),
+            ("http://127.0.0.1/", "http://127.0.0.2/", false),
+            ("http://[::1]:8080/", "http://[0:0:0:0:0:0:0:1]:8080/a", true),
+            ("http://[::1]:8080/", "http://[::1]:8081/", false),
+            ("https://example.org/", "http://example.org:443/", false),
+            ("http://example.org:443/", "https://example.org/", false),
+            ("https://EXAMPLE.ORG/", "https://example.org/path", true),
+            ("http://example.org./", "http://example.org/", false),
+            ("custom://example.org/a", "custom://EXAMPLE.org/b", true),
+            ("custom://example.org:80/a", "custom://example.org/b", false),
+            ("custom://example.org:80/a", "custom://example.org:80/b", true),
+            ("custom://example.org:80/a", "custom://example.org:81/b", false),
+            ("file:///C:/Users/a.html", "file:///C:/Users/a.html", false),
+            ("file://localhost/tmp/a", "file:///tmp/a", false),
+            ("http://example.org:0/", "http://example.org/", false),
+            ("https://example.org:0/", "https://example.org/", false),
         ];
         for (left, right, expected) in cases {
             let left = Url::parse(left).unwrap();
