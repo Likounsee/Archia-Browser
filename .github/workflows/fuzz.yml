@@ -4,6 +4,15 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "17 3 * * 1"
+  push:
+    branches: ["Archia-Browser"]
+    paths:
+      - "fuzz/**"
+      - "Archia-Browser/src/net/url.rs"
+      - "Archia-Browser/src/net/cookies.rs"
+      - "Archia-Browser/src/html/**"
+      - "Archia-Browser/src/css/**"
+      - ".github/workflows/fuzz.yml"
 
 permissions:
   contents: read
