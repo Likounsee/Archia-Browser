@@ -455,7 +455,7 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
                     let start_value = i;
                     while i < chars.len()
                         && chars[i] != ']'
-                        && quote.map_or(true, |q| chars[i] != q)
+                        && quote.is_none_or(|q| chars[i] != q)
                     {
                         i += 1;
                     }
@@ -612,7 +612,7 @@ fn pseudo_argument_matches(
 
 fn pseudo_argument_specificity(argument: &str) -> Specificity {
     split_pseudo_arguments(argument)
-        .filter_map(|candidate| Selector::parse(candidate))
+        .filter_map(Selector::parse)
         .filter(|selector| selector.parts.len() == 1)
         .map(|selector| selector.specificity())
         .max()
