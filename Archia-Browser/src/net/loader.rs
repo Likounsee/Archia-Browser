@@ -433,9 +433,7 @@ fn has_header_case_insensitive(
     headers.keys().any(|key| key.eq_ignore_ascii_case(name))
 }
 
-fn retain_safe_cross_origin_headers(
-    headers: &mut std::collections::BTreeMap<String, String>,
-) {
+fn retain_safe_cross_origin_headers(headers: &mut std::collections::BTreeMap<String, String>) {
     headers.retain(|name, _| {
         [
             "accept",
@@ -1457,10 +1455,16 @@ mod tests {
         };
         let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
         let mut request = Request::new(Url::parse("https://example.org/start").unwrap());
-        request.headers.insert("X-API-Key".into(), "secret-key".into());
-        request.headers.insert("X-Private-Token".into(), "secret-token".into());
+        request
+            .headers
+            .insert("X-API-Key".into(), "secret-key".into());
+        request
+            .headers
+            .insert("X-Private-Token".into(), "secret-token".into());
         request.headers.insert("Accept".into(), "text/html".into());
-        request.headers.insert("Origin".into(), "https://example.org".into());
+        request
+            .headers
+            .insert("Origin".into(), "https://example.org".into());
 
         loader
             .load(&request, LayoutViewport::new(320, 200))
