@@ -522,10 +522,7 @@ mod tests {
             );
         }
 
-        assert_eq!(
-            Url::parse("http://127.0.0.1/").unwrap().host(),
-            "127.0.0.1"
-        );
+        assert_eq!(Url::parse("http://127.0.0.1/").unwrap().host(), "127.0.0.1");
     }
 
     #[test]
