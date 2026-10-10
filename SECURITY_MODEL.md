@@ -42,7 +42,7 @@ These controls are implemented in source but still require ongoing regression te
 - Local file transport opens the file before inspecting its handle, requires a regular file, bounds file size, rejects malformed percent escapes and NUL; Windows UNC and drive-relative paths are rejected.
 - Request policy is checked before cache hits and network I/O. Stylesheet loads enforce mixed-content and remote-to-file restrictions on every redirect hop.
 - Cookie storage is bounded and implements domain/path, secure, HttpOnly, prefix, expiration and SameSite checks.
-- HTML, CSS, stylesheet imports and network/local-file bodies have explicit limits. CI checks formatting, tests, build and Clippy on Linux and Windows.
+- HTML, CSS, stylesheet imports and network/local-file bodies have explicit limits. CI checks formatting, tests, build and Clippy on Linux and Windows; RustSec dependency auditing runs on Linux, and Dependabot checks Cargo and GitHub Actions dependencies weekly.
 
 ## 5. Known gaps / risks not yet closed
 
@@ -51,7 +51,7 @@ These controls are implemented in source but still require ongoing regression te
 - The custom URL parser and origin model are not a full WHATWG URL implementation; compatibility and differential testing remain necessary.
 - TLS policy/root lifecycle and positive/negative certificate integration tests need a documented, repeatable validation plan.
 - Memory accounting is not proven to cover every allocation in DOM, layout, display lists, raster surfaces and all temporary parser buffers.
-- Fuzz targets, sustained fuzzing, a retained adversarial corpus, and broad WPT/differential coverage are not yet established.
+- Initial cargo-fuzz targets now exercise URL parsing/resolution, HTML tokenization/DOM parsing, CSS tokenization and cookie parsing/selection. A scheduled workflow builds and runs them and uploads crash artifacts on failure, but no successful fuzz run, retained minimized corpus, sustained 24-hour run, HTTP parser target, or broad WPT/differential coverage has yet been verified.
 - Dependency advisories, license inventory and reproducible-build policy require a recorded audit.
 - A passing unit/CI run proves only the tested revision and covered cases; it does not prove the absence of vulnerabilities.
 
