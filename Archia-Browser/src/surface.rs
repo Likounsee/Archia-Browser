@@ -130,7 +130,7 @@ impl SoftwareSurface {
     }
 
     pub fn clear(&mut self, color: Color) {
-        for pixel in self.pixels.chunks_exact_mut(4) {
+        for pixel in self.pixels.as_chunks_mut::<4>().0 {
             pixel.copy_from_slice(&[color.0, color.1, color.2, color.3]);
         }
     }
@@ -139,6 +139,7 @@ impl SoftwareSurface {
         self.fill_rect_clipped(x, y, width, height, color, None);
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn fill_rounded_rect_clipped(
         &mut self,
         x: i32,
@@ -449,7 +450,7 @@ mod tests {
     fn fill_rect_writes_pixels() {
         let mut surface = SoftwareSurface::new(4, 4);
         surface.fill_rect(1, 1, 2, 2, Color::RED);
-        let offset = ((1 * 4 + 1) * 4) as usize;
+        let offset = 20usize;
         assert_eq!(&surface.pixels()[offset..offset + 4], &[255, 0, 0, 255]);
     }
 
