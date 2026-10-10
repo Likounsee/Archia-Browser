@@ -149,12 +149,12 @@ where
                 }
                 remove_header_case_insensitive(&mut next.headers, "cookie");
                 if cross_origin {
-                    // Header names are case-insensitive. Request.headers is public,
-                    // so callers may have inserted mixed-case credentials directly.
-                    // Remove every spelling before following a cross-origin redirect.
-                    for name in ["authorization", "proxy-authorization", "host"] {
-                        remove_header_case_insensitive(&mut next.headers, name);
-                    }
+                    // Do not forward arbitrary caller-supplied headers to another
+                    // origin. Custom headers frequently carry API keys or session
+                    // material and cannot be classified reliably by their names.
+                    // Retain only common non-credential request metadata and the
+                    // entity headers needed when a 307/308 preserves the request body.
+                    retain_safe_cross_origin_headers(&mut next.headers);
                 }
                 if let Some(cookie) = self
                     .cookies
@@ -431,6 +431,26 @@ fn has_header_case_insensitive(
     name: &str,
 ) -> bool {
     headers.keys().any(|key| key.eq_ignore_ascii_case(name))
+}
+
+fn retain_safe_cross_origin_headers(
+    headers: &mut std::collections::BTreeMap<String, String>,
+) {
+    headers.retain(|name, _| {
+        [
+            "accept",
+            "accept-language",
+            "cache-control",
+            "content-length",
+            "content-type",
+            "dnt",
+            "pragma",
+            "user-agent",
+            "upgrade-insecure-requests",
+        ]
+        .iter()
+        .any(|safe| name.eq_ignore_ascii_case(safe))
+    });
 }
 
 fn remove_header_case_insensitive(
@@ -1408,6 +1428,54 @@ mod tests {
             .load(&request, LayoutViewport::new(320, 200))
             .unwrap();
         assert_eq!(page.document.text_content(), "Safe");
+    }
+
+    #[test]
+    fn strips_arbitrary_custom_headers_on_cross_origin_redirects() {
+        #[derive(Debug)]
+        struct RecordingTransport {
+            responses: std::sync::Mutex<Vec<Response>>,
+            requests: std::sync::Mutex<Vec<Request>>,
+        }
+
+        impl Transport for RecordingTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                self.requests.lock().unwrap().push(request.clone());
+                Ok(self.responses.lock().unwrap().remove(0))
+            }
+        }
+
+        let transport = RecordingTransport {
+            responses: std::sync::Mutex::new(vec![
+                Response::new(302).with_header("location", "https://other.example/final"),
+                Response::new(200)
+                    .with_header("content-type", "text/html")
+                    .with_body(b"<body>safe</body>".to_vec()),
+            ]),
+            requests: std::sync::Mutex::new(Vec::new()),
+        };
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
+        let mut request = Request::new(Url::parse("https://example.org/start").unwrap());
+        request.headers.insert("X-API-Key".into(), "secret-key".into());
+        request.headers.insert("X-Private-Token".into(), "secret-token".into());
+        request.headers.insert("Accept".into(), "text/html".into());
+        request.headers.insert("Origin".into(), "https://example.org".into());
+
+        loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .unwrap();
+
+        let requests = loader.transport.requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0].header("x-api-key"), Some("secret-key"));
+        assert_eq!(requests[0].header("x-private-token"), Some("secret-token"));
+        for name in ["x-api-key", "x-private-token", "origin"] {
+            assert!(
+                !has_header_case_insensitive(&requests[1].headers, name),
+                "{name} must not cross an origin boundary"
+            );
+        }
+        assert_eq!(requests[1].header("accept"), Some("text/html"));
     }
 
     #[test]
