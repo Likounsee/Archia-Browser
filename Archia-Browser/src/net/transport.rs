@@ -9,6 +9,7 @@ use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 use super::{Request, Response, Transport, TransportError};
 
 const MAX_REQUEST_HEADER_BYTES: usize = 64 * 1024;
+const MAX_RESPONSE_HEADER_COUNT: usize = 256;
 const MAX_INTERIM_RESPONSES: usize = 16;
 
 /// Minimal HTTP/1.1 transport with certificate-validated TLS for HTTPS origins.
@@ -762,7 +763,12 @@ fn parse_http_response_head(
 
     let mut response = Response::new(status);
     let mut seen_headers = std::collections::HashSet::new();
+    let mut header_count = 0;
     for line in lines {
+        header_count += 1;
+        if header_count > MAX_RESPONSE_HEADER_COUNT {
+            return Err(TransportError::ResponseTooLarge);
+        }
         let Some((name, value)) = line.split_once(':') else {
             return Err(TransportError::ConnectionFailed);
         };
@@ -978,7 +984,12 @@ fn decode_chunked(
             let trailer_text = std::str::from_utf8(&trailer_bytes[..trailer_end])
                 .map_err(|_| TransportError::ConnectionFailed)?;
             let mut seen_trailers = std::collections::HashSet::new();
+            let mut trailer_count = 0;
             for line in trailer_text.split("\r\n") {
+                trailer_count += 1;
+                if trailer_count > MAX_RESPONSE_HEADER_COUNT {
+                    return Err(TransportError::ResponseTooLarge);
+                }
                 let Some((name, value)) = line.split_once(':') else {
                     return Err(TransportError::ConnectionFailed);
                 };
@@ -1367,6 +1378,31 @@ mod tests {
         assert_eq!(
             parse_http_response(&bytes, 4096, 1024),
             Err(TransportError::ConnectionFailed)
+        );
+    }
+
+    #[test]
+    fn rejects_response_with_too_many_headers_or_trailers() {
+        let mut headers = String::from("HTTP/1.1 200 OK\r\n");
+        for index in 0..=MAX_RESPONSE_HEADER_COUNT {
+            headers.push_str(&format!("X-Test-{index}: value\r\n"));
+        }
+        headers.push_str("\r\n");
+        assert_eq!(
+            parse_http_response(headers.as_bytes(), 4096, 64 * 1024),
+            Err(TransportError::ResponseTooLarge)
+        );
+
+        let mut trailers = String::from(
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n",
+        );
+        for index in 0..=MAX_RESPONSE_HEADER_COUNT {
+            trailers.push_str(&format!("X-Test-{index}: value\r\n"));
+        }
+        trailers.push_str("\r\n");
+        assert_eq!(
+            parse_http_response(trailers.as_bytes(), 4096, 64 * 1024),
+            Err(TransportError::ResponseTooLarge)
         );
     }
 
