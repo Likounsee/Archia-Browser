@@ -299,15 +299,21 @@ fn validate_dns_or_ipv4_host(host: &str) -> Result<(), UrlError> {
         return Err(UrlError::InvalidAuthority);
     }
 
-    // Numeric dotted hosts are interpreted as IPv4 by many networking APIs.
-    // Reject invalid forms instead of allowing different parsers to normalize
-    // the same spelling to different destinations.
-    if labels.len() == 4
-        && labels
-            .iter()
-            .all(|label| label.bytes().all(|b| b.is_ascii_digit()))
-        && host.parse::<std::net::Ipv4Addr>().is_err()
-    {
+    // Some system resolvers accept legacy IPv4 spellings such as 127.1,
+    // 0177.0.0.1, or a single decimal integer, while URL/origin and policy
+    // code treats those spellings as ordinary host names. Accept only strict
+    // dotted-decimal IPv4 when the hostname is entirely numeric or uses
+    // hexadecimal numeric labels, so all consumers agree on the destination.
+    let legacy_numeric_host = labels.iter().all(|label| {
+        label.bytes().all(|byte| byte.is_ascii_digit())
+            || label
+                .strip_prefix("0x")
+                .or_else(|| label.strip_prefix("0X"))
+                .is_some_and(|hex| {
+                    !hex.is_empty() && hex.bytes().all(|byte| byte.is_ascii_hexdigit())
+                })
+    });
+    if legacy_numeric_host && host.parse::<std::net::Ipv4Addr>().is_err() {
         return Err(UrlError::InvalidAuthority);
     }
     Ok(())
@@ -497,6 +503,28 @@ mod tests {
         assert_eq!(
             Url::parse("https://user name@example.org/path").unwrap_err(),
             UrlError::InvalidCharacter
+        );
+    }
+
+    #[test]
+    fn rejects_legacy_numeric_ipv4_spellings() {
+        for input in [
+            "http://127.1/",
+            "http://2130706433/",
+            "http://0177.0.0.1/",
+            "http://0x7f000001/",
+            "http://0x7f.0.0.1/",
+        ] {
+            assert_eq!(
+                Url::parse(input).unwrap_err(),
+                UrlError::InvalidAuthority,
+                "ambiguous numeric host must be rejected: {input}"
+            );
+        }
+
+        assert_eq!(
+            Url::parse("http://127.0.0.1/").unwrap().host(),
+            "127.0.0.1"
         );
     }
 
