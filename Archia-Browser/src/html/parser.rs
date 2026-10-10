@@ -146,12 +146,20 @@ fn normalize_document_structure(mut root: Node) -> Node {
         return root;
     };
 
-    if html_position != 0 {
-        let html = root.children.remove(html_position);
-        root.children.insert(0, html);
-    }
+    // Content outside an explicit <html> element is still part of the
+    // document. Preserve it by placing preceding siblings at the start of
+    // <body> and following siblings at the end, rather than leaving nodes
+    // as invalid document-level siblings.
+    let mut root_children = std::mem::take(&mut root.children).into_iter();
+    let mut preceding = root_children
+        .by_ref()
+        .take(html_position)
+        .collect::<Vec<_>>();
+    let mut html = root_children
+        .next()
+        .expect("the located html element exists");
+    let following = root_children.collect::<Vec<_>>();
 
-    let html = &mut root.children[0];
     let mut head = None;
     let mut body = None;
     let mut body_extras = Vec::new();
@@ -170,8 +178,13 @@ fn normalize_document_structure(mut root: Node) -> Node {
         body.append(child);
     }
 
+    preceding.append(&mut body.children);
+    body.children = preceding;
+    body.children.extend(following);
+
     html.append(head.unwrap_or_else(|| Node::element("head")));
     html.append(body);
+    root.append(html);
     root
 }
 
@@ -241,6 +254,19 @@ mod tests {
         assert_eq!(html.children[0].tag_name(), Some("head"));
         assert_eq!(html.children[1].tag_name(), Some("body"));
         assert_eq!(html.children[1].text_content(), "Hello world");
+    }
+
+    #[test]
+    fn content_outside_explicit_html_is_moved_into_body_in_order() {
+        let tokens = HtmlTokenizer::tokenize(
+            "before<html><head><title>title</title></head><body>inside</body></html>after",
+        );
+        let root = parse(&tokens);
+
+        assert_eq!(root.children.len(), 1);
+        let html = &root.children[0];
+        let body = &html.children[1];
+        assert_eq!(body.text_content(), "beforeinsideafter");
     }
 
     #[test]
