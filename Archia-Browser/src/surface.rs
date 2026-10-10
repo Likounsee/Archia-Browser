@@ -554,8 +554,7 @@ mod tests {
     fn budgeted_surface_reserves_and_releases_pixel_storage() {
         let budget = Arc::new(MemoryBudget::new(8 * 4 * 4));
         {
-            let surface =
-                SoftwareSurface::try_new_with_budget(8, 4, Arc::clone(&budget)).unwrap();
+            let surface = SoftwareSurface::try_new_with_budget(8, 4, Arc::clone(&budget)).unwrap();
             assert_eq!(surface.pixels().len(), 8 * 4 * 4);
             assert_eq!(budget.used(), 8 * 4 * 4);
             assert_eq!(budget.available(), 0);
