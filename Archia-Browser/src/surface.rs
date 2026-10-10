@@ -1,5 +1,7 @@
 use crate::html::{Node, NodeKind};
 
+const MAX_SOFTWARE_SURFACE_BYTES: usize = 64 * 1024 * 1024;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Color(pub u8, pub u8, pub u8, pub u8);
 
@@ -53,7 +55,7 @@ impl Surface {
     }
 
     pub fn pixel_count(&self) -> usize {
-        self.width as usize * self.height as usize
+        (self.width as usize).saturating_mul(self.height as usize)
     }
 }
 
@@ -64,11 +66,27 @@ pub struct SoftwareSurface {
 }
 
 impl SoftwareSurface {
+    /// Create a bounded surface, falling back to an empty surface on failure.
     pub fn new(width: u32, height: u32) -> Self {
-        Self {
-            surface: Surface::new(width, height),
-            pixels: vec![0; width as usize * height as usize * 4],
+        Self::try_new(width, height).unwrap_or_else(|| Self {
+            surface: Surface::new(0, 0),
+            pixels: Vec::new(),
+        })
+    }
+
+    /// Fallibly allocate an RGBA surface with a 64 MiB pixel-storage limit.
+    pub fn try_new(width: u32, height: u32) -> Option<Self> {
+        if width == 0 || height == 0 {
+            return Some(Self { surface: Surface::new(0, 0), pixels: Vec::new() });
         }
+        let byte_len = usize::try_from(width).ok()?
+            .checked_mul(usize::try_from(height).ok()?)?
+            .checked_mul(4)?;
+        if byte_len > MAX_SOFTWARE_SURFACE_BYTES { return None; }
+        let mut pixels = Vec::new();
+        pixels.try_reserve_exact(byte_len).ok()?;
+        pixels.resize(byte_len, 0);
+        Some(Self { surface: Surface::new(width, height), pixels })
     }
 
     pub fn surface(&self) -> Surface {
@@ -91,13 +109,12 @@ impl SoftwareSurface {
         if x >= self.width() || y >= self.height() {
             return None;
         }
-        let index = ((y * self.width() + x) * 4) as usize;
-        Some(Color(
-            self.pixels[index],
-            self.pixels[index + 1],
-            self.pixels[index + 2],
-            self.pixels[index + 3],
-        ))
+        let index = (y as usize)
+            .checked_mul(self.width() as usize)?
+            .checked_add(x as usize)?
+            .checked_mul(4)?;
+        let pixel = self.pixels.get(index..index.checked_add(4)?)?;
+        Some(Color(pixel[0], pixel[1], pixel[2], pixel[3]))
     }
 
     pub fn draw_text(&mut self, x: i32, y: i32, text: &str, color: Color) {
@@ -278,9 +295,14 @@ impl SoftwareSurface {
 
         for py in y0..y1 {
             for px in x0..x1 {
-                let index = ((py * self.surface.width + px) * 4) as usize;
-                self.pixels[index..index + 4]
-                    .copy_from_slice(&[color.0, color.1, color.2, color.3]);
+                let Some(index) = (py as usize)
+                    .checked_mul(self.surface.width as usize)
+                    .and_then(|row| row.checked_add(px as usize))
+                    .and_then(|pixel| pixel.checked_mul(4))
+                else { continue; };
+                let Some(pixel) = index.checked_add(4).and_then(|end| self.pixels.get_mut(index..end))
+                else { continue; };
+                pixel.copy_from_slice(&[color.0, color.1, color.2, color.3]);
             }
         }
     }
