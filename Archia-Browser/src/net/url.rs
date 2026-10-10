@@ -11,7 +11,7 @@ pub struct Url {
 
 impl Url {
     pub fn parse(input: &str) -> Result<Self, UrlError> {
-        if contains_unsafe_url_whitespace(input) || !has_valid_percent_encoding(input) {
+        if contains_unsafe_url_whitespace(input) {
             return Err(UrlError::InvalidCharacter);
         }
 
@@ -43,6 +43,9 @@ impl Url {
             return Err(UrlError::UnsupportedFileAuthority);
         }
         let rest = &remainder[authority_end..];
+        if !has_valid_percent_encoding(rest) {
+            return Err(UrlError::InvalidCharacter);
+        }
         let (without_fragment, fragment) = rest
             .split_once('#')
             .map_or((rest, None), |(before, after)| {
@@ -156,7 +159,7 @@ impl Url {
     /// redirects and document links while keeping the URL type independent
     /// from the network layer.
     pub fn resolve(&self, reference: &str) -> Result<Self, UrlError> {
-        if contains_unsafe_url_whitespace(reference) || !has_valid_percent_encoding(reference) {
+        if contains_unsafe_url_whitespace(reference) {
             return Err(UrlError::InvalidCharacter);
         }
 
@@ -170,6 +173,9 @@ impl Url {
 
         if let Some(authority) = reference.strip_prefix("//") {
             return Self::parse(&format!("{}://{}", self.scheme, authority));
+        }
+        if !has_valid_percent_encoding(reference) {
+            return Err(UrlError::InvalidCharacter);
         }
 
         let (reference, fragment) = reference
