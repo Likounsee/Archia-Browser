@@ -507,6 +507,7 @@ mod tests {
         surface.draw_text_clipped(i32::MAX, i32::MAX, "A", Color::BLACK, None);
         assert!(surface.pixels().iter().all(|byte| *byte == 0));
     }
+
     #[test]
     fn draw_text_handles_newlines_and_tabs() {
         let mut surface = SoftwareSurface::new(40, 16);
