@@ -60,7 +60,7 @@ impl CssTokenizer {
                 '"' | '\'' => {
                     let quote = ch;
                     let mut value = String::new();
-                    while let Some(next) = chars.next() {
+                    for next in chars.by_ref() {
                         if next == quote {
                             break;
                         }
