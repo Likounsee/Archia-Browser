@@ -414,8 +414,7 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
             // HTTP field names are case-insensitive. Reject duplicate spellings
             // so framing/security checks cannot inspect a different value than
             // the one a downstream server chooses.
-            || (!seen_headers.insert(name.to_ascii_lowercase())
-                && !name.eq_ignore_ascii_case("set-cookie"))
+            || !seen_headers.insert(name.to_ascii_lowercase())
         {
             return Err(TransportError::InvalidRequest);
         }
@@ -445,7 +444,11 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
         return Err(TransportError::InvalidRequest);
     }
     if let Some(length) = content_lengths.first() {
-        let length = trim_http_ows(length)
+        let length = trim_http_ows(length);
+        if length.is_empty() || !length.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Err(TransportError::InvalidRequest);
+        }
+        let length = length
             .parse::<usize>()
             .map_err(|_| TransportError::InvalidRequest)?;
         if length != request.body.len() {
@@ -662,9 +665,16 @@ fn parse_http_response_for_method(
         // Those responses carry no body, but malformed framing metadata must
         // not become accepted merely because the body branch is skipped.
         let parsed_content_length = content_length
-            .map(|length| trim_http_ows(length).parse::<usize>())
-            .transpose()
-            .map_err(|_| TransportError::ConnectionFailed)?;
+            .map(|length| {
+                let length = trim_http_ows(length);
+                if length.is_empty() || !length.bytes().all(|byte| byte.is_ascii_digit()) {
+                    return Err(TransportError::ConnectionFailed);
+                }
+                length
+                    .parse::<usize>()
+                    .map_err(|_| TransportError::ConnectionFailed)
+            })
+            .transpose()?;
         // 205 Reset Content must carry no content. Reject transfer coding
         // (which this no-body parser cannot consume) and non-zero lengths.
         if response.status == 205
@@ -1019,6 +1029,17 @@ mod tests {
 
     #[test]
     fn body_forbidden_responses_still_validate_content_length_syntax() {
+        for response in [
+            b"HTTP/1.1 200 OK\\r\\nContent-Length: +5\\r\\n\\r\\nHello".as_slice(),
+            b"HTTP/1.1 200 OK\\r\\nContent-Length: -0\\r\\n\\r\\n".as_slice(),
+            b"HTTP/1.1 200 OK\\r\\nContent-Length: \\r\\n\\r\\n".as_slice(),
+        ] {
+            assert_eq!(
+                parse_http_response(response, 1024, 1024),
+                Err(TransportError::ConnectionFailed)
+            );
+        }
+
         for (response, method) in [
             (
                 b"HTTP/1.1 200 OK\r\nContent-Length: invalid\r\n\r\n".as_slice(),
@@ -1438,6 +1459,17 @@ mod tests {
             validate_request(&invalid_length),
             Err(TransportError::InvalidRequest)
         );
+
+        for invalid in ["+5", "-0", ""] {
+            let request = Request::new(url.clone())
+                .with_body(b"Hello".to_vec())
+                .with_header("content-length", invalid);
+            assert_eq!(
+                validate_request(&request),
+                Err(TransportError::InvalidRequest),
+                "invalid Content-Length syntax must be rejected: {invalid:?}"
+            );
+        }
 
         let transfer_encoded = Request::new(url.clone())
             .with_body(b"Hello".to_vec())
