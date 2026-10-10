@@ -1,0 +1,26 @@
+name: Archia Browser URL fuzzing
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  url-fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: Archia-Browser
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install nightly for cargo-fuzz
+        run: rustup toolchain install nightly --profile minimal
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      - name: Fuzz URL parsing and resolution
+        run: cargo +nightly fuzz run url_parse_resolve -- -max_total_time=120 -print_final_stats=1
+        working-directory: fuzz
