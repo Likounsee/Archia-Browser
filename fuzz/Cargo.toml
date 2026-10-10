@@ -12,6 +12,13 @@ libfuzzer-sys = "0.4"
 archia-browser = { path = "../Archia-Browser" }
 
 [[bin]]
+name = "http_response"
+path = "fuzz_targets/http_response.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "html_tokenize_parse"
 path = "fuzz_targets/html_tokenize_parse.rs"
 test = false
