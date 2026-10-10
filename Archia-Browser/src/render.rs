@@ -48,6 +48,7 @@ pub enum PaintCommand {
 pub struct DisplayList {
     commands: Vec<PaintCommand>,
     text_bytes: usize,
+    truncated: bool,
 }
 
 impl DisplayList {
@@ -61,6 +62,7 @@ impl DisplayList {
     /// command metadata and retained text. A truncated list remains safe to rasterize.
     pub fn push(&mut self, command: PaintCommand) {
         if self.commands.len() >= MAX_DISPLAY_COMMANDS {
+            self.truncated = true;
             return;
         }
         let text_bytes = match &command {
@@ -68,9 +70,11 @@ impl DisplayList {
             _ => 0,
         };
         let Some(next_text_bytes) = self.text_bytes.checked_add(text_bytes) else {
+            self.truncated = true;
             return;
         };
         if next_text_bytes > MAX_DISPLAY_TEXT_BYTES {
+            self.truncated = true;
             return;
         }
         self.text_bytes = next_text_bytes;
@@ -87,6 +91,11 @@ impl DisplayList {
 
     pub fn is_empty(&self) -> bool {
         self.commands.is_empty()
+    }
+
+    /// Whether a command or text budget caused commands to be omitted.
+    pub fn is_truncated(&self) -> bool {
+        self.truncated
     }
 }
 
@@ -784,6 +793,7 @@ mod tests {
             list.push(PaintCommand::PopClip);
         }
         assert_eq!(list.len(), MAX_DISPLAY_COMMANDS);
+        assert!(list.is_truncated());
     }
 
     #[test]
@@ -806,6 +816,7 @@ mod tests {
             color: 0,
         });
         assert_eq!(list.len(), 2);
+        assert!(list.is_truncated());
     }
 
     #[test]
