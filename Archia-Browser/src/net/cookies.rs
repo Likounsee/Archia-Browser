@@ -306,7 +306,10 @@ impl CookieJar {
     ) -> Option<String> {
         let same_site = first_party.is_some_and(|party| same_site_url(url, party));
         let safe_navigation = top_level_navigation
-            && matches!(method, super::HttpMethod::Get | super::HttpMethod::Head);
+            && matches!(
+                method,
+                super::HttpMethod::Get | super::HttpMethod::Head
+            );
         let now = SystemTime::now();
         let host = url.host().to_ascii_lowercase();
         let path = url.path();
@@ -574,11 +577,23 @@ mod tests {
         jar.store(&origin, "none=n; SameSite=None; Secure");
 
         assert_eq!(
-            jar.header_for_context(&origin, Some(&cross_site), false, super::super::HttpMethod::Get).as_deref(),
+            jar.header_for_context(
+                &origin,
+                Some(&cross_site),
+                false,
+                super::super::HttpMethod::Get
+            )
+            .as_deref(),
             Some("none=n")
         );
         assert_eq!(
-            jar.header_for_context(&origin, Some(&origin), false, super::super::HttpMethod::Get).as_deref(),
+            jar.header_for_context(
+                &origin,
+                Some(&origin),
+                false,
+                super::super::HttpMethod::Get
+            )
+            .as_deref(),
             Some("strict=s; lax=l; default=d; none=n")
         );
     }
@@ -593,11 +608,22 @@ mod tests {
         jar.store(&origin, "default=d");
 
         assert_eq!(
-            jar.header_for_context(&origin, Some(&cross_site), true, super::super::HttpMethod::Get).as_deref(),
+            jar.header_for_context(
+                &origin,
+                Some(&cross_site),
+                true,
+                super::super::HttpMethod::Get
+            )
+            .as_deref(),
             Some("lax=l; default=d")
         );
         assert_eq!(
-            jar.header_for_context(&origin, Some(&cross_site), true, super::super::HttpMethod::Post),
+            jar.header_for_context(
+                &origin,
+                Some(&cross_site),
+                true,
+                super::super::HttpMethod::Post
+            ),
             None
         );
     }
