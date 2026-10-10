@@ -1484,9 +1484,10 @@ mod tests {
                 "{name} must not cross an origin boundary"
             );
         }
-        assert!(requests[1].headers.iter().any(|(name, value)| {
-            name.eq_ignore_ascii_case("accept") && value == "text/html"
-        }));
+        assert!(requests[1]
+            .headers
+            .iter()
+            .any(|(name, value)| { name.eq_ignore_ascii_case("accept") && value == "text/html" }));
     }
 
     #[test]
