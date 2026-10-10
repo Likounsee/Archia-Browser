@@ -293,7 +293,9 @@ impl Transport for LocalFileTransport {
 fn file_url_path(url_path: &str) -> Result<std::path::PathBuf, TransportError> {
     let decoded = percent_decode(url_path)?;
     if decoded.as_bytes().contains(&0) {
-        return Err(TransportError::InvalidUrl(super::UrlError::InvalidCharacter));
+        return Err(TransportError::InvalidUrl(
+            super::UrlError::InvalidCharacter,
+        ));
     }
     #[cfg(windows)]
     let path = {
@@ -1468,9 +1470,8 @@ mod tests {
             Err(TransportError::ResponseTooLarge)
         );
 
-        let mut trailers = String::from(
-            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n",
-        );
+        let mut trailers =
+            String::from("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n");
         for index in 0..=MAX_RESPONSE_HEADER_COUNT {
             trailers.push_str(&format!("X-Test-{index}: value\r\n"));
         }
@@ -1571,7 +1572,10 @@ mod tests {
         let url = local_file_test_url(&path);
         let request = Request::new(super::super::Url::parse(&url).unwrap());
         let transport = LocalFileTransport::new().with_max_file_size(4);
-        assert_eq!(transport.send(&request), Err(TransportError::ResponseTooLarge));
+        assert_eq!(
+            transport.send(&request),
+            Err(TransportError::ResponseTooLarge)
+        );
         let head = request.clone().with_method(crate::net::HttpMethod::Head);
         assert_eq!(transport.send(&head), Err(TransportError::ResponseTooLarge));
         std::fs::remove_file(path).unwrap();
@@ -1591,7 +1595,12 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn local_file_transport_rejects_unc_and_drive_relative_paths() {
-        for path in ["//server/share/secret.txt", "C:secret.txt", "/C:secret.txt", "relative.txt"] {
+        for path in [
+            "//server/share/secret.txt",
+            "C:secret.txt",
+            "/C:secret.txt",
+            "relative.txt",
+        ] {
             assert!(
                 file_url_path(path).is_err(),
                 "ambiguous or network-backed Windows file path must be rejected: {path}"
