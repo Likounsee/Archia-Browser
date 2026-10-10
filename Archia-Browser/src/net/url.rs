@@ -66,7 +66,9 @@ impl Url {
         // access. Encoded separators could therefore create new path segments
         // after URL policy and dot-segment normalization have already run.
         if normalized_scheme == "file"
-            && (normalized_path.starts_with("//") || contains_encoded_path_separator(path))
+            && (normalized_path.starts_with("//")
+                || contains_encoded_path_separator(path)
+                || contains_encoded_windows_drive_colon(path))
         {
             return Err(UrlError::InvalidCharacter);
         }
@@ -190,7 +192,10 @@ impl Url {
 
         // Apply the same file-path rule to relative references; otherwise
         // percent decoding in LocalFileTransport could change path boundaries.
-        if self.scheme == "file" && contains_encoded_path_separator(path) {
+        if self.scheme == "file"
+            && (contains_encoded_path_separator(path)
+                || contains_encoded_windows_drive_colon(path))
+        {
             return Err(UrlError::InvalidCharacter);
         }
 
@@ -417,6 +422,17 @@ fn has_valid_percent_encoding(value: &str) -> bool {
     true
 }
 
+fn contains_encoded_windows_drive_colon(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    bytes.len() >= 6
+        && bytes[0] == b'/'
+        && bytes[1].is_ascii_alphabetic()
+        && bytes[2] == b'%'
+        && bytes[3] == b'3'
+        && bytes[4].eq_ignore_ascii_case(&b'a')
+        && bytes[5] == b'/'
+}
+
 fn contains_encoded_path_separator(path: &str) -> bool {
     let bytes = path.as_bytes();
     bytes.windows(3).any(|sequence| {
@@ -579,6 +595,26 @@ mod tests {
         assert_eq!(url.authority(), "");
         assert_eq!(url.path(), "/tmp/index.html");
         assert_eq!(url.to_string(), "file:///tmp/index.html");
+    }
+
+    #[test]
+    fn file_urls_reject_percent_encoded_windows_drive_colons() {
+        for input in [
+            "file:///C%3A/../Windows/system.ini",
+            "file:///d%3a/Users/example/index.html",
+        ] {
+            assert_eq!(
+                Url::parse(input).unwrap_err(),
+                UrlError::InvalidCharacter,
+                "encoded drive colon must not change path normalization: {input}"
+            );
+        }
+
+        let base = Url::parse("file:///C:/Users/example/index.html").unwrap();
+        assert_eq!(
+            base.resolve("/D%3A/Windows/system.ini").unwrap_err(),
+            UrlError::InvalidCharacter
+        );
     }
 
     #[test]
