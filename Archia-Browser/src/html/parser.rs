@@ -5,6 +5,8 @@ const VOID_ELEMENTS: &[&str] = &[
     "track", "wbr",
 ];
 
+const MAX_DOM_DEPTH: usize = 256;
+
 const BLOCK_CLOSES_P: &[&str] = &[
     "address",
     "article",
@@ -42,8 +44,30 @@ const BLOCK_CLOSES_P: &[&str] = &[
 pub fn parse(tokens: &[HtmlToken]) -> Node {
     let mut root = Node::document();
     let mut stack: Vec<Node> = Vec::new();
+    // Keep malformed hostile nesting from making open-element searches
+    // quadratic or creating a tree too deep for recursive DOM consumers.
+    // Once the limit is reached, discard that subtree until its matching
+    // end tag; tokenization already bounds the total input and token count.
+    let mut suppressed: Vec<String> = Vec::new();
 
     for token in tokens {
+        if !suppressed.is_empty() {
+            match token {
+                HtmlToken::StartTag { name, self_closing: _, .. }
+                    if !VOID_ELEMENTS.contains(&name.as_str()) =>
+                {
+                    suppressed.push(name.clone());
+                }
+                HtmlToken::EndTag(name) => {
+                    if let Some(position) = suppressed.iter().rposition(|open| open == name) {
+                        suppressed.truncate(position);
+                    }
+                }
+                _ => {}
+            }
+            continue;
+        }
+
         match token {
             HtmlToken::Doctype(_) => {}
             HtmlToken::Comment(comment) => {
@@ -80,6 +104,8 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // an end tag; treating <div/> as empty changes the DOM tree.
                 if VOID_ELEMENTS.contains(&name.as_str()) {
                     append_node(&mut root, &mut stack, node);
+                } else if stack.len() >= MAX_DOM_DEPTH {
+                    suppressed.push(name.clone());
                 } else {
                     stack.push(node);
                 }
@@ -212,6 +238,19 @@ fn normalize_document_structure(mut root: Node) -> Node {
 mod tests {
     use super::*;
     use crate::html::tokenizer::HtmlTokenizer;
+
+    #[test]
+    fn excessive_nesting_is_discarded_without_corrupting_following_siblings() {
+        let mut html = "<div>".repeat(MAX_DOM_DEPTH + 32);
+        html.push_str("discarded");
+        html.push_str(&"</div>".repeat(MAX_DOM_DEPTH + 32));
+        html.push_str("<p>visible</p>");
+
+        let root = parse(&HtmlTokenizer::tokenize(&html));
+
+        assert_eq!(root.text_content(), "visible");
+        assert_eq!(root.children[0].children[1].children[0].tag_name(), Some("p"));
+    }
 
     #[test]
     fn builds_basic_tree() {
