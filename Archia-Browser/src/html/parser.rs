@@ -80,9 +80,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 attributes,
                 self_closing: _,
             } => {
-                if name == "p" && has_open(&stack, "p") {
-                    close_element(&mut root, &mut stack, "p");
-                } else if is_block_closing_p(name) && has_open(&stack, "p") {
+                if (name == "p" || is_block_closing_p(name)) && has_open(&stack, "p") {
                     close_element(&mut root, &mut stack, "p");
                 }
 
