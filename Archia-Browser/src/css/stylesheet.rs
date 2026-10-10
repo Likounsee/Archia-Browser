@@ -456,8 +456,12 @@ fn resolve_css_value(
     resolve_variables(&wide, variables, 0)
 }
 
+const MAX_RESOLVED_CSS_VALUE_BYTES: usize = 64 * 1024;
+
 fn resolve_variables(value: &str, variables: &ComputedStyle, depth: usize) -> String {
-    if depth >= 16 {
+    // Variable substitution can amplify a short declaration into a huge string
+    // when custom properties recursively repeat other properties.
+    if depth >= 16 || value.len() > MAX_RESOLVED_CSS_VALUE_BYTES {
         return value.to_owned();
     }
     let Some(start) = value.find("var(") else {
@@ -489,8 +493,17 @@ fn resolve_variables(value: &str, variables: &ComputedStyle, depth: usize) -> St
     let Some(replacement) = replacement else {
         return value.to_owned();
     };
+
+    let resulting_len = value
+        .len()
+        .saturating_sub(end + 1 - start)
+        .saturating_add(replacement.len());
+    if resulting_len > MAX_RESOLVED_CSS_VALUE_BYTES {
+        return value.to_owned();
+    }
+
     let replacement = resolve_variables(&replacement, variables, depth + 1);
-    let mut output = String::with_capacity(value.len() + replacement.len());
+    let mut output = String::with_capacity(resulting_len);
     output.push_str(&value[..start]);
     output.push_str(&replacement);
     output.push_str(&value[end + 1..]);
@@ -652,6 +665,18 @@ mod tests {
         assert!(sheet
             .matching_rules_path_with_siblings(&[], &[], &[])
             .is_empty());
+    }
+
+    #[test]
+    fn custom_property_expansion_is_bounded() {
+        let mut variables = ComputedStyle::default();
+        variables.set("--large", "x".repeat(40 * 1024));
+        let value = "var(--large)var(--large)";
+
+        let resolved = resolve_variables(value, &variables, 0);
+
+        assert_eq!(resolved, value);
+        assert!(resolved.len() <= MAX_RESOLVED_CSS_VALUE_BYTES);
     }
 
     #[test]
