@@ -26,7 +26,12 @@ impl From<net::UrlError> for LinkActivationError {
 
 fn local_path_to_file_url(path: &std::path::Path) -> String {
     let mut url = String::from("file://");
-    let path = path.to_string_lossy().replace('\\', "/");
+    let path = path.to_string_lossy();
+    // Windows canonicalize() may return an extended-length path such as
+    // \\\\?\\C:\\...; that prefix is an OS path namespace, not URL syntax.
+    #[cfg(windows)]
+    let path = path.strip_prefix("\\\\?\\").unwrap_or(path.as_ref());
+    let path = path.replace('\\', "/");
     if !path.starts_with('/') {
         url.push('/');
     }
@@ -433,10 +438,11 @@ mod tests {
             std::process::id()
         ));
         std::fs::write(&path, b"<title>Local</title><body>Hello</body>").unwrap();
+        let normalized_path = path.to_string_lossy().replace('\\', "/");
         let url = if cfg!(windows) {
-            format!("file:///{}", path.display())
+            format!("file:///{}", normalized_path)
         } else {
-            format!("file://{}", path.display())
+            format!("file://{}", normalized_path)
         };
 
         let mut browser = Browser::new();
