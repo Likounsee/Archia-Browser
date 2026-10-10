@@ -733,6 +733,33 @@ mod tests {
     }
 
     #[test]
+    fn vary_response_evicts_an_older_representation_for_the_same_key() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/language");
+        cache.store(
+            &request,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_body(b"english".to_vec()),
+        );
+        assert_eq!(cache.get(&request).unwrap().body, b"english");
+
+        // Since this cache does not implement Vary matching, a later response
+        // with Vary must invalidate the older representation rather than
+        // leave a potentially incorrect language-specific response reusable.
+        cache.store(
+            &request,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_header("vary", "accept-language")
+                .with_body(b"localized".to_vec()),
+        );
+
+        assert!(cache.get(&request).is_none());
+        assert!(cache.is_empty());
+    }
+
+    #[test]
     fn no_store_and_no_cache_bypass_reuse() {
         let mut cache = HttpCache::default();
         let request = make_request("https://example.org/");
