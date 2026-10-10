@@ -14,6 +14,7 @@ on:
       - "Cargo.lock"
       - "fuzz/Cargo.toml"
       - "fuzz/fuzz_targets/**"
+      - "fuzz/corpus/**"
       - "Archia-Browser/src/net/url.rs"
       - "Archia-Browser/src/net/loader.rs"
       - "Archia-Browser/src/net/pipeline.rs"
