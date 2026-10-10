@@ -33,6 +33,20 @@ doc = false
 bench = false
 
 [[bin]]
+name = "css_stylesheet"
+path = "fuzz_targets/css_stylesheet.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "css_selector"
+path = "fuzz_targets/css_selector.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "url_parse_resolve"
 path = "fuzz_targets/url_parse_resolve.rs"
 test = false
