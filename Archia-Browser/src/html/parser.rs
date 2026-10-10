@@ -60,7 +60,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                     close_element(&mut root, &mut stack, "p");
                 }
 
-                if name == "li" && has_open(&stack, "li") {
+                if name == "li" && has_open_list_item_in_current_list(&stack) {
                     close_element(&mut root, &mut stack, "li");
                 }
 
@@ -96,6 +96,17 @@ fn append_node(root: &mut Node, stack: &mut [Node], node: Node) {
 
 fn has_open(stack: &[Node], name: &str) -> bool {
     stack.iter().any(|node| node.tag_name() == Some(name))
+}
+
+fn has_open_list_item_in_current_list(stack: &[Node]) -> bool {
+    for node in stack.iter().rev() {
+        match node.tag_name() {
+            Some("li") => return true,
+            Some("ol" | "ul") => return false,
+            _ => {}
+        }
+    }
+    false
 }
 
 fn is_block_closing_p(name: &str) -> bool {
@@ -231,6 +242,23 @@ mod tests {
         assert_eq!(body.children.len(), 2);
         assert_eq!(body.children[0].tag_name(), Some("p"));
         assert_eq!(body.children[1].tag_name(), Some("div"));
+    }
+
+    #[test]
+    fn nested_list_items_do_not_close_the_outer_list_item() {
+        let tokens = HtmlTokenizer::tokenize(
+            "<ul><li>outer<ul><li>inner</li></ul></li><li>second</li></ul>",
+        );
+        let root = parse(&tokens);
+        let body = &root.children[0].children[1];
+        let outer_list = &body.children[0];
+        let outer_item = &outer_list.children[0];
+        let nested_list = outer_item.find_first_element("ul").unwrap();
+
+        assert_eq!(outer_item.text_content(), "outerinner");
+        assert_eq!(nested_list.children.len(), 2);
+        assert_eq!(nested_list.children[0].text_content(), "inner");
+        assert_eq!(outer_list.children[1].text_content(), "second");
     }
 
     #[test]
