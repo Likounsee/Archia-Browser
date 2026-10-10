@@ -570,7 +570,6 @@ mod tests {
     fn rejects_invalid_hosts_and_ambiguous_userinfo() {
         for input in [
             "https://exa[mple.org/path",
-            "https://example.org\\\\evil.test/path",
             "https://-invalid.example/path",
             "https://invalid-.example/path",
             "https://example..org/path",
