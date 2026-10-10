@@ -460,7 +460,7 @@ impl fmt::Display for UrlError {
             Self::UnsupportedFileAuthority => "file URL uses an unsupported authority",
             Self::InvalidCharacter => {
                 "URL contains disallowed whitespace, control characters, or backslashes"
-            },
+            }
             Self::InvalidAuthority => "URL authority has an invalid host or port",
         })
     }
