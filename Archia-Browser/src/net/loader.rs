@@ -557,24 +557,7 @@ fn is_redirect(status: u16) -> bool {
 }
 
 fn same_origin(left: &super::Url, right: &super::Url) -> bool {
-    // Url values do not carry a document's opaque-origin identity. Treat file
-    // URLs as cross-origin here rather than collapsing all file:/// paths into
-    // one tuple origin.
-    if left.scheme() == "file" || right.scheme() == "file" {
-        return false;
-    }
-
-    left.scheme().eq_ignore_ascii_case(right.scheme())
-        && left.host().eq_ignore_ascii_case(right.host())
-        && origin_port(left) == origin_port(right)
-}
-
-fn origin_port(url: &super::Url) -> Option<u16> {
-    url.port().or(match url.scheme() {
-        "http" => Some(80),
-        "https" => Some(443),
-        _ => None,
-    })
+    left.same_origin(right)
 }
 
 /// Apply a conservative strict-origin-when-cross-origin referrer policy.
