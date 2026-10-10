@@ -972,10 +972,7 @@ fn decode_chunked(
             return Err(TransportError::ConnectionFailed);
         }
         let (size_text, extensions) = match line.split_once(';') {
-            Some((size, extensions)) => (
-                size.trim_end_matches([' ', '\t']),
-                Some(extensions),
-            ),
+            Some((size, extensions)) => (size.trim_end_matches([' ', '\t']), Some(extensions)),
             None => (line, None),
         };
         if size_text.is_empty()
