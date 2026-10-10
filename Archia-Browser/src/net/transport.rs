@@ -1532,8 +1532,7 @@ mod tests {
         let exact = Request::new(url.clone()).with_body(vec![b'x'; MAX_REQUEST_BODY_BYTES]);
         assert_eq!(validate_request(&exact), Ok(()));
 
-        let oversized =
-            Request::new(url).with_body(vec![b'x'; MAX_REQUEST_BODY_BYTES + 1]);
+        let oversized = Request::new(url).with_body(vec![b'x'; MAX_REQUEST_BODY_BYTES + 1]);
         assert_eq!(
             validate_request(&oversized),
             Err(TransportError::InvalidRequest)
