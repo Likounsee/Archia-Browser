@@ -33,6 +33,9 @@ jobs:
       - name: Fuzz CSS tokenization
         run: cargo +nightly fuzz run css_tokenize -- -max_total_time=90 -print_final_stats=1
         working-directory: fuzz
+      - name: Fuzz cookie parsing and selection
+        run: cargo +nightly fuzz run cookie_parse -- -max_total_time=90 -print_final_stats=1
+        working-directory: fuzz
       - name: Upload crashing fuzz inputs
         if: failure()
         uses: actions/upload-artifact@v4
