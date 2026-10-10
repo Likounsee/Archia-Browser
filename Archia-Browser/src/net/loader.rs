@@ -306,9 +306,13 @@ where
         }
 
         let mut current = url;
+        let mut visited_redirect_targets = HashSet::new();
 
         for _ in 0..=MAX_REDIRECTS {
             if *request_budget == 0 || !matches!(current.scheme(), "http" | "https" | "file") {
+                return None;
+            }
+            if !visited_redirect_targets.insert(redirect_loop_key(&current)) {
                 return None;
             }
 
@@ -1284,6 +1288,45 @@ mod tests {
             "the file URL must never reach the transport"
         );
         assert!(requests.iter().all(|url| !url.starts_with("file:")));
+    }
+
+    #[test]
+    fn linked_stylesheet_redirect_loops_stop_before_repeating_the_request() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+
+        struct StylesheetLoopTransport(Arc<AtomicUsize>);
+
+        impl Transport for StylesheetLoopTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                if request.policy.resource_kind == ResourceKind::Document {
+                    return Ok(Response::new(200)
+                        .with_header("content-type", "text/html")
+                        .with_body(
+                            br#"<link rel="stylesheet" href="/loop.css"><body>Safe</body>"#
+                                .to_vec(),
+                        ));
+                }
+                Ok(Response::new(302).with_header("location", "/loop.css#alternate"))
+            }
+        }
+
+        let sends = Arc::new(AtomicUsize::new(0));
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            StylesheetLoopTransport(Arc::clone(&sends)),
+        );
+        let request = Request::new(Url::parse("https://example.org/page").unwrap());
+
+        assert!(loader.load(&request, LayoutViewport::new(320, 200)).is_ok());
+        assert_eq!(
+            sends.load(Ordering::SeqCst),
+            2,
+            "the stylesheet redirect loop should stop after one stylesheet request"
+        );
     }
 
     #[test]
