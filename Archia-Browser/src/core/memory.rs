@@ -153,7 +153,8 @@ mod tests {
         let budget = Arc::new(MemoryBudget::new(4096));
         for iteration in 0..1_000 {
             let bytes = iteration % 512 + 1;
-            let reservation = MemoryReservation::try_new(Arc::clone(&budget), bytes).unwrap();
+            let reservation =
+                MemoryReservation::try_new(Arc::clone(&budget), bytes).unwrap();
             assert_eq!(budget.used(), bytes);
             drop(reservation);
             assert_eq!(budget.used(), 0);
@@ -182,11 +183,14 @@ mod tests {
 
         let mut successful_reservations = 0;
         for worker in workers {
-            successful_reservations += usize::from(worker.join().unwrap());
+            if worker.join().unwrap() {
+                successful_reservations += 1;
+            }
         }
         assert!(successful_reservations <= 8);
         assert_eq!(budget.used(), 0);
     }
+
     #[test]
     fn over_release_does_not_erase_existing_reservations() {
         let budget = MemoryBudget::new(1024);
