@@ -1949,10 +1949,9 @@ mod tests {
             }
         }
 
-        let mut request =
-            Request::new(Url::parse("http://example.org/").unwrap())
-                .with_method(super::super::HttpMethod::Post)
-                .with_body(b"Hello".to_vec());
+        let mut request = Request::new(Url::parse("http://example.org/").unwrap())
+            .with_method(super::super::HttpMethod::Post)
+            .with_body(b"Hello".to_vec());
         request.headers.insert("Content-Length".into(), "5".into());
         let mut stream = CaptureStream::default();
         HttpTransport::new()
