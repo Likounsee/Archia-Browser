@@ -821,7 +821,10 @@ fn valid_chunk_extensions(input: &str) -> bool {
             return false;
         }
         cursor += 1;
-        while bytes.get(cursor).is_some_and(|byte| matches!(byte, b' ' | b'\t')) {
+        while bytes
+            .get(cursor)
+            .is_some_and(|byte| matches!(byte, b' ' | b'\t'))
+        {
             cursor += 1;
         }
 
