@@ -388,7 +388,7 @@ impl CookieJar {
             .collect::<Vec<_>>();
         // RFC 6265 sends longer, more-specific paths first. Keep insertion
         // order stable for cookies whose paths have equal lengths.
-        matching.sort_by(|first, second| second.path.len().cmp(&first.path.len()));
+        matching.sort_by_key(|cookie| std::cmp::Reverse(cookie.path.len()));
         // Bound the request header independently from cookie count. A jar
         // can contain many individually valid cookies, but emitting all of
         // them can create multi-megabyte request headers.
