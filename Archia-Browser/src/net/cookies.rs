@@ -816,6 +816,21 @@ mod tests {
     }
 
     #[test]
+    fn cookie_jar_enforces_global_storage_cap_across_domains() {
+        let mut jar = CookieJar::new();
+
+        for domain in 0..(MAX_COOKIES / MAX_COOKIES_PER_DOMAIN + 2) {
+            let url = Url::parse(&format!("https://host{domain}.example.org/")).unwrap();
+            for index in 0..MAX_COOKIES_PER_DOMAIN {
+                jar.store(&url, &format!("cookie{index}=value"));
+            }
+        }
+
+        assert_eq!(jar.len(), MAX_COOKIES);
+        assert!(jar.len() <= MAX_COOKIES);
+    }
+
+    #[test]
     fn replaces_same_cookie_key() {
         let url = Url::parse("https://example.org/").unwrap();
         let mut jar = CookieJar::new();
