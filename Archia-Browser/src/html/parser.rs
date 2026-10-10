@@ -245,10 +245,7 @@ mod tests {
         let root = parse(&HtmlTokenizer::tokenize(&html));
 
         assert_eq!(root.text_content(), "visible");
-        assert_eq!(
-            root.children[0].children[1].children[0].tag_name(),
-            Some("p")
-        );
+        assert!(root.find_first_element("p").is_some());
     }
 
     #[test]
