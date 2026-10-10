@@ -90,6 +90,7 @@ impl CookieJar {
                         if domain.is_empty()
                             || domain.starts_with('.')
                             || domain.ends_with('.')
+                            || is_public_suffix(&domain)
                             || !cookie_domain_matches(&host, &domain)
                         {
                             return;
@@ -307,6 +308,17 @@ impl CookieJar {
     }
 }
 
+fn is_public_suffix(domain: &str) -> bool {
+    // Fail closed if the PSL cannot classify the supplied domain. Without
+    // this check, Domain=co.uk on shop.example.co.uk would leak a cookie to
+    // unrelated registrants under the same public suffix. The PSL crate
+    // includes both ICANN and PRIVATE sections, matching browser cookie scope.
+    match psl::suffix(domain.as_bytes()) {
+        Some(suffix) => suffix.as_bytes() == domain.as_bytes(),
+        None => true,
+    }
+}
+
 fn cookie_domain_matches(host: &str, domain: &str) -> bool {
     if host == domain {
         return true;
@@ -435,6 +447,32 @@ mod tests {
         assert_eq!(
             jar.header_for(&Url::parse("https://sub.example.org/account").unwrap()),
             None
+        );
+    }
+
+    #[test]
+    fn rejects_public_and_private_suffix_cookie_domains() {
+        let mut public_suffix_jar = CookieJar::new();
+        let public_suffix_host = Url::parse("https://shop.example.co.uk/").unwrap();
+        public_suffix_jar.store(&public_suffix_host, "sid=bad; Domain=co.uk");
+        assert!(public_suffix_jar.is_empty());
+
+        let mut private_suffix_jar = CookieJar::new();
+        let private_suffix_host = Url::parse("https://alice.github.io/").unwrap();
+        private_suffix_jar.store(&private_suffix_host, "sid=bad; Domain=github.io");
+        assert!(private_suffix_jar.is_empty());
+    }
+
+    #[test]
+    fn accepts_registrable_domain_cookie_scope() {
+        let url = Url::parse("https://shop.example.co.uk/").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&url, "sid=shared; Domain=example.co.uk");
+
+        assert_eq!(
+            jar.header_for(&Url::parse("https://cdn.example.co.uk/").unwrap()).as_deref(),
+            Some("sid=shared")
         );
     }
 
