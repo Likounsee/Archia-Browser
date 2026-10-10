@@ -871,10 +871,7 @@ mod tests {
             }
         }
 
-        let loader = DocumentLoader::new(
-            NetworkPipeline::new(AllowAll),
-            CookieInspectTransport,
-        );
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), CookieInspectTransport);
         let destination = Url::parse("https://example.org/account").unwrap();
         let initiator = Url::parse("https://attacker.test/").unwrap();
         {
