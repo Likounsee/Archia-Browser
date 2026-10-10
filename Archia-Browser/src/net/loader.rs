@@ -1723,6 +1723,67 @@ mod tests {
     }
 
     #[test]
+    fn cross_origin_308_preserves_post_body_but_strips_credentials() {
+        #[derive(Debug)]
+        struct RecordingTransport {
+            responses: std::sync::Mutex<Vec<Response>>,
+            requests: std::sync::Mutex<Vec<Request>>,
+        }
+
+        impl Transport for RecordingTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                self.requests.lock().unwrap().push(request.clone());
+                Ok(self.responses.lock().unwrap().remove(0))
+            }
+        }
+
+        let transport = RecordingTransport {
+            responses: std::sync::Mutex::new(vec![
+                Response::new(308).with_header("location", "https://other.example/submit"),
+                Response::new(200)
+                    .with_header("content-type", "text/html")
+                    .with_body(b"<body>submitted</body>".to_vec()),
+            ]),
+            requests: std::sync::Mutex::new(Vec::new()),
+        };
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
+        let mut request = Request::new(Url::parse("https://example.org/submit").unwrap())
+            .with_method(HttpMethod::Post)
+            .with_body(b"private payload".to_vec())
+            .with_header("content-type", "application/octet-stream")
+            .with_header("authorization", "Bearer secret")
+            .with_header("cookie", "sid=secret")
+            .with_header("x-custom-secret", "secret")
+            .with_header("accept", "text/html");
+        request.headers.insert("content-length".into(), "15".into());
+
+        loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .unwrap();
+
+        let requests = loader.transport.requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0].method, HttpMethod::Post);
+        assert_eq!(requests[1].method, HttpMethod::Post);
+        assert_eq!(requests[1].body, b"private payload");
+        assert!(requests[1]
+            .headers
+            .iter()
+            .any(|(name, value)| name.eq_ignore_ascii_case("content-type")
+                && value == "application/octet-stream"));
+        assert!(requests[1]
+            .headers
+            .iter()
+            .any(|(name, value)| name.eq_ignore_ascii_case("content-length") && value == "15"));
+        for name in ["authorization", "cookie", "x-custom-secret"] {
+            assert!(
+                !has_header_case_insensitive(&requests[1].headers, name),
+                "{name} must not cross a 308 origin boundary"
+            );
+        }
+    }
+
+    #[test]
     fn cross_origin_301_switches_post_to_get_and_removes_entity_headers() {
         #[derive(Debug)]
         struct RecordingTransport {
