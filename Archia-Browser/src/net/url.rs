@@ -1029,11 +1029,19 @@ mod tests {
         }
 
         assert_eq!(
-            Url::parse("file:///safe/%2e%2e/private.txt")
-                .unwrap()
-                .path(),
-            "/private.txt"
+            Url::parse("file:///safe/%2e%2e/private.txt").unwrap_err(),
+            UrlError::InvalidCharacter,
+            "local-file URLs must reject encoded dot segments before filesystem decoding"
         );
+
+        let base = Url::parse("file:///safe/index.html").unwrap();
+        for reference in ["%2e%2e/private.txt", ".%2e/private.txt", "%2e/private.txt"] {
+            assert_eq!(
+                base.resolve(reference).unwrap_err(),
+                UrlError::InvalidCharacter,
+                "local-file references must reject encoded dot segments: {reference}"
+            );
+        }
     }
 
     #[test]
