@@ -47,6 +47,17 @@ mod tests {
     use crate::net::Url;
 
     #[test]
+    fn equivalent_ipv6_spellings_have_the_same_origin() {
+        let compressed = Origin::from_url(&Url::parse("https://[2001:db8::1]/a").unwrap());
+        let expanded =
+            Origin::from_url(&Url::parse("https://[2001:0DB8:0:0:0:0:0:1]/b").unwrap());
+
+        assert!(compressed.same_origin(&expanded));
+        assert_eq!(compressed.host(), "2001:db8::1");
+        assert_eq!(expanded.host(), "2001:db8::1");
+    }
+
+    #[test]
     fn compares_web_origins() {
         let a = Origin::from_url(&Url::parse("https://example.org/a").unwrap());
         let b = Origin::from_url(&Url::parse("https://example.org/b").unwrap());
