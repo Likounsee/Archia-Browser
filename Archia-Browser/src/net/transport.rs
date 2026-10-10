@@ -1198,16 +1198,20 @@ mod tests {
             "http://example.org:bad/",
             "http://example.org:99999/",
             "http://example.org:/",
-            "http://user@example.org/",
             "http://example.org:80:90/",
         ] {
-            let request = Request::new(Url::parse(input).unwrap());
-            assert_eq!(
-                HttpTransport::new().send(&request),
-                Err(TransportError::InvalidRequest),
-                "expected {input} to be rejected"
+            assert!(
+                Url::parse(input).is_err(),
+                "expected malformed URL authority to be rejected: {input}"
             );
         }
+
+        let request = Request::new(Url::parse("http://user@example.org/").unwrap());
+        assert_eq!(
+            HttpTransport::new().send(&request),
+            Err(TransportError::InvalidRequest),
+            "userinfo must be rejected by the HTTP transport"
+        );
     }
 
     #[test]
@@ -1224,11 +1228,9 @@ mod tests {
             "http://example..org./",
             "http://./",
         ] {
-            let request = Request::new(Url::parse(input).unwrap());
-            assert_eq!(
-                validate_request(&request),
-                Err(TransportError::InvalidRequest),
-                "expected {input} to be rejected"
+            assert!(
+                Url::parse(input).is_err(),
+                "expected empty DNS labels to be rejected: {input}"
             );
         }
     }
