@@ -6,7 +6,8 @@ check is only Done after the implementation and regression coverage have been in
 execution status is tracked separately and must not be inferred from tests merely existing
 in source.
 
-## P0-1 — URL and origin parsing
+## P0-1 — URL and origin parsing (targeted fixes complete; broader consumer audit still open)
+- [ ] Complete the deferred cross-consumer audit across URL, origin, policy, cache, loader, and local-file handling; the checked items below record targeted fixes, not closure of the full audit.
 - [x] Reject malformed URL authorities (invalid host characters, malformed userinfo, ports, and IPv6).
 - [x] Ensure origin, cookie, policy, and transport code use consistent host/port interpretation.
 - [x] Add regression cases for malformed and valid authority forms.
