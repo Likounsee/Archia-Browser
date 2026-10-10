@@ -1144,9 +1144,12 @@ mod tests {
             );
         }
 
-        let zero_length =
-            parse_http_response(b"HTTP/1.1 205 Reset Content\r\nContent-Length: 0\r\n\r\n", 1024, 1024)
-                .unwrap();
+        let zero_length = parse_http_response(
+            b"HTTP/1.1 205 Reset Content\r\nContent-Length: 0\r\n\r\n",
+            1024,
+            1024,
+        )
+        .unwrap();
         assert!(zero_length.body.is_empty());
     }
 
