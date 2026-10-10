@@ -664,6 +664,14 @@ fn parse_http_response_for_method(
             .map(|length| trim_http_ows(length).parse::<usize>())
             .transpose()
             .map_err(|_| TransportError::ConnectionFailed)?;
+        // 205 Reset Content must carry no content. Reject transfer coding
+        // (which this no-body parser cannot consume) and non-zero lengths.
+        if response.status == 205
+            && (transfer_encoding.is_some()
+                || parsed_content_length.is_some_and(|length| length != 0))
+        {
+            return Err(TransportError::ConnectionFailed);
+        }
         let is_chunked = match transfer_encoding {
             Some(value) if trim_http_ows(value).eq_ignore_ascii_case("chunked") => true,
             Some(_) => return Err(TransportError::ConnectionFailed),
@@ -1122,6 +1130,24 @@ mod tests {
 
         assert_eq!(response.status, 200);
         assert_eq!(response.body, b"Hello");
+    }
+
+    #[test]
+    fn reset_content_requires_zero_length_framing() {
+        for response in [
+            b"HTTP/1.1 205 Reset Content\r\nContent-Length: 1\r\n\r\n".as_slice(),
+            b"HTTP/1.1 205 Reset Content\r\nTransfer-Encoding: chunked\r\n\r\n".as_slice(),
+        ] {
+            assert_eq!(
+                parse_http_response(response, 1024, 1024),
+                Err(TransportError::ConnectionFailed)
+            );
+        }
+
+        let zero_length =
+            parse_http_response(b"HTTP/1.1 205 Reset Content\r\nContent-Length: 0\r\n\r\n", 1024, 1024)
+                .unwrap();
+        assert!(zero_length.body.is_empty());
     }
 
     #[test]
