@@ -1,10 +1,14 @@
 use crate::net::Url;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static NEXT_OPAQUE_ORIGIN_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Origin {
     scheme: String,
     host: String,
     port: Option<u16>,
+    opaque_id: Option<u64>,
 }
 
 impl Origin {
@@ -13,6 +17,11 @@ impl Origin {
             scheme: url.scheme().to_ascii_lowercase(),
             host: url.host().to_ascii_lowercase(),
             port: url.port(),
+            // Local-file URLs must not all collapse to the same tuple origin.
+            // Give each constructed file origin a distinct identity; clones
+            // retain that identity, while independently created origins do not.
+            opaque_id: (url.scheme() == "file")
+                .then(|| NEXT_OPAQUE_ORIGIN_ID.fetch_add(1, Ordering::Relaxed)),
         }
     }
 
@@ -27,16 +36,20 @@ impl Origin {
     }
 
     pub fn same_origin(&self, other: &Self) -> bool {
+        if self.opaque_id.is_some() || other.opaque_id.is_some() {
+            return self.opaque_id.is_some() && self.opaque_id == other.opaque_id;
+        }
+
         self.scheme == other.scheme
             && self.host == other.host
             && self.effective_port() == other.effective_port()
     }
 
-    fn effective_port(&self) -> u16 {
-        self.port.unwrap_or(match self.scheme.as_str() {
-            "http" => 80,
-            "https" => 443,
-            _ => 0,
+    fn effective_port(&self) -> Option<u16> {
+        self.port.or(match self.scheme.as_str() {
+            "http" => Some(80),
+            "https" => Some(443),
+            _ => None,
         })
     }
 }
@@ -54,6 +67,27 @@ mod tests {
         assert!(compressed.same_origin(&expanded));
         assert_eq!(compressed.host(), "2001:db8::1");
         assert_eq!(expanded.host(), "2001:db8::1");
+    }
+
+    #[test]
+    fn file_urls_have_distinct_opaque_origins() {
+        let first_url = Url::parse("file:///private/first.html").unwrap();
+        let second_url = Url::parse("file:///private/second.html").unwrap();
+        let first = Origin::from_url(&first_url);
+        let second = Origin::from_url(&second_url);
+        let first_clone = first.clone();
+
+        assert!(!first.same_origin(&second));
+        assert!(first.same_origin(&first_clone));
+    }
+
+    #[test]
+    fn non_http_origins_distinguish_missing_port_from_port_zero() {
+        let implicit = Origin::from_url(&Url::parse("custom://example.org/resource").unwrap());
+        let explicit_zero =
+            Origin::from_url(&Url::parse("custom://example.org:0/resource").unwrap());
+
+        assert!(!implicit.same_origin(&explicit_zero));
     }
 
     #[test]

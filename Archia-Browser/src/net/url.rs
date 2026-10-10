@@ -83,7 +83,7 @@ impl Url {
     pub fn same_document(&self, other: &Self) -> bool {
         self.scheme == other.scheme
             && self.host().eq_ignore_ascii_case(other.host())
-            && self.effective_port() == other.effective_port()
+            && self.origin_port() == other.origin_port()
             && self.path == other.path
             && self.query == other.query
     }
@@ -124,6 +124,16 @@ impl Url {
             "https" => 443,
             // Non-HTTP schemes have no implicit HTTP port.
             _ => 0,
+        })
+    }
+
+    // Preserve the distinction between an absent port and explicit port 0
+    // for origin/document comparisons. The transport separately rejects port 0.
+    fn origin_port(&self) -> Option<u16> {
+        self.port().or(match self.scheme.as_str() {
+            "http" => Some(80),
+            "https" => Some(443),
+            _ => None,
         })
     }
 
@@ -740,6 +750,14 @@ mod tests {
         assert_eq!(implicit.effective_port(), 0);
         assert_eq!(explicit_http_port.effective_port(), 80);
         assert!(!implicit.same_document(&explicit_http_port));
+    }
+
+    #[test]
+    fn non_http_document_comparison_distinguishes_missing_port_from_zero() {
+        let implicit = Url::parse("custom://example.org/resource").unwrap();
+        let explicit_zero = Url::parse("custom://example.org:0/resource").unwrap();
+
+        assert!(!implicit.same_document(&explicit_zero));
     }
 
     #[test]
