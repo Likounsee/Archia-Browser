@@ -154,7 +154,11 @@ fn close_element(root: &mut Node, stack: &mut Vec<Node>, name: &str) {
         }
     }
 
-    let mut matching = completed.pop().expect("matching element exists");
+    let Some(mut matching) = completed.pop() else {
+        // A matching stack position should always yield a node, but malformed
+        // input must never turn an internal invariant violation into a panic.
+        return;
+    };
     while let Some(node) = completed.pop() {
         matching.append(node);
     }
@@ -195,9 +199,11 @@ fn normalize_document_structure(mut root: Node) -> Node {
         .by_ref()
         .take(html_position)
         .collect::<Vec<_>>();
-    let mut html = root_children
-        .next()
-        .expect("the located html element exists");
+    let Some(mut html) = root_children.next() else {
+        // The position was found before taking the children; keep parsing
+        // resilient if that invariant is ever changed by future refactors.
+        return root;
+    };
     let following = root_children.collect::<Vec<_>>();
 
     let mut head = None;
