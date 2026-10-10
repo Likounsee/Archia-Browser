@@ -806,6 +806,90 @@ fn is_interim_response(status: u16) -> bool {
     (100..200).contains(&status) && status != 101
 }
 
+fn valid_chunk_extensions(input: &str) -> bool {
+    let bytes = input.as_bytes();
+    let mut cursor = 0;
+
+    while cursor < bytes.len() {
+        while bytes.get(cursor).is_some_and(|byte| matches!(byte, b' ' | b'\t')) {
+            cursor += 1;
+        }
+        if bytes.get(cursor) != Some(&b';') {
+            return false;
+        }
+        cursor += 1;
+        while bytes.get(cursor).is_some_and(|byte| matches!(byte, b' ' | b'\t')) {
+            cursor += 1;
+        }
+
+        let name_start = cursor;
+        while bytes.get(cursor).is_some_and(|byte| is_http_token_byte(*byte)) {
+            cursor += 1;
+        }
+        if cursor == name_start {
+            return false;
+        }
+
+        while bytes.get(cursor).is_some_and(|byte| matches!(byte, b' ' | b'\t')) {
+            cursor += 1;
+        }
+        if bytes.get(cursor) == Some(&b'=') {
+            cursor += 1;
+            while bytes.get(cursor).is_some_and(|byte| matches!(byte, b' ' | b'\t')) {
+                cursor += 1;
+            }
+
+            if bytes.get(cursor) == Some(&b'"') {
+                cursor += 1;
+                let mut closed = false;
+                while let Some(byte) = bytes.get(cursor).copied() {
+                    cursor += 1;
+                    match byte {
+                        b'"' => {
+                            closed = true;
+                            break;
+                        }
+                        b'\\' => {
+                            let Some(escaped) = bytes.get(cursor).copied() else {
+                                return false;
+                            };
+                            if !(escaped == b'\t' || (b' '..=b'~').contains(&escaped)) {
+                                return false;
+                            }
+                            cursor += 1;
+                        }
+                        b'\t' | b' ' | b'!' | b'#'..=b'[' | b']'..=b'~' => {}
+                        _ => return false,
+                    }
+                }
+                if !closed {
+                    return false;
+                }
+            } else {
+                let value_start = cursor;
+                while bytes.get(cursor).is_some_and(|byte| is_http_token_byte(*byte)) {
+                    cursor += 1;
+                }
+                if cursor == value_start {
+                    return false;
+                }
+            }
+        }
+
+        if cursor == bytes.len() {
+            return true;
+        }
+        if !bytes[cursor..]
+            .iter()
+            .any(|byte| !matches!(byte, b' ' | b'\t'))
+        {
+            return true;
+        }
+    }
+
+    false
+}
+
 fn decode_chunked(
     bytes: &[u8],
     max_response_size: usize,
@@ -831,8 +915,14 @@ fn decode_chunked(
         {
             return Err(TransportError::ConnectionFailed);
         }
-        let size_text = line.split(';').next().unwrap_or_default();
-        if size_text.is_empty() || !size_text.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        let (size_text, extensions) = match line.split_once(';') {
+            Some((size, extensions)) => (trim_http_ows(size), Some(extensions)),
+            None => (line, None),
+        };
+        if size_text.is_empty()
+            || !size_text.bytes().all(|byte| byte.is_ascii_hexdigit())
+            || extensions.is_some_and(|extensions| !valid_chunk_extensions(extensions))
+        {
             return Err(TransportError::ConnectionFailed);
         }
         let size =
@@ -983,7 +1073,16 @@ mod tests {
 
     #[test]
     fn rejects_invalid_chunk_size_lines() {
-        for chunk_size in [" 5", "5 ", "+5", "5;bad\u{1}extension"] {
+        for chunk_size in [
+            " 5",
+            "5 ",
+            "+5",
+            "5;bad\\u{1}extension",
+            "5;",
+            "5;=value",
+            "5;name=",
+            "5;name=\\"unterminated",
+        ] {
             let response = format!(
                 "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n{chunk_size}\r\nHello\r\n0\r\n\r\n"
             );
@@ -991,6 +1090,21 @@ mod tests {
                 parse_http_response(response.as_bytes(), 1024, 1024),
                 Err(TransportError::ConnectionFailed),
                 "chunk size line must be rejected: {chunk_size:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn accepts_valid_chunk_extensions() {
+        for extension in ["name", "name=value", "name=\"quoted value\"", "name = token"] {
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5;{extension}\r\nHello\r\n0\r\n\r\n"
+            );
+            assert_eq!(
+                parse_http_response(response.as_bytes(), 1024, 1024)
+                    .unwrap()
+                    .body,
+                b"Hello"
             );
         }
     }
