@@ -1186,7 +1186,7 @@ mod tests {
             "Trailer: X-Other",
         ] {
             let response = format!(
-                "HTTP/1.1 200 OK\\r\\nTransfer-Encoding: chunked\\r\\n\\r\\n0\\r\\n{trailer}\\r\\n\\r\\n"
+                "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n{trailer}\r\n\r\n"
             );
             assert_eq!(
                 parse_http_response(response.as_bytes(), 1024, 1024),
