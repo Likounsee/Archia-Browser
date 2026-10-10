@@ -10,6 +10,7 @@ use super::{Request, Response, Transport, TransportError};
 
 const MAX_REQUEST_HEADER_BYTES: usize = 64 * 1024;
 const MAX_REQUEST_BODY_BYTES: usize = 8 * 1024 * 1024;
+const MAX_REQUEST_HEADER_COUNT: usize = 256;
 const MAX_RESPONSE_HEADER_COUNT: usize = 256;
 const MAX_INTERIM_RESPONSES: usize = 16;
 
@@ -444,6 +445,10 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
         {
             return Err(TransportError::InvalidRequest);
         }
+    }
+
+    if request.headers.len() > MAX_REQUEST_HEADER_COUNT {
+        return Err(TransportError::InvalidRequest);
     }
 
     let mut seen_headers = std::collections::HashSet::new();
@@ -1572,6 +1577,27 @@ mod tests {
             validate_request(&Request::new(url)),
             Ok(()),
             "bodyless GET remains valid"
+        );
+    }
+
+    #[test]
+    fn request_header_count_limit_accepts_exact_boundary_and_rejects_one_over() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut exact = Request::new(url.clone());
+        for index in 0..MAX_REQUEST_HEADER_COUNT {
+            exact.headers.insert(format!("x-test-{index}"), "v".to_owned());
+        }
+        assert_eq!(validate_request(&exact), Ok(()));
+
+        let mut oversized = Request::new(url);
+        for index in 0..=MAX_REQUEST_HEADER_COUNT {
+            oversized
+                .headers
+                .insert(format!("x-test-{index}"), "v".to_owned());
+        }
+        assert_eq!(
+            validate_request(&oversized),
+            Err(TransportError::InvalidRequest)
         );
     }
 
