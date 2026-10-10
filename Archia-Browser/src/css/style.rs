@@ -53,6 +53,10 @@ impl ComputedStyle {
         self.properties.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.properties.is_empty()
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
         self.properties
             .iter()
