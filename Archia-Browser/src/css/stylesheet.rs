@@ -5,6 +5,8 @@ const MAX_STYLESHEET_BYTES: usize = 256 * 1024;
 const MAX_STYLE_RULES: usize = 256;
 const MAX_SELECTOR_BYTES: usize = 512;
 const MAX_SELECTORS_PER_RULE: usize = 32;
+const MAX_TOTAL_SELECTORS: usize = 64;
+const MAX_SELECTOR_PARTS: usize = 16;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StyleRule {
@@ -32,9 +34,13 @@ impl StyleSheet {
             input
         };
         let mut rules = Vec::new();
+        let mut total_selectors = 0usize;
         for (selector_text, declaration_text) in
             parse_rule_blocks(input).into_iter().take(MAX_STYLE_RULES)
         {
+            if total_selectors >= MAX_TOTAL_SELECTORS {
+                break;
+            }
             // Nested at-rules (for example @media) are intentionally ignored until
             // the engine implements their conditions; never misinterpret them as selectors.
             if selector_text.trim_start().starts_with('@')
@@ -43,14 +49,19 @@ impl StyleSheet {
                 continue;
             }
 
-            let selectors = split_selector_list(&selector_text, MAX_SELECTORS_PER_RULE)
-                .into_iter()
-                .filter(|selector| selector.len() <= MAX_SELECTOR_BYTES)
-                .filter_map(|selector| Selector::parse(&selector))
-                .collect::<Vec<_>>();
+            let selectors = split_selector_list(
+                &selector_text,
+                MAX_SELECTORS_PER_RULE.min(MAX_TOTAL_SELECTORS - total_selectors),
+            )
+            .into_iter()
+            .filter(|selector| selector.len() <= MAX_SELECTOR_BYTES)
+            .filter_map(|selector| Selector::parse(&selector))
+            .filter(|selector| selector.parts.len() <= MAX_SELECTOR_PARTS)
+            .collect::<Vec<_>>();
             if selectors.is_empty() {
                 continue;
             }
+            total_selectors += selectors.len();
 
             let declarations = parse_declarations(&CssTokenizer::tokenize(&declaration_text));
             rules.push(StyleRule {
@@ -680,6 +691,28 @@ mod tests {
 
         assert!(resolved.len() <= MAX_RESOLVED_CSS_VALUE_BYTES);
         assert!(resolved.contains("var(--large)"));
+    }
+
+    #[test]
+    fn stylesheet_parser_caps_total_selector_count_and_parts() {
+        let rule = (0..MAX_SELECTORS_PER_RULE)
+            .map(|index| format!(".item{index}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let input = (0..8)
+            .map(|_| format!("{rule} {{ color: red; }}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let sheet = StyleSheet::parse(&input);
+        let total = sheet.rules.iter().map(|rule| rule.selectors.len()).sum::<usize>();
+
+        assert_eq!(total, MAX_TOTAL_SELECTORS);
+
+        let too_complex = format!("{} {{ color: red; }}", (0..MAX_SELECTOR_PARTS + 2)
+            .map(|_| "div")
+            .collect::<Vec<_>>()
+            .join(" "));
+        assert!(StyleSheet::parse(&too_complex).rules.is_empty());
     }
 
     #[test]
