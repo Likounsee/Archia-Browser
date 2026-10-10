@@ -58,10 +58,8 @@ impl Url {
         // a path such as "/.//server/share" can become a double-leading-slash
         // path only after normalization and may be interpreted as a UNC share
         // by Windows filesystem APIs.
-        let normalized_path = normalize_path_for_scheme(
-            if path.is_empty() { "/" } else { path },
-            &normalized_scheme,
-        );
+        let normalized_path =
+            normalize_path_for_scheme(if path.is_empty() { "/" } else { path }, &normalized_scheme);
         // The local-file transport percent-decodes paths before filesystem
         // access. Encoded separators could therefore create new path segments
         // after URL policy and dot-segment normalization have already run.
@@ -208,8 +206,7 @@ impl Url {
         // Apply the same file-path rule to relative references; otherwise
         // percent decoding in LocalFileTransport could change path boundaries.
         if self.scheme == "file"
-            && (contains_encoded_path_separator(path)
-                || contains_encoded_windows_drive_colon(path))
+            && (contains_encoded_path_separator(path) || contains_encoded_windows_drive_colon(path))
         {
             return Err(UrlError::InvalidCharacter);
         }
@@ -518,11 +515,8 @@ fn normalize_path_for_scheme(path: &str, scheme: &str) -> String {
     if has_windows_drive {
         let drive = &path[1..3];
         let remainder = &path[3..];
-        let normalized_remainder = normalize_path(if remainder.is_empty() {
-            "/"
-        } else {
-            remainder
-        });
+        let normalized_remainder =
+            normalize_path(if remainder.is_empty() { "/" } else { remainder });
         format!("/{drive}{normalized_remainder}")
     } else {
         normalize_path(path)
@@ -624,11 +618,23 @@ mod tests {
             ("http://example.org/", "http://example.net/", false),
             ("http://example.org:81/", "http://example.org:81/a", true),
             ("http://example.org:81/", "http://example.org:82/", false),
-            ("https://example.org:444/", "https://example.org:444/a", true),
-            ("https://example.org:444/", "https://example.org:443/", false),
+            (
+                "https://example.org:444/",
+                "https://example.org:444/a",
+                true,
+            ),
+            (
+                "https://example.org:444/",
+                "https://example.org:443/",
+                false,
+            ),
             ("http://127.0.0.1/", "http://127.0.0.1:80/a", true),
             ("http://127.0.0.1/", "http://127.0.0.2/", false),
-            ("http://[::1]:8080/", "http://[0:0:0:0:0:0:0:1]:8080/a", true),
+            (
+                "http://[::1]:8080/",
+                "http://[0:0:0:0:0:0:0:1]:8080/a",
+                true,
+            ),
             ("http://[::1]:8080/", "http://[::1]:8081/", false),
             ("https://example.org/", "http://example.org:443/", false),
             ("http://example.org:443/", "https://example.org/", false),
@@ -636,8 +642,16 @@ mod tests {
             ("http://example.org./", "http://example.org/", false),
             ("custom://example.org/a", "custom://EXAMPLE.org/b", true),
             ("custom://example.org:80/a", "custom://example.org/b", false),
-            ("custom://example.org:80/a", "custom://example.org:80/b", true),
-            ("custom://example.org:80/a", "custom://example.org:81/b", false),
+            (
+                "custom://example.org:80/a",
+                "custom://example.org:80/b",
+                true,
+            ),
+            (
+                "custom://example.org:80/a",
+                "custom://example.org:81/b",
+                false,
+            ),
             ("file:///C:/Users/a.html", "file:///C:/Users/a.html", false),
             ("file://localhost/tmp/a", "file:///tmp/a", false),
             ("http://example.org:0/", "http://example.org/", false),
@@ -692,7 +706,9 @@ mod tests {
 
         let base = Url::parse("file:///D:/Users/example/index.html").unwrap();
         assert_eq!(
-            base.resolve("../../../../Windows/system.ini").unwrap().path(),
+            base.resolve("../../../../Windows/system.ini")
+                .unwrap()
+                .path(),
             "/D:/Windows/system.ini"
         );
         assert_eq!(
