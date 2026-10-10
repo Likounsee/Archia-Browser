@@ -46,11 +46,21 @@ impl MemoryBudget {
     }
 
     pub fn release(&self, bytes: usize) {
-        let _ = self
-            .used
-            .try_update(Ordering::AcqRel, Ordering::Acquire, |used| {
-                Some(used.saturating_sub(bytes))
-            });
+        let mut current = self.used.load(Ordering::Acquire);
+        loop {
+            let Some(next) = current.checked_sub(bytes) else {
+                return;
+            };
+            match self.used.compare_exchange_weak(
+                current,
+                next,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => return,
+                Err(actual) => current = actual,
+            }
+        }
     }
 
     pub const fn limit(&self) -> usize {
@@ -117,5 +127,18 @@ mod tests {
         assert!(!budget.try_reserve(1));
         budget.release(1024);
         assert_eq!(budget.available(), 1024);
+    }
+
+    #[test]
+    fn over_release_does_not_erase_existing_reservations() {
+        let budget = MemoryBudget::new(1024);
+        assert!(budget.try_reserve(700));
+
+        budget.release(701);
+
+        assert_eq!(budget.used(), 700);
+        assert_eq!(budget.available(), 324);
+        assert!(budget.try_reserve(324));
+        assert!(!budget.try_reserve(1));
     }
 }
