@@ -269,7 +269,10 @@ mod tests {
         filter.add_rule(FilterRule::block("/%62locked"));
 
         assert_eq!(
-            filter.decide("https://example.org/blocked/resource", Some(ResourceType::Document)),
+            filter.decide(
+                "https://example.org/blocked/resource",
+                Some(ResourceType::Document)
+            ),
             FilterDecision::Block
         );
     }
