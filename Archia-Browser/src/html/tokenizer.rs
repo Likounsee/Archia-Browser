@@ -1,5 +1,9 @@
 use std::collections::BTreeMap;
 
+// Bound scanning and retained token data for untrusted documents.
+const MAX_HTML_INPUT_BYTES: usize = 4 * 1024 * 1024;
+const MAX_HTML_TOKENS: usize = 100_000;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HtmlToken {
     Doctype(String),
@@ -18,11 +22,21 @@ pub struct HtmlTokenizer;
 
 impl HtmlTokenizer {
     pub fn tokenize(input: &str) -> Vec<HtmlToken> {
+        // Truncate oversized documents only at a UTF-8 character boundary.
+        let input = if input.len() > MAX_HTML_INPUT_BYTES {
+            let mut end = MAX_HTML_INPUT_BYTES;
+            while !input.is_char_boundary(end) {
+                end -= 1;
+            }
+            &input[..end]
+        } else {
+            input
+        };
         let mut tokens = Vec::new();
         let mut cursor = 0;
         let bytes = input.as_bytes();
 
-        while cursor < bytes.len() {
+        while cursor < bytes.len() && tokens.len() < MAX_HTML_TOKENS {
             if bytes[cursor] != b'<' {
                 let end = input[cursor..]
                     .find('<')
@@ -206,6 +220,25 @@ mod tests {
     fn malformed_unicode_tag_does_not_panic() {
         let tokens = HtmlTokenizer::tokenize("<ééééé>");
         assert!(matches!(tokens.as_slice(), [HtmlToken::StartTag { name, .. }] if name == "ééééé"));
+    }
+
+    #[test]
+    fn oversized_input_is_truncated_at_a_utf8_boundary() {
+        let mut input = "a".repeat(MAX_HTML_INPUT_BYTES);
+        input.push('é');
+        let tokens = HtmlTokenizer::tokenize(&input);
+        assert_eq!(tokens.len(), 1);
+        let HtmlToken::Text(text) = &tokens[0] else {
+            panic!("expected text token");
+        };
+        assert_eq!(text.len(), MAX_HTML_INPUT_BYTES);
+    }
+
+    #[test]
+    fn token_count_is_bounded_for_many_small_tags() {
+        let input = "<b></b>".repeat(MAX_HTML_TOKENS);
+        let tokens = HtmlTokenizer::tokenize(&input);
+        assert_eq!(tokens.len(), MAX_HTML_TOKENS);
     }
 
     #[test]
