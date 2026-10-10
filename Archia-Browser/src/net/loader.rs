@@ -1104,7 +1104,7 @@ mod tests {
 
         let html = format!(
             "<head><link rel=\"stylesheet\" href=\"{}\"></head><body>Hello</body>",
-            main.to_string_lossy().replace('\\', "/")
+            local_file_test_url(&main)
         );
         let document = Response::new(200)
             .with_header("content-type", "text/html")
