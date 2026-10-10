@@ -296,10 +296,29 @@ fn file_url_path(url_path: &str) -> Result<std::path::PathBuf, TransportError> {
         return Err(TransportError::InvalidUrl(super::UrlError::InvalidCharacter));
     }
     #[cfg(windows)]
-    let path = decoded
-        .strip_prefix('/')
-        .filter(|value| value.as_bytes().get(1) == Some(&b':'))
-        .unwrap_or(&decoded);
+    let path = {
+        // Do not interpret file URLs as UNC/network-share paths. They can
+        // trigger network access and bypass the browser's ordinary HTTP policy.
+        if decoded.starts_with("//") {
+            return Err(TransportError::InvalidRequest);
+        }
+        let path = decoded
+            .strip_prefix('/')
+            .filter(|value| value.as_bytes().get(1) == Some(&b':'))
+            .unwrap_or(&decoded);
+        // Windows drive-relative paths (for example C:secret.txt) depend on
+        // the process's per-drive working directory. Accept only an absolute
+        // drive path with a slash after the colon.
+        let bytes = path.as_bytes();
+        if bytes.len() < 3
+            || !bytes[0].is_ascii_alphabetic()
+            || bytes[1] != b':'
+            || bytes[2] != b'/'
+        {
+            return Err(TransportError::InvalidRequest);
+        }
+        path
+    };
     #[cfg(not(windows))]
     let path = decoded.as_str();
     Ok(std::path::PathBuf::from(path))
@@ -1567,6 +1586,22 @@ mod tests {
             );
         }
         assert!(file_url_path("/tmp/%00secret").is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn local_file_transport_rejects_unc_and_drive_relative_paths() {
+        for path in ["//server/share/secret.txt", "C:secret.txt", "/C:secret.txt", "relative.txt"] {
+            assert!(
+                file_url_path(path).is_err(),
+                "ambiguous or network-backed Windows file path must be rejected: {path}"
+            );
+        }
+
+        assert_eq!(
+            file_url_path("/C:/Windows/system.ini").unwrap(),
+            std::path::PathBuf::from("C:/Windows/system.ini")
+        );
     }
 
     #[test]
