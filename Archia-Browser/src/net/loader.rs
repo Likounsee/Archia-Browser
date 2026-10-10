@@ -165,6 +165,11 @@ where
                 if current.url.scheme() != "file" && url.scheme() == "file" {
                     return Err(DocumentLoadError::InvalidRedirect);
                 }
+                // Do not silently downgrade a secure top-level navigation to
+                // cleartext HTTP. Check every redirect hop, not just the initial URL.
+                if current.url.is_secure() && url.scheme() == "http" {
+                    return Err(DocumentLoadError::InvalidRedirect);
+                }
 
                 let mut next = current.clone();
                 let had_referrer = has_header_case_insensitive(&next.headers, "referer")
@@ -1998,6 +2003,37 @@ mod tests {
         assert!(!should_switch_to_get(HttpMethod::Post, 307));
         assert!(!should_switch_to_get(HttpMethod::Put, 308));
         assert!(!should_switch_to_get(HttpMethod::Patch, 307));
+    }
+
+    #[test]
+    fn secure_document_rejects_https_to_http_redirect_before_second_request() {
+        #[derive(Debug)]
+        struct RedirectTransport {
+            requests: std::sync::Mutex<Vec<Request>>,
+        }
+
+        impl Transport for RedirectTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                self.requests.lock().unwrap().push(request.clone());
+                Ok(Response::new(302).with_header("location", "http://example.org/landing"))
+            }
+        }
+
+        let transport = RedirectTransport {
+            requests: std::sync::Mutex::new(Vec::new()),
+        };
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
+        let request = Request::new(Url::parse("https://example.org/start").unwrap());
+
+        assert_eq!(
+            loader.load(&request, LayoutViewport::new(320, 200)),
+            Err(DocumentLoadError::InvalidRedirect)
+        );
+        assert_eq!(
+            loader.transport.requests.lock().unwrap().len(),
+            1,
+            "the cleartext redirect target must never be requested"
+        );
     }
 
     #[test]
