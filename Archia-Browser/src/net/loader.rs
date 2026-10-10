@@ -1764,7 +1764,12 @@ mod tests {
         assert_eq!(requests[0].method, HttpMethod::Post);
         assert_eq!(requests[1].method, HttpMethod::Get);
         assert!(requests[1].body.is_empty());
-        for name in ["content-type", "content-length", "authorization", "x-custom-secret"] {
+        for name in [
+            "content-type",
+            "content-length",
+            "authorization",
+            "x-custom-secret",
+        ] {
             assert!(
                 !has_header_case_insensitive(&requests[1].headers, name),
                 "{name} must not survive this redirect"
