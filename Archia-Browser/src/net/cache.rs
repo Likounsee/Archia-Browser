@@ -542,7 +542,7 @@ mod tests {
         let request = make_request("https://example.org/invalid-age");
         let response = Response::new(200)
             .with_header("cache-control", "public, max-age=60")
-            .with_header("age", "\\u{00a0}0\\u{00a0}")
+            .with_header("age", "\u{00a0}0\u{00a0}")
             .with_body(b"ambiguous age".to_vec());
 
         cache.store(&request, &response);
