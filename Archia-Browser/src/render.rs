@@ -773,6 +773,7 @@ mod tests {
         }
         assert_eq!(list.len(), MAX_DISPLAY_COMMANDS);
     }
+
     #[test]
     fn opacity_applies_to_vertical_border_sides() {
         let mut root = Node::element("div");
