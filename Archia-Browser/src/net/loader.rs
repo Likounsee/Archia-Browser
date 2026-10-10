@@ -627,7 +627,7 @@ mod tests {
         impl Transport for LoopTransport {
             fn send(&self, _: &Request) -> Result<Response, TransportError> {
                 self.0.fetch_add(1, Ordering::SeqCst);
-                Ok(Response::new(302).with_header("location", "/loop"))
+                Ok(Response::new(302).with_header("location", "/loop#alternate"))
             }
         }
 
