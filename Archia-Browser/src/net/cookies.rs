@@ -472,6 +472,21 @@ mod tests {
     }
 
     #[test]
+    fn insecure_expired_cookie_cannot_delete_secure_cookie() {
+        let https = Url::parse("https://example.org/").unwrap();
+        let http = Url::parse("http://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&https, "sid=secure; Secure; Path=/");
+
+        jar.store(
+            &http,
+            "sid=expired; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+        );
+
+        assert_eq!(jar.header_for(&https).as_deref(), Some("sid=secure"));
+    }
+
+    #[test]
     fn max_age_takes_precedence_over_expires() {
         let url = Url::parse("https://example.org/").unwrap();
         let mut jar = CookieJar::new();
