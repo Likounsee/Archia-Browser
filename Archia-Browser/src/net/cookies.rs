@@ -436,7 +436,7 @@ impl CookieJar {
                     && (!cookie.secure || secure)
             })
             .collect::<Vec<_>>();
-        matching.sort_by(|first, second| second.path.len().cmp(&first.path.len()));
+        matching.sort_by_key(|cookie| std::cmp::Reverse(cookie.path.len()));
 
         let mut header = String::new();
         for cookie in matching {
