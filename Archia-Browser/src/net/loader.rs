@@ -2025,10 +2025,10 @@ mod tests {
         let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
         let request = Request::new(Url::parse("https://example.org/start").unwrap());
 
-        assert_eq!(
+        assert!(matches!(
             loader.load(&request, LayoutViewport::new(320, 200)),
             Err(DocumentLoadError::InvalidRedirect)
-        );
+        ));
         assert_eq!(
             loader.transport.requests.lock().unwrap().len(),
             1,
