@@ -191,12 +191,7 @@ where
                     .cookies
                     .lock()
                     .expect("cookie jar poisoned")
-                    .header_for_context(
-                        &next.url,
-                        cookie_first_party.as_ref(),
-                        true,
-                        next.method,
-                    )
+                    .header_for_context(&next.url, cookie_first_party.as_ref(), true, next.method)
                 {
                     next.headers.insert("cookie".into(), cookie);
                 }
@@ -335,12 +330,7 @@ where
                 .cookies
                 .lock()
                 .expect("cookie jar poisoned")
-                .header_for_context(
-                    &current,
-                    Some(document_url),
-                    false,
-                    HttpMethod::Get,
-                )
+                .header_for_context(&current, Some(document_url), false, HttpMethod::Get)
             {
                 request.headers.insert("cookie".into(), cookie);
             }
@@ -851,10 +841,7 @@ mod tests {
             }
         }
 
-        let loader = DocumentLoader::new(
-            NetworkPipeline::new(AllowAll),
-            CookieInspectTransport,
-        );
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), CookieInspectTransport);
         let url = Url::parse("https://example.org/account").unwrap();
         loader
             .cookies
@@ -863,9 +850,7 @@ mod tests {
             .store(&url, "session=secret; Secure; SameSite=Strict");
 
         let request = Request::new(url);
-        assert!(loader
-            .load(&request, LayoutViewport::new(320, 200))
-            .is_ok());
+        assert!(loader.load(&request, LayoutViewport::new(320, 200)).is_ok());
     }
 
     #[test]
@@ -900,9 +885,7 @@ mod tests {
 
         let mut request = Request::new(destination);
         request.policy.first_party = Some(initiator);
-        assert!(loader
-            .load(&request, LayoutViewport::new(320, 200))
-            .is_ok());
+        assert!(loader.load(&request, LayoutViewport::new(320, 200)).is_ok());
     }
 
     #[test]
