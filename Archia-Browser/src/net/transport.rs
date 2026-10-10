@@ -646,6 +646,13 @@ fn parse_http_response_for_method(
         if transfer_encoding.is_some() && content_length.is_some() {
             return Err(TransportError::ConnectionFailed);
         }
+        // Validate Content-Length even on HEAD and body-forbidden status codes.
+        // Those responses carry no body, but malformed framing metadata must
+        // not become accepted merely because the body branch is skipped.
+        let parsed_content_length = content_length
+            .map(|length| trim_http_ows(length).parse::<usize>())
+            .transpose()
+            .map_err(|_| TransportError::ConnectionFailed)?;
         let is_chunked = match transfer_encoding {
             Some(value) if trim_http_ows(value).eq_ignore_ascii_case("chunked") => true,
             Some(_) => return Err(TransportError::ConnectionFailed),
@@ -662,10 +669,7 @@ fn parse_http_response_for_method(
             Vec::new()
         } else if is_chunked {
             decode_chunked(body_bytes, max_response_size, max_header_size)?
-        } else if let Some(length) = content_length {
-            let length = trim_http_ows(length)
-                .parse::<usize>()
-                .map_err(|_| TransportError::ConnectionFailed)?;
+        } else if let Some(length) = parsed_content_length {
             if length > max_response_size {
                 return Err(TransportError::ResponseTooLarge);
             }
@@ -990,6 +994,29 @@ mod tests {
         .unwrap();
 
         assert_eq!(response.body, b"Hello");
+    }
+
+    #[test]
+    fn body_forbidden_responses_still_validate_content_length_syntax() {
+        for (response, method) in [
+            (
+                b"HTTP/1.1 200 OK\r\nContent-Length: invalid\r\n\r\n".as_slice(),
+                crate::net::HttpMethod::Head,
+            ),
+            (
+                b"HTTP/1.1 204 No Content\r\nContent-Length: invalid\r\n\r\n".as_slice(),
+                crate::net::HttpMethod::Get,
+            ),
+            (
+                b"HTTP/1.1 304 Not Modified\r\nContent-Length: \xC2\xA05\xC2\xA0\r\n\r\n".as_slice(),
+                crate::net::HttpMethod::Get,
+            ),
+        ] {
+            assert_eq!(
+                parse_http_response_for_method(response, method, 1024, 1024),
+                Err(TransportError::ConnectionFailed)
+            );
+        }
     }
 
     #[test]
