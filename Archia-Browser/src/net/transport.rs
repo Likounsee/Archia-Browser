@@ -293,7 +293,7 @@ impl Transport for LocalFileTransport {
 fn file_url_path(url_path: &str) -> Result<std::path::PathBuf, TransportError> {
     let decoded = percent_decode(url_path)?;
     if decoded.as_bytes().contains(&0) {
-        return Err(TransportError::InvalidUrl(super::UrlError::InvalidScheme));
+        return Err(TransportError::InvalidUrl(super::UrlError::InvalidCharacter));
     }
     #[cfg(windows)]
     let path = decoded
