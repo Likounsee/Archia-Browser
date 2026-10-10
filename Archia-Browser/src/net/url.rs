@@ -51,6 +51,12 @@ impl Url {
         let (path, query) = without_fragment
             .split_once('?')
             .map_or((without_fragment, None), |(p, q)| (p, Some(q.to_owned())));
+        // The local-file transport percent-decodes paths before filesystem
+        // access. Encoded separators could therefore create new path segments
+        // after URL policy and dot-segment normalization have already run.
+        if normalized_scheme == "file" && contains_encoded_path_separator(path) {
+            return Err(UrlError::InvalidCharacter);
+        }
         Ok(Self {
             scheme: normalized_scheme,
             authority: normalize_ipv6_authority(authority),
@@ -168,6 +174,12 @@ impl Url {
         let (path, query) = reference
             .split_once('?')
             .map_or((reference, None), |(before, after)| (before, Some(after)));
+
+        // Apply the same file-path rule to relative references; otherwise
+        // percent decoding in LocalFileTransport could change path boundaries.
+        if self.scheme == "file" && contains_encoded_path_separator(path) {
+            return Err(UrlError::InvalidCharacter);
+        }
 
         if path.is_empty() {
             let mut resolved = self.clone();
@@ -358,6 +370,17 @@ fn validate_dns_or_ipv4_host(host: &str) -> Result<(), UrlError> {
         return Err(UrlError::InvalidAuthority);
     }
     Ok(())
+}
+
+fn contains_encoded_path_separator(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    bytes.windows(3).any(|sequence| {
+        sequence[0] == b'%'
+            && matches!(
+                (sequence[1].to_ascii_lowercase(), sequence[2].to_ascii_lowercase()),
+                (b'2', b'f') | (b'5', b'c')
+            )
+    })
 }
 
 fn contains_unsafe_url_whitespace(value: &str) -> bool {
@@ -636,6 +659,34 @@ mod tests {
             Url::parse("http+custom://example.org").unwrap().scheme(),
             "http+custom"
         );
+    }
+
+    #[test]
+    fn file_urls_reject_percent_encoded_path_separators() {
+        for input in [
+            "file:///safe%2f..%2fprivate.txt",
+            "file:///safe/%2e%2e%2fprivate.txt",
+            "file:///safe%5c..%5cprivate.txt",
+            "file:///safe/%5C..%5Cprivate.txt",
+        ] {
+            assert_eq!(
+                Url::parse(input).unwrap_err(),
+                UrlError::InvalidCharacter,
+                "filesystem decoding must not create new path segments: {input}"
+            );
+        }
+
+        let base = Url::parse("file:///safe/index.html").unwrap();
+        for reference in ["%2f..%2fprivate.txt", "%5c..%5cprivate.txt"] {
+            assert_eq!(
+                base.resolve(reference).unwrap_err(),
+                UrlError::InvalidCharacter,
+                "relative file reference must not create decoded separators: {reference}"
+            );
+        }
+
+        // Encoded separators in the query are not filesystem path syntax.
+        assert!(Url::parse("file:///safe/index.html?next=%2fprivate").is_ok());
     }
 
     #[test]
