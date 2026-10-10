@@ -54,7 +54,11 @@ impl Url {
         // The local-file transport percent-decodes paths before filesystem
         // access. Encoded separators could therefore create new path segments
         // after URL policy and dot-segment normalization have already run.
-        if normalized_scheme == "file" && contains_encoded_path_separator(path) {
+        if normalized_scheme == "file"
+            && (path.starts_with("//") || contains_encoded_path_separator(path))
+        {
+            // On Windows, a double-leading-slash path can become a UNC share
+            // after filesystem conversion even though the URL authority is empty.
             return Err(UrlError::InvalidCharacter);
         }
         Ok(Self {
@@ -197,6 +201,9 @@ impl Url {
                 .map_or("/", |(directory, _)| directory);
             normalize_path(&format!("{base}/{path}"))
         };
+        if self.scheme == "file" && resolved_path.starts_with("//") {
+            return Err(UrlError::InvalidCharacter);
+        }
 
         Ok(Self {
             scheme: self.scheme.clone(),
@@ -661,6 +668,28 @@ mod tests {
         assert_eq!(
             Url::parse("http+custom://example.org").unwrap().scheme(),
             "http+custom"
+        );
+    }
+
+    #[test]
+    fn file_urls_reject_unc_like_double_slash_paths() {
+        assert_eq!(
+            Url::parse("file:////server/share/secret.txt").unwrap_err(),
+            UrlError::InvalidCharacter
+        );
+        assert_eq!(
+            Url::parse("file://localhost//server/share/secret.txt").unwrap_err(),
+            UrlError::InvalidCharacter
+        );
+
+        let base = Url::parse("file:///safe/index.html").unwrap();
+        assert_eq!(
+            base.resolve("///server/share/secret.txt").unwrap_err(),
+            UrlError::InvalidCharacter
+        );
+        assert_eq!(
+            base.resolve("//server/share/secret.txt").unwrap_err(),
+            UrlError::InvalidCharacter
         );
     }
 
