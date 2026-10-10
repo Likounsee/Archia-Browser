@@ -38,6 +38,10 @@ in source.
 - [ ] Remove avoidable panic paths in externally reachable processing; distinguish internal invariants from hostile input.
 - [ ] Run full workspace tests, formatting, and build.
 
+- **P0-5 implementation correction (2026-10-10):** review of the first depth-limit patch found that retaining and repeatedly searching suppressed tag names could itself become quadratic for adversarial nesting. Replaced that stack with a constant-space nesting-depth counter, preserving a linear scan of the bounded token stream. Commit: `5f810fdb4eaaadefef7c5240a843d76fe60a9fd2`; comment cleanup: `4f652d76596db5b14c4044ad98491ebbf6725ab3`. This still needs formatting, workspace tests/build, and CI; P0-5 remains open.
+- **P0-6 concrete accounting defect (2026-10-10):** `MemoryReservation::try_new` used `bool::then_some(Self { ... })`, which eagerly constructs the reservation even when `try_reserve` fails. Dropping that temporary can release bytes belonging to another reservation and undercount usage, enabling later overcommit. Replaced it with an explicit conditional and added a regression test for a failed 400-byte reservation while 700/1024 bytes are already reserved. Commit: `57fad232e7f50cb216cb303e821d83d4362877a4`. P0-6 remains open pending execution and CI validation.
+- **Verification limitation (2026-10-10):** attempted a local checkout, but this execution environment could not resolve `github.com`; therefore `cargo fmt --all -- --check`, `cargo test --workspace`, and `cargo build --workspace` have not been run here. The available combined-status and workflow-run lookups return no checks/runs for the direct-push commits. Do not infer CI success from an empty status list.
+
 ## Verification and completion rules
 - Do not mark a P0 item Done merely because code or a test exists; the targeted tests must pass in CI.
 - Track each commit SHA and CI run in the project report.
