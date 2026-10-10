@@ -2131,7 +2131,9 @@ mod limit_tests {
             .unwrap();
 
         assert_eq!(
-            parse_http_response(response, 1024, separator).unwrap().status,
+            parse_http_response(response, 1024, separator)
+                .unwrap()
+                .status,
             200
         );
         assert_eq!(
