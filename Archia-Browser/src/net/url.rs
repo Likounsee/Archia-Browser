@@ -66,7 +66,8 @@ impl Url {
         if normalized_scheme == "file"
             && (normalized_path.starts_with("//")
                 || contains_encoded_path_separator(path)
-                || contains_encoded_windows_drive_colon(path))
+                || contains_encoded_windows_drive_colon(path)
+                || contains_encoded_dot_segment(path))
         {
             return Err(UrlError::InvalidCharacter);
         }
@@ -206,7 +207,9 @@ impl Url {
         // Apply the same file-path rule to relative references; otherwise
         // percent decoding in LocalFileTransport could change path boundaries.
         if self.scheme == "file"
-            && (contains_encoded_path_separator(path) || contains_encoded_windows_drive_colon(path))
+            && (contains_encoded_path_separator(path)
+                || contains_encoded_windows_drive_colon(path)
+                || contains_encoded_dot_segment(path))
         {
             return Err(UrlError::InvalidCharacter);
         }
@@ -447,6 +450,34 @@ fn contains_encoded_windows_drive_colon(path: &str) -> bool {
         && bytes[4].eq_ignore_ascii_case(&b'a')
 }
 
+fn contains_encoded_dot_segment(path: &str) -> bool {
+    path.split('/').any(|segment| {
+        let bytes = segment.as_bytes();
+        let mut index = 0;
+        let mut dots = 0;
+        let mut contains_encoded_dot = false;
+
+        while index < bytes.len() {
+            if bytes[index] == b'.' {
+                dots += 1;
+                index += 1;
+            } else if index + 2 < bytes.len()
+                && bytes[index] == b'%'
+                && bytes[index + 1] == b'2'
+                && bytes[index + 2].eq_ignore_ascii_case(&b'e')
+            {
+                dots += 1;
+                contains_encoded_dot = true;
+                index += 3;
+            } else {
+                return false;
+            }
+        }
+
+        contains_encoded_dot && matches!(dots, 1 | 2)
+    })
+}
+
 fn contains_encoded_path_separator(path: &str) -> bool {
     let bytes = path.as_bytes();
     bytes.windows(3).any(|sequence| {
@@ -675,6 +706,23 @@ mod tests {
         assert_eq!(url.authority(), "");
         assert_eq!(url.path(), "/tmp/index.html");
         assert_eq!(url.to_string(), "file:///tmp/index.html");
+    }
+
+    #[test]
+    fn file_urls_reject_percent_encoded_dot_segments() {
+        for input in [
+            "file:///safe/%2e%2e/secret.txt",
+            "file:///safe/.%2e/secret.txt",
+            "file:///safe/%2E./secret.txt",
+            "file:///safe/%2e/secret.txt",
+            "file:///safe/%2e%2E/secret.txt",
+        ] {
+            assert_eq!(
+                Url::parse(input).unwrap_err(),
+                UrlError::InvalidCharacter,
+                "encoded dot segment must be rejected: {input}"
+            );
+        }
     }
 
     #[test]
