@@ -52,7 +52,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
             HtmlToken::StartTag {
                 name,
                 attributes,
-                self_closing,
+                self_closing: _,
             } => {
                 if name == "p" && has_open(&stack, "p") {
                     close_element(&mut root, &mut stack, "p");
@@ -69,7 +69,10 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                     node.set_attribute(attribute, value);
                 }
 
-                if *self_closing || VOID_ELEMENTS.contains(&name.as_str()) {
+                // In HTML syntax, the self-closing flag is ignored for
+                // ordinary HTML elements. Only void elements close without
+                // an end tag; treating <div/> as empty changes the DOM tree.
+                if VOID_ELEMENTS.contains(&name.as_str()) {
                     append_node(&mut root, &mut stack, node);
                 } else {
                     stack.push(node);
@@ -222,6 +225,18 @@ mod tests {
         let div = &body.children[0];
         assert_eq!(div.children.len(), 2);
         assert_eq!(root.text_content(), "helloworld");
+    }
+
+    #[test]
+    fn self_closing_syntax_does_not_close_non_void_html_elements() {
+        let tokens = HtmlTokenizer::tokenize("<div/>inside</div><p/>text</p>");
+        let root = parse(&tokens);
+        let body = &root.children[0].children[1];
+
+        assert_eq!(body.children[0].tag_name(), Some("div"));
+        assert_eq!(body.children[0].text_content(), "inside");
+        assert_eq!(body.children[1].tag_name(), Some("p"));
+        assert_eq!(body.children[1].text_content(), "text");
     }
 
     #[test]
