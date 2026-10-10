@@ -146,7 +146,13 @@ impl SoftwareSurface {
                 for (row, bits) in glyph.iter().enumerate() {
                     for column in 0..5 {
                         if bits & (1 << (4 - column)) != 0 {
-                            self.fill_rect(cursor_x + column, cursor_y + row as i32, 1, 1, color);
+                            self.fill_rect(
+                                cursor_x.saturating_add(column),
+                                cursor_y.saturating_add(row as i32),
+                                1,
+                                1,
+                                color,
+                            );
                         }
                     }
                 }
@@ -350,8 +356,8 @@ impl SoftwareSurface {
                     for column in 0..5 {
                         if bits & (1 << (4 - column)) != 0 {
                             self.fill_rect_clipped(
-                                cursor_x + column,
-                                cursor_y + row as i32,
+                                cursor_x.saturating_add(column),
+                                cursor_y.saturating_add(row as i32),
                                 1,
                                 1,
                                 color,
@@ -494,6 +500,13 @@ mod tests {
         assert_eq!(surface.pixel(0, 3), Some(Color::BLACK));
     }
 
+    #[test]
+    fn drawing_text_at_extreme_coordinates_does_not_overflow() {
+        let mut surface = SoftwareSurface::new(8, 8);
+        surface.draw_text(i32::MAX, i32::MAX, "A", Color::BLACK);
+        surface.draw_text_clipped(i32::MAX, i32::MAX, "A", Color::BLACK, None);
+        assert!(surface.pixels().iter().all(|byte| *byte == 0));
+    }
     #[test]
     fn draw_text_handles_newlines_and_tabs() {
         let mut surface = SoftwareSurface::new(40, 16);
