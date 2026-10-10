@@ -85,10 +85,7 @@ impl CookieJar {
 
         for attribute in parts {
             let mut pieces = attribute.splitn(2, '=');
-            let key = trim_cookie_ows(pieces
-                .next()
-                .unwrap_or_default())
-                .to_ascii_lowercase();
+            let key = trim_cookie_ows(pieces.next().unwrap_or_default()).to_ascii_lowercase();
             match key.as_str() {
                 "domain" => {
                     if let Some(value) = pieces.next() {
