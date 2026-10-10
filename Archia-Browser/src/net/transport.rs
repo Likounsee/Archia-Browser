@@ -1030,9 +1030,9 @@ mod tests {
     #[test]
     fn body_forbidden_responses_still_validate_content_length_syntax() {
         for response in [
-            b"HTTP/1.1 200 OK\\r\\nContent-Length: +5\\r\\n\\r\\nHello".as_slice(),
-            b"HTTP/1.1 200 OK\\r\\nContent-Length: -0\\r\\n\\r\\n".as_slice(),
-            b"HTTP/1.1 200 OK\\r\\nContent-Length: \\r\\n\\r\\n".as_slice(),
+            b"HTTP/1.1 200 OK\r\nContent-Length: +5\r\n\r\nHello".as_slice(),
+            b"HTTP/1.1 200 OK\r\nContent-Length: -0\r\n\r\n".as_slice(),
+            b"HTTP/1.1 200 OK\r\nContent-Length: \r\n\r\n".as_slice(),
         ] {
             assert_eq!(
                 parse_http_response(response, 1024, 1024),
