@@ -1122,13 +1122,16 @@ mod tests {
     #[test]
     fn preserves_multiple_set_cookie_headers() {
         let response = parse_http_response(
-            b"HTTP/1.1 200 OK\\r\\nSet-Cookie: a=1\\r\\nset-cookie: b=2\\r\\n\\r\\n",
+            b"HTTP/1.1 200 OK\r\nSet-Cookie: a=1\r\nset-cookie: b=2\r\n\r\n",
             1024,
             1024,
         )
         .unwrap();
 
-        assert_eq!(response.set_cookie_headers(), &["a=1", "b=2"]);
+        assert_eq!(
+            response.set_cookie_headers(),
+            &["a=1".to_string(), "b=2".to_string()]
+        );
         assert_eq!(response.header("set-cookie"), Some("b=2"));
     }
 
