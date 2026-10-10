@@ -71,6 +71,10 @@ impl<T> ResourceCache<T> {
         self.entries.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
     pub fn remove(&mut self, key: &str) -> Option<T> {
         let position = self.entries.iter().position(|entry| entry.key == key)?;
         let entry = self.entries.remove(position)?;
