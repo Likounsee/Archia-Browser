@@ -435,6 +435,9 @@ fn resolve_css_value(
     variables: &ComputedStyle,
     inherited: &ComputedStyle,
 ) -> String {
+    if value.len() > MAX_RESOLVED_CSS_VALUE_BYTES {
+        return initial_value(name).to_owned();
+    }
     let wide = match value.trim().to_ascii_lowercase().as_str() {
         "inherit" => inherited
             .get(name)
