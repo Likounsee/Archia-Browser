@@ -1,66 +1,151 @@
-# Archia Browser — Roadmap P0 à P3
+# Archia Browser — Roadmap technique P0 → P3
 
-Branche de référence : `Archia-Browser`.
+Branche de travail : `Archia-Browser` uniquement. Cette roadmap vise un navigateur indépendant développé en Rust, sans intégrer un moteur complet tel que Chromium/Blink, Gecko ou WebKit. Les bibliothèques ciblées (TLS, codecs, shaping, etc.) restent possibles si leur surface d'attaque, licence, maintenance et configuration sont auditées.
 
-Ce fichier suit les travaux restants connus. Un item ne sera terminé qu'après implémentation, tests de régression exécutés et validation CI. P0 reste ouvert ; P1–P3 sont planifiés et ne sont pas déclarés réalisés.
+## Comment lire l'état
 
-## P0 — Sécurité et corrections bloquantes
+- **[SOURCE] Présent dans le code** : une implémentation identifiable existe ; cela ne prouve ni sa complétude ni sa correction.
+- **[PARTIEL] Partiel / couverture limitée** : la brique existe, mais les cas web réels, exigences de sécurité ou intégrations sont incomplets.
+- **[MANQUANT] À implémenter** : aucune implémentation utilisable n'a été identifiée dans les modules inspectés.
+- **[NON VALIDÉ] Tests non confirmés** : aucune preuve de réussite d'exécution n'a été établie pour le commit courant.
+- Les statuts décrivent l'inspection du dépôt, pas une certification. Ne cocher une tâche qu'après preuve attachée (commande/résultat CI, test reproductible, rapport ou benchmark). Un test écrit mais non exécuté n'est pas une validation.
 
-- [ ] Auditer URL/origines de bout en bout entre parser, policy, loader, cache, cookies, redirects et transport local.
-- [ ] Exécuter et compléter les tests HTTP framing, headers, trailers, limites, EOF et redirects.
-- [ ] Revalider la frontière réseau/`file://`, les chemins locaux, les redirects et la suppression des credentials inter-origines.
-- [ ] Finaliser l'audit cookies : PSL, Domain/Path, Secure/HttpOnly, préfixes, Max-Age/Expires, SameSite et suppression.
-- [ ] Finaliser l'audit cache : clés, Vary, credentials, no-store/private, réponses personnalisées et requêtes bloquées.
-- [ ] Vérifier limites HTML/CSS, parsing malformé, complexité des sélecteurs, expansion `var()` et fuzzing adversarial.
-- [ ] Appliquer réellement le budget mémoire aux allocations critiques ou définir explicitement son rôle comme simple métrique.
-- [ ] Auditer panics, indexations, overflows, allocations et nettoyage après erreurs/annulation.
-- [ ] Corriger toute régression de compilation, formatage ou tests révélée par CI.
-- [ ] Exécuter `cargo fmt --all -- --check`, `cargo test --workspace` et `cargo build --workspace` sur CI et conserver les liens de résultats.
+## État initial issu de l'inspection du code
 
-## P1 — Fiabiliser les fondations
+| Domaine | Constat du code inspecté | Statut initial |
+|---|---|---|
+| Réseau | Transport HTTP/1.1, limites de réponse/en-têtes, TLS via rustls, validation des certificats, redirects et pipeline de policy présents | [PARTIEL] [NON VALIDÉ] |
+| URL/origines | Parser URL maison, résolution de références, origine avec identité opaque pour les URL file ; audit de cohérence entre tous les consommateurs toujours nécessaire | [PARTIEL] [NON VALIDÉ] |
+| Cookies/cache | CookieJar avec PSL, limites et expiration ; cache HTTP avec règles partielles. SameSite/HttpOnly, politiques complètes et sémantique de cache restent à auditer | [PARTIEL] [NON VALIDÉ] |
+| HTML/DOM | Tokenizer borné (4 MiB/100 000 tokens) et parseur borné en profondeur (256), DOM maison | [PARTIEL] [NON VALIDÉ] |
+| CSS | Tokenizer, parser, sélecteurs/cascade et limites d'entrée/règles/complexité | [PARTIEL] [NON VALIDÉ] |
+| Layout/rendu | Layout maison, liste de commandes de peinture et rasterizer logiciel | [PARTIEL] [NON VALIDÉ] |
+| Texte/Unicode | Rendu glyphique bitmap très limité visible dans `surface.rs`; shaping, bidi, fontes réelles et couverture Unicode complète non établis | [PARTIEL / MANQUANT] |
+| Mémoire | Budget atomique et limites ciblées existent ; il n'est pas prouvé que toutes les allocations critiques y sont comptabilisées | [PARTIEL] |
+| Onglets/historique | Modèles de données et historique en mémoire présents ; ce n'est pas encore une interface navigateur utilisable | [PARTIEL] |
+| Interface/plateformes | `main.rs` lance actuellement un programme qui affiche la version ; UI native complète et intégration multiplateforme non établies | [MANQUANT] |
+| JavaScript/Web APIs | Aucun runtime JavaScript ni couche DOM/Web APIs utilisable identifié | [MANQUANT] |
+| Sécurité du contenu | Type Origin présent, mais Same-Origin/CORS/CSP/mixed content/permissions/sandbox ne forment pas encore une défense complète | [PARTIEL / MANQUANT] |
+| CI | Workflow avec fmt, tests workspace et build sur push de la branche et PR ; les résultats du commit courant ne sont pas confirmés. WPT, fuzzing continu et matrice OS non établis | [SOURCE] [NON VALIDÉ] |
 
-- [ ] Améliorer la construction/récupération HTML, entités, parcours DOM, mutations et namespaces.
-- [ ] Compléter parser CSS, cascade complète, valeurs calculées, at-rules, pseudo-éléments et tests de conformité.
-- [ ] Corriger le formatage inline, inline-block, dimensions intrinsèques, overflow, viewport et ordre de peinture.
-- [ ] Définir un système de fontes, charger des fontes locales, gérer fallbacks et améliorer shaping/Unicode.
-- [ ] Fiabiliser cycle de vie Page/Document/Tab, annulation des navigations et réponses tardives.
-- [ ] Structurer les erreurs, diagnostics sans secrets, documentation d'invariants, benchmarks et fuzzing.
-- [ ] Ajouter corpus de référence HTML/CSS/layout et tests de non-régression automatisés.
+## Dépendances et règles de progression
 
-## P2 — Fonctionnalités web essentielles
+- Les identifiants ci-dessous sont stables : ne pas les réutiliser ni les renuméroter ; ajouter de nouveaux IDs si le périmètre évolue.
+- `Dépend de` exprime les prérequis techniques. Les tâches d'architecture de sécurité de P0 précèdent l'exposition de JavaScript, des sous-ressources actives et des Web APIs.
+- P1 ne passe pas à « terminé » tant que la porte de sortie P0 n'est pas satisfaite. P2 peut préparer l'architecture et les prototypes sans prétendre à une version sûre si P0 reste ouvert. P3 n'expose aucun script non fiable avant l'application effective des contrôles P0.
+- Aucun moteur complet existant ne doit être intégré. Toute dépendance externe doit avoir un rôle limité, une version contrôlée, une licence vérifiée et une politique de mise à jour.
 
-- [ ] Implémenter Flexbox, layout de tableaux, scrolling, stacking contexts et `z-index`.
-- [ ] Ajouter images comme éléments remplacés, `object-fit`, border-radius, opacity et transforms de base.
-- [ ] Implémenter HTTPS/TLS natif avec validation stricte de certificats et nom d'hôte.
-- [ ] Compléter cache HTTP, cookies, stockage persistant, téléchargements et annulation réseau.
-- [ ] Améliorer formulaires, focus, clavier, événements et accessibilité de base.
-- [ ] Construire UI fenêtre/onglets, barre d'adresse, navigation, historique, favoris, paramètres et gestionnaire de téléchargements.
-- [ ] Compléter les abstractions plateforme et valider Windows, Linux et ArchiaOS dans la mesure possible.
-- [ ] Ajouter tests d'intégration du parcours navigation → réseau → HTML/CSS → layout → rendu.
+# P0 — Sécurité, stabilité et architecture de confiance
 
-## P3 — Runtime, isolation et capacités avancées
+**But :** rendre les entrées non fiables bornées, les décisions de sécurité cohérentes et les échecs observables avant d'élargir la compatibilité.
 
-- [ ] Choisir et intégrer/implémenter un runtime JavaScript sans intégrer un moteur de navigateur complet.
-- [ ] Ajouter DOM bindings, événements, timers, Fetch, tâches/microtasks et APIs web essentielles.
-- [ ] Imposer quotas CPU/mémoire, interruption des scripts et nettoyage lors des navigations.
-- [ ] Définir et implémenter isolation de processus/site et sandbox OS avec permissions minimales.
-- [ ] Compléter politiques Same-Origin, CORS, CSP, mixed content et permissions avant d'exposer les scripts.
-- [ ] Ajouter console, inspecteur DOM/style, panneau réseau et profilage CPU/mémoire.
-- [ ] Profiler puis optimiser layout/rendu incrémental ; évaluer accélération GPU avec fallback logiciel.
-- [ ] Ajouter profils, mode privé, gestion des permissions par site, packaging signé et mises à jour sûres.
-- [ ] Mettre en place matrice de compatibilité, audits de sécurité et critères de publication mesurables.
+| ID | Tâche | Dépend de | État initial | Critère de sortie mesurable |
+|---|---|---|---|---|
+| P0-ARCH-01 | Écrire les frontières de confiance et le modèle de menace : réseau, document, sous-ressources, fichiers locaux, profils, UI privilégiée, scripts et processus. Définir les interfaces de policy avant d'ajouter des APIs actives. | — | [PARTIEL] | Document validé couvrant chaque frontière, acteur, actif, menace, contrôle et risque accepté ; revue de conception enregistrée. |
+| P0-URL-01 | Auditer parser, canonicalisation, résolution relative, hôte/IP/IPv6, ports, userinfo, encodage %, fragments, schémas inconnus et URLs malformées ; comparer les décisions entre policy, transport, cache, cookies, redirects et DOM. | P0-ARCH-01 | [PARTIEL] [NON VALIDÉ] | Tests de table pour chaque famille de cas ; aucun consommateur ne réinterprète une URL de manière contradictoire ; tous les tests URL passent sur CI. |
+| P0-ORIGIN-02 | Centraliser les calculs d'origine et les comparaisons (schéma/hôte/port effectif, IPv6, origines opaques, file) ; supprimer les comparaisons ad hoc. | P0-URL-01, P0-ARCH-01 | [PARTIEL] | Matrice de tests d'origine couvrant au moins 30 cas positifs/négatifs ; chaque usage sensible passe par la même API ; revue des appels terminée. |
+| P0-FILE-03 | Verrouiller `file://` : traversée, séparateurs encodés, UNC/chemins Windows, symlinks, redirects réseau↔local, accès aux fichiers non autorisés et divulgation de credentials. | P0-URL-01, P0-ORIGIN-02 | [PARTIEL] [NON VALIDÉ] | Suite de tests adversariaux par plateforme ; aucun redirect réseau ne lit un fichier local ; les cas bloqués échouent de façon fermée. |
+| P0-HTTP-04 | Auditer framing HTTP/1.1 : Content-Length, Transfer-Encoding, chunking, trailers, réponses interim, EOF prématuré, headers dupliqués/conflictuels, CRLF, corps sans longueur et limites. | P0-ARCH-01 | [PARTIEL] [NON VALIDÉ] | Corpus de réponses valides/malveillantes ; chaque limite de taille est testée à N−1/N/N+1 ; aucun dépassement ni désynchronisation constaté dans les tests. |
+| P0-TLS-05 | Valider chaîne, nom d'hôte, dates, racines, erreurs TLS, SNI, protocoles/ciphers et comportement sans réseau ; définir politique TLS minimale et processus de mise à jour des racines. | P0-ARCH-01 | [PARTIEL] [NON VALIDÉ] | Tests positifs et négatifs sur certificats valides, expirés, mauvais hôte, chaîne invalide et racine inconnue ; échec TLS toujours fermé ; résultats CI enregistrés. |
+| P0-REDIR-06 | Auditer redirects : nombre, boucle, URL relative, downgrade HTTPS→HTTP, changement de méthode/corps, cookies, Authorization et suppression des secrets inter-origines. | P0-URL-01, P0-HTTP-04, P0-ORIGIN-02 | [PARTIEL] [NON VALIDÉ] | Tests pour 301/302/303/307/308, boucle et cross-origin ; aucun secret transmis à une origine interdite ; limite de redirects vérifiée. |
+| P0-COOKIE-07 | Finaliser cookies : Domain/host-only, PSL, Path, Secure, HttpOnly, SameSite, préfixes __Host-/__Secure-, Max-Age/Expires, suppression, ordre, taille et limites globales/par domaine. | P0-URL-01, P0-ORIGIN-02 | [PARTIEL] [NON VALIDÉ] | Suite de conformité ciblée couvrant chaque attribut et frontière ; cookies cross-site ne fuient pas hors de la politique retenue ; cas limites exécutés sur CI. |
+| P0-CACHE-08 | Auditer clés et fraîcheur HTTP : Vary, Authorization/Cookie, private/no-store, directives de requête, réponses personnalisées, redirects, erreurs, cache bypass et ressources bloquées. | P0-URL-01, P0-ORIGIN-02, P0-HTTP-04 | [PARTIEL] [NON VALIDÉ] | Tests de non-fuite entre requêtes/utilisateurs/origines ; les réponses no-store/private interdites ne sont pas réutilisées ; règles explicites documentées. |
+| P0-POLICY-09 | Faire appliquer les contrôles avant cache hit et transport pour chaque type de ressource (document, CSS, script, image, font, media, fetch) ; politique par défaut deny pour capacités non prises en charge. | P0-ARCH-01, P0-ORIGIN-02 | [PARTIEL] | Tests qui prouvent qu'un cache hit ne contourne pas la policy et qu'une ressource bloquée n'est jamais demandée ; matrice de types de ressources couverte. |
+| P0-RESOURCE-10 | Centraliser les quotas de taille, profondeur, nombre d'objets, temps de parsing, pixels et concurrence pour HTML/CSS/URL/headers/corps/ressources. | P0-ARCH-01 | [PARTIEL] | Chaque limite documentée a un test N−1/N/N+1 ; entrées surdimensionnées échouent ou sont tronquées selon une règle explicite sans panique. |
+| P0-MEM-11 | Tracer les allocations importantes et faire respecter le budget mémoire dans les buffers réseau, DOM, CSS, layout, display list, surface et cache ; distinguer comptage et limite effective. | P0-RESOURCE-10 | [PARTIEL] | Tests montrant qu'un budget saturé empêche les allocations gérées, que les réservations sont libérées sur erreurs/annulation et qu'aucun compteur ne fuit sur 1000 cycles de test. |
+| P0-PANIC-12 | Auditer panics, `unwrap/expect`, indexations, débordements, récursion, verrouillages empoisonnés et nettoyage après erreur/annulation sur données non fiables. | P0-RESOURCE-10 | [PARTIEL] | Fuzz/tests adversariaux sans panic ni crash ; chaque panic restant est justifié comme invariant interne inaccessible aux entrées web. |
+| P0-DEPEND-13 | Vérifier dépendances Rust, licences, versions, advisories et reproductibilité du build ; activer alertes/contrôles de dépendances sans mises à jour aveugles. | P0-ARCH-01 | [MANQUANT / NON VALIDÉ] | Audit des dépendances et licences publié ; aucun advisory critique/haut non traité sans dérogation documentée ; build reproductible selon procédure définie. |
+| P0-FUZZ-14 | Ajouter fuzz targets pour URL, HTTP, cookies, HTML tokenizer/parser, CSS tokenizer/parser, sélecteurs et décodage futur ; enregistrer les corpus de régression. | P0-HTTP-04, P0-URL-01, P0-COOKIE-07, P0-RESOURCE-10, P0-PANIC-12 | [PARTIEL / MANQUANT] | Cibles fuzz exécutables en CI ou job planifié ; au moins 24 h cumulées sans crash avant release candidate, corpus et régressions conservés. |
+| P0-CI-15 | Renforcer CI : formatage, tests, build, Clippy, dépendances, tests de sécurité et artefacts de preuve ; exécuter sur le commit réel et traiter les échecs. | P0-HTTP-04, P0-RESOURCE-10, P0-PANIC-12 | [SOURCE] [NON VALIDÉ] | `cargo fmt --all -- --check`, `cargo test --workspace`, `cargo build --workspace` et `cargo clippy --workspace --all-targets -- -D warnings` réussissent ; liens d'exécution et SHA du commit archivés. |
 
-## Règles de validation
+**Porte de sortie P0 :** toutes les tâches P0 bloquantes sont vérifiées par tests exécutés ; aucune vulnérabilité critique/haute ouverte sans exception signée ; CI verte sur le SHA candidat ; rapport des risques résiduels publié. Tant que ce seuil n'est pas atteint, P0 reste ouvert.
 
-1. Reproduire chaque bug avec un test avant correction lorsque possible.
-2. Vérifier les limites de temps, mémoire, taille et les chemins d'erreur.
-3. Exécuter formatage, tests workspace et build ; ne pas assimiler des tests ajoutés à des tests passés.
-4. Corriger les échecs CI avant d'empiler d'autres changements.
-5. Enregistrer commits, résultats CI et risques résiduels ici.
-6. Si une nouvelle faille P0 apparaît, la corriger avant de poursuivre les phases suivantes.
+# P1 — Fondations HTML/CSS, layout, texte et rendu
 
-## État à la création
+**But :** définir un sous-ensemble web explicite, robuste et testable, puis augmenter sa conformité sans masquer les fonctionnalités absentes.
 
-- P0 reste ouvert : plusieurs correctifs et limites ont été publiés, mais les vérifications des derniers changements ne sont pas confirmées.
-- P1–P3 représentent le backlog restant connu, à réviser au fil des audits ; ce n'est pas une garantie d'exhaustivité.
-- Toutes les modifications de cette roadmap sont destinées à la branche `Archia-Browser`, jamais à `main` et sans création de branche supplémentaire.
+| ID | Tâche | Dépend de | État initial | Critère de sortie mesurable |
+|---|---|---|---|---|
+| P1-HTML-01 | Améliorer tokenizer/parser HTML : entités nommées/numériques, commentaires, raw-text, balises mal formées, insertion implicite, namespaces HTML/SVG/MathML et récupération d'erreurs. | P0-RESOURCE-10, P0-PANIC-12 | [PARTIEL] | Tests de parsing par catégories ; pas de crash sur corpus adversarial ; résultats de référence conservés pour chaque régression. |
+| P1-DOM-02 | Compléter DOM : parcours/mutations, ordre et attributs, texte, namespaces, ownership et invariants ; préparer une API stable pour runtime et accessibilité. | P1-HTML-01, P0-MEM-11 | [PARTIEL] | Tests unitaires pour opérations DOM et invariants ; 100 % des mutations publiques couvertes par au moins un test ; limites de profondeur maintenues. |
+| P1-CSS-03 | Compléter tokenizer/parser CSS, commentaires/escapes, valeurs, erreurs récupérables, at-rules utiles et propriétés invalides ; définir précisément les propriétés prises en charge. | P0-RESOURCE-10, P0-PANIC-12 | [PARTIEL] | Corpus CSS valide/invalide ; aucun crash ; support documenté par propriété avec tests de calcul de valeur. |
+| P1-CASCADE-04 | Compléter cascade : origine des règles, importance, spécificité, ordre, héritage, valeurs initiales/inherit/unset, custom properties et résolution `var()`. | P1-CSS-03 | [PARTIEL] | Suite de tests couvrant les règles de cascade et au moins 100 cas de régression ciblés ; résultats déterministes. |
+| P1-SELECTOR-05 | Couvrir sélecteurs modernes essentiels : attributs, combinateurs, pseudo-classes structurales, états interactifs prévus et pseudo-éléments, avec bornes de complexité. | P1-DOM-02, P1-CASCADE-04, P0-RESOURCE-10 | [PARTIEL] | Matrice de sélecteurs supportés/non supportés documentée ; tests positifs/négatifs ; limites de temps/complexité mesurées. |
+| P1-LAYOUT-06 | Stabiliser box model, block/inline/inline-block, dimensions intrinsèques, unités, marges, line boxes, wrapping, overflow, viewport et ordre de peinture. | P1-CASCADE-04, P1-TEXT-08 | [PARTIEL] | Tests géométriques à tolérance définie ; cas de référence à plusieurs viewports ; aucune régression visuelle inexpliquée dans le corpus. |
+| P1-TEXT-07 | Introduire un système de fontes et shaping réel via une bibliothèque dédiée ou une implémentation spécialisée ; gérer fallback et métriques. | P0-RESOURCE-10 | [MANQUANT / PARTIEL] | Rendu vérifié de fontes réelles, fallback déterministe et métriques cohérentes sur les polices de test ; licences et mises à jour auditées. |
+| P1-UNICODE-08 | Gérer Unicode : UTF-8, graphemes, combining marks, ligatures, bidi RTL, scripts complexes, emoji, variation selectors et fallback ; ne pas assimiler les octets/caractères aux glyphes. | P1-TEXT-07 | [PARTIEL / MANQUANT] | Corpus de test multi-script (latin accentué, arabe, hébreu, devanagari, CJK, emoji) rendu sans perte/corruption ; cas bidi et shaping comparés à des références. |
+| P1-PAINT-09 | Compléter rendu 2D : couleurs CSS, bordures, ombres prioritaires, clipping, opacité, ordre de peinture, stacking contexts de base et surfaces sûres en taille. | P1-LAYOUT-06 | [PARTIEL] | Tests de pixels et captures de référence sur scènes fixes ; limites surface/pixels testées ; aucune écriture hors limites. |
+| P1-WPT-10 | Mettre en place un harness de conformité inspiré de Web Platform Tests (WPT) pour HTML parsing, CSS parsing/selectors/cascade, layout et rendu ; respecter licences et attribution du corpus. | P1-HTML-01, P1-CSS-03, P1-LAYOUT-06, P1-PAINT-09 | [MANQUANT] | Harness reproductible, rapport de tests pass/fail/skip par commit et catégories ; seuil initial mesuré puis progression chiffrée publiée, sans cacher les tests ignorés. |
+| P1-BASELINE-11 | Créer corpus de compatibilité web moderne et tests différentiels de référence pour les fonctionnalités annoncées ; classer les échecs par fonctionnalité et sévérité. | P1-WPT-10 | [MANQUANT] | Rapport versionné avec au moins 200 tests pertinents au périmètre initial, résultat par test et liste des incompatibilités connues. |
+| P1-LIFECYCLE-12 | Formaliser cycle Document/Page/navigation, invalidation de style/layout/paint, réponses tardives et annulation, pour éviter les états périmés. | P0-POLICY-09, P1-DOM-02 | [PARTIEL] | Tests d'annulation, redirection, rechargement et réponse hors ordre ; aucun document ancien ne remplace le document courant. |
+| P1-DIAG-13 | Ajouter erreurs structurées, logs sans secrets, dumps de DOM/style/layout optionnels et cas de reproduction minimaux. | P0-CI-15 | [PARTIEL] | Chaque échec d'intégration expose une catégorie et un contexte non sensible ; tests vérifient l'absence de cookies/credentials dans les logs. |
+| P1-BENCH-14 | Créer benchmarks reproductibles tokenizer, DOM, sélecteurs, cascade, layout, paint et mémoire sur petits/grands documents. | P1-HTML-01, P1-CASCADE-04, P1-LAYOUT-06, P1-PAINT-09 | [MANQUANT] | Baseline publiée avec matériel/versions, médiane et dispersion ; régression de plus de 20 % déclenche une alerte à confirmer. |
+
+**Porte de sortie P1 :** porte P0 satisfaite ; les tests unitaires et d'intégration du périmètre passent ; rapport WPT/corpus publié avec taux pass/fail/skip ; les limites de compatibilité sont explicites. Ne pas revendiquer « compatible avec le web moderne » sur la seule base de quelques pages de démonstration.
+
+# P2 — Navigateur quotidien, interface, ressources et plateformes
+
+**But :** passer de bibliothèques de moteur à une application utilisable, avec un périmètre web explicite et des parcours complets.
+
+| ID | Tâche | Dépend de | État initial | Critère de sortie mesurable |
+|---|---|---|---|---|
+| P2-CSS-01 | Implémenter les fonctionnalités CSS essentielles manquantes : Flexbox, table layout, positionnement, z-index/stacking, transforms, transitions prioritaires, media queries et responsive layout. | P1-CASCADE-04, P1-LAYOUT-06, P1-PAINT-09 | [PARTIEL] | Tests de référence par fonctionnalité et plusieurs viewports ; résultat WPT catégorisé ; aucune fonctionnalité annoncée sans test. |
+| P2-IMAGES-02 | Charger/décoder les formats image prioritaires via codecs dédiés ; gérer dimensions intrinsèques, ratio, `object-fit`, `srcset`/sélection responsive et erreurs. | P0-POLICY-09, P0-RESOURCE-10, P1-LAYOUT-06 | [PARTIEL] | Tests PNG/JPEG/WebP et ressources invalides/surdimensionnées ; quotas pixels/mémoire ; échec de décodage sans crash. |
+| P2-FONTS-03 | Charger fontes web avec MIME, formats supportés, cache, fallback, validation des fichiers et politique réseau. | P0-POLICY-09, P1-TEXT-07, P1-UNICODE-08 | [MANQUANT / PARTIEL] | Tests de chargement, fallback, format invalide et fonte malveillante ; limites mémoire et règles de cache vérifiées. |
+| P2-MEDIA-04 | Définir puis implémenter audio/vidéo : codecs supportés, décodage, contrôles, synchronisation, sous-titres, erreurs et arrêt des ressources hors écran. | P0-POLICY-09, P0-RESOURCE-10, P1-LIFECYCLE-12 | [MANQUANT] | Matrice de codecs/plateformes publiée ; tests lecture/pause/seek/erreurs et budgets CPU/mémoire ; aucun codec annoncé sans test. |
+| P2-FORMS-05 | Compléter formulaires : types d'inputs, validation, encodage, focus, clavier, sélection, événements, upload contrôlé et navigation soumise. | P1-DOM-02, P1-LAYOUT-06, P1-LIFECYCLE-12 | [PARTIEL] | Tests d'interaction pour chaque type annoncé, GET/POST et navigation ; pas de soumission involontaire de données sensibles. |
+| P2-A11Y-06 | Construire un arbre d'accessibilité, rôles/noms/états, navigation clavier, focus visible, zoom, contraste et interfaces accessibles aux technologies d'assistance. | P1-DOM-02, P1-LAYOUT-06, P2-FORMS-05 | [MANQUANT] | Tests automatisés de l'arbre et parcours clavier ; audit manuel avec au moins un lecteur d'écran sur chaque OS supporté. |
+| P2-UI-07 | Construire UI graphique réelle : fenêtre, viewport, barre d'adresse, navigation, erreurs, menus, raccourcis, focus et fermeture propre ; séparer UI privilégiée du contenu. | P0-ARCH-01, P1-LIFECYCLE-12 | [MANQUANT] | Parcours manuel automatisable ouvrir URL, naviguer, recharger, revenir/avancer et fermer ; UI ne lit pas directement les données arbitraires du contenu. |
+| P2-TABS-08 | Relier le modèle d'onglets à l'UI : ouvrir/fermer/sélectionner, état par onglet, isolation des navigations et limites de ressources. | P2-UI-07, P1-LIFECYCLE-12, P0-MEM-11 | [PARTIEL] | Tests de 20 onglets, fermeture/sélection/rechargement et erreurs ; aucune page ou historique n'est attribué au mauvais onglet. |
+| P2-HISTORY-09 | Ajouter historique persistant, favoris, restauration maîtrisée et suppression des données, avec politique de vie privée et quotas. | P2-UI-07, P2-TABS-08 | [PARTIEL] | Tests redémarrage, suppression et quotas ; mode privé futur ne laisse aucune donnée persistante. |
+| P2-DOWNLOAD-10 | Ajouter gestionnaire de téléchargements : destination confirmée, nom de fichier sûr, collisions, annulation, progression, taille max et protections contre chemins malveillants. | P0-FILE-03, P0-POLICY-09, P2-UI-07 | [MANQUANT] | Tests traversal, noms Unicode, collision, annulation et téléchargement interrompu ; écritures hors destination impossible dans les tests. |
+| P2-HTTP-11 | Compléter gestion HTTP pour navigation/ressources : compression, charset, types MIME, HEAD/POST, connexions réutilisées si sûres, timeouts et annulation. | P0-HTTP-04, P0-TLS-05, P1-LIFECYCLE-12 | [PARTIEL] | Tests d'intégration pour chaque capacité activée, y compris contenu invalide ; aucune réutilisation de connexion inter-origines incorrecte. |
+| P2-STORE-12 | Définir stockage web : localStorage/sessionStorage et IndexedDB seulement après modèle d'origine, quotas, effacement et isolation ; ne pas confondre avec cookies/cache HTTP. | P0-ORIGIN-02, P0-MEM-11, P3-SOP-01 | [MANQUANT] | Tests d'isolation entre origines, quotas et effacement ; aucune API n'est exposée avant que les contrôles de sécurité correspondants soient effectifs. |
+| P2-PLATFORM-13 | Formaliser support Windows/Linux/ArchiaOS, abstraction fenêtre/entrée/fichiers/clipboard, empaquetage et chemins natifs ; ne pas considérer un enum de plateforme comme une intégration. | P2-UI-07, P0-FILE-03 | [PARTIEL / MANQUANT] | Build et tests d'intégration sur chaque OS revendiqué ; tableau des fonctionnalités et limitations par plateforme publié. |
+| P2-E2E-14 | Ajouter tests bout-en-bout navigation → transport → redirects/cookies/cache → HTML/CSS → layout → rendu → interaction. | P1-WPT-10, P2-UI-07, P2-IMAGES-02 | [MANQUANT / PARTIEL] | Au moins 50 scénarios stables en CI, serveur local déterministe, captures ou assertions de rendu et journaux sans secrets. |
+| P2-PERF-15 | Établir budget de performance sur pages représentatives, mémoire de surfaces, nombre d'onglets, temps au premier rendu et annulation. | P1-BENCH-14, P2-E2E-14 | [MANQUANT] | Baseline documentée sur matériel défini ; budgets initiaux explicites et alertes de régression ; pas de chiffres inventés sans mesure. |
+
+**Porte de sortie P2 :** application graphique réellement utilisable sur les plateformes annoncées ; parcours de navigation et interaction testés ; téléchargements et ressources appliquent les quotas ; accessibilité de base évaluée ; matrice de compatibilité publiée.
+
+# P3 — JavaScript, Web APIs, isolation forte et publication
+
+**But :** exposer progressivement les capacités actives du web seulement lorsque les contrôles de sécurité et les tests sont prêts.
+
+| ID | Tâche | Dépend de | État initial | Critère de sortie mesurable |
+|---|---|---|---|---|
+| P3-SOP-01 | Appliquer Same-Origin Policy partout : DOM, fenêtres, ressources, stockage, navigation, fetch et messages ; traiter les origines opaques et les documents locaux. | P0-ORIGIN-02, P0-POLICY-09, P1-DOM-02 | [MANQUANT / PARTIEL] | Suite d'isolation inter-origines positive/négative ; aucune lecture/écriture cross-origin non autorisée ; rapport de tests archivé. |
+| P3-CORS-02 | Implémenter CORS, preflight, credentials, redirects, erreurs opaques et règles de cache de preflight, alignés sur le modèle de sécurité retenu. | P3-SOP-01, P0-HTTP-04, P0-CACHE-08 | [MANQUANT] | Tests d'intégration pour origines autorisées/interdites, preflight et credentials ; chaque décision est observable sans divulguer de secrets. |
+| P3-CSP-03 | Implémenter CSP : sources, nonce/hash selon périmètre, scripts/styles/objets, violations, intégration avec redirects et policies réseau. | P3-SOP-01, P0-POLICY-09 | [MANQUANT] | Tests de blocage et d'autorisation par directive ; scripts/ressources interdits ne s'exécutent/ne se chargent pas. |
+| P3-JS-04 | Choisir et intégrer un runtime JavaScript autonome ou l'implémenter ; auditer licence, CVE, sandboxabilité, mémoire, interruptions et cadence de mise à jour. Aucun moteur navigateur complet. | P0-ARCH-01, P0-DEPEND-13, P1-DOM-02 | [MANQUANT] | Décision d'architecture documentée ; prototype exécute le corpus ECMAScript retenu ; quotas et arrêt forcé testés avant toute exposition réseau. |
+| P3-BIND-05 | Créer bindings DOM et modèle d'événements, tâches/microtasks, timers, navigation de contexte, erreurs et garbage collection coordonnée avec les documents. | P3-JS-04, P3-SOP-01, P1-LIFECYCLE-12 | [MANQUANT] | Tests DOM/events/timers/ordre des tâches et navigation ; script interrompu ou ancien document ne peut plus modifier l'état courant. |
+| P3-WEBAPI-06 | Ajouter progressivement Fetch, URL, Headers, Request/Response, AbortController, Promises, console, forms et APIs web prioritaires avec permissions. | P3-BIND-05, P3-CORS-02, P3-CSP-03 | [MANQUANT] | Matrice API par API avec tests positifs/négatifs, quotas et conformité ; chaque API annoncée a une suite automatisée. |
+| P3-WORKERS-07 | Définir workers, communication inter-contextes, postMessage et structured clone avec limites, origine et cycle de vie. | P3-BIND-05, P3-SOP-01, P0-MEM-11 | [MANQUANT] | Tests d'isolation, transferts invalides, quotas et arrêt à la fermeture du document ; aucune tâche orpheline. |
+| P3-SANDBOX-08 | Définir processus de contenu séparé de l'UI privilégiée, permissions minimales, IPC validé et sandbox OS par plateforme. Concevoir les interfaces tôt, activer les scripts seulement après cette étape. | P0-ARCH-01, P2-PLATFORM-13, P3-JS-04 | [MANQUANT] | Tests d'IPC malformé et tentative d'accès fichiers/réseau non autorisé ; preuve de confinement sur chaque OS annoncé et audit externe avant release stable. |
+| P3-QUOTA-09 | Imposer limites CPU, mémoire, temps d'exécution, pile, tâches, DOM, canvases et allocations Web API ; interruption fiable des scripts infinis. | P0-MEM-11, P0-RESOURCE-10, P3-JS-04, P3-SANDBOX-08 | [MANQUANT] | Tests de boucles infinies, allocation massive et tâches abusives ; processus/onglet récupéré dans le délai défini sans faire tomber l'UI. |
+| P3-MIXED-10 | Bloquer mixed content, appliquer politiques HTTPS, permissions par origine et contrôle de navigation dangereuse ; définir les exceptions et avertissements. | P0-TLS-05, P0-POLICY-09, P3-SOP-01 | [MANQUANT] | Tests HTTP depuis document HTTPS, redirects downgrade et permission refusée ; aucun accès non sécurisé en dehors de la policy. |
+| P3-DEVTOOLS-11 | Ajouter DevTools : console, inspecteur DOM/style, réseau, erreurs, source maps si runtime supporté et profileur CPU/mémoire. | P3-BIND-05, P3-WEBAPI-06, P2-E2E-14 | [MANQUANT] | Tests de non-divulgation inter-origines et de déconnexion ; les outils ne modifient pas les décisions de sécurité du contenu. |
+| P3-PRIVACY-12 | Ajouter profils, mode privé, isolation de session, permissions par site, effacement des données, protection des secrets et politique de télémétrie explicite. | P2-STORE-12, P2-HISTORY-09, P3-SOP-01 | [MANQUANT] | Tests après fermeture/redémarrage confirmant l'absence des données privées visées ; matrice des données conservées publiée. |
+| P3-RENDER-13 | Optimiser invalidation et rendu incrémental, cache de layout/paint, virtualisation et GPU facultatif avec fallback logiciel sûr. | P1-BENCH-14, P2-PERF-15, P2-E2E-14 | [MANQUANT / PARTIEL] | Benchmarks comparatifs avant/après ; gain mesuré sur corpus sans régression visuelle ni dépassement mémoire. |
+| P3-WPT-14 | Étendre WPT et tests web-platform aux API actives, DOM, events, CORS, CSP, workers, images, fonts et médias selon support annoncé. | P1-WPT-10, P3-WEBAPI-06, P3-WORKERS-07 | [MANQUANT] | Rapports par catégorie avec pass/fail/skip et versions du corpus ; toute exclusion documentée et aucun skip compté comme succès. |
+| P3-UPDATE-15 | Concevoir mise à jour sécurisée : métadonnées signées, vérification cryptographique, anti-downgrade, reprise, rollback sûr et canal de distribution contrôlé. | P0-DEPEND-13, P2-PLATFORM-13 | [MANQUANT] | Tests signature invalide, artefact altéré, downgrade, interruption et rollback ; refus systématique d'installer un artefact non vérifié. |
+| P3-RELEASE-16 | Préparer publication : builds signés, SBOM, provenance, notes de sécurité, politique de divulgation, réponse CVE, support des versions et cycle de release. | P0-CI-15, P3-SANDBOX-08, P3-UPDATE-15 | [MANQUANT] | Pipeline release reproductible, artefacts signés vérifiables, SBOM publiée et checklist sécurité validée pour chaque version candidate. |
+
+**Porte de sortie P3 :** aucune capacité scriptée exposée avant les contrôles de sécurité correspondants ; suite WPT/API publiée ; sandbox et mises à jour vérifiées sur les OS supportés ; bilan de sécurité et compatibilité avant publication.
+
+# Processus de validation commun
+
+1. **Avant de cocher :** identifier le commit, le code et le test correspondant ; préciser si le test est nouveau ou existant.
+2. **Exécution obligatoire :** conserver la commande, le code de sortie, la version des outils, le SHA et le lien CI/log. Ne pas transformer « test ajouté » en « test réussi ».
+3. **Tests adversariaux :** tester limites N−1/N/N+1, données tronquées/malformées, concurrence, annulation, ressources imbriquées, fuzz corpus et erreurs réseau.
+4. **WPT :** épingler une version/commit du corpus, rapporter pass/fail/skip par catégorie et expliquer les exclusions. Un résultat de conformité n'est valide que pour le périmètre réellement exécuté.
+5. **Compatibilité :** annoncer les fonctionnalités supportées et absentes ; utiliser des tests différentiels et captures de référence ; ne pas revendiquer une compatibilité générale sur des tests maison uniquement.
+6. **Sécurité :** réévaluer le modèle de menace à chaque ajout de runtime, stockage, téléchargement, média, IPC ou permission. Aucun P3 ne contourne un P0 non résolu.
+7. **Performance :** publier les mesures et le protocole ; pas d'optimisation déclarée réussie sans comparaison reproductible.
+8. **Suivi de chaque tâche :** remplacer l'état initial par `[EN COURS]`, `[IMPLÉMENTÉ — NON VALIDÉ]` ou `[VALIDÉ]` avec preuve liée. Réouvrir la tâche si une régression survient.
+
+## État de validation au moment de cette révision
+
+- L'inspection de code a identifié les briques et les lacunes décrites dans « État initial » ; elle ne remplace pas l'exécution des tests.
+- Le workflow `.github/workflows/ci.yml` prévoit `cargo fmt --all -- --check`, `cargo test --workspace` et `cargo build --workspace` sur push de `Archia-Browser` et sur pull request.
+- **Aucun résultat de test ou de CI n'est déclaré réussi par cette révision.** Les exécutions du commit courant doivent être consultées et archivées avant de changer les statuts.
+- P0 demeure ouvert. P1–P3 sont le backlog technique connu, à réviser lors des audits de code et de compatibilité ; ce document ne prétend pas que toute exigence future du Web a déjà été découverte.
