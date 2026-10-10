@@ -11,7 +11,7 @@ struct CornerRadius {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-struct CornerRadii {
+pub struct CornerRadii {
     top_left: CornerRadius,
     top_right: CornerRadius,
     bottom_right: CornerRadius,
@@ -61,6 +61,10 @@ impl DisplayList {
 
     pub fn len(&self) -> usize {
         self.commands.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.commands.is_empty()
     }
 }
 
@@ -1068,7 +1072,7 @@ mod tests {
             let mut root = Node::element("div");
             root.set_attribute(
                 "style",
-                &format!("width: 20px; height: 10px; {property}: hidden;"),
+                format!("width: 20px; height: 10px; {property}: hidden;"),
             );
             root.append(Node::text("overflow"));
 
@@ -1090,7 +1094,7 @@ mod tests {
             let mut root = Node::element("div");
             root.set_attribute(
                 "style",
-                &format!("width: 20px; height: 10px; overflow: {overflow};"),
+                format!("width: 20px; height: 10px; overflow: {overflow};"),
             );
             root.append(Node::text("overflow"));
 
