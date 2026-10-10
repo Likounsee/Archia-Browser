@@ -962,7 +962,7 @@ mod tests {
             "Content-Length: 0",
             "Transfer-Encoding: chunked",
             "X-Test: bad\u{1}value",
-            "X-Test: one\\r\\nx-test: two",
+            "X-Test: one\r\nx-test: two",
         ] {
             let response = format!(
                 "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n{trailer}\r\n\r\n"
