@@ -1245,10 +1245,8 @@ mod tests {
         );
         assert!(request_only_if_cached(&request));
 
-        let ordinary = make_request("https://example.org/resource").with_header(
-            "cache-control",
-            r#"private="only-if-cached""#,
-        );
+        let ordinary = make_request("https://example.org/resource")
+            .with_header("cache-control", r#"private="only-if-cached""#);
         assert!(!request_only_if_cached(&ordinary));
     }
 }
