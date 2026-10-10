@@ -51,7 +51,7 @@ These controls are implemented in source but still require ongoing regression te
 - The custom URL parser and origin model are not a full WHATWG URL implementation; compatibility and differential testing remain necessary.
 - TLS policy/root lifecycle and positive/negative certificate integration tests need a documented, repeatable validation plan.
 - Memory accounting is not proven to cover every allocation in DOM, layout, display lists, raster surfaces and all temporary parser buffers.
-- Initial cargo-fuzz targets now exercise URL parsing/resolution, HTML tokenization/DOM parsing, CSS tokenization and cookie parsing/selection. A scheduled workflow builds and runs them and uploads crash artifacts on failure, but no successful fuzz run, retained minimized corpus, sustained 24-hour run, HTTP parser target, or broad WPT/differential coverage has yet been verified.
+- Seven cargo-fuzz targets now exercise URL parsing/resolution, HTTP response framing, HTML tokenization/DOM parsing, CSS tokenization, stylesheet parsing, selector parsing and cookie parsing/selection. Initial seed corpora are versioned for URL, HTTP, HTML, CSS and cookies; the workflow builds targets, runs bounded fuzz sessions and uploads crash artifacts on failure. URL, HTML and CSS tokenization each passed a 90-second run on an earlier commit. The full seven-target run on the current commit, 24-hour sustained fuzzing, minimized crash-regression corpus and broad WPT/differential coverage remain unverified.
 - Dependency advisories, license inventory and reproducible-build policy require a recorded audit.
 - A passing unit/CI run proves only the tested revision and covered cases; it does not prove the absence of vulnerabilities.
 
