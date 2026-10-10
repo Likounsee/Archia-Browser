@@ -7,6 +7,10 @@ const MAX_COOKIE_HEADER_BYTES: usize = 8192;
 const MAX_COOKIES: usize = 3000;
 const MAX_COOKIES_PER_DOMAIN: usize = 180;
 
+fn trim_cookie_ows(value: &str) -> &str {
+    value.trim_matches(|character| character == ' ' || character == '\t')
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SameSite {
     Unspecified,
@@ -45,7 +49,7 @@ impl CookieJar {
         if set_cookie.len() > MAX_COOKIE_PAIR_BYTES {
             return;
         }
-        let mut parts = set_cookie.split(';').map(str::trim);
+        let mut parts = set_cookie.split(';').map(trim_cookie_ows);
         let Some(pair) = parts.next() else {
             return;
         };
@@ -55,11 +59,11 @@ impl CookieJar {
         let Some((name, value)) = pair.split_once('=') else {
             return;
         };
-        let name = name.trim();
+        let name = trim_cookie_ows(name);
         if name.is_empty() || !Self::valid_cookie_name(name) {
             return;
         }
-        let value = value.trim();
+        let value = trim_cookie_ows(value);
         if !Self::valid_cookie_value(value) {
             return;
         }
@@ -81,15 +85,14 @@ impl CookieJar {
 
         for attribute in parts {
             let mut pieces = attribute.splitn(2, '=');
-            let key = pieces
+            let key = trim_cookie_ows(pieces
                 .next()
-                .unwrap_or_default()
-                .trim()
+                .unwrap_or_default())
                 .to_ascii_lowercase();
             match key.as_str() {
                 "domain" => {
                     if let Some(value) = pieces.next() {
-                        let raw_domain = value.trim();
+                        let raw_domain = trim_cookie_ows(value);
                         // RFC 6265 ignores one leading dot, but accepting
                         // repeated dots after trimming them all is too lenient.
                         let domain = raw_domain
@@ -114,7 +117,7 @@ impl CookieJar {
                 }
                 "path" => {
                     if let Some(value) = pieces.next() {
-                        let value = value.trim();
+                        let value = trim_cookie_ows(value);
                         if value.starts_with('/') {
                             cookie.path = value.to_owned();
                             path_attribute_set = true;
@@ -123,13 +126,13 @@ impl CookieJar {
                 }
                 "expires" => {
                     if let Some(value) = pieces.next() {
-                        expires_attribute = httpdate::parse_http_date(value.trim()).ok();
+                        expires_attribute = httpdate::parse_http_date(trim_cookie_ows(value)).ok();
                     }
                 }
                 "max-age" => {
                     if let Some(seconds) = pieces
                         .next()
-                        .and_then(|value| value.trim().parse::<i64>().ok())
+                        .and_then(|value| trim_cookie_ows(value).parse::<i64>().ok())
                     {
                         max_age = Some(seconds);
                     }
@@ -139,7 +142,7 @@ impl CookieJar {
                 "samesite" => {
                     cookie.same_site = match pieces
                         .next()
-                        .map(str::trim)
+                        .map(trim_cookie_ows)
                         .unwrap_or_default()
                         .to_ascii_lowercase()
                         .as_str()
@@ -472,6 +475,16 @@ mod tests {
         assert!(header.len() <= MAX_COOKIE_HEADER_BYTES);
         assert!(header.starts_with("cookie"));
         assert!(header.contains("; "));
+    }
+
+    #[test]
+    fn rejects_unicode_whitespace_around_cookie_name_and_value() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&url, "\u{00a0}sid=ok");
+        jar.store(&url, "sid=\u{00a0}ok");
+        assert!(jar.is_empty());
     }
 
     #[test]
