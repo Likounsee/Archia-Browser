@@ -14,7 +14,7 @@ in source.
 - [ ] **DEFERRED by priority decision (2026-10-10):** the cross-consumer adversarial URL review is incomplete. Existing fixes remain in place; resume the broader review after P0-2. Do not report P0-1 as fully resolved.
 
 ## P0-2 — HTTP request/response framing
-- [x] Reject invalid header names/values and duplicate case-insensitive response/request headers and chunk trailers; reject conflicting Content-Length/Transfer-Encoding framing. Targeted regression tests pass in CI.
+- [x] Reject invalid header names/values and duplicate case-insensitive request headers, duplicate response fields other than valid repeated `Set-Cookie`, and duplicate/forbidden chunk trailers; reject conflicting Content-Length/Transfer-Encoding framing. Targeted regression tests pass in CI.
 - [ ] Finish Content-Length / Transfer-Encoding edge cases, HEAD and bodyless statuses, interim responses, chunk parsing, and response size limits.
 - [ ] Add remaining adversarial framing tests and verify transport tests on CI.
 
@@ -92,3 +92,5 @@ in source.
 
 
 - **Priority change (2026-10-10):** by user decision, pause the broad P0-1 URL consumer audit and prioritize P0-2. P0-1 remains explicitly incomplete/deferred; do not revert prior fixes. P0-2 has verified work for ASCII HTTP optional whitespace, bodyless response Content-Length syntax, forbidden framing on 1xx/204, 205 Reset Content framing, duplicate request/response header rejection, and duplicate/forbidden chunk trailers. Continue P0-2 now; do not mark it Done until the remaining framing audit and CI checks pass.
+
+- **P0-2 compatibility correction:** response parsing now preserves multiple `Set-Cookie` fields rather than rejecting a valid repeated field; regression coverage checks both cookies survive. Other duplicate response fields remain rejected conservatively pending broader header-list semantics review.

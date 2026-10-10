@@ -414,7 +414,8 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
             // HTTP field names are case-insensitive. Reject duplicate spellings
             // so framing/security checks cannot inspect a different value than
             // the one a downstream server chooses.
-            || !seen_headers.insert(name.to_ascii_lowercase())
+            || (!seen_headers.insert(name.to_ascii_lowercase())
+                && !name.eq_ignore_ascii_case("set-cookie"))
         {
             return Err(TransportError::InvalidRequest);
         }
@@ -1110,13 +1111,25 @@ mod tests {
             b"HTTP/1.1 200 OK\\r\\nContent-Length: 5\\r\\nContent-Length: 5\\r\\n\\r\\nHello".as_slice(),
             b"HTTP/1.1 200 OK\\r\\nTransfer-Encoding: chunked\\r\\nTransfer-Encoding: chunked\\r\\n\\r\\n0\\r\\n\\r\\n".as_slice(),
             b"HTTP/1.1 200 OK\\r\\nContent-Type: text/plain\\r\\ncontent-type: text/html\\r\\n\\r\\n".as_slice(),
-            b"HTTP/1.1 200 OK\\r\\nSet-Cookie: a=1\\r\\nset-cookie: b=2\\r\\n\\r\\n".as_slice(),
         ] {
             assert_eq!(
                 parse_http_response(response, 1024, 1024),
                 Err(TransportError::ConnectionFailed)
             );
         }
+    }
+
+    #[test]
+    fn preserves_multiple_set_cookie_headers() {
+        let response = parse_http_response(
+            b"HTTP/1.1 200 OK\\r\\nSet-Cookie: a=1\\r\\nset-cookie: b=2\\r\\n\\r\\n",
+            1024,
+            1024,
+        )
+        .unwrap();
+
+        assert_eq!(response.set_cookie_headers(), &["a=1", "b=2"]);
+        assert_eq!(response.header("set-cookie"), Some("b=2"));
     }
 
     #[test]
