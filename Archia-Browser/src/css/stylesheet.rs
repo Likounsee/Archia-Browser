@@ -99,49 +99,68 @@ impl StyleSheet {
         let mut inherited = ComputedStyle::default();
 
         for index in 0..path.len() {
-            let mut matched = self.matching_rules_path_with_siblings(
+            inherited = self.compute_style_node_with_siblings(
                 &path[..=index],
                 &sibling_lists[..=index],
                 &sibling_positions[..=index],
+                &inherited,
             );
-            matched.sort_by_key(|(_, specificity)| *specificity);
-
-            let mut local = ComputedStyle::default();
-            for (rule, _) in matched {
-                for declaration in &rule.declarations {
-                    apply_declaration(&mut local, declaration);
-                }
-            }
-
-            if let Some(inline_style) = path[index].attribute("style") {
-                for declaration in parse_declarations(&CssTokenizer::tokenize(inline_style)) {
-                    apply_declaration(&mut local, &declaration);
-                }
-            }
-
-            let mut computed = ComputedStyle::default();
-            for (name, value) in inherited.iter() {
-                if is_inherited_property(name) || name.starts_with("--") {
-                    computed.set(name, value);
-                }
-            }
-            for (name, value) in local.iter() {
-                if name.starts_with("--") {
-                    computed.set(name, value);
-                }
-            }
-            for (name, value) in local.iter() {
-                let resolved = resolve_css_value(name, value, &computed, &inherited);
-                if local.is_important(name) {
-                    computed.set_important(name, resolved);
-                } else {
-                    computed.set(name, resolved);
-                }
-            }
-            inherited = computed;
         }
 
         inherited
+    }
+
+    /// Compute only the current node's style, inheriting from its already
+    /// computed parent. Recomputing every ancestor for every node makes
+    /// style resolution grow with the sum of all ancestor-path lengths.
+    pub(crate) fn compute_style_node_with_siblings(
+        &self,
+        path: &[&Node],
+        sibling_lists: &[&[Node]],
+        sibling_positions: &[usize],
+        inherited: &ComputedStyle,
+    ) -> ComputedStyle {
+        let Some(node) = path.last() else {
+            return inherited.clone();
+        };
+        let mut matched =
+            self.matching_rules_path_with_siblings(path, sibling_lists, sibling_positions);
+        matched.sort_by_key(|(_, specificity)| *specificity);
+
+        let mut local = ComputedStyle::default();
+        for (rule, _) in matched {
+            for declaration in &rule.declarations {
+                apply_declaration(&mut local, declaration);
+            }
+        }
+
+        if let Some(inline_style) = node.attribute("style") {
+            for declaration in parse_declarations(&CssTokenizer::tokenize(inline_style)) {
+                apply_declaration(&mut local, &declaration);
+            }
+        }
+
+        let mut computed = ComputedStyle::default();
+        for (name, value) in inherited.iter() {
+            if is_inherited_property(name) || name.starts_with("--") {
+                computed.set(name, value);
+            }
+        }
+        for (name, value) in local.iter() {
+            if name.starts_with("--") {
+                computed.set(name, value);
+            }
+        }
+        for (name, value) in local.iter() {
+            let resolved = resolve_css_value(name, value, &computed, inherited);
+            if local.is_important(name) {
+                computed.set_important(name, resolved);
+            } else {
+                computed.set(name, resolved);
+            }
+        }
+
+        computed
     }
 
     pub fn compute_style_path(&self, path: &[&Node]) -> ComputedStyle {
