@@ -2010,6 +2010,66 @@ mod limit_tests {
     use super::*;
 
     #[test]
+    fn tls_server_name_accepts_dns_and_ip_literals() {
+        assert!(tls_server_name("example.org").is_ok());
+        assert!(tls_server_name("127.0.0.1").is_ok());
+        assert!(tls_server_name("::1").is_ok());
+    }
+
+    #[test]
+    fn tls_server_name_rejects_invalid_dns_names() {
+        for host in ["", "bad host", "example.org/path", "example.org:443"] {
+            assert_eq!(tls_server_name(host), Err(TransportError::TlsFailed), "{host:?}");
+        }
+    }
+
+    #[test]
+    fn rejects_head_response_with_unexpected_wire_body() {
+        let result = parse_http_response_for_method(
+            b"HTTP/1.1 200 OK\\r\\nContent-Length: 5\\r\\n\\r\\nHello",
+            super::super::HttpMethod::Head,
+            1024,
+            1024,
+        );
+        assert_eq!(result, Err(TransportError::ConnectionFailed));
+    }
+
+    #[test]
+    fn rejects_zero_content_length_mismatch_and_truncated_fixed_body() {
+        let result = parse_http_response(
+            b"HTTP/1.1 200 OK\\r\\nContent-Length: 5\\r\\n\\r\\nHell",
+            1024,
+            1024,
+        );
+        assert_eq!(result, Err(TransportError::ConnectionFailed));
+    }
+
+    #[test]
+    fn rejects_body_forbidden_status_with_wire_body() {
+        for status in [204, 205, 304] {
+            let response = format!("HTTP/1.1 {status} No Content\\r\\n\\r\\nunexpected");
+            assert_eq!(
+                parse_http_response(response.as_bytes(), 1024, 1024),
+                Err(TransportError::ConnectionFailed),
+                "status {status}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_excessive_interim_responses() {
+        let mut response = Vec::new();
+        for _ in 0..=MAX_INTERIM_RESPONSES {
+            response.extend_from_slice(b"HTTP/1.1 100 Continue\\r\\n\\r\\n");
+        }
+        response.extend_from_slice(b"HTTP/1.1 200 OK\\r\\nContent-Length: 0\\r\\n\\r\\n");
+        assert_eq!(
+            parse_http_response(&response, 1024, 1024),
+            Err(TransportError::ConnectionFailed)
+        );
+    }
+
+    #[test]
     fn rejects_incomplete_chunk_terminator() {
         let result = parse_http_response(
             b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nHello\r\n0\r\n",
