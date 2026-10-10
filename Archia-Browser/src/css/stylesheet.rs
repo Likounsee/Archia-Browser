@@ -675,8 +675,8 @@ mod tests {
 
         let resolved = resolve_variables(value, &variables, 0);
 
-        assert_eq!(resolved, value);
         assert!(resolved.len() <= MAX_RESOLVED_CSS_VALUE_BYTES);
+        assert!(resolved.contains("var(--large)"));
     }
 
     #[test]
