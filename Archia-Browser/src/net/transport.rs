@@ -676,6 +676,12 @@ fn parse_http_response_for_method(
     loop {
         let (response, body_start) = parse_http_response_head(&bytes[cursor..], max_header_size)?;
 
+        // Protocol upgrades are unsupported; accepting 101 as a final response
+        // would expose a connection state this HTTP/1.1 client cannot handle.
+        if response.status == 101 {
+            return Err(TransportError::ConnectionFailed);
+        }
+
         if is_interim_response(response.status) {
             // Informational responses cannot carry message framing fields.
             // Reject them rather than letting a peer disagree about where the
@@ -2109,6 +2115,18 @@ mod limit_tests {
                 "status {status}"
             );
         }
+    }
+
+    #[test]
+    fn rejects_unsupported_protocol_switching_response() {
+        assert_eq!(
+            parse_http_response(
+                b"HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n",
+                1024,
+                1024,
+            ),
+            Err(TransportError::ConnectionFailed)
+        );
     }
 
     #[test]
