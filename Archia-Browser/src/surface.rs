@@ -271,8 +271,14 @@ impl SoftwareSurface {
                     None
                 };
                 if let Some((cx, cy, radius_x, radius_y)) = corner {
-                    let dx = px - cx;
-                    let dy = py - cy;
+                    // Geometry originates in untrusted document dimensions. Use i128
+                    // for the ellipse equation: i64 products overflow when CSS
+                    // supplies very large corner radii even though the raster area
+                    // itself is clipped to the small, bounded surface.
+                    let dx = i128::from(px - cx);
+                    let dy = i128::from(py - cy);
+                    let radius_x = i128::from(radius_x);
+                    let radius_y = i128::from(radius_y);
                     let lhs = dx * dx * radius_y * radius_y + dy * dy * radius_x * radius_x;
                     let rhs = radius_x * radius_x * radius_y * radius_y;
                     if lhs > rhs {
@@ -454,6 +460,28 @@ pub fn paint_background(surface: &mut SoftwareSurface, node: &Node, color: Color
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn extreme_rounded_rectangle_radii_do_not_overflow() {
+        let mut surface = SoftwareSurface::new(2, 2);
+        surface.fill_rounded_rect_clipped(
+            0,
+            0,
+            u32::MAX,
+            u32::MAX,
+            u32::MAX,
+            u32::MAX,
+            u32::MAX,
+            u32::MAX,
+            u32::MAX,
+            u32::MAX,
+            u32::MAX,
+            u32::MAX,
+            Color::RED,
+            None,
+        );
+        assert_eq!(surface.pixels().len(), 16);
+    }
 
     #[test]
     fn software_surface_has_rgba_storage() {
