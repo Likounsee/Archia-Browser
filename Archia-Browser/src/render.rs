@@ -1195,6 +1195,8 @@ mod tests {
                 PaintCommand::PopClip,
                 PaintCommand::PopClip,
             ],
+            text_bytes: 0,
+            truncated: false,
         };
         let mut surface = SoftwareSurface::new(20, 20);
         SoftwareRenderer::rasterize(&list, &mut surface);
