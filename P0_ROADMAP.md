@@ -11,7 +11,7 @@ in source.
 - [x] Ensure origin, cookie, policy, and transport code use consistent host/port interpretation.
 - [x] Add regression cases for malformed and valid authority forms.
 - [x] Run the URL and networking test suites on CI.
-- [ ] Complete the cross-consumer adversarial URL review; follow-ups fixed local-file encoded-separator/UNC mismatches, malformed percent escapes, and a filter bypass via percent-encoded unreserved path characters. Keep P0-1 open until remaining URL consumers and edge cases are reviewed.
+- [ ] Complete the cross-consumer adversarial URL review; follow-ups fixed local-file encoded-separator issues, UNC prefixes created only after dot-segment normalization, malformed percent escapes, and asymmetric percent-encoded filter matching. Keep P0-1 open until remaining URL consumers and edge cases are reviewed.
 
 ## P0-2 — HTTP request/response framing
 - [ ] Reject invalid header names/values, duplicate case-insensitive headers, and ambiguous message framing.
