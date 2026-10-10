@@ -15,8 +15,8 @@ in source.
 
 ## P0-2 — HTTP request/response framing
 - [x] Reject invalid header names/values and duplicate case-insensitive request headers, duplicate response fields other than valid repeated `Set-Cookie`, and duplicate/forbidden chunk trailers; reject conflicting Content-Length/Transfer-Encoding framing. Targeted regression tests pass in CI.
-- [ ] Finish Content-Length / Transfer-Encoding edge cases, HEAD and bodyless statuses, interim responses, chunk parsing, and response size limits.
-- [ ] Add remaining adversarial framing tests and verify transport tests on CI.
+- [x] Cover Content-Length / Transfer-Encoding edge cases, HEAD and bodyless statuses, interim responses, chunk parsing, and response size limits with conservative rejection of ambiguous framing.
+- [x] Add adversarial framing regression tests and verify formatting, workspace tests, and build on CI.
 
 ## P0-3 — Navigation and local-file boundary
 - [ ] Ensure remote navigation and subresources cannot reach file URLs through redirects or references.
@@ -96,3 +96,5 @@ in source.
 - **P0-2 compatibility correction:** response parsing now preserves multiple `Set-Cookie` fields rather than rejecting a valid repeated field; regression coverage checks both cookies survive. Other duplicate response fields remain rejected conservatively pending broader header-list semantics review.
 
 - **P0-2 follow-up:** request and response `Content-Length` now require one or more ASCII decimal digits after HTTP OWS trimming; signs and empty values are rejected. Chunk-size extensions are now parsed rather than ignored, rejecting malformed names/values/quotes while accepting token and quoted extensions. Regression coverage added; CI verification pending for the current head.
+
+- **P0-2 completion (2026-10-10):** completed the targeted HTTP/1 framing remediation on `Archia-Browser`: ASCII-only decimal Content-Length validation for requests and responses; reject framing on 1xx/204 and reject Transfer-Encoding on HTTP/1.0; preserve valid repeated Set-Cookie fields while rejecting other duplicate response fields; validate chunk extensions and trailers; cover HEAD/204/205/304 behavior, interim-response limits, conflicting framing, truncated/extra body bytes, and response-size limits. Final code commit: `6b7c68957302fb6c1c411ece2a27767a0fad4fb5`; CI: https://github.com/Likounsee/Archia-Browser/actions/runs/38067508303 — formatting passed, workspace tests passed (460 + 7 + 4, zero failures), and workspace build passed. This marks the scoped P0-2 checklist complete, not full HTTP/1.1 standards conformance; unsupported transfer codings and protocol upgrades remain rejected.
