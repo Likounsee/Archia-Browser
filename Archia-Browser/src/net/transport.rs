@@ -255,12 +255,11 @@ impl Transport for LocalFileTransport {
         let metadata = file
             .metadata()
             .map_err(|_| TransportError::ConnectionFailed)?;
-        if !metadata.is_file() || metadata.len() > self.max_file_size as u64 {
-            return Err(if metadata.len() > self.max_file_size as u64 {
-                TransportError::ResponseTooLarge
-            } else {
-                TransportError::ConnectionFailed
-            });
+        if !metadata.is_file() {
+            return Err(TransportError::ConnectionFailed);
+        }
+        if metadata.len() > self.max_file_size as u64 {
+            return Err(TransportError::ResponseTooLarge);
         }
 
         let body = if request.method == super::HttpMethod::Head {
@@ -1564,6 +1563,21 @@ mod tests {
             );
         }
         assert!(file_url_path("/tmp/%00secret").is_err());
+    }
+
+    #[test]
+    fn local_file_transport_rejects_directories() {
+        let path = std::env::temp_dir();
+        let url = if cfg!(windows) {
+            format!("file:///{}", path.display())
+        } else {
+            format!("file://{}", path.display())
+        };
+        let request = Request::new(super::super::Url::parse(&url).unwrap());
+        assert_eq!(
+            LocalFileTransport::new().send(&request),
+            Err(TransportError::ConnectionFailed)
+        );
     }
 
     #[test]
