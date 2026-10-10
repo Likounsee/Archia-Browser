@@ -185,7 +185,7 @@ impl Selector {
     }
 
     pub fn matches_path(&self, path: &[&Node]) -> bool {
-        if path.is_empty() || path.len() < self.parts.len() {
+        if self.parts.is_empty() || path.is_empty() || path.len() < self.parts.len() {
             return false;
         }
         self.matches_at(self.parts.len() - 1, path.len() - 1, path)
@@ -197,7 +197,8 @@ impl Selector {
         sibling_lists: &[&[Node]],
         sibling_positions: &[usize],
     ) -> bool {
-        if path.is_empty()
+        if self.parts.is_empty()
+            || path.is_empty()
             || path.len() < self.parts.len()
             || sibling_lists.len() != path.len()
             || sibling_positions.len() != path.len()
@@ -910,6 +911,15 @@ mod tests {
             attributes.insert("lang".into(), "en-US".into());
         }
         node
+    }
+
+    #[test]
+    fn manually_constructed_empty_selector_does_not_panic() {
+        let selector = Selector { parts: Vec::new() };
+        let node = Node::element("div");
+
+        assert!(!selector.matches_path(&[&node]));
+        assert!(!selector.matches_path_with_siblings(&[&node], &[&[]], &[0]));
     }
 
     #[test]
