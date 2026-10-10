@@ -424,13 +424,15 @@ fn has_valid_percent_encoding(value: &str) -> bool {
 
 fn contains_encoded_windows_drive_colon(path: &str) -> bool {
     let bytes = path.as_bytes();
-    bytes.len() >= 6
+    // Reject the encoded colon even without a following slash: on Windows,
+    // "C:relative" is drive-relative rather than rooted and has different
+    // semantics from the URL path the policy layer normalized.
+    bytes.len() >= 5
         && bytes[0] == b'/'
         && bytes[1].is_ascii_alphabetic()
         && bytes[2] == b'%'
         && bytes[3] == b'3'
         && bytes[4].eq_ignore_ascii_case(&b'a')
-        && bytes[5] == b'/'
 }
 
 fn contains_encoded_path_separator(path: &str) -> bool {
@@ -602,6 +604,8 @@ mod tests {
         for input in [
             "file:///C%3A/../Windows/system.ini",
             "file:///d%3a/Users/example/index.html",
+            "file:///C%3A",
+            "file:///C%3Arelative/path",
         ] {
             assert_eq!(
                 Url::parse(input).unwrap_err(),
