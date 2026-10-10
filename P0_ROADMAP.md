@@ -51,3 +51,6 @@ in source.
 - Added URL-authority checks for ASCII DNS/IPv4 host syntax and percent-encoded userinfo, and regression cases for malformed hosts, malformed userinfo, and valid userinfo with a trailing-dot hostname.
 - Related commits: \`a92390e2331ea7d2b842899b19dac79331441e4e\` (roadmap), \`4080baec6e6d039a7934f9514f28397a167da7cb\`, \`aaa7ec90f4e879a21e09d38f0d821deabe2e227a\`, \`a7bf89b1810b1d978b10c7e7992dc54d80f0ac47\`.
 - **Verification pending:** this environment cannot resolve GitHub for a local checkout, and the available workflow lookup returned no runs for these commits. Do not mark the URL item Done until formatting, tests, and build pass on CI.
+
+- Continued P0-2: response parsing now rejects duplicate HTTP header names case-insensitively, including non-framing headers such as `Content-Type` and `Set-Cookie`; regression cases added. Commit: `233a3d7c6a54bdd199576572cf1482406d79617f`.
+- **Verification still pending:** source-level regression tests are committed, but they have not been executed in this environment. P0-1 and P0-2 remain open until the corresponding CI checks pass.
