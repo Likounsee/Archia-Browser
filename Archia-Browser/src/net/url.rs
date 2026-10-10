@@ -486,7 +486,6 @@ mod tests {
             "https://999.999.999.999/path",
             "https://user@@example.org/path",
             "https://user%ZZ@example.org/path",
-            "https://user name@example.org/path",
         ] {
             assert_eq!(
                 Url::parse(input).unwrap_err(),
@@ -494,6 +493,11 @@ mod tests {
                 "expected invalid authority to be rejected: {input}"
             );
         }
+
+        assert_eq!(
+            Url::parse("https://user name@example.org/path").unwrap_err(),
+            UrlError::InvalidCharacter
+        );
     }
 
     #[test]
