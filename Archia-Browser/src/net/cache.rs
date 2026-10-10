@@ -230,6 +230,9 @@ fn request_forces_cache_bypass(request: &Request) -> bool {
 fn request_can_use_cache(request: &Request) -> bool {
     matches!(request.method, HttpMethod::Get)
         && matches!(request.url.scheme(), "http" | "https")
+        // User-info is not sent by this transport and must not alias a public
+        // cache entry for the same host/path before transport validation runs.
+        && !request.url.authority().contains('@')
         && !has_request_header(request, "authorization")
         && !has_request_header(request, "cookie")
         && !request
@@ -247,6 +250,7 @@ fn request_can_use_cache(request: &Request) -> bool {
 fn request_can_store(request: &Request) -> bool {
     matches!(request.method, HttpMethod::Get)
         && matches!(request.url.scheme(), "http" | "https")
+        && !request.url.authority().contains('@')
         && !has_request_header(request, "authorization")
         && !has_request_header(request, "cookie")
         && !request
@@ -513,6 +517,28 @@ mod tests {
 
         assert_eq!(cache.len(), 1);
         assert_eq!(cache.get(&request).unwrap().body, b"cached");
+    }
+
+    #[test]
+    fn userinfo_url_cannot_reuse_or_replace_public_cache_entry() {
+        let mut cache = HttpCache::default();
+        let public = make_request("https://example.org/account");
+        let response = Response::new(200)
+            .with_header("cache-control", "public, max-age=60")
+            .with_body(b"public representation".to_vec());
+        cache.store(&public, &response);
+
+        let userinfo = make_request("https://alice:secret@example.org/account");
+        assert!(cache.get(&userinfo).is_none());
+        cache.store(
+            &userinfo,
+            &Response::new(200)
+                .with_header("cache-control", "public, max-age=60")
+                .with_body(b"credential-specific".to_vec()),
+        );
+
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache.get(&public).unwrap().body, b"public representation");
     }
 
     #[test]
