@@ -561,7 +561,7 @@ mod tests {
 
         jar.store(&url, "sid=exact; Domain=127.0.0.1");
         assert_eq!(jar.header_for(&url).as_deref(), Some("sid=exact"));
-        assert_eq!(jar.header_for(&Url::parse("https://0.0.1/").unwrap()), None);
+        assert_eq!(jar.header_for(&Url::parse("https://127.0.0.2/").unwrap()), None);
     }
 
     #[test]
