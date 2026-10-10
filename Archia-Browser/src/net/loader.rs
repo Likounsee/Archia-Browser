@@ -18,6 +18,7 @@ pub enum DocumentLoadError {
     RedirectLoopDetected,
     InvalidRedirect,
     NoCurrentDocument,
+    InternalStatePoisoned,
 }
 
 const MAX_REDIRECTS: usize = 10;
@@ -85,7 +86,7 @@ where
         if let Some(cookie) = self
             .cookies
             .lock()
-            .expect("cookie jar poisoned")
+            .map_err(|_| DocumentLoadError::InternalStatePoisoned)?
             .header_for_context(
                 &current.url,
                 cookie_first_party.as_ref(),
@@ -112,7 +113,7 @@ where
                 .map_err(DocumentLoadError::Network)?;
 
             let cached_response = {
-                let mut cache = self.cache.lock().expect("HTTP cache poisoned");
+                let mut cache = self.cache.lock().map_err(|_| DocumentLoadError::InternalStatePoisoned)?;
                 cache.get(&current)
             };
             let response = if let Some(response) = cached_response {
@@ -124,7 +125,7 @@ where
                     .map_err(DocumentLoadError::Network)?;
                 self.cache
                     .lock()
-                    .expect("HTTP cache poisoned")
+                    .map_err(|_| DocumentLoadError::InternalStatePoisoned)?
                     .store(&current, &response);
                 response
             };
@@ -132,7 +133,7 @@ where
             for set_cookie in response.set_cookie_headers() {
                 self.cookies
                     .lock()
-                    .expect("cookie jar poisoned")
+                    .map_err(|_| DocumentLoadError::InternalStatePoisoned)?
                     .store(&current.url, set_cookie);
             }
 
@@ -204,7 +205,7 @@ where
                 if let Some(cookie) = self
                     .cookies
                     .lock()
-                    .expect("cookie jar poisoned")
+                    .map_err(|_| DocumentLoadError::InternalStatePoisoned)?
                     .header_for_context(&next.url, cookie_first_party.as_ref(), true, next.method)
                 {
                     next.headers.insert("cookie".into(), cookie);
@@ -347,7 +348,7 @@ where
             if let Some(cookie) = self
                 .cookies
                 .lock()
-                .expect("cookie jar poisoned")
+                .ok()?
                 .header_for_context(&current, Some(document_url), false, HttpMethod::Get)
             {
                 request.headers.insert("cookie".into(), cookie);
@@ -358,7 +359,7 @@ where
 
             *request_budget -= 1;
             let cached_response = {
-                let mut cache = self.cache.lock().expect("HTTP cache poisoned");
+                let mut cache = self.cache.lock().ok()?;
                 cache.get(&request)
             };
             let response = if let Some(response) = cached_response {
@@ -370,7 +371,7 @@ where
                 };
                 self.cache
                     .lock()
-                    .expect("HTTP cache poisoned")
+                    .ok()?
                     .store(&request, &response);
                 response
             };
@@ -378,7 +379,7 @@ where
             for set_cookie in response.set_cookie_headers() {
                 self.cookies
                     .lock()
-                    .expect("cookie jar poisoned")
+                    .ok()?
                     .store(&current, set_cookie);
             }
 
