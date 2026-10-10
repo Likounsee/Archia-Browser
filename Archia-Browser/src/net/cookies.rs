@@ -201,7 +201,7 @@ impl CookieJar {
         // overwriting or shadowing a security-sensitive HTTPS cookie.
         if cookie.secure && !url.is_secure() {
             return;
-       }
+        }
 
         // Enforce the cookie prefixes used by browsers to prevent insecure
         // origins and sibling subdomains from replacing sensitive cookies.
@@ -706,12 +706,26 @@ mod tests {
         jar.store(&url, "session=secret; HttpOnly; SameSite=Lax; Secure");
         jar.store(&url, "theme=dark; SameSite=Strict; Secure");
 
-        assert_eq!(jar.header_for(&url).as_deref(), Some("session=secret; theme=dark"));
-        assert_eq!(jar.script_visible_header_for(&url).as_deref(), Some("theme=dark"));
-        let session = jar.cookies.iter().find(|cookie| cookie.name == "session").unwrap();
+        assert_eq!(
+            jar.header_for(&url).as_deref(),
+            Some("session=secret; theme=dark")
+        );
+        assert_eq!(
+            jar.script_visible_header_for(&url).as_deref(),
+            Some("theme=dark")
+        );
+        let session = jar
+            .cookies
+            .iter()
+            .find(|cookie| cookie.name == "session")
+            .unwrap();
         assert!(session.http_only);
         assert_eq!(session.same_site, SameSite::Lax);
-        let theme = jar.cookies.iter().find(|cookie| cookie.name == "theme").unwrap();
+        let theme = jar
+            .cookies
+            .iter()
+            .find(|cookie| cookie.name == "theme")
+            .unwrap();
         assert!(!theme.http_only);
         assert_eq!(theme.same_site, SameSite::Strict);
     }
@@ -737,9 +751,13 @@ mod tests {
         jar.store(&account, "hidden=secret; HttpOnly; Path=/account");
         jar.store(&account, "scoped=yes; Path=/account");
 
-        assert_eq!(jar.script_visible_header_for(&account).as_deref(), Some("scoped=yes; visible=root"));
         assert_eq!(
-            jar.script_visible_header_for(&Url::parse("https://example.org/other").unwrap()).as_deref(),
+            jar.script_visible_header_for(&account).as_deref(),
+            Some("scoped=yes; visible=root")
+        );
+        assert_eq!(
+            jar.script_visible_header_for(&Url::parse("https://example.org/other").unwrap())
+                .as_deref(),
             Some("visible=root")
         );
     }
