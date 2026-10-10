@@ -217,7 +217,9 @@ fn validate_authority(authority: &str) -> Result<(), UrlError> {
         let (host, port) = match host_port.matches(':').count() {
             0 => (host_port, None),
             1 => {
-                let (host, port) = host_port.rsplit_once(':').ok_or(UrlError::InvalidAuthority)?;
+                let (host, port) = host_port
+                    .rsplit_once(':')
+                    .ok_or(UrlError::InvalidAuthority)?;
                 (host, Some(port))
             }
             _ => return Err(UrlError::InvalidAuthority),
@@ -276,9 +278,10 @@ fn validate_dns_or_ipv4_host(host: &str) -> Result<(), UrlError> {
     if !host.is_ascii() || host.len() > 253 {
         return Err(UrlError::InvalidAuthority);
     }
-    if host.bytes().any(|byte| {
-        !(byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-'))
-    }) {
+    if host
+        .bytes()
+        .any(|byte| !(byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-')))
+    {
         return Err(UrlError::InvalidAuthority);
     }
 
@@ -299,7 +302,10 @@ fn validate_dns_or_ipv4_host(host: &str) -> Result<(), UrlError> {
     // Numeric dotted hosts are interpreted as IPv4 by many networking APIs.
     // Reject invalid forms instead of allowing different parsers to normalize
     // the same spelling to different destinations.
-    if labels.len() == 4 && labels.iter().all(|label| label.bytes().all(|b| b.is_ascii_digit()))
+    if labels.len() == 4
+        && labels
+            .iter()
+            .all(|label| label.bytes().all(|b| b.is_ascii_digit()))
         && host.parse::<std::net::Ipv4Addr>().is_err()
     {
         return Err(UrlError::InvalidAuthority);
