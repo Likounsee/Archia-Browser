@@ -444,8 +444,7 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
         return Err(TransportError::InvalidRequest);
     }
     if let Some(length) = content_lengths.first() {
-        let length = length
-            .trim()
+        let length = trim_http_ows(length)
             .parse::<usize>()
             .map_err(|_| TransportError::InvalidRequest)?;
         if length != request.body.len() {
@@ -747,11 +746,18 @@ fn parse_http_response_head(
         {
             return Err(TransportError::ConnectionFailed);
         }
-        let value = value.trim();
+        let value = trim_http_ows(value);
         response = response.with_header(name, value);
     }
 
     Ok((response, separator + 4))
+}
+
+fn trim_http_ows(value: &str) -> &str {
+    // HTTP optional whitespace is ASCII SP / HTAB only. Unicode str::trim()
+    // accepts characters such as NBSP that remain distinct bytes on the wire,
+    // creating parser/peer disagreement around framing fields.
+    value.trim_matches(|character| character == ' ' || character == '\t')
 }
 
 fn is_http_token_byte(byte: u8) -> bool {
@@ -1417,6 +1423,32 @@ mod tests {
                 .count(),
             1,
             "a mixed-case caller header must not trigger a second Content-Length"
+        );
+    }
+
+    #[test]
+    fn content_length_uses_only_http_ascii_optional_whitespace() {
+        let url = Url::parse("http://example.org/").unwrap();
+
+        let mut request = Request::new(url.clone()).with_body(b"Hello".to_vec());
+        request
+            .headers
+            .insert("Content-Length".into(), "\u{00a0}5\u{00a0}".into());
+        assert_eq!(
+            validate_request(&request),
+            Err(TransportError::InvalidRequest),
+            "non-ASCII whitespace must not be silently stripped from wire framing"
+        );
+
+        let valid_ows = Request::new(url).with_body(b"Hello".to_vec())
+            .with_header("content-length", "\t5 \t");
+        assert_eq!(validate_request(&valid_ows), Ok(()));
+
+        let response = b"HTTP/1.1 200 OK\r\nContent-Length: \xC2\xA05\xC2\xA0\r\n\r\nHello";
+        assert_eq!(
+            parse_http_response(response, 1024, 1024),
+            Err(TransportError::ConnectionFailed),
+            "response framing must use the same ASCII OWS rules"
         );
     }
 
