@@ -11,12 +11,12 @@ in source.
 - [x] Ensure origin, cookie, policy, and transport code use consistent host/port interpretation.
 - [x] Add regression cases for malformed and valid authority forms.
 - [x] Run the URL and networking test suites on CI.
-- [ ] Complete the cross-consumer adversarial URL review; follow-ups fixed local-file encoded-separator issues, UNC prefixes created only after dot-segment normalization, malformed percent escapes, and asymmetric percent-encoded filter matching. Keep P0-1 open until remaining URL consumers and edge cases are reviewed.
+- [ ] **DEFERRED by priority decision (2026-10-10):** the cross-consumer adversarial URL review is incomplete. Existing fixes remain in place; resume the broader review after P0-2. Do not report P0-1 as fully resolved.
 
 ## P0-2 — HTTP request/response framing
-- [ ] Reject invalid header names/values, duplicate case-insensitive headers, and ambiguous message framing.
-- [ ] Verify Content-Length, Transfer-Encoding, HEAD, interim responses, and response size limits.
-- [ ] Add adversarial framing tests and run transport tests.
+- [x] Reject invalid header names/values and duplicate case-insensitive response/request headers and chunk trailers; reject conflicting Content-Length/Transfer-Encoding framing. Targeted regression tests pass in CI.
+- [ ] Finish Content-Length / Transfer-Encoding edge cases, HEAD and bodyless statuses, interim responses, chunk parsing, and response size limits.
+- [ ] Add remaining adversarial framing tests and verify transport tests on CI.
 
 ## P0-3 — Navigation and local-file boundary
 - [ ] Ensure remote navigation and subresources cannot reach file URLs through redirects or references.
@@ -89,3 +89,6 @@ in source.
 - **P0-1 local-file UNC interpretation follow-up (2026-10-10):** on Windows, a file URL with an empty authority but a path beginning `//` could become a UNC network path after conversion to `PathBuf`, bypassing the parser's remote-file-authority rejection. File URL parsing now rejects double-leading-slash paths, and relative file resolution checks the resulting path; scheme-relative remote authorities remain rejected by the existing authority validation. Added regression tests for `file:////server/share`, `file://localhost//server/share`, and a scheme-relative remote authority. Code commit: `fdd638ab37632fd047d7c1d446f2ab1cceebf350` (test expectation correction: `519d96faa875704611aa29ab17266853438213cc`). CI: https://github.com/Likounsee/Archia-Browser/actions/runs/38064175828 — formatting passed, workspace tests (453 passed, 0 failed, plus 7 and 4 additional tests), and workspace build succeeded. P0-1 remains open for continued cross-consumer review.
 
 - **P0-1 malformed percent-escape follow-up (2026-10-10):** the URL parser accepted incomplete or non-hex percent escapes in path/query/fragment components and the request resolver retained them. Parsing and relative-reference resolution now reject malformed escapes; authority validation remains responsible for classifying malformed user-info as an invalid authority. Added adversarial tests for `%`, `%2`, `%GG`, malformed query/fragment escapes, relative references, and valid escaped user-info. Code commit: `ce919d00a04384694c1867ebce4a6d5191ca106a` (authority error-classification correction: `6c792a8aedbb6d912dcfdd26ecfe84f04f0cc160`). CI: https://github.com/Likounsee/Archia-Browser/actions/runs/38064407147 — formatting passed, workspace tests (454 passed, 0 failed, plus 7 and 4 additional tests), and workspace build succeeded. P0-1 remains open until the remaining cross-consumer audit is complete.
+
+
+- **Priority change (2026-10-10):** by user decision, pause the broad P0-1 URL consumer audit and prioritize P0-2. P0-1 remains explicitly incomplete/deferred; do not revert prior fixes. P0-2 has verified work for ASCII HTTP optional whitespace, bodyless response Content-Length syntax, forbidden framing on 1xx/204, 205 Reset Content framing, duplicate request/response header rejection, and duplicate/forbidden chunk trailers. Continue P0-2 now; do not mark it Done until the remaining framing audit and CI checks pass.
