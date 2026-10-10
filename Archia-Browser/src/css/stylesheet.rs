@@ -71,11 +71,14 @@ impl StyleSheet {
         sibling_lists: &[&[Node]],
         sibling_positions: &[usize],
     ) -> Vec<(&'a StyleRule, Specificity)> {
+        let Some(node) = path.last() else {
+            return Vec::new();
+        };
         let mut matches = Vec::new();
         for rule in &self.rules {
             let matching = rule.selectors.iter().filter(|selector| {
                 if selector.parts.len() == 1 {
-                    selector.matches(path.last().unwrap_or(&path[0]))
+                    selector.matches(node)
                 } else {
                     selector.matches_path_with_siblings(path, sibling_lists, sibling_positions)
                 }
@@ -642,6 +645,14 @@ fn normalize_declaration_value(value: &str) -> (String, bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn matching_rules_with_siblings_handles_empty_path() {
+        let sheet = StyleSheet::parse("div { color: red; }");
+        assert!(sheet
+            .matching_rules_path_with_siblings(&[], &[], &[])
+            .is_empty());
+    }
 
     #[test]
     fn stylesheet_parser_caps_rule_count() {
