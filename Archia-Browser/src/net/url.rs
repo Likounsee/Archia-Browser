@@ -377,10 +377,7 @@ fn contains_encoded_path_separator(path: &str) -> bool {
     bytes.windows(3).any(|sequence| {
         sequence[0] == b'%'
             && matches!(
-                (
-                    sequence[1].to_ascii_lowercase(),
-                    sequence[2].to_ascii_lowercase()
-                ),
+                (sequence[1].to_ascii_lowercase(), sequence[2].to_ascii_lowercase()),
                 (b'2', b'f') | (b'5', b'c')
             )
     })
