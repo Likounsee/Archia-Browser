@@ -156,20 +156,24 @@ where
                     // entity headers needed when a 307/308 preserves the request body.
                     retain_safe_cross_origin_headers(&mut next.headers);
                 }
-                if let Some(cookie) = self
-                    .cookies
-                    .lock()
-                    .expect("cookie jar poisoned")
-                    .header_for(&next.url)
-                {
-                    next.headers.insert("cookie".into(), cookie);
-                }
-
                 if should_switch_to_get(current.method, response.status) {
                     next.method = HttpMethod::Get;
                     next.body.clear();
                     remove_header_case_insensitive(&mut next.headers, "content-length");
                     remove_header_case_insensitive(&mut next.headers, "content-type");
+                }
+                if let Some(cookie) = self
+                    .cookies
+                    .lock()
+                    .expect("cookie jar poisoned")
+                    .header_for_context(
+                        &next.url,
+                        next.policy.first_party.as_ref(),
+                        true,
+                        next.method,
+                    )
+                {
+                    next.headers.insert("cookie".into(), cookie);
                 }
                 current = next;
                 continue;
@@ -306,7 +310,12 @@ where
                 .cookies
                 .lock()
                 .expect("cookie jar poisoned")
-                .header_for(&current)
+                .header_for_context(
+                    &current,
+                    Some(document_url),
+                    false,
+                    HttpMethod::Get,
+                )
             {
                 request.headers.insert("cookie".into(), cookie);
             }
