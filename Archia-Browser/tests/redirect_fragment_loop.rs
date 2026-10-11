@@ -85,7 +85,7 @@ fn redirect_target_is_rechecked_by_policy_before_transport() {
     let requests = Arc::new(Mutex::new(Vec::new()));
     let transport = RedirectTransport {
         responses: Mutex::new(vec![
-            Response::new(302).with_header("location", "https://blocked.example/private"),
+            Response::new(302).with_header("location", "https://blocked.example/private")
         ]),
         requests: Arc::clone(&requests),
     };
