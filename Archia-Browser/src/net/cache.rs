@@ -237,12 +237,16 @@ pub(crate) fn request_only_if_cached(request: &Request) -> bool {
         .headers
         .iter()
         .filter(|(name, _)| name.eq_ignore_ascii_case("cache-control"))
-        .flat_map(|(_, value)| cache_control_directives(value))
-        .any(|directive| {
-            let name = directive
-                .split_once('=')
-                .map_or(directive, |(name, _)| name);
-            trim_http_ows(name).eq_ignore_ascii_case("only-if-cached")
+        .any(|(_, value)| {
+            // If the directive list is malformed, fail closed: a hidden
+            // only-if-cached directive must not accidentally permit network I/O.
+            cache_control_is_malformed(value)
+                || cache_control_directives(value).into_iter().any(|directive| {
+                    let name = directive
+                        .split_once('=')
+                        .map_or(directive, |(name, _)| name);
+                    trim_http_ows(name).eq_ignore_ascii_case("only-if-cached")
+                })
         })
 }
 
@@ -609,6 +613,17 @@ mod tests {
 
         assert!(cache.is_empty());
         assert!(cache.get(&request).is_none());
+    }
+
+    #[test]
+    fn malformed_cache_control_is_treated_as_only_if_cached() {
+        let mut request = make_request("https://example.org/cache-only");
+        request.headers.insert(
+            "cache-control".to_owned(),
+            r#"extension="unterminated, only-if-cached"#.to_owned(),
+        );
+
+        assert!(request_only_if_cached(&request));
     }
 
     #[test]
