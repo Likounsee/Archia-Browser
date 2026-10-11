@@ -260,6 +260,10 @@ fn request_can_use_cache(request: &Request) -> bool {
         && !request.url.authority().contains('@')
         && !has_request_header(request, "authorization")
         && !has_request_header(request, "cookie")
+        // Range responses have different representation semantics and this
+        // cache does not implement partial-response merging or If-Range.
+        && !has_request_header(request, "range")
+        && !has_request_header(request, "if-range")
         && !request
             .headers
             .iter()
@@ -279,6 +283,10 @@ fn request_can_store(request: &Request) -> bool {
         && !request.url.authority().contains('@')
         && !has_request_header(request, "authorization")
         && !has_request_header(request, "cookie")
+        // Range responses have different representation semantics and this
+        // cache does not implement partial-response merging or If-Range.
+        && !has_request_header(request, "range")
+        && !has_request_header(request, "if-range")
         && !request
             .headers
             .iter()
@@ -1394,4 +1402,55 @@ mod tests {
             .with_header("cache-control", r#"private="only-if-cached""#);
         assert!(!request_only_if_cached(&ordinary));
     }
+    #[test]
+    fn range_requests_bypass_cache_without_poisoning_full_representation() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/resource");
+        let full_response = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_body(b"full representation".to_vec());
+        cache.store(&request, &full_response);
+        assert_eq!(cache.len(), 1);
+
+        let range_request = request.clone().with_header("Range", "bytes=0-3");
+        assert!(
+            cache.get(&range_request).is_none(),
+            "a full cached representation must not satisfy a range request"
+        );
+
+        // A server response to a range request must not replace the cached
+        // full representation under the same URL-only key.
+        cache.store(
+            &range_request,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_body(b"part".to_vec()),
+        );
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache.get(&request).unwrap().body, b"full representation");
+    }
+
+    #[test]
+    fn if_range_requests_bypass_cache() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/resource");
+        cache.store(
+            &request,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_body(b"full representation".to_vec()),
+        );
+
+        let conditional_range = request
+            .clone()
+            .with_header("Range", "bytes=0-3")
+            .with_header("If-Range", "\"etag-value\"");
+        assert!(cache.get(&conditional_range).is_none());
+        cache.store(
+            &conditional_range,
+            &Response::new(206).with_body(b"part".to_vec()),
+        );
+        assert_eq!(cache.get(&request).unwrap().body, b"full representation");
+    }
+
 }
