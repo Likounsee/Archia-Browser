@@ -208,11 +208,21 @@ mod tests {
             }
         );
         assert!(!budget.try_reserve(1), "N+1 must be rejected");
-        assert!(!budget.try_reserve(usize::MAX), "addition overflow must be rejected");
-        assert_eq!(budget.used(), 8, "rejected reservations must not change accounting");
+        assert!(
+            !budget.try_reserve(usize::MAX),
+            "addition overflow must be rejected"
+        );
+        assert_eq!(
+            budget.used(),
+            8,
+            "rejected reservations must not change accounting"
+        );
 
         budget.release(8);
-        assert!(budget.try_reserve(0), "zero-byte reservations are valid at an empty budget");
+        assert!(
+            budget.try_reserve(0),
+            "zero-byte reservations are valid at an empty budget"
+        );
         assert_eq!(budget.used(), 0);
         assert_eq!(budget.available(), 8);
     }
