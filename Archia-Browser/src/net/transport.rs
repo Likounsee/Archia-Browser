@@ -331,7 +331,15 @@ fn file_url_path(url_path: &str) -> Result<std::path::PathBuf, TransportError> {
         path
     };
     #[cfg(not(windows))]
-    let path = decoded.as_str();
+    let path = {
+        // A file URL must identify an absolute filesystem path. Resolving a
+        // relative path against the browser process working directory would
+        // make access depend on launch location and could expose unintended files.
+        if !decoded.starts_with('/') {
+            return Err(TransportError::InvalidRequest);
+        }
+        decoded.as_str()
+    };
     Ok(std::path::PathBuf::from(path))
 }
 
@@ -1674,6 +1682,19 @@ mod tests {
         let head = request.clone().with_method(crate::net::HttpMethod::Head);
         assert_eq!(transport.send(&head), Err(TransportError::ResponseTooLarge));
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn local_file_transport_rejects_relative_paths() {
+        for path in ["relative.txt", "./relative.txt", "../outside.txt"] {
+            assert_eq!(
+                file_url_path(path),
+                Err(TransportError::InvalidRequest),
+                "relative file URL path must not depend on process working directory: {path}"
+            );
+        }
+        assert_eq!(file_url_path("/tmp/absolute.txt").unwrap(), std::path::PathBuf::from("/tmp/absolute.txt"));
     }
 
     #[test]
