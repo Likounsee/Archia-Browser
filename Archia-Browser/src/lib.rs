@@ -116,6 +116,19 @@ impl Browser {
         Arc::clone(&self.memory)
     }
 
+    /// Build a document loader that charges cached responses to this browser's budget.
+    ///
+    /// Use this factory for both network and local-file loaders so their retained
+    /// response bodies cannot silently sit outside the browser's shared cache budget.
+    pub fn document_loader<P, T>(
+        &self,
+        pipeline: net::pipeline::NetworkPipeline<P>,
+        transport: T,
+    ) -> net::DocumentLoader<P, T> {
+        net::DocumentLoader::new(pipeline, transport)
+            .with_shared_memory_budget(Arc::clone(&self.memory))
+    }
+
     /// Allocate a tracked resource against the same budget used by software surfaces.
     pub fn allocate_resource(&mut self, bytes: usize) -> Option<core::resource::Resource> {
         self.resources.allocate(bytes)
@@ -417,6 +430,40 @@ impl Default for Browser {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn browser_document_loader_charges_cached_responses_to_shared_budget() {
+        #[derive(Debug, Default)]
+        struct AllowAll;
+        impl net::pipeline::RequestPolicyEngine for AllowAll {
+            fn decide(&self, _: &net::Request) -> net::pipeline::PolicyDecision {
+                net::pipeline::PolicyDecision::Allow
+            }
+        }
+        #[derive(Debug)]
+        struct MockTransport;
+        impl net::Transport for MockTransport {
+            fn send(&self, _: &net::Request) -> Result<net::Response, net::TransportError> {
+                Ok(net::Response::new(200)
+                    .with_header("cache-control", "max-age=60")
+                    .with_header("content-type", "text/html")
+                    .with_body(b"<body>Shared cache</body>".to_vec()))
+            }
+        }
+
+        let browser = Browser::with_memory_limit(4096);
+        let loader = browser.document_loader(
+            net::pipeline::NetworkPipeline::new(AllowAll),
+            MockTransport,
+        );
+        let request = net::Request::new(net::Url::parse("https://example.org/").unwrap());
+        loader
+            .load(&request, crate::layout::LayoutViewport::new(64, 32))
+            .unwrap();
+
+        assert!(browser.memory().used() > 0);
+        assert!(browser.memory().used() <= browser.memory().limit());
+    }
 
     #[test]
     fn browser_can_render_into_a_budgeted_surface() {
