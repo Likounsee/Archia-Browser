@@ -1696,14 +1696,26 @@ mod tests {
 
     #[test]
     fn local_file_transport_decodes_percent_escapes_exactly_once() {
-        let decoded = file_url_path("/tmp/%252e%252e/secret.txt").unwrap();
+        #[cfg(windows)]
+        let (input, expected) = (
+            "/C:/tmp/%252e%252e/secret.txt",
+            "C:/tmp/%2e%2e/secret.txt",
+        );
+        #[cfg(not(windows))]
+        let (input, expected) = (
+            "/tmp/%252e%252e/secret.txt",
+            "/tmp/%2e%2e/secret.txt",
+        );
+
+        let decoded = file_url_path(input).unwrap();
         assert_eq!(
             decoded,
-            std::path::PathBuf::from("/tmp/%2e%2e/secret.txt"),
+            std::path::PathBuf::from(expected),
             "double-encoded dot segments must remain literal after one URL decode"
         );
     }
 
+    #[cfg(windows)]
     #[test]
     fn local_file_transport_rejects_unc_and_drive_relative_paths() {
         for path in [
