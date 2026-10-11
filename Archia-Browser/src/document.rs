@@ -128,10 +128,7 @@ impl Page {
     ///
     /// Cloned pages share the reservation, so tab/history clones do not double-charge
     /// the same retained document representation.
-    pub(crate) fn attach_memory_reservation(
-        &mut self,
-        reservation: Arc<MemoryReservation>,
-    ) {
+    pub(crate) fn attach_memory_reservation(&mut self, reservation: Arc<MemoryReservation>) {
         self._memory_reservation = Some(reservation);
     }
 
