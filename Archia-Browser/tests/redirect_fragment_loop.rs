@@ -99,9 +99,6 @@ fn redirect_target_is_rechecked_by_policy_before_transport() {
         Err(DocumentLoadError::Network(TransportError::BlockedByPolicy))
     ));
     let requests = requests.lock().expect("request log mutex poisoned");
-    assert_eq!(
-        requests,
-        &["https://example.org/start"],
-        "the denied redirect destination must never reach transport"
-    );
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0], "https://example.org/start");
 }
