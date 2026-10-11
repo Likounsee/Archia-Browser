@@ -11,6 +11,10 @@ fn trim_cookie_ows(value: &str) -> &str {
     value.trim_matches(|character| character == ' ' || character == '\t')
 }
 
+fn cookie_url_supported(url: &Url) -> bool {
+    matches!(url.scheme(), "http" | "https")
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SameSite {
     Unspecified,
@@ -44,6 +48,12 @@ impl CookieJar {
 
     pub fn store(&mut self, url: &Url, set_cookie: &str) {
         self.remove_expired();
+        // Cookies are an HTTP state mechanism. Do not let custom schemes or
+        // local-file documents populate a jar that may later be shared with
+        // network requests.
+        if !cookie_url_supported(url) {
+            return;
+        }
         // Bound the complete attribute string, not just name=value: otherwise
         // a tiny cookie pair can carry a huge Path or Domain allocation.
         if set_cookie.len() > MAX_COOKIE_PAIR_BYTES {
@@ -313,6 +323,9 @@ impl CookieJar {
         top_level_navigation: bool,
         method: super::HttpMethod,
     ) -> Option<String> {
+        if !cookie_url_supported(url) {
+            return None;
+        }
         let same_site = first_party.is_some_and(|party| same_site_url(url, party));
         let safe_navigation = top_level_navigation
             && matches!(method, super::HttpMethod::Get | super::HttpMethod::Head);
@@ -363,6 +376,9 @@ impl CookieJar {
     }
 
     pub fn header_for(&self, url: &Url) -> Option<String> {
+        if !cookie_url_supported(url) {
+            return None;
+        }
         let now = SystemTime::now();
         let host = url.host().to_ascii_lowercase();
         let path = url.path();
@@ -415,6 +431,9 @@ impl CookieJar {
     /// SameSite eligibility is intentionally not decided here: request callers
     /// need top-level-site and navigation context to enforce that policy.
     pub fn script_visible_header_for(&self, url: &Url) -> Option<String> {
+        if !cookie_url_supported(url) {
+            return None;
+        }
         let now = SystemTime::now();
         let host = url.host().to_ascii_lowercase();
         let path = url.path();
@@ -1239,6 +1258,33 @@ mod tests {
 
         assert_eq!(jar.len(), MAX_COOKIES);
         assert!(jar.len() <= MAX_COOKIES);
+    }
+
+    #[test]
+    fn cookies_are_rejected_for_non_http_schemes() {
+        let https = Url::parse("https://example.org/").unwrap();
+        let custom = Url::parse("custom://example.org/").unwrap();
+        let file = Url::parse("file:///example.org/index.html").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&custom, "custom_cookie=leak");
+        jar.store(&file, "file_cookie=leak");
+        assert!(jar.is_empty());
+
+        jar.store(&https, "session=valid");
+        assert_eq!(jar.header_for(&https).as_deref(), Some("session=valid"));
+        assert_eq!(jar.header_for(&custom), None);
+        assert_eq!(jar.header_for(&file), None);
+        assert_eq!(jar.script_visible_header_for(&custom), None);
+        assert_eq!(
+            jar.header_for_context(
+                &custom,
+                Some(&https),
+                true,
+                super::super::HttpMethod::Get
+            ),
+            None
+        );
     }
 
     #[test]
