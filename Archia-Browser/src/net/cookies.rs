@@ -1354,5 +1354,4 @@ mod tests {
             "SameSite=None is accepted when Secure is present"
         );
     }
-
 }
