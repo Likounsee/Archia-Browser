@@ -1588,7 +1588,11 @@ mod tests {
         let exact = Request::new(url.clone())
             .with_method(super::super::HttpMethod::Post)
             .with_body(vec![b'x'; MAX_REQUEST_BODY_BYTES]);
-        assert_eq!(validate_request(&exact), Ok(()), "N request body bytes must fit");
+        assert_eq!(
+            validate_request(&exact),
+            Ok(()),
+            "N request body bytes must fit"
+        );
 
         let oversized = Request::new(url)
             .with_method(super::super::HttpMethod::Post)
