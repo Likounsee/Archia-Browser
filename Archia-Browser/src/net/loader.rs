@@ -53,7 +53,13 @@ impl<P, T> DocumentLoader<P, T> {
     }
 
     pub fn with_cache_capacity(mut self, capacity: usize) -> Self {
-        self.cache = Mutex::new(super::HttpCache::new(capacity));
+        let cache = match &self.memory_budget {
+            Some(budget) => {
+                super::HttpCache::with_memory_budget(capacity, Arc::clone(budget))
+            }
+            None => super::HttpCache::new(capacity),
+        };
+        self.cache = Mutex::new(cache);
         self
     }
 
