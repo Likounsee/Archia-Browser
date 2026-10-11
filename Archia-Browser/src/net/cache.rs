@@ -241,12 +241,14 @@ pub(crate) fn request_only_if_cached(request: &Request) -> bool {
             // If the directive list is malformed, fail closed: a hidden
             // only-if-cached directive must not accidentally permit network I/O.
             cache_control_is_malformed(value)
-                || cache_control_directives(value).into_iter().any(|directive| {
-                    let name = directive
-                        .split_once('=')
-                        .map_or(directive, |(name, _)| name);
-                    trim_http_ows(name).eq_ignore_ascii_case("only-if-cached")
-                })
+                || cache_control_directives(value)
+                    .into_iter()
+                    .any(|directive| {
+                        let name = directive
+                            .split_once('=')
+                            .map_or(directive, |(name, _)| name);
+                        trim_http_ows(name).eq_ignore_ascii_case("only-if-cached")
+                    })
         })
 }
 
