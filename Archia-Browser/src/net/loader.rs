@@ -697,23 +697,43 @@ mod tests {
     fn redirect_method_rewriting_follows_status_specific_rules() {
         for status in [301, 302] {
             assert!(should_switch_to_get(HttpMethod::Post, status));
-            for method in [HttpMethod::Get, HttpMethod::Head, HttpMethod::Put,
-                HttpMethod::Delete, HttpMethod::Patch, HttpMethod::Options, HttpMethod::Connect] {
-                assert!(!should_switch_to_get(method, status),
-                    "{method:?} must be preserved for status {status}");
+            for method in [
+                HttpMethod::Get,
+                HttpMethod::Head,
+                HttpMethod::Put,
+                HttpMethod::Delete,
+                HttpMethod::Patch,
+                HttpMethod::Options,
+                HttpMethod::Connect,
+            ] {
+                assert!(
+                    !should_switch_to_get(method, status),
+                    "{method:?} must be preserved for status {status}"
+                );
             }
         }
 
-        for method in [HttpMethod::Get, HttpMethod::Post, HttpMethod::Put,
-            HttpMethod::Delete, HttpMethod::Patch, HttpMethod::Options, HttpMethod::Connect] {
-            assert!(should_switch_to_get(method, 303),
-                "{method:?} should switch to GET for 303");
+        for method in [
+            HttpMethod::Get,
+            HttpMethod::Post,
+            HttpMethod::Put,
+            HttpMethod::Delete,
+            HttpMethod::Patch,
+            HttpMethod::Options,
+            HttpMethod::Connect,
+        ] {
+            assert!(
+                should_switch_to_get(method, 303),
+                "{method:?} should switch to GET for 303"
+            );
         }
         assert!(!should_switch_to_get(HttpMethod::Head, 303));
         for status in [300, 304, 307, 308] {
             for method in [HttpMethod::Post, HttpMethod::Put, HttpMethod::Patch] {
-                assert!(!should_switch_to_get(method, status),
-                    "{method:?} must be preserved for status {status}");
+                assert!(
+                    !should_switch_to_get(method, status),
+                    "{method:?} must be preserved for status {status}"
+                );
             }
         }
     }
