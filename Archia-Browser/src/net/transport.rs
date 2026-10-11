@@ -1818,6 +1818,61 @@ mod tests {
     }
 
     #[test]
+    fn local_file_transport_rejects_remote_authorities_and_userinfo() {
+        // Remote file authorities can cause platform-dependent network-share
+        // access (notably UNC paths on Windows). Userinfo must not turn a
+        // remote authority into an accepted local-file request either.
+        for input in [
+            "file://server/share/secret.txt",
+            "file://192.0.2.1/share/secret.txt",
+            "file://user:secret@localhost/tmp/secret.txt",
+            "file://attacker.example/tmp/secret.txt",
+        ] {
+            let request = Request::new(
+                super::super::Url::parse(input).expect("test URL should parse"),
+            );
+            assert_eq!(
+                LocalFileTransport::new().send(&request),
+                Err(TransportError::UnsupportedScheme),
+                "remote or credential-bearing file URL must be rejected: {input}"
+            );
+        }
+
+        for input in ["file:///tmp/secret.txt", "file://localhost/tmp/secret.txt"] {
+            let url = super::super::Url::parse(input).expect("local file URL should parse");
+            assert!(
+                url.authority().is_empty() || url.authority().eq_ignore_ascii_case("localhost"),
+                "only an empty authority or localhost is considered local"
+            );
+        }
+    }
+
+    #[test]
+    fn local_file_transport_rejects_methods_and_bodies_outside_get_head() {
+        let path = std::env::temp_dir().join(format!(
+            "archia-browser-local-method-{}.txt",
+            std::process::id()
+        ));
+        std::fs::write(&path, b"must not be uploaded").unwrap();
+        let url = super::super::Url::parse(&local_file_test_url(&path)).unwrap();
+
+        let post = Request::new(url.clone())
+            .with_method(crate::net::HttpMethod::Post)
+            .with_body(b"request payload".to_vec());
+        assert_eq!(
+            LocalFileTransport::new().send(&post),
+            Err(TransportError::InvalidRequest)
+        );
+
+        let get_with_body = Request::new(url).with_body(b"ambiguous payload".to_vec());
+        assert_eq!(
+            LocalFileTransport::new().send(&get_with_body),
+            Err(TransportError::InvalidRequest)
+        );
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn rejects_malformed_ports_and_user_info_before_connecting() {
         for input in [
             "http://example.org:bad/",
