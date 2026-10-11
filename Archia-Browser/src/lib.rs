@@ -444,6 +444,43 @@ mod tests {
     use super::*;
 
     #[test]
+    fn retained_page_holds_and_releases_its_memory_reservation() {
+        #[derive(Debug, Default)]
+        struct AllowAll;
+        impl net::pipeline::RequestPolicyEngine for AllowAll {
+            fn decide(&self, _: &net::Request) -> net::pipeline::PolicyDecision {
+                net::pipeline::PolicyDecision::Allow
+            }
+        }
+        #[derive(Debug)]
+        struct MockTransport;
+        impl net::Transport for MockTransport {
+            fn send(&self, _: &net::Request) -> Result<net::Response, net::TransportError> {
+                Ok(net::Response::new(200)
+                    .with_header("cache-control", "no-store")
+                    .with_header("content-type", "text/html")
+                    .with_body(b"<html><body>Reserved page</body></html>".to_vec()))
+            }
+        }
+
+        let browser = Browser::with_memory_limit(4096);
+        let loader = browser.document_loader(
+            net::pipeline::NetworkPipeline::new(AllowAll),
+            MockTransport,
+        );
+        let request = net::Request::new(net::Url::parse("https://example.org/").unwrap());
+        let page = loader
+            .load(&request, crate::layout::LayoutViewport::new(64, 32))
+            .unwrap();
+
+        let reserved = browser.memory().used();
+        assert!(reserved > 0);
+        assert!(reserved <= browser.memory().limit());
+        drop(page);
+        assert_eq!(browser.memory().used(), 0);
+    }
+
+    #[test]
     fn browser_loader_factory_preserves_configured_cache_capacity() {
         #[derive(Debug, Default)]
         struct AllowAll;
