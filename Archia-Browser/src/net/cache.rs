@@ -320,7 +320,7 @@ fn response_can_store(response: &Response) -> bool {
                     .split(',')
                     .any(|d| trim_http_ows(d).eq_ignore_ascii_case("no-cache"))
             })
-        && !response_has_header(response, "vary")
+        // A 200 response carrying Content-Range is still a partial representation;\n        // caching it under the full-resource key could serve truncated content later.\n        && !response_has_header(response, "content-range")\n        && !response_has_header(response, "vary")
 }
 
 fn trim_http_ows(value: &str) -> &str {
@@ -754,6 +754,30 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn content_range_response_is_not_cached_and_evicts_older_full_response() {
+        let mut cache = HttpCache::new(4096);
+        let request = make_request("https://example.org/resource");
+        cache.store(
+            &request,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_body(b"complete representation".to_vec()),
+        );
+        assert!(cache.get(&request).is_some());
+
+        cache.store(
+            &request,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_header("content-range", "bytes 0-3/100")
+                .with_body(b"part".to_vec()),
+        );
+
+        assert!(cache.get(&request).is_none());
+        assert!(cache.is_empty());
+    }
+
     fn vary_response_evicts_an_older_representation_for_the_same_key() {
         let mut cache = HttpCache::default();
         let request = make_request("https://example.org/language");
