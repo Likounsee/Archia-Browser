@@ -136,10 +136,7 @@ mod tests {
         let resource = manager
             .allocate(0)
             .expect("a failed reservation must not exhaust object slots");
-        assert_eq!(
-            manager.live_resources.load(Ordering::Acquire),
-            1
-        );
+        assert_eq!(manager.live_resources.load(Ordering::Acquire), 1);
         drop(resource);
         assert_eq!(manager.live_resources.load(Ordering::Acquire), 0);
     }
