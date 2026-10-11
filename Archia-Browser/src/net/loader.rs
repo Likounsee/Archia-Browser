@@ -728,6 +728,40 @@ mod tests {
     };
 
     #[test]
+    fn changing_cache_capacity_after_shared_budget_keeps_cache_accounted() {
+        use std::sync::Arc;
+        use crate::core::memory::MemoryBudget;
+
+        #[derive(Debug)]
+        struct CacheableTransport;
+        impl Transport for CacheableTransport {
+            fn send(&self, _: &Request) -> Result<Response, TransportError> {
+                Ok(Response::new(200)
+                    .with_header("cache-control", "max-age=60")
+                    .with_header("content-type", "text/html")
+                    .with_body(b"<html><body>Accounted</body></html>".to_vec()))
+            }
+        }
+
+        let budget = Arc::new(MemoryBudget::new(4096));
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), CacheableTransport)
+            .with_shared_memory_budget(Arc::clone(&budget))
+            .with_cache_capacity(2048);
+        let request = Request::new(Url::parse("https://example.org/").unwrap());
+        let page = loader.load(&request, LayoutViewport::new(64, 32)).unwrap();
+
+        assert_eq!(loader.cache_capacity_bytes(), Some(2048));
+        let retained_bytes = budget.used();
+        assert!(retained_bytes > 0);
+        drop(page);
+        assert!(
+            budget.used() > 0,
+            "the cached response must keep its own reservation after the page is dropped"
+        );
+        assert!(budget.used() < retained_bytes);
+    }
+
+    #[test]
     fn redirect_loops_are_rejected_before_repeating_the_request() {
         use std::sync::{
             atomic::{AtomicUsize, Ordering},
