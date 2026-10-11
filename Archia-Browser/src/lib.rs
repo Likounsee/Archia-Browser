@@ -129,6 +129,18 @@ impl Browser {
             .with_shared_memory_budget(Arc::clone(&self.memory))
     }
 
+    /// Build a budget-aware document loader with a caller-selected cache ceiling.
+    pub fn document_loader_with_cache_capacity<P, T>(
+        &self,
+        pipeline: net::pipeline::NetworkPipeline<P>,
+        transport: T,
+        cache_capacity: usize,
+    ) -> net::DocumentLoader<P, T> {
+        net::DocumentLoader::new(pipeline, transport)
+            .with_cache_capacity(cache_capacity)
+            .with_shared_memory_budget(Arc::clone(&self.memory))
+    }
+
     /// Allocate a tracked resource against the same budget used by software surfaces.
     pub fn allocate_resource(&mut self, bytes: usize) -> Option<core::resource::Resource> {
         self.resources.allocate(bytes)
@@ -430,6 +442,35 @@ impl Default for Browser {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn browser_loader_factory_preserves_configured_cache_capacity() {
+        #[derive(Debug, Default)]
+        struct AllowAll;
+        impl net::pipeline::RequestPolicyEngine for AllowAll {
+            fn decide(&self, _: &net::Request) -> net::pipeline::PolicyDecision {
+                net::pipeline::PolicyDecision::Allow
+            }
+        }
+        #[derive(Debug)]
+        struct MockTransport;
+        impl net::Transport for MockTransport {
+            fn send(&self, _: &net::Request) -> Result<net::Response, net::TransportError> {
+                Ok(net::Response::new(200)
+                    .with_header("cache-control", "max-age=60")
+                    .with_header("content-type", "text/html")
+                    .with_body(b"<body>Capacity</body>".to_vec()))
+            }
+        }
+
+        let browser = Browser::with_memory_limit(4096);
+        let loader = browser.document_loader_with_cache_capacity(
+            net::pipeline::NetworkPipeline::new(AllowAll),
+            MockTransport,
+            512,
+        );
+        assert_eq!(loader.cache_capacity_bytes(), 512);
+    }
 
     #[test]
     fn browser_document_loader_charges_cached_responses_to_shared_budget() {
