@@ -1004,7 +1004,10 @@ mod tests {
 
         let no_userinfo = Url::parse("https://EXAMPLE.ORG:443/path").unwrap();
         assert_eq!(no_userinfo.authority(), "example.org:443");
-        assert!(!url.same_origin(&no_userinfo), "a trailing-dot hostname remains distinct in this origin model");
+        assert!(
+            !url.same_origin(&no_userinfo),
+            "a trailing-dot hostname remains distinct in this origin model"
+        );
     }
 
     #[test]
