@@ -8,7 +8,7 @@ use crate::{
     html::{parse, HtmlTokenizer, Node},
     layout::LayoutViewport,
 };
-use std::{collections::HashSet, sync::Mutex};
+use std::{collections::HashSet, sync::{Arc, Mutex}};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DocumentLoadError {
@@ -51,6 +51,19 @@ impl<P, T> DocumentLoader<P, T> {
 
     pub fn with_cache_capacity(mut self, capacity: usize) -> Self {
         self.cache = Mutex::new(super::HttpCache::new(capacity));
+        self
+    }
+
+    /// Charge cached response storage to the same budget as browser-owned resources.
+    pub fn with_shared_memory_budget(
+        mut self,
+        budget: Arc<crate::core::memory::MemoryBudget>,
+    ) -> Self {
+        let capacity = self
+            .cache
+            .get_mut()
+            .map_or(16 * 1024 * 1024, |cache| cache.capacity_bytes());
+        self.cache = Mutex::new(super::HttpCache::with_memory_budget(capacity, budget));
         self
     }
 }
