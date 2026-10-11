@@ -35,7 +35,7 @@ hr { display: block; border-top: 1px; margin-top: 8px; margin-bottom: 8px; }
 #[derive(Debug, Clone)]
 pub struct Page {
     url: Option<Url>,
-    memory_reservation: Option<Arc<MemoryReservation>>,
+    _memory_reservation: Option<Arc<MemoryReservation>>,
     pub document: Node,
     pub styled: StyledNode,
     pub layout: LayoutNode,
@@ -112,7 +112,7 @@ impl Page {
 
         Self {
             url,
-            memory_reservation: None,
+            _memory_reservation: None,
             document,
             styled,
             layout,
@@ -132,7 +132,7 @@ impl Page {
         &mut self,
         reservation: Arc<MemoryReservation>,
     ) {
-        self.memory_reservation = Some(reservation);
+        self._memory_reservation = Some(reservation);
     }
 
     pub fn base_url(&self) -> Option<Url> {
