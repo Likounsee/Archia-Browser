@@ -2348,10 +2348,7 @@ mod limit_tests {
 
         for header_bytes in [header_limit - 1, header_limit] {
             let mut wire = prefix.to_vec();
-            wire.extend(std::iter::repeat_n(
-                b'a',
-                header_bytes - prefix.len(),
-            ));
+            wire.extend(std::iter::repeat_n(b'a', header_bytes - prefix.len()));
             wire.extend_from_slice(b"\r\n\r\nBODY");
             let mut stream = std::io::Cursor::new(wire);
             let response = transport
@@ -2361,10 +2358,7 @@ mod limit_tests {
         }
 
         let mut wire = prefix.to_vec();
-        wire.extend(std::iter::repeat_n(
-            b'a',
-            header_limit + 1 - prefix.len(),
-        ));
+        wire.extend(std::iter::repeat_n(b'a', header_limit + 1 - prefix.len()));
         wire.extend_from_slice(b"\r\n\r\nBODY");
         let mut stream = std::io::Cursor::new(wire);
         assert_eq!(
