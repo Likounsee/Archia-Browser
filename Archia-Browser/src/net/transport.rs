@@ -1574,12 +1574,21 @@ mod tests {
     }
 
     #[test]
-    fn request_body_limit_accepts_exact_boundary_and_rejects_one_byte_over() {
+    fn request_body_limit_accepts_n_minus_one_and_exact_boundary_and_rejects_one_over() {
         let url = Url::parse("https://example.org/upload").unwrap();
+        let under = Request::new(url.clone())
+            .with_method(super::super::HttpMethod::Post)
+            .with_body(vec![b'x'; MAX_REQUEST_BODY_BYTES - 1]);
+        assert_eq!(
+            validate_request(&under),
+            Ok(()),
+            "N-1 request body bytes must fit"
+        );
+
         let exact = Request::new(url.clone())
             .with_method(super::super::HttpMethod::Post)
             .with_body(vec![b'x'; MAX_REQUEST_BODY_BYTES]);
-        assert_eq!(validate_request(&exact), Ok(()));
+        assert_eq!(validate_request(&exact), Ok(()), "N request body bytes must fit");
 
         let oversized = Request::new(url)
             .with_method(super::super::HttpMethod::Post)
@@ -1611,8 +1620,20 @@ mod tests {
     }
 
     #[test]
-    fn request_header_count_limit_accepts_exact_boundary_and_rejects_one_over() {
+    fn request_header_count_limit_covers_n_minus_one_n_and_n_plus_one() {
         let url = Url::parse("https://example.org/").unwrap();
+        let mut under = Request::new(url.clone());
+        for index in 0..MAX_REQUEST_HEADER_COUNT - 1 {
+            under
+                .headers
+                .insert(format!("x-test-{index}"), "v".to_owned());
+        }
+        assert_eq!(
+            validate_request(&under),
+            Ok(()),
+            "N-1 request headers must fit"
+        );
+
         let mut exact = Request::new(url.clone());
         for index in 0..MAX_REQUEST_HEADER_COUNT {
             exact
