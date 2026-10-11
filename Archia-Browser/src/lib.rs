@@ -111,6 +111,11 @@ impl Browser {
         &self.memory
     }
 
+    /// Clone the shared budget handle for loaders and other subsystems.
+    pub fn shared_memory_budget(&self) -> Arc<core::memory::MemoryBudget> {
+        Arc::clone(&self.memory)
+    }
+
     /// Allocate a tracked resource against the same budget used by software surfaces.
     pub fn allocate_resource(&mut self, bytes: usize) -> Option<core::resource::Resource> {
         self.resources.allocate(bytes)
@@ -199,7 +204,8 @@ impl Browser {
         let loader = net::DocumentLoader::new(
             net::pipeline::NetworkPipeline::new(LocalFilePolicy),
             net::LocalFileTransport::new(),
-        );
+        )
+        .with_shared_memory_budget(Arc::clone(&self.memory));
         self.load_request(&loader, &request, viewport)
     }
 
