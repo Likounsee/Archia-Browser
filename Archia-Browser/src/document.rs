@@ -1,9 +1,11 @@
+use crate::core::memory::MemoryReservation;
 use crate::css::StyleSheet;
 use crate::html::{parse, HtmlTokenizer, Node};
 use crate::layout::{LayoutEngine, LayoutNode, LayoutViewport};
 use crate::net::Url;
 use crate::render::{DisplayList, SoftwareRenderer};
 use crate::style_tree::{StyleEngine, StyledNode};
+use std::sync::Arc;
 
 const USER_AGENT_STYLESHEET: &str = r#"
 html, body { display: block; }
@@ -33,6 +35,7 @@ hr { display: block; border-top: 1px; margin-top: 8px; margin-bottom: 8px; }
 #[derive(Debug, Clone)]
 pub struct Page {
     url: Option<Url>,
+    memory_reservation: Option<Arc<MemoryReservation>>,
     pub document: Node,
     pub styled: StyledNode,
     pub layout: LayoutNode,
@@ -109,6 +112,7 @@ impl Page {
 
         Self {
             url,
+            memory_reservation: None,
             document,
             styled,
             layout,
@@ -118,6 +122,17 @@ impl Page {
 
     pub fn url(&self) -> Option<&Url> {
         self.url.as_ref()
+    }
+
+    /// Retain the shared memory reservation for the lifetime of this page.
+    ///
+    /// Cloned pages share the reservation, so tab/history clones do not double-charge
+    /// the same retained document representation.
+    pub(crate) fn attach_memory_reservation(
+        &mut self,
+        reservation: Arc<MemoryReservation>,
+    ) {
+        self.memory_reservation = Some(reservation);
     }
 
     pub fn base_url(&self) -> Option<Url> {
