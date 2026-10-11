@@ -162,6 +162,11 @@ impl HttpCache {
             if bytes > budget.limit() {
                 return;
             }
+            // Replacing a cached key temporarily needs both the old and new
+            // reservations if we wait for insert() to overwrite it. Release the
+            // old copy first so an update does not evict unrelated LRU entries
+            // merely to account for a short-lived double reservation.
+            self.entries.remove(&key);
             loop {
                 if budget.available() >= bytes {
                     if let Some(reservation) =
@@ -599,6 +604,38 @@ fn has_pragma_no_cache(request: &Request) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn replacing_shared_budget_entry_does_not_evict_unrelated_lru_entry() {
+        use std::sync::Arc;
+        use crate::core::memory::MemoryBudget;
+
+        let budget = Arc::new(MemoryBudget::new(512));
+        let first = Request::new(super::super::Url::parse("https://example.org/first").unwrap());
+        let second = Request::new(super::super::Url::parse("https://example.org/second").unwrap());
+        let response = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_header("content-type", "text/plain")
+            .with_body(vec![b'x'; 128]);
+        let replacement = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_header("content-type", "text/plain")
+            .with_body(vec![b'y'; 128]);
+        let mut cache = HttpCache::with_memory_budget(2048, Arc::clone(&budget));
+
+        cache.store(&first, &response);
+        cache.store(&second, &response);
+        assert_eq!(cache.len(), 2);
+        // Make first newer, so second is the LRU entry.
+        assert!(cache.get(&first).is_some());
+
+        cache.store(&first, &replacement);
+
+        assert_eq!(cache.len(), 2, "replacement should preserve the unrelated entry");
+        assert_eq!(cache.get(&first).unwrap().body, replacement.body);
+        assert!(cache.get(&second).is_some());
+        assert!(budget.used() <= budget.limit());
+    }
+
     #[test]
     fn shared_budget_does_not_evict_live_resources_when_cache_cannot_fit() {
         use std::sync::Arc;
