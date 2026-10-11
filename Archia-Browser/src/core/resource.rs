@@ -48,8 +48,13 @@ pub struct ResourceManager {
 
 impl ResourceManager {
     pub fn new(limit: usize) -> Self {
+        Self::with_budget(Arc::new(MemoryBudget::new(limit)))
+    }
+
+    /// Create a resource manager that shares accounting with other browser subsystems.
+    pub fn with_budget(budget: Arc<MemoryBudget>) -> Self {
         Self {
-            budget: Arc::new(MemoryBudget::new(limit)),
+            budget,
             live_resources: Arc::new(AtomicUsize::new(0)),
             next_id: 1,
         }
@@ -100,6 +105,18 @@ impl ResourceManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resource_manager_can_share_an_existing_memory_budget() {
+        let budget = Arc::new(MemoryBudget::new(1024));
+        let mut manager = ResourceManager::with_budget(Arc::clone(&budget));
+
+        let resource = manager.allocate(768).unwrap();
+        assert_eq!(budget.used(), 768);
+        assert_eq!(manager.memory().available(), 256);
+        drop(resource);
+        assert_eq!(budget.used(), 0);
+    }
 
     #[test]
     fn resource_id_exhaustion_releases_the_failed_reservation() {
