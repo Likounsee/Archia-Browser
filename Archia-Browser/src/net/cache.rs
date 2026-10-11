@@ -649,8 +649,8 @@ fn has_pragma_no_cache(request: &Request) -> bool {
 mod tests {
     #[test]
     fn replacing_shared_budget_entry_does_not_evict_unrelated_lru_entry() {
-        use std::sync::Arc;
         use crate::core::memory::MemoryBudget;
+        use std::sync::Arc;
 
         let budget = Arc::new(MemoryBudget::new(512));
         let first =
@@ -683,8 +683,8 @@ mod tests {
 
     #[test]
     fn shared_budget_does_not_evict_live_resources_when_cache_cannot_fit() {
-        use std::sync::Arc;
         use crate::core::{memory::MemoryBudget, resource::ResourceManager};
+        use std::sync::Arc;
 
         let budget = Arc::new(MemoryBudget::new(256));
         let mut resources = ResourceManager::with_budget(Arc::clone(&budget));
@@ -707,8 +707,8 @@ mod tests {
 
     #[test]
     fn shared_budget_pressure_evicts_oldest_cached_response() {
-        use std::sync::Arc;
         use crate::core::memory::MemoryBudget;
+        use std::sync::Arc;
 
         let budget = Arc::new(MemoryBudget::new(320));
         let first = Request::new(super::super::Url::parse("https://example.org/first").unwrap());
@@ -732,8 +732,8 @@ mod tests {
 
     #[test]
     fn larger_replacement_reserves_only_incremental_shared_memory() {
-        use std::sync::Arc;
         use crate::core::memory::MemoryBudget;
+        use std::sync::Arc;
 
         let budget = Arc::new(MemoryBudget::new(512));
         let request = make_request("https://example.org/resource");
@@ -757,8 +757,8 @@ mod tests {
 
     #[test]
     fn smaller_replacement_releases_excess_shared_memory() {
-        use std::sync::Arc;
         use crate::core::memory::MemoryBudget;
+        use std::sync::Arc;
 
         let budget = Arc::new(MemoryBudget::new(4096));
         let request = make_request("https://example.org/resource");
@@ -840,8 +840,8 @@ mod tests {
 
     #[test]
     fn same_sized_replacement_works_when_shared_budget_is_full() {
-        use std::sync::Arc;
         use crate::core::memory::MemoryBudget;
+        use std::sync::Arc;
 
         let budget = Arc::new(MemoryBudget::new(512));
         let request = make_request("https://example.org/resource");
@@ -867,8 +867,8 @@ mod tests {
 
     #[test]
     fn failed_shared_budget_replacement_preserves_previous_response() {
-        use std::sync::Arc;
         use crate::core::memory::MemoryBudget;
+        use std::sync::Arc;
 
         let budget = Arc::new(MemoryBudget::new(512));
         let request = make_request("https://example.org/resource");
@@ -901,8 +901,8 @@ mod tests {
 
     #[test]
     fn shared_memory_budget_tracks_cached_response_lifetime() {
-        use std::sync::Arc;
         use crate::core::memory::MemoryBudget;
+        use std::sync::Arc;
 
         let budget = Arc::new(MemoryBudget::new(4096));
         let request = Request::new(super::super::Url::parse("https://example.org/").unwrap());
