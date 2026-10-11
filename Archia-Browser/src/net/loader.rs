@@ -658,7 +658,6 @@ mod tests {
         );
     }
 
-
     use super::*;
     use crate::net::{
         pipeline::{PolicyDecision, RequestPolicyEngine},
