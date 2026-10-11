@@ -229,7 +229,7 @@ impl CookieJar {
         }
         // The HTTP prefixes additionally prove that the cookie was set by
         // an HTTP response rather than a script-created document.cookie value.
-        if cookie.name.starts_with("__Http-")
+        if (cookie.name.starts_with("__Http-") || cookie.name.starts_with("__Host-Http-"))
             && (!cookie.secure || !cookie.http_only || !url.is_secure())
         {
             return;
@@ -1237,6 +1237,7 @@ mod tests {
             &https,
             "__Host-Http-session=missing-host; Secure; HttpOnly; Path=/; Domain=example.org",
         );
+        jar.store(&https, "__Host-Http-session=missing-http-only; Secure; Path=/");
         assert!(jar.is_empty());
 
         jar.store(&https, "__Http-session=valid; Secure; HttpOnly");
