@@ -757,7 +757,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn content_range_response_is_not_cached_and_evicts_older_full_response() {
         let mut cache = HttpCache::new(4096);
         let request = make_request("https://example.org/resource");
@@ -781,6 +780,7 @@ mod tests {
         assert!(cache.is_empty());
     }
 
+    #[test]
     fn vary_response_evicts_an_older_representation_for_the_same_key() {
         let mut cache = HttpCache::default();
         let request = make_request("https://example.org/language");
