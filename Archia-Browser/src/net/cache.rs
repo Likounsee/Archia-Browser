@@ -215,7 +215,7 @@ impl HttpCache {
                 reservations
             }
         } else {
-            None
+            Vec::new()
         };
 
         self.entries.insert(
@@ -1359,6 +1359,7 @@ mod tests {
                 stored_at: Instant::now() - Duration::from_secs(45),
                 initial_age: 0,
                 expires_at: Instant::now() + Duration::from_secs(255),
+                _reservations: Vec::new(),
             },
             128,
         );
