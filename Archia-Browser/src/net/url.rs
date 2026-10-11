@@ -73,7 +73,7 @@ impl Url {
         }
         Ok(Self {
             scheme: normalized_scheme,
-            authority: normalize_ipv6_authority(authority),
+            authority: normalize_authority_host(&normalize_ipv6_authority(authority)),
             path: normalized_path,
             query,
             fragment,
@@ -273,6 +273,35 @@ fn normalize_ipv6_authority(authority: &str) -> String {
     normalized.push_str(&address.to_string());
     normalized.push(']');
     normalized.push_str(&bracketed[end + 1..]);
+    normalized
+}
+
+fn normalize_authority_host(authority: &str) -> String {
+    // DNS names are case-insensitive. Canonicalize only the host component:
+    // userinfo can be case-sensitive, and the numeric port must remain intact.
+    let (userinfo, host_port) = authority
+        .split_once('@')
+        .map_or((None, authority), |(userinfo, host_port)| {
+            (Some(userinfo), host_port)
+        });
+    if host_port.starts_with('[') {
+        // IPv6 literals have already been normalized by normalize_ipv6_authority.
+        return authority.to_owned();
+    }
+
+    let (host, port) = host_port
+        .rsplit_once(':')
+        .map_or((host_port, None), |(host, port)| (host, Some(port)));
+    let mut normalized = String::new();
+    if let Some(userinfo) = userinfo {
+        normalized.push_str(userinfo);
+        normalized.push('@');
+    }
+    normalized.push_str(&host.to_ascii_lowercase());
+    if let Some(port) = port {
+        normalized.push(':');
+        normalized.push_str(port);
+    }
     normalized
 }
 
@@ -964,6 +993,18 @@ mod tests {
         let url = Url::parse("https://user:pass%40word@example.org.:443/path").unwrap();
         assert_eq!(url.host(), "example.org.");
         assert_eq!(url.port(), Some(443));
+    }
+
+    #[test]
+    fn canonicalizes_dns_host_case_without_mutating_userinfo_or_port() {
+        let url = Url::parse("https://User:Pass@EXAMPLE.ORG.:0443/path").unwrap();
+        assert_eq!(url.authority(), "User:Pass@example.org.:0443");
+        assert_eq!(url.host(), "example.org.");
+        assert_eq!(url.port(), Some(443));
+
+        let no_userinfo = Url::parse("https://EXAMPLE.ORG:443/path").unwrap();
+        assert_eq!(no_userinfo.authority(), "example.org:443");
+        assert!(url.same_origin(&no_userinfo));
     }
 
     #[test]
