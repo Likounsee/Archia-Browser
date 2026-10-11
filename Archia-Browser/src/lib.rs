@@ -82,10 +82,17 @@ pub struct Browser {
 
 impl Browser {
     pub fn new() -> Self {
+        Self::with_memory_limit(512 * 1024 * 1024)
+    }
+
+    /// Construct a browser with a configurable shared memory ceiling.
+    ///
+    /// The limit is shared by budgeted software surfaces and tracked resources.
+    pub fn with_memory_limit(memory_limit: usize) -> Self {
         let mut tabs = core::tabs::TabManager::new();
         tabs.open();
 
-        let memory = Arc::new(core::memory::MemoryBudget::new(512 * 1024 * 1024));
+        let memory = Arc::new(core::memory::MemoryBudget::new(memory_limit));
         let resources = core::resource::ResourceManager::with_budget(Arc::clone(&memory));
 
         Self {
@@ -439,6 +446,20 @@ mod tests {
         let mut surface = browser.try_create_software_surface(64, 32).unwrap();
         assert!(browser.render_current_page_budgeted(&mut surface));
         assert_eq!(browser.memory().used(), 64 * 32 * 4);
+    }
+
+    #[test]
+    fn browser_shared_memory_limit_rejects_surface_until_resource_is_released() {
+        let mut browser = Browser::with_memory_limit(1024);
+        let resource = browser.allocate_resource(800).unwrap();
+
+        assert!(browser.try_create_software_surface(8, 8).is_none());
+        assert_eq!(browser.memory().used(), 800);
+
+        drop(resource);
+        let surface = browser.try_create_software_surface(8, 8);
+        assert!(surface.is_some());
+        assert_eq!(browser.memory().used(), 8 * 8 * 4);
     }
 
     #[test]
