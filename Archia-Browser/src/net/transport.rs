@@ -183,7 +183,10 @@ impl HttpTransport {
                         if end.saturating_sub(4) > self.max_header_size {
                             return Err(TransportError::ResponseTooLarge);
                         }
-                    } else if bytes.len() > self.max_header_size {
+                    } else if bytes.len() > self.max_header_size.saturating_add(3) {
+                        // Up to three bytes beyond the limit may be a partial
+                        // CRLFCRLF delimiter. Allow that suffix across reads,
+                        // while bounding an unterminated header to limit + 3.
                         return Err(TransportError::ResponseTooLarge);
                     }
                     if bytes.len() > self.max_response_size {
@@ -2366,6 +2369,61 @@ mod limit_tests {
             Err(TransportError::ResponseTooLarge),
             "one byte over the header limit must be rejected"
         );
+    }
+
+    #[test]
+    fn exact_limit_header_survives_delimiter_split_across_reads() {
+        use std::io;
+
+        struct ChunkedStream {
+            bytes: Vec<u8>,
+            offset: usize,
+            chunk_size: usize,
+        }
+
+        impl Read for ChunkedStream {
+            fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+                if self.offset == self.bytes.len() {
+                    return Ok(0);
+                }
+                let count = output
+                    .len()
+                    .min(self.chunk_size)
+                    .min(self.bytes.len() - self.offset);
+                output[..count].copy_from_slice(&self.bytes[self.offset..self.offset + count]);
+                self.offset += count;
+                Ok(count)
+            }
+        }
+
+        impl Write for ChunkedStream {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                Ok(bytes.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let prefix = b"HTTP/1.1 200 OK\r\nX-Large: ";
+        let header_limit = 1024;
+        let mut wire = prefix.to_vec();
+        wire.extend(std::iter::repeat_n(b'a', header_limit - prefix.len()));
+        wire.extend_from_slice(b"\r\n\r\nBODY");
+        let mut stream = ChunkedStream {
+            bytes: wire,
+            offset: 0,
+            // The first read includes the full header and only the first byte
+            // of the four-byte delimiter.
+            chunk_size: header_limit + 1,
+        };
+        let transport = HttpTransport::new().with_limits(4096, header_limit);
+
+        let response = transport
+            .read_response(&mut stream, super::super::HttpMethod::Get)
+            .expect("a partial delimiter must not make an exact-limit header oversized");
+        assert_eq!(response.body, b"BODY");
     }
 
     #[test]
