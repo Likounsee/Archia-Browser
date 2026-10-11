@@ -2145,8 +2145,7 @@ mod tests {
                 Err(TransportError::InvalidRequest),
             ),
         ] {
-            let request = Request::new(url.clone())
-                .with_header("x-large", "a".repeat(value_len));
+            let request = Request::new(url.clone()).with_header("x-large", "a".repeat(value_len));
             assert_eq!(
                 validate_request(&request),
                 expected,
