@@ -2132,6 +2132,31 @@ mod tests {
     }
 
     #[test]
+    fn request_header_block_limit_covers_n_minus_one_n_and_n_plus_one() {
+        let url = Url::parse("http://example.org/").unwrap();
+        // For this URL and one "x-large" header, all fixed request-line,
+        // Host, Connection and delimiter bytes total 67 bytes.
+        let fixed_bytes = 67;
+        for (value_len, expected) in [
+            (MAX_REQUEST_HEADER_BYTES - fixed_bytes - 1, Ok(())),
+            (MAX_REQUEST_HEADER_BYTES - fixed_bytes, Ok(())),
+            (
+                MAX_REQUEST_HEADER_BYTES - fixed_bytes + 1,
+                Err(TransportError::InvalidRequest),
+            ),
+        ] {
+            let request = Request::new(url.clone())
+                .with_header("x-large", "a".repeat(value_len));
+            assert_eq!(
+                validate_request(&request),
+                expected,
+                "unexpected validation result for serialized header size {}",
+                fixed_bytes + value_len
+            );
+        }
+    }
+
+    #[test]
     fn rejects_oversized_request_header_block_before_connecting() {
         let request = Request::new(Url::parse("http://example.org/").unwrap())
             .with_header("x-large", "a".repeat(MAX_REQUEST_HEADER_BYTES));
