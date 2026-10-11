@@ -2438,16 +2438,35 @@ mod limit_tests {
 
     #[test]
     fn rejects_oversized_chunked_body() {
-        let result = parse_http_response(
-            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nHello\r\n0\r\n\r\n",
-            4,
+        let under = parse_http_response(
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nab\r\n0\r\n\r\n",
+            3,
+            1024,
+        )
+        .unwrap();
+        assert_eq!(under.body, b"ab");
+
+        let exact = parse_http_response(
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n0\r\n\r\n",
+            3,
+            1024,
+        )
+        .unwrap();
+        assert_eq!(exact.body, b"abc");
+
+        let over = parse_http_response(
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nabcd\r\n0\r\n\r\n",
+            3,
             1024,
         );
-        assert_eq!(result, Err(TransportError::ResponseTooLarge));
+        assert_eq!(over, Err(TransportError::ResponseTooLarge));
     }
 
     #[test]
     fn response_body_limit_accepts_exact_boundary_and_rejects_one_byte_over() {
+        let under = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nab";
+        assert_eq!(parse_http_response(under, 3, 1024).unwrap().body, b"ab");
+
         let exact = b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nabc";
         let response = parse_http_response(exact, 3, 1024).unwrap();
         assert_eq!(response.body, b"abc");
