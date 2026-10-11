@@ -20,6 +20,7 @@ pub enum DocumentLoadError {
     InvalidRedirect,
     NoCurrentDocument,
     InternalStatePoisoned,
+    MemoryBudgetExceeded,
 }
 
 const MAX_REDIRECTS: usize = 10;
@@ -31,6 +32,7 @@ pub struct DocumentLoader<P, T> {
     max_redirects: usize,
     cookies: Mutex<super::CookieJar>,
     cache: Mutex<super::HttpCache>,
+    memory_budget: Option<Arc<crate::core::memory::MemoryBudget>>,
 }
 
 impl<P, T> DocumentLoader<P, T> {
@@ -41,6 +43,7 @@ impl<P, T> DocumentLoader<P, T> {
             max_redirects: MAX_REDIRECTS,
             cookies: Mutex::new(super::CookieJar::new()),
             cache: Mutex::new(super::HttpCache::default()),
+            memory_budget: None,
         }
     }
 
@@ -63,7 +66,11 @@ impl<P, T> DocumentLoader<P, T> {
             .cache
             .get_mut()
             .map_or(16 * 1024 * 1024, |cache| cache.capacity_bytes());
-        self.cache = Mutex::new(super::HttpCache::with_memory_budget(capacity, budget));
+        self.cache = Mutex::new(super::HttpCache::with_memory_budget(
+            capacity,
+            Arc::clone(&budget),
+        ));
+        self.memory_budget = Some(budget);
         self
     }
 
@@ -250,12 +257,44 @@ where
 
             let html = String::from_utf8_lossy(&response.body);
             let stylesheet = self.load_linked_stylesheets(&current.url, &html);
-            return Ok(Page::from_html_at(
+            let mut page = Page::from_html_at(
                 Some(current.url.clone()),
                 &html,
                 &stylesheet,
                 viewport,
-            ));
+            );
+
+            if let Some(budget) = &self.memory_budget {
+                // DOM, styled tree, layout and display-list allocations are larger
+                // than the source markup. Use a conservative input-size estimate;
+                // this is accounting, not an exact heap measurement.
+                let estimated_page_bytes = html
+                    .len()
+                    .saturating_mul(8)
+                    .saturating_add(stylesheet.len().saturating_mul(4))
+                    .max(1);
+                let mut reservation = crate::core::memory::MemoryReservation::try_new(
+                    Arc::clone(budget),
+                    estimated_page_bytes,
+                );
+                if reservation.is_none() {
+                    // Cached responses are reclaimable; retained page data takes
+                    // priority over cache reuse when the shared budget is tight.
+                    self.cache
+                        .lock()
+                        .map_err(|_| DocumentLoadError::InternalStatePoisoned)?
+                        .clear();
+                    reservation = crate::core::memory::MemoryReservation::try_new(
+                        Arc::clone(budget),
+                        estimated_page_bytes,
+                    );
+                }
+                let reservation =
+                    reservation.ok_or(DocumentLoadError::MemoryBudgetExceeded)?;
+                page.attach_memory_reservation(Arc::new(reservation));
+            }
+
+            return Ok(page);
         }
 
         Err(DocumentLoadError::RedirectLimitExceeded)
