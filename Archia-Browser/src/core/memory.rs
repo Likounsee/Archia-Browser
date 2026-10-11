@@ -86,7 +86,7 @@ impl MemoryBudget {
 #[derive(Debug)]
 pub struct MemoryReservation {
     budget: Arc<MemoryBudget>,
-    bytes: usize,
+    bytes: AtomicUsize,
 }
 
 impl MemoryReservation {
@@ -95,20 +95,48 @@ impl MemoryReservation {
         // so a failed reservation would construct and drop a reservation,
         // releasing bytes that were never acquired and corrupting accounting.
         if budget.try_reserve(bytes) {
-            Some(Self { budget, bytes })
+            Some(Self {
+                budget,
+                bytes: AtomicUsize::new(bytes),
+            })
         } else {
             None
         }
     }
 
-    pub const fn bytes(&self) -> usize {
-        self.bytes
+    pub fn bytes(&self) -> usize {
+        self.bytes.load(Ordering::Acquire)
+    }
+
+    /// Reduce an existing reservation and immediately return the excess budget.
+    /// Reservations can be shared by cache entries through `Arc`, so the
+    /// byte count is atomic and remains consistent for every owner.
+    pub fn shrink_to(&self, target: usize) {
+        let mut current = self.bytes.load(Ordering::Acquire);
+        loop {
+            if target >= current {
+                return;
+            }
+            match self.bytes.compare_exchange_weak(
+                current,
+                target,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => {
+                    self.budget.release(current - target);
+                    return;
+                }
+                Err(actual) => current = actual,
+            }
+        }
     }
 }
 
 impl Drop for MemoryReservation {
     fn drop(&mut self) {
-        self.budget.release(self.bytes);
+        let bytes = self.bytes.swap(0, Ordering::AcqRel);
+        self.budget.release(bytes);
     }
 }
 
