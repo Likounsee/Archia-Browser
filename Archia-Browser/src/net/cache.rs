@@ -600,6 +600,31 @@ fn has_pragma_no_cache(request: &Request) -> bool {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn shared_budget_pressure_evicts_oldest_cached_response() {
+        use std::sync::Arc;
+        use crate::core::memory::MemoryBudget;
+
+        let budget = Arc::new(MemoryBudget::new(320));
+        let first = Request::new(super::super::Url::parse("https://example.org/first").unwrap());
+        let second = Request::new(super::super::Url::parse("https://example.org/second").unwrap());
+        let response = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_header("content-type", "text/plain")
+            .with_body(vec![b'x'; 128]);
+        let mut cache = HttpCache::with_memory_budget(2048, Arc::clone(&budget));
+
+        cache.store(&first, &response);
+        assert_eq!(cache.len(), 1);
+        assert!(budget.used() <= budget.limit());
+
+        cache.store(&second, &response);
+        assert_eq!(cache.len(), 1);
+        assert!(cache.get(&first).is_none());
+        assert!(cache.get(&second).is_some());
+        assert!(budget.used() <= budget.limit());
+    }
+
+    #[test]
     fn shared_memory_budget_tracks_cached_response_lifetime() {
         use std::sync::Arc;
         use crate::core::memory::MemoryBudget;
