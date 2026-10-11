@@ -64,7 +64,7 @@ impl HttpTransport {
         let addresses = address
             .to_socket_addrs()
             .map_err(|_| TransportError::ConnectionFailed)?;
-        let stream = addresses
+        let mut stream = addresses
             .into_iter()
             .find_map(|address| TcpStream::connect_timeout(&address, self.connect_timeout).ok())
             .ok_or(TransportError::ConnectionFailed)?;
