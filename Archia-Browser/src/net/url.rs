@@ -713,8 +713,7 @@ mod tests {
         for (left, right) in cases {
             let left = Url::parse(left).unwrap();
             let right = Url::parse(right).unwrap();
-            let expected =
-                Origin::from_url(&left).same_origin(&Origin::from_url(&right));
+            let expected = Origin::from_url(&left).same_origin(&Origin::from_url(&right));
             assert_eq!(
                 left.same_origin(&right),
                 expected,
