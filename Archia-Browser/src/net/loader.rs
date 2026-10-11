@@ -2129,7 +2129,6 @@ mod tests {
             .any(|(name, value)| name.eq_ignore_ascii_case("accept") && value == "text/html"));
     }
 
-
     #[test]
     fn cross_origin_307_and_308_preserve_entity_but_strip_credentials() {
         #[derive(Debug)]
