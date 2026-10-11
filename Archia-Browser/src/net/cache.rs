@@ -980,7 +980,10 @@ mod tests {
         assert_eq!(cache.len(), 1);
         assert_eq!(
             cache.used_bytes(),
-            response.body.len() + 64 + "cache-control".len() + "max-age=60".len()
+            response.body.len()
+                + 64
+                + "cache-control".len()
+                + "max-age=60".len()
                 + super::cache_key(&second).len()
         );
         assert!(cache.get(&first).is_none());
