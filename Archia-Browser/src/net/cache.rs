@@ -1415,6 +1415,7 @@ mod tests {
             .with_header("cache-control", r#"private="only-if-cached""#);
         assert!(!request_only_if_cached(&ordinary));
     }
+
     #[test]
     fn range_requests_bypass_cache_without_poisoning_full_representation() {
         let mut cache = HttpCache::default();
@@ -1465,6 +1466,7 @@ mod tests {
         );
         assert_eq!(cache.get(&request).unwrap().body, b"full representation");
     }
+
     #[test]
     fn conditional_requests_bypass_cache_until_revalidation_is_supported() {
         let mut cache = HttpCache::default();
@@ -1495,5 +1497,4 @@ mod tests {
             );
         }
     }
-
 }
