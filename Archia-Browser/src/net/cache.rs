@@ -1485,7 +1485,10 @@ mod tests {
             ("If-Unmodified-Since", "Sun, 06 Nov 1994 08:49:37 GMT"),
         ] {
             let conditional = request.clone().with_header(name, value);
-            assert!(cache.get(&conditional).is_none(), "{name} must not be ignored");
+            assert!(
+                cache.get(&conditional).is_none(),
+                "{name} must not be ignored"
+            );
             cache.store(
                 &conditional,
                 &Response::new(304).with_header("cache-control", "max-age=60"),
