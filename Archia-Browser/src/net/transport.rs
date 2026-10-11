@@ -2341,6 +2341,40 @@ mod limit_tests {
     }
 
     #[test]
+    fn response_header_limit_accepts_exact_boundary_and_rejects_one_byte_over() {
+        let prefix = b"HTTP/1.1 200 OK\r\nX-Large: ";
+        let header_limit = 1024;
+        let transport = HttpTransport::new().with_limits(4096, header_limit);
+
+        for header_bytes in [header_limit - 1, header_limit] {
+            let mut wire = prefix.to_vec();
+            wire.extend(std::iter::repeat_n(
+                b'a',
+                header_bytes - prefix.len(),
+            ));
+            wire.extend_from_slice(b"\r\n\r\nBODY");
+            let mut stream = std::io::Cursor::new(wire);
+            let response = transport
+                .read_response(&mut stream, super::super::HttpMethod::Get)
+                .expect("headers at or below the configured limit must be accepted");
+            assert_eq!(response.body, b"BODY");
+        }
+
+        let mut wire = prefix.to_vec();
+        wire.extend(std::iter::repeat_n(
+            b'a',
+            header_limit + 1 - prefix.len(),
+        ));
+        wire.extend_from_slice(b"\r\n\r\nBODY");
+        let mut stream = std::io::Cursor::new(wire);
+        assert_eq!(
+            transport.read_response(&mut stream, super::super::HttpMethod::Get),
+            Err(TransportError::ResponseTooLarge),
+            "one byte over the header limit must be rejected"
+        );
+    }
+
+    #[test]
     fn rejects_oversized_content_length() {
         let result = parse_http_response(
             b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nHello",
