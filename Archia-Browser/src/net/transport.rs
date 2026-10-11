@@ -1682,6 +1682,29 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn local_file_transport_rejects_nul_after_percent_decoding() {
+        for path in ["/tmp/safe%00hidden", "/tmp/%00", "/tmp/safe%00/../secret"] {
+            assert_eq!(
+                file_url_path(path),
+                Err(TransportError::InvalidUrl(
+                    super::super::UrlError::InvalidCharacter
+                )),
+                "decoded NUL must never reach filesystem APIs: {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn local_file_transport_decodes_percent_escapes_exactly_once() {
+        let decoded = file_url_path("/tmp/%252e%252e/secret.txt").unwrap();
+        assert_eq!(
+            decoded,
+            std::path::PathBuf::from("/tmp/%2e%2e/secret.txt"),
+            "double-encoded dot segments must remain literal after one URL decode"
+        );
+    }
+
+    #[test]
     fn local_file_transport_rejects_unc_and_drive_relative_paths() {
         for path in [
             "//server/share/secret.txt",
