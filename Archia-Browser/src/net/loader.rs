@@ -66,6 +66,11 @@ impl<P, T> DocumentLoader<P, T> {
         self.cache = Mutex::new(super::HttpCache::with_memory_budget(capacity, budget));
         self
     }
+
+    /// Report the configured cache ceiling, or None if its lock is poisoned.
+    pub fn cache_capacity_bytes(&self) -> Option<usize> {
+        self.cache.lock().ok().map(|cache| cache.capacity_bytes())
+    }
 }
 
 impl<P, T> DocumentLoader<P, T>
