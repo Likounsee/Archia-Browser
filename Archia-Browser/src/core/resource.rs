@@ -132,7 +132,9 @@ mod tests {
             manager.live_resources.load(Ordering::Acquire),
             MAX_LIVE_RESOURCES - 1
         );
-        let replacement = manager.allocate(0).expect("released slot should be reusable");
+        let replacement = manager
+            .allocate(0)
+            .expect("released slot should be reusable");
         assert_eq!(
             manager.live_resources.load(Ordering::Acquire),
             MAX_LIVE_RESOURCES
