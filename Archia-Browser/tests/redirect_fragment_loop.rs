@@ -62,14 +62,21 @@ fn fragment_only_redirects_cannot_evade_loop_detection() {
         requests: Arc::clone(&requests),
     };
     let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
-    let request = Request::new(Url::parse("https://example.org/start").unwrap())
-        .with_method(HttpMethod::Get);
+    let request =
+        Request::new(Url::parse("https://example.org/start").unwrap()).with_method(HttpMethod::Get);
 
     let result = loader.load(&request, LayoutViewport::new(320, 200));
 
-    assert!(matches!(result, Err(DocumentLoadError::RedirectLoopDetected)));
+    assert!(matches!(
+        result,
+        Err(DocumentLoadError::RedirectLoopDetected)
+    ));
     let requests = requests.lock().expect("request log mutex poisoned");
-    assert_eq!(requests.len(), 2, "loop must be stopped before a third request");
+    assert_eq!(
+        requests.len(),
+        2,
+        "loop must be stopped before a third request"
+    );
     assert_eq!(requests[1], "https://example.org/next#first");
 }
 
