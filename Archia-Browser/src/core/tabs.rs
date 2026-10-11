@@ -91,12 +91,22 @@ impl TabManager {
         self.tabs.iter_mut().find(|tab| tab.id == id)
     }
 
-    pub fn open(&mut self) -> TabId {
+    /// Open a new tab, returning `None` if the unique ID space is exhausted.
+    pub fn try_open(&mut self) -> Option<TabId> {
         let id = TabId(self.next_id);
-        self.next_id = self.next_id.saturating_add(1);
+        let next_id = self.next_id.checked_add(1)?;
         self.tabs.push(Tab::new(id));
         self.active = Some(self.tabs.len() - 1);
-        id
+        self.next_id = next_id;
+        Some(id)
+    }
+
+    /// Open a new tab.
+    ///
+    /// Panics only if all 64-bit tab IDs have been exhausted. Use
+    /// `try_open` when exhaustion must be handled without panicking.
+    pub fn open(&mut self) -> TabId {
+        self.try_open().expect("tab ID space exhausted")
     }
 
     pub fn select(&mut self, id: TabId) -> bool {
@@ -233,6 +243,17 @@ mod tests {
         assert!(manager.close(only));
         assert!(manager.is_empty());
         assert_eq!(manager.active_id(), None);
+    }
+
+    #[test]
+    fn tab_id_exhaustion_fails_without_creating_duplicate_ids() {
+        let mut manager = TabManager::new();
+        manager.next_id = u64::MAX;
+
+        assert_eq!(manager.try_open(), None);
+        assert!(manager.is_empty());
+        assert_eq!(manager.active_id(), None);
+        assert_eq!(manager.next_id, u64::MAX);
     }
 
     #[test]
