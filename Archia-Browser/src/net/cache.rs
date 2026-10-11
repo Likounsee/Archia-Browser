@@ -755,12 +755,16 @@ mod tests {
         let response = Response::new(200)
             .with_header("cache-control", "max-age=60")
             .with_body(b"x".to_vec());
-        let mut cache = HttpCache::new(4096);
+        let budget = Arc::new(MemoryBudget::new(4096));
+        let mut cache = HttpCache::with_memory_budget(4096, Arc::clone(&budget));
 
         cache.store(&request, &response);
 
         assert_eq!(cache.len(), 1);
-        assert!(cache.used_bytes() >= cache_key(&request).len());
+        assert!(
+            budget.used() >= cache_key(&request).len() + accounted_response_bytes(&response),
+            "shared budget must account for both the retained URL key and response"
+        );
     }
 
     #[test]
