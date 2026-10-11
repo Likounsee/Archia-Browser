@@ -173,6 +173,13 @@ impl CookieJar {
             }
         }
 
+        // RFC 6265bis requires Secure for SameSite=None cookies. Accepting
+        // an insecure cross-site cookie would let it participate in requests
+        // where modern browsers reject it, weakening the cookie boundary.
+        if cookie.same_site == SameSite::None && !cookie.secure {
+            return;
+        }
+
         if max_age.is_some_and(|seconds| seconds <= 0) {
             // Cookie identity depends on the fully parsed Domain and Path, so
             // apply deletion only after all attributes have been processed.
@@ -1328,4 +1335,20 @@ mod tests {
         assert_eq!(jar.len(), 1);
         assert_eq!(jar.header_for(&url).as_deref(), Some("sid=two"));
     }
+    #[test]
+    fn same_site_none_requires_secure_attribute() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&url, "cross_site=insecure; SameSite=None");
+        assert!(jar.is_empty(), "SameSite=None without Secure must be rejected");
+
+        jar.store(&url, "cross_site=secure; SameSite=None; Secure");
+        assert_eq!(
+            jar.header_for(&url).as_deref(),
+            Some("cross_site=secure"),
+            "SameSite=None is accepted when Secure is present"
+        );
+    }
+
 }
