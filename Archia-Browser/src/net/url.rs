@@ -1002,8 +1002,8 @@ mod tests {
         assert_eq!(url.host(), "example.org.");
         assert_eq!(url.port(), Some(443));
 
-        let canonical = Url::parse("https://User:Pass@example.org:443/path").unwrap();
-        assert_eq!(canonical.authority(), "User:Pass@example.org:443");
+        let canonical = Url::parse("https://User:Pass@example.org.:443/path").unwrap();
+        assert_eq!(canonical.authority(), "User:Pass@example.org.:443");
         assert!(url.same_origin(&canonical));
 
         let no_userinfo = Url::parse("https://EXAMPLE.ORG:443/path").unwrap();
