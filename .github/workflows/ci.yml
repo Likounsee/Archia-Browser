@@ -1,5 +1,9 @@
 name: Archia Browser CI
 
+# CI only reads source and dependencies; do not grant repository write access.
+permissions:
+  contents: read
+
 concurrency:
   group: archia-browser-ci-${{ github.ref }}
   cancel-in-progress: true
@@ -13,6 +17,7 @@ jobs:
   check:
     name: Build and test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
