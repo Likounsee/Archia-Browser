@@ -1696,15 +1696,9 @@ mod tests {
     #[test]
     fn local_file_transport_decodes_percent_escapes_exactly_once() {
         #[cfg(windows)]
-        let (input, expected) = (
-            "/C:/tmp/%252e%252e/secret.txt",
-            "C:/tmp/%2e%2e/secret.txt",
-        );
+        let (input, expected) = ("/C:/tmp/%252e%252e/secret.txt", "C:/tmp/%2e%2e/secret.txt");
         #[cfg(not(windows))]
-        let (input, expected) = (
-            "/tmp/%252e%252e/secret.txt",
-            "/tmp/%2e%2e/secret.txt",
-        );
+        let (input, expected) = ("/tmp/%252e%252e/secret.txt", "/tmp/%2e%2e/secret.txt");
 
         let decoded = file_url_path(input).unwrap();
         assert_eq!(
