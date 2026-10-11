@@ -649,16 +649,12 @@ fn has_pragma_no_cache(request: &Request) -> bool {
 mod tests {
     #[test]
     fn cache_key_uses_canonical_host_default_port_and_ignores_fragment() {
-        let implicit = super::cache_key(
-            &super::Request::new(
-                super::super::Url::parse("https://EXAMPLE.ORG:443/resource?q=1#top").unwrap(),
-            ),
-        );
-        let equivalent = super::cache_key(
-            &super::Request::new(
-                super::super::Url::parse("https://example.org/resource?q=1#other").unwrap(),
-            ),
-        );
+        let implicit = super::cache_key(&super::Request::new(
+            super::super::Url::parse("https://EXAMPLE.ORG:443/resource?q=1#top").unwrap(),
+        ));
+        let equivalent = super::cache_key(&super::Request::new(
+            super::super::Url::parse("https://example.org/resource?q=1#other").unwrap(),
+        ));
 
         assert_eq!(
             implicit, equivalent,
