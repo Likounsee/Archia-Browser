@@ -187,14 +187,11 @@ fn decode_unreserved_percent_escapes(input: &str) -> String {
 fn party_context(url: &str, first_party: Option<&crate::net::Url>) -> Option<PartyContext> {
     let first_party = first_party?;
     let requested = crate::net::Url::parse(url).ok()?;
-    // Url values do not carry document opaque-origin identity. Conservatively
-    // classify file URLs as cross-origin instead of collapsing all local files
-    // into the same empty-host tuple.
-    let same_origin = requested.scheme() != "file"
-        && first_party.scheme() != "file"
-        && requested.scheme() == first_party.scheme()
-        && requested.host().eq_ignore_ascii_case(first_party.host())
-        && origin_port(&requested) == origin_port(first_party);
+    // Reuse the canonical comparison so party classification cannot drift
+    // from redirect, referrer, or other origin-sensitive decisions.
+    // File URLs compare as cross-origin because Url does not carry an opaque
+    // document-origin identity.
+    let same_origin = requested.same_origin(first_party);
     Some(if same_origin {
         PartyContext::FirstParty
     } else {
@@ -202,13 +199,6 @@ fn party_context(url: &str, first_party: Option<&crate::net::Url>) -> Option<Par
     })
 }
 
-fn origin_port(url: &crate::net::Url) -> Option<u16> {
-    url.port().or(match url.scheme() {
-        "http" => Some(80),
-        "https" => Some(443),
-        _ => None,
-    })
-}
 
 #[cfg(test)]
 mod tests {
