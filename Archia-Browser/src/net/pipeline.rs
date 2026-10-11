@@ -123,6 +123,64 @@ mod tests {
     }
 
     #[test]
+    fn policy_blocks_every_resource_kind_before_transport() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+
+        struct CountingTransport(Arc<AtomicUsize>);
+
+        impl Transport for CountingTransport {
+            fn send(&self, _: &Request) -> Result<Response, TransportError> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Ok(Response::new(200))
+            }
+        }
+
+        let mut filter = RequestFilter::default();
+        filter.add_rule(FilterRule::block("blocked.example"));
+        let pipeline = NetworkPipeline::new(FilterPolicy(filter));
+        let sends = Arc::new(AtomicUsize::new(0));
+        let transport = CountingTransport(Arc::clone(&sends));
+        let resource_kinds = [
+            ResourceKind::Document,
+            ResourceKind::Stylesheet,
+            ResourceKind::Script,
+            ResourceKind::Image,
+            ResourceKind::Font,
+            ResourceKind::Media,
+            ResourceKind::Fetch,
+            ResourceKind::Other,
+        ];
+
+        for resource_kind in resource_kinds {
+            let request = Request::new(
+                super::super::Url::parse("https://blocked.example/resource").unwrap(),
+            )
+            .with_method(HttpMethod::Get)
+            .with_policy(RequestPolicy {
+                resource_kind,
+                ..Default::default()
+            });
+
+            assert!(
+                matches!(
+                    pipeline.execute(&transport, &request),
+                    Err(TransportError::BlockedByPolicy)
+                ),
+                "policy should block resource kind {resource_kind:?}"
+            );
+        }
+
+        assert_eq!(
+            sends.load(Ordering::SeqCst),
+            0,
+            "a blocked request must never reach the transport"
+        );
+    }
+
+    #[test]
     fn pipeline_blocks_before_transport() {
         let mut filter = RequestFilter::default();
         filter.add_rule(FilterRule::block("ads.example").for_resource(ResourceType::Script));
