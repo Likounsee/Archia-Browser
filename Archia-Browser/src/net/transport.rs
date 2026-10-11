@@ -1828,12 +1828,9 @@ mod tests {
             "file://user:secret@localhost/tmp/secret.txt",
             "file://attacker.example/tmp/secret.txt",
         ] {
-            let request =
-                Request::new(super::super::Url::parse(input).expect("test URL should parse"));
-            assert_eq!(
-                LocalFileTransport::new().send(&request),
-                Err(TransportError::UnsupportedScheme),
-                "remote or credential-bearing file URL must be rejected: {input}"
+            assert!(
+                super::super::Url::parse(input).is_err(),
+                "remote or credential-bearing file URL must be rejected during parsing: {input}"
             );
         }
 
