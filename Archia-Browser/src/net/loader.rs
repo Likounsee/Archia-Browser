@@ -716,6 +716,49 @@ mod tests {
     }
 
     #[test]
+    fn blocked_only_if_cached_request_is_denied_before_cache_fallback() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+
+        struct BlockAll;
+        impl RequestPolicyEngine for BlockAll {
+            fn decide(&self, _: &Request) -> PolicyDecision {
+                PolicyDecision::Block
+            }
+        }
+
+        struct CountingTransport(Arc<AtomicUsize>);
+        impl Transport for CountingTransport {
+            fn send(&self, _: &Request) -> Result<Response, TransportError> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Ok(Response::new(200)
+                    .with_header("content-type", "text/html")
+                    .with_body(b"<html>must not be fetched</html>".to_vec()))
+            }
+        }
+
+        let sends = Arc::new(AtomicUsize::new(0));
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(BlockAll),
+            CountingTransport(Arc::clone(&sends)),
+        );
+        let request = Request::new(Url::parse("https://blocked.example/private").unwrap())
+            .with_header("cache-control", "only-if-cached");
+
+        assert!(matches!(
+            loader.load(&request, LayoutViewport::new(320, 200)),
+            Err(DocumentLoadError::Network(TransportError::BlockedByPolicy))
+        ));
+        assert_eq!(
+            sends.load(Ordering::SeqCst),
+            0,
+            "policy denial must take precedence over cache-only fallback and transport"
+        );
+    }
+
+    #[test]
     fn html_content_type_is_case_insensitive() {
         let html = Response::new(200).with_header("content-type", "TEXT/HTML; charset=UTF-8");
         let xhtml = Response::new(200).with_header("content-type", "Application/XHTML+XML");
