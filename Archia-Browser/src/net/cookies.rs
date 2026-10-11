@@ -1238,11 +1238,17 @@ mod tests {
             &https,
             "__Host-Http-session=missing-host; Secure; HttpOnly; Path=/; Domain=example.org",
         );
-        jar.store(&https, "__Host-Http-session=missing-http-only; Secure; Path=/");
+        jar.store(
+            &https,
+            "__Host-Http-session=missing-http-only; Secure; Path=/",
+        );
         assert!(jar.is_empty());
 
         jar.store(&https, "__Http-session=valid; Secure; HttpOnly");
-        jar.store(&https, "__Host-Http-session=valid; Secure; HttpOnly; Path=/");
+        jar.store(
+            &https,
+            "__Host-Http-session=valid; Secure; HttpOnly; Path=/",
+        );
         assert_eq!(
             jar.header_for(&https).as_deref(),
             Some("__Http-session=valid; __Host-Http-session=valid")
