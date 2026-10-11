@@ -76,6 +76,7 @@ impl net::pipeline::RequestPolicyEngine for LocalFilePolicy {
 pub struct Browser {
     version: &'static str,
     memory: Arc<core::memory::MemoryBudget>,
+    resources: core::resource::ResourceManager,
     tabs: core::tabs::TabManager,
 }
 
@@ -84,9 +85,13 @@ impl Browser {
         let mut tabs = core::tabs::TabManager::new();
         tabs.open();
 
+        let memory = Arc::new(core::memory::MemoryBudget::new(512 * 1024 * 1024));
+        let resources = core::resource::ResourceManager::with_budget(Arc::clone(&memory));
+
         Self {
             version: env!("CARGO_PKG_VERSION"),
-            memory: Arc::new(core::memory::MemoryBudget::new(512 * 1024 * 1024)),
+            memory,
+            resources,
             tabs,
         }
     }
@@ -97,6 +102,11 @@ impl Browser {
 
     pub fn memory(&self) -> &core::memory::MemoryBudget {
         &self.memory
+    }
+
+    /// Allocate a tracked resource against the same budget used by software surfaces.
+    pub fn allocate_resource(&mut self, bytes: usize) -> Option<core::resource::Resource> {
+        self.resources.allocate(bytes)
     }
 
     /// Create a software surface charged to this browser's shared memory budget.
@@ -429,6 +439,20 @@ mod tests {
         let mut surface = browser.try_create_software_surface(64, 32).unwrap();
         assert!(browser.render_current_page_budgeted(&mut surface));
         assert_eq!(browser.memory().used(), 64 * 32 * 4);
+    }
+
+    #[test]
+    fn browser_resources_and_surfaces_compete_for_the_same_memory_budget() {
+        let mut browser = Browser::new();
+        let resource = browser.allocate_resource(1024).unwrap();
+        assert_eq!(browser.memory().used(), 1024);
+
+        let surface = browser.try_create_software_surface(16, 16).unwrap();
+        assert_eq!(browser.memory().used(), 1024 + 16 * 16 * 4);
+        drop(surface);
+        assert_eq!(browser.memory().used(), 1024);
+        drop(resource);
+        assert_eq!(browser.memory().used(), 0);
     }
 
     #[test]
