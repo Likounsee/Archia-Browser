@@ -8,7 +8,10 @@ fn host_prefix_requires_secure_host_only_and_explicit_root_path() {
     jar.store(&https, "__Host-valid=1; Secure; Path=/");
     jar.store(&https, "__Host-no-path=1; Secure");
     jar.store(&https, "__Host-subpath=1; Secure; Path=/account");
-    jar.store(&https, "__Host-domain=1; Secure; Path=/; Domain=example.org");
+    jar.store(
+        &https,
+        "__Host-domain=1; Secure; Path=/; Domain=example.org",
+    );
 
     assert_eq!(
         jar.header_for(&Url::parse("https://example.org/").unwrap())
