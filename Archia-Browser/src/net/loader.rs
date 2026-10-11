@@ -664,7 +664,15 @@ fn referrer_for_target(source: &super::Url, target: &super::Url) -> Option<super
 }
 
 fn should_switch_to_get(method: HttpMethod, status: u16) -> bool {
-    matches!(status, 301..=303) && !matches!(method, HttpMethod::Get | HttpMethod::Head)
+    // Historically, user agents rewrite POST to GET for 301/302. Other
+    // methods are preserved for those statuses; 303 switches every method
+    // except HEAD to GET. Rewriting PUT/PATCH/DELETE on 301/302 can silently
+    // turn a state-changing request into a different operation.
+    match status {
+        301 | 302 => method == HttpMethod::Post,
+        303 => method != HttpMethod::Head,
+        _ => false,
+    }
 }
 
 fn is_html_response(response: &Response) -> bool {
@@ -684,6 +692,31 @@ fn is_html_response(response: &Response) -> bool {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn redirect_method_rewriting_follows_status_specific_rules() {
+        for status in [301, 302] {
+            assert!(should_switch_to_get(HttpMethod::Post, status));
+            for method in [HttpMethod::Get, HttpMethod::Head, HttpMethod::Put,
+                HttpMethod::Delete, HttpMethod::Patch, HttpMethod::Options, HttpMethod::Connect] {
+                assert!(!should_switch_to_get(method, status),
+                    "{method:?} must be preserved for status {status}");
+            }
+        }
+
+        for method in [HttpMethod::Get, HttpMethod::Post, HttpMethod::Put,
+            HttpMethod::Delete, HttpMethod::Patch, HttpMethod::Options, HttpMethod::Connect] {
+            assert!(should_switch_to_get(method, 303),
+                "{method:?} should switch to GET for 303");
+        }
+        assert!(!should_switch_to_get(HttpMethod::Head, 303));
+        for status in [300, 304, 307, 308] {
+            for method in [HttpMethod::Post, HttpMethod::Put, HttpMethod::Patch] {
+                assert!(!should_switch_to_get(method, status),
+                    "{method:?} must be preserved for status {status}");
+            }
+        }
+    }
 
     #[test]
     fn secure_navigation_rejects_https_to_http_redirect_without_following_it() {
