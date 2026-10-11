@@ -1364,7 +1364,8 @@ mod tests {
 
         assert_eq!(jar.cookies[0].path, "/account");
         assert_eq!(
-            jar.header_for(&Url::parse("https://example.org/account/settings").unwrap()).as_deref(),
+            jar.header_for(&Url::parse("https://example.org/account/settings").unwrap())
+                .as_deref(),
             Some("sid=value")
         );
         assert_eq!(
@@ -1379,7 +1380,10 @@ mod tests {
         let mut jar = CookieJar::new();
 
         jar.store(&url, "__Host-session=missing-path; Secure");
-        jar.store(&url, "__Host-session=domain; Secure; Path=/; Domain=example.org");
+        jar.store(
+            &url,
+            "__Host-session=domain; Secure; Path=/; Domain=example.org",
+        );
         assert!(jar.is_empty(), "invalid __Host- cookies must be rejected");
 
         jar.store(&url, "__Host-session=valid; Secure; Path=/");
@@ -1403,7 +1407,8 @@ mod tests {
                 Some(&first_party),
                 true,
                 super::super::HttpMethod::Get
-            ).as_deref(),
+            )
+            .as_deref(),
             Some("lax=allowed")
         );
     }
