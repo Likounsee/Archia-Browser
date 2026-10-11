@@ -648,6 +648,33 @@ fn has_pragma_no_cache(request: &Request) -> bool {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn cache_key_uses_canonical_host_default_port_and_ignores_fragment() {
+        let implicit = super::cache_key(
+            &super::Request::new(
+                super::super::Url::parse("https://EXAMPLE.ORG:443/resource?q=1#top").unwrap(),
+            ),
+        );
+        let equivalent = super::cache_key(
+            &super::Request::new(
+                super::super::Url::parse("https://example.org/resource?q=1#other").unwrap(),
+            ),
+        );
+
+        assert_eq!(
+            implicit, equivalent,
+            "host case, explicit default port, and fragment must not split one cache resource"
+        );
+
+        let different_query = super::cache_key(&super::Request::new(
+            super::super::Url::parse("https://example.org/resource?q=2").unwrap(),
+        ));
+        assert_ne!(
+            implicit, different_query,
+            "query strings must remain part of the cache resource identity"
+        );
+    }
+
+    #[test]
     fn replacing_shared_budget_entry_does_not_evict_unrelated_lru_entry() {
         use crate::core::memory::MemoryBudget;
         use std::sync::Arc;
