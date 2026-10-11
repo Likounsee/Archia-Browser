@@ -229,7 +229,8 @@ impl CookieJar {
         }
         // The HTTP prefixes additionally prove that the cookie was set by
         // an HTTP response rather than a script-created document.cookie value.
-        if (cookie.name.starts_with("__Http-") || cookie.name.starts_with("__Host-Http-"))
+        if (cookie.name.starts_with("__Http-")
+            || cookie.name.starts_with("__Host-Http-"))
             && (!cookie.secure || !cookie.http_only || !url.is_secure())
         {
             return;
