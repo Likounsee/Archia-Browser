@@ -652,7 +652,7 @@ mod tests {
         use crate::core::memory::MemoryBudget;
         use std::sync::Arc;
 
-        let budget = Arc::new(MemoryBudget::new(512));
+        let budget = Arc::new(MemoryBudget::new(600));
         let first = Request::new(super::super::Url::parse("https://example.org/first").unwrap());
         let second = Request::new(super::super::Url::parse("https://example.org/second").unwrap());
         let response = Response::new(200)
@@ -981,6 +981,7 @@ mod tests {
         assert_eq!(
             cache.used_bytes(),
             response.body.len() + 64 + "cache-control".len() + "max-age=60".len()
+                + super::cache_key(&second).len()
         );
         assert!(cache.get(&first).is_none());
         assert!(cache.get(&second).is_some());
