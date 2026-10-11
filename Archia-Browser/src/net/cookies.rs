@@ -1354,4 +1354,73 @@ mod tests {
             "SameSite=None is accepted when Secure is present"
         );
     }
+
+    #[test]
+    fn invalid_path_attribute_falls_back_to_default_path() {
+        let url = Url::parse("https://example.org/account/profile").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&url, "sid=value; Path=relative");
+
+        assert_eq!(jar.cookies[0].path, "/account");
+        assert_eq!(
+            jar.header_for(&Url::parse("https://example.org/account/settings").unwrap()).as_deref(),
+            Some("sid=value")
+        );
+        assert_eq!(
+            jar.header_for(&Url::parse("https://example.org/other").unwrap()),
+            None
+        );
+    }
+
+    #[test]
+    fn host_prefix_requires_explicit_root_path_and_host_only_scope() {
+        let url = Url::parse("https://example.org/account").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&url, "__Host-session=missing-path; Secure");
+        jar.store(&url, "__Host-session=domain; Secure; Path=/; Domain=example.org");
+        assert!(jar.is_empty(), "invalid __Host- cookies must be rejected");
+
+        jar.store(&url, "__Host-session=valid; Secure; Path=/");
+        assert_eq!(
+            jar.header_for(&url).as_deref(),
+            Some("__Host-session=valid")
+        );
+    }
+
+    #[test]
+    fn strict_same_site_is_not_allowed_on_cross_site_safe_navigation() {
+        let target = Url::parse("https://shop.example.com/checkout").unwrap();
+        let first_party = Url::parse("https://attacker.test/").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&target, "strict=secret; SameSite=Strict");
+        jar.store(&target, "lax=allowed; SameSite=Lax");
+
+        assert_eq!(
+            jar.header_for_context(
+                &target,
+                Some(&first_party),
+                true,
+                super::super::HttpMethod::Get
+            ).as_deref(),
+            Some("lax=allowed")
+        );
+    }
+
+    #[test]
+    fn max_age_zero_deletes_only_the_matching_path_cookie() {
+        let url = Url::parse("https://example.org/account/page").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&url, "sid=root; Path=/");
+        jar.store(&url, "sid=account; Path=/account");
+
+        jar.store(&url, "sid=deleted; Path=/account; Max-Age=0");
+
+        assert_eq!(
+            jar.header_for(&url).as_deref(),
+            Some("sid=account; sid=root")
+        );
+        assert_eq!(jar.len(), 1);
+    }
 }
