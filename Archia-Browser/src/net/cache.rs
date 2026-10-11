@@ -600,6 +600,30 @@ fn has_pragma_no_cache(request: &Request) -> bool {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn shared_budget_does_not_evict_live_resources_when_cache_cannot_fit() {
+        use std::sync::Arc;
+        use crate::core::{memory::MemoryBudget, resource::ResourceManager};
+
+        let budget = Arc::new(MemoryBudget::new(256));
+        let mut resources = ResourceManager::with_budget(Arc::clone(&budget));
+        let live_resource = resources.allocate(200).unwrap();
+        let request = Request::new(super::super::Url::parse("https://example.org/").unwrap());
+        let response = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_header("content-type", "text/plain")
+            .with_body(vec![b'x'; 128]);
+        let mut cache = HttpCache::with_memory_budget(2048, Arc::clone(&budget));
+
+        cache.store(&request, &response);
+
+        assert_eq!(cache.len(), 0, "cache entry must not exceed shared budget");
+        assert_eq!(budget.used(), 200, "live resource reservation must remain intact");
+        assert_eq!(budget.available(), 56);
+        drop(live_resource);
+        assert_eq!(budget.used(), 0);
+    }
+
+    #[test]
     fn shared_budget_pressure_evicts_oldest_cached_response() {
         use std::sync::Arc;
         use crate::core::memory::MemoryBudget;
