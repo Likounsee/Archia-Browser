@@ -1422,10 +1422,7 @@ mod tests {
 
         jar.store(&url, "sid=deleted; Path=/account; Max-Age=0");
 
-        assert_eq!(
-            jar.header_for(&url).as_deref(),
-            Some("sid=root")
-        );
+        assert_eq!(jar.header_for(&url).as_deref(), Some("sid=root"));
         assert_eq!(jar.len(), 1);
     }
 }
