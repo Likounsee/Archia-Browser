@@ -156,6 +156,23 @@ mod tests {
     }
 
     #[test]
+    fn shrinking_shared_reservation_releases_only_excess_bytes() {
+        let budget = Arc::new(MemoryBudget::new(1024));
+        let reservation = Arc::new(MemoryReservation::try_new(Arc::clone(&budget), 700).unwrap());
+        let shared = Arc::clone(&reservation);
+
+        reservation.shrink_to(256);
+
+        assert_eq!(reservation.bytes(), 256);
+        assert_eq!(shared.bytes(), 256);
+        assert_eq!(budget.used(), 256);
+        drop(reservation);
+        assert_eq!(budget.used(), 256, "shared owner still holds its reservation");
+        drop(shared);
+        assert_eq!(budget.used(), 0);
+    }
+
+    #[test]
     fn budget_prevents_overcommit() {
         let budget = MemoryBudget::new(1024);
         assert!(budget.try_reserve(1024));
