@@ -109,8 +109,39 @@ mod tests {
         assert!(manager.allocate(1024).is_none());
         assert_eq!(manager.memory().used(), 0);
         assert_eq!(manager.memory().available(), 4096);
+        assert_eq!(
+            manager.live_resources.load(Ordering::Acquire),
+            0,
+            "an exhausted resource ID must release its live-object slot"
+        );
         assert!(manager.memory().try_reserve(4096));
         manager.memory().release(4096);
+    }
+
+    #[test]
+    fn failed_memory_reservation_does_not_leak_live_resource_slots() {
+        let mut manager = ResourceManager::new(0);
+
+        for _ in 0..MAX_LIVE_RESOURCES * 2 {
+            assert!(manager.allocate(1).is_none());
+        }
+
+        assert_eq!(manager.memory().used(), 0);
+        assert_eq!(
+            manager.live_resources.load(Ordering::Acquire),
+            0,
+            "failed byte-budget reservations must release the live-object slot"
+        );
+
+        let resource = manager
+            .allocate(0)
+            .expect("a failed reservation must not exhaust object slots");
+        assert_eq!(
+            manager.live_resources.load(Ordering::Acquire),
+            1
+        );
+        drop(resource);
+        assert_eq!(manager.live_resources.load(Ordering::Acquire), 0);
     }
 
     #[test]
