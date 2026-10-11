@@ -180,6 +180,48 @@ mod tests {
     }
 
     #[test]
+    fn canonicalized_host_is_used_by_request_policy_before_transport() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+
+        struct CountingTransport(Arc<AtomicUsize>);
+
+        impl Transport for CountingTransport {
+            fn send(&self, _: &Request) -> Result<Response, TransportError> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Ok(Response::new(200))
+            }
+        }
+
+        let mut filter = RequestFilter::default();
+        filter.add_rule(FilterRule::block("example.org"));
+        let pipeline = NetworkPipeline::new(FilterPolicy(filter));
+        let sends = Arc::new(AtomicUsize::new(0));
+        let transport = CountingTransport(Arc::clone(&sends));
+        let request = Request::new(
+            super::super::Url::parse("https://EXAMPLE.ORG/resource").unwrap(),
+        )
+        .with_method(HttpMethod::Get);
+
+        assert_eq!(
+            request.url.authority(),
+            "example.org",
+            "URL parsing must canonicalize the host before policy evaluation"
+        );
+        assert_eq!(
+            pipeline.execute(&transport, &request),
+            Err(TransportError::BlockedByPolicy)
+        );
+        assert_eq!(
+            sends.load(Ordering::SeqCst),
+            0,
+            "a policy match on a canonicalized host must not reach transport"
+        );
+    }
+
+    #[test]
     fn pipeline_blocks_before_transport() {
         let mut filter = RequestFilter::default();
         filter.add_rule(FilterRule::block("ads.example").for_resource(ResourceType::Script));
