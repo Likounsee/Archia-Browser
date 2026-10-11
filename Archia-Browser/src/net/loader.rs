@@ -622,6 +622,43 @@ fn is_html_response(response: &Response) -> bool {
 #[cfg(test)]
 mod tests {
 
+    #[test]
+    fn secure_navigation_rejects_https_to_http_redirect_without_following_it() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+
+        #[derive(Debug)]
+        struct DowngradeTransport(Arc<AtomicUsize>);
+
+        impl Transport for DowngradeTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                assert_eq!(request.url.scheme(), "https");
+                Ok(Response::new(302).with_header("location", "http://example.org/insecure"))
+            }
+        }
+
+        let sends = Arc::new(AtomicUsize::new(0));
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            DowngradeTransport(Arc::clone(&sends)),
+        );
+        let request = Request::new(Url::parse("https://example.org/secure").unwrap());
+
+        assert!(matches!(
+            loader.load(&request, LayoutViewport::new(320, 200)),
+            Err(DocumentLoadError::InvalidRedirect)
+        ));
+        assert_eq!(
+            sends.load(Ordering::SeqCst),
+            1,
+            "the cleartext redirect target must never reach the transport"
+        );
+    }
+
+
     use super::*;
     use crate::net::{
         pipeline::{PolicyDecision, RequestPolicyEngine},
