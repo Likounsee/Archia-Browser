@@ -2090,9 +2090,11 @@ mod tests {
     }
 
     #[test]
-    fn post_switches_to_get_for_301_302_and_303() {
+    fn redirect_method_rewriting_matches_fetch_semantics() {
         assert!(should_switch_to_get(HttpMethod::Post, 301));
-        assert!(should_switch_to_get(HttpMethod::Put, 302));
+        assert!(should_switch_to_get(HttpMethod::Post, 302));
+        assert!(!should_switch_to_get(HttpMethod::Put, 302));
+        assert!(!should_switch_to_get(HttpMethod::Patch, 302));
         assert!(should_switch_to_get(HttpMethod::Patch, 303));
         assert!(!should_switch_to_get(HttpMethod::Get, 302));
         assert!(!should_switch_to_get(HttpMethod::Head, 303));
