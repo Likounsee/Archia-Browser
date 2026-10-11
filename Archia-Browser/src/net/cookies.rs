@@ -1277,12 +1277,7 @@ mod tests {
         assert_eq!(jar.header_for(&file), None);
         assert_eq!(jar.script_visible_header_for(&custom), None);
         assert_eq!(
-            jar.header_for_context(
-                &custom,
-                Some(&https),
-                true,
-                super::super::HttpMethod::Get
-            ),
+            jar.header_for_context(&custom, Some(&https), true, super::super::HttpMethod::Get),
             None
         );
     }
