@@ -146,13 +146,7 @@ impl HttpCache {
         // Response data can be constructed by callers as well as received
         // from the bounded network transport. Saturate accounting arithmetic
         // so an extreme size estimate cannot overflow and undercharge the cache.
-        let bytes = response
-            .headers
-            .iter()
-            .fold(response.body.len(), |total, (name, value)| {
-                total.saturating_add(name.len()).saturating_add(value.len())
-            })
-            .saturating_add(64);
+        let bytes = accounted_response_bytes(response);
 
         // Cache entries participate in the browser-wide budget when one is supplied.
         // The reservation follows the entry and is released on eviction or cache drop.
@@ -166,8 +160,8 @@ impl HttpCache {
             // reservations if we wait for insert() to overwrite it. Release the
             // old copy first so an update does not evict unrelated LRU entries
             // merely to account for a short-lived double reservation.
-            self.entries.remove(&key);
-            loop {
+            let previous = self.entries.remove(&key);
+            let reservation = loop {
                 if budget.available() >= bytes {
                     if let Some(reservation) =
                         MemoryReservation::try_new(Arc::clone(budget), bytes)
@@ -178,9 +172,19 @@ impl HttpCache {
                 // Shared allocations may race with this cache. Reclaim LRU entries
                 // until the reservation succeeds or there is nothing left to evict.
                 if self.entries.remove_oldest().is_none() {
+                    // Keep the old representation if the replacement cannot be
+                    // reserved. Its reservation remains alive in the previous value.
+                    if let Some(previous) = previous {
+                        let previous_bytes = accounted_response_bytes(&previous.response);
+                        self.entries.insert(key.clone(), previous, previous_bytes);
+                    }
                     return;
                 }
-            }
+            };
+            // The new reservation is secured before releasing the old one, so a
+            // failed replacement never destroys a still-usable cached response.
+            drop(previous);
+            reservation
         } else {
             None
         };
@@ -233,6 +237,16 @@ impl HttpCache {
     pub fn clear(&mut self) {
         self.entries.clear();
     }
+}
+
+fn accounted_response_bytes(response: &Response) -> usize {
+    response
+        .headers
+        .iter()
+        .fold(response.body.len(), |total, (name, value)| {
+            total.saturating_add(name.len()).saturating_add(value.len())
+        })
+        .saturating_add(64)
 }
 
 fn cache_key(request: &Request) -> String {
@@ -685,6 +699,40 @@ mod tests {
         assert!(cache.get(&first).is_none());
         assert!(cache.get(&second).is_some());
         assert!(budget.used() <= budget.limit());
+    }
+
+    #[test]
+    fn failed_shared_budget_replacement_preserves_previous_response() {
+        use std::sync::Arc;
+        use crate::core::memory::MemoryBudget;
+
+        let budget = Arc::new(MemoryBudget::new(512));
+        let request = make_request("https://example.org/resource");
+        let original = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_body(vec![b'o'; 64]);
+        let replacement = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_body(vec![b'n'; 256]);
+        let mut cache = HttpCache::with_memory_budget(4096, Arc::clone(&budget));
+
+        cache.store(&request, &original);
+        assert_eq!(cache.get(&request).unwrap().body, original.body);
+
+        // Consume the remaining shared budget so the larger replacement cannot
+        // be reserved, even after every other cache entry has been evicted.
+        let remaining = budget.available();
+        assert!(remaining > 1);
+        assert!(budget.try_reserve(remaining - 1));
+
+        cache.store(&request, &replacement);
+
+        assert_eq!(
+            cache.get(&request).unwrap().body,
+            original.body,
+            "failed replacement must retain the old cached representation"
+        );
+        assert_eq!(cache.len(), 1);
     }
 
     #[test]
