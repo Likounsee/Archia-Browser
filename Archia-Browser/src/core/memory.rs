@@ -167,7 +167,11 @@ mod tests {
         assert_eq!(shared.bytes(), 256);
         assert_eq!(budget.used(), 256);
         drop(reservation);
-        assert_eq!(budget.used(), 256, "shared owner still holds its reservation");
+        assert_eq!(
+            budget.used(),
+            256,
+            "shared owner still holds its reservation"
+        );
         drop(shared);
         assert_eq!(budget.used(), 0);
     }
