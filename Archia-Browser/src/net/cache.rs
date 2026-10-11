@@ -156,15 +156,28 @@ impl HttpCache {
 
         // Cache entries participate in the browser-wide budget when one is supplied.
         // The reservation follows the entry and is released on eviction or cache drop.
-        let reservation = match &self.memory_budget {
-            Some(budget) => {
-                let Some(reservation) = MemoryReservation::try_new(Arc::clone(budget), bytes)
-                else {
-                    return;
-                };
-                Some(Arc::new(reservation))
+        let reservation = if let Some(budget) = &self.memory_budget {
+            // An entry larger than the entire shared budget cannot ever fit; do not
+            // evict useful entries for an impossible insertion.
+            if bytes > budget.limit() {
+                return;
             }
-            None => None,
+            loop {
+                if budget.available() >= bytes {
+                    if let Some(reservation) =
+                        MemoryReservation::try_new(Arc::clone(budget), bytes)
+                    {
+                        break Some(Arc::new(reservation));
+                    }
+                }
+                // Shared allocations may race with this cache. Reclaim LRU entries
+                // until the reservation succeeds or there is nothing left to evict.
+                if self.entries.remove_oldest().is_none() {
+                    return;
+                }
+            }
+        } else {
+            None
         };
 
         self.entries.insert(
