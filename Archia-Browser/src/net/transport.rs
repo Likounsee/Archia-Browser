@@ -1828,9 +1828,8 @@ mod tests {
             "file://user:secret@localhost/tmp/secret.txt",
             "file://attacker.example/tmp/secret.txt",
         ] {
-            let request = Request::new(
-                super::super::Url::parse(input).expect("test URL should parse"),
-            );
+            let request =
+                Request::new(super::super::Url::parse(input).expect("test URL should parse"));
             assert_eq!(
                 LocalFileTransport::new().send(&request),
                 Err(TransportError::UnsupportedScheme),
