@@ -86,8 +86,15 @@ impl HttpTransport {
             .with_root_certificates(roots)
             .with_no_client_auth();
         let server_name = tls_server_name(request.url.host())?;
-        let connection = ClientConnection::new(Arc::new(config), server_name)
+        let mut connection = ClientConnection::new(Arc::new(config), server_name)
             .map_err(|_| TransportError::TlsFailed)?;
+        // Complete the handshake here so certificate and protocol failures are
+        // reported as TLS errors, rather than being misclassified as HTTP I/O.
+        while connection.is_handshaking() {
+            connection
+                .complete_io(&mut stream)
+                .map_err(|_| TransportError::TlsFailed)?;
+        }
         Ok(Box::new(StreamOwned::new(connection, stream)))
     }
 
@@ -2131,6 +2138,41 @@ mod tests {
 #[cfg(test)]
 mod limit_tests {
     use super::*;
+
+    #[test]
+    fn tls_handshake_rejects_non_tls_peer_as_tls_failure() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        use std::thread;
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            stream
+                .set_write_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let mut client_hello = [0_u8; 4096];
+            let _ = stream.read(&mut client_hello).unwrap();
+            stream.write_all(b"not a TLS record").unwrap();
+        });
+
+        let request = Request::new(
+            Url::parse(&format!("https://127.0.0.1:{}/", address.port())).unwrap(),
+        );
+        assert_eq!(
+            HttpTransport::with_timeouts(
+                Duration::from_secs(2),
+                Duration::from_secs(2)
+            )
+            .send(&request),
+            Err(TransportError::TlsFailed)
+        );
+        server.join().unwrap();
+    }
 
     #[test]
     fn tls_server_name_accepts_dns_and_ip_literals() {
