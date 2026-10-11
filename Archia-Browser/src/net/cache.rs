@@ -146,7 +146,9 @@ impl HttpCache {
         // Response data can be constructed by callers as well as received
         // from the bounded network transport. Saturate accounting arithmetic
         // so an extreme size estimate cannot overflow and undercharge the cache.
-        let bytes = accounted_response_bytes(response);
+        // The normalized URL key is retained alongside the response. Long URLs
+        // can exceed the fixed per-entry overhead, so account for their bytes too.
+        let bytes = accounted_response_bytes(response).saturating_add(key.len());
 
         // Cache entries participate in the browser-wide budget when one is supplied.
         // The reservation follows the entry and is released on eviction or cache drop.
@@ -189,7 +191,8 @@ impl HttpCache {
                     // until the incremental reservation succeeds or no entry remains.
                     if self.entries.remove_oldest().is_none() {
                         if let Some(previous) = previous {
-                            let previous_bytes = accounted_response_bytes(&previous.response);
+                            let previous_bytes = accounted_response_bytes(&previous.response)
+                                .saturating_add(key.len());
                             self.entries.insert(key.clone(), previous, previous_bytes);
                         }
                         return;
@@ -739,6 +742,21 @@ mod tests {
         assert_eq!(cache.len(), 1);
         assert!(budget.used() > before);
         assert!(budget.used() <= budget.limit());
+    }
+
+    #[test]
+    fn cache_accounting_includes_long_retained_url_keys() {
+        let url = format!("https://example.org/{}", "a".repeat(512));
+        let request = Request::new(Url::parse(&url).unwrap());
+        let response = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_body(b"x".to_vec());
+        let mut cache = HttpCache::new(4096);
+
+        cache.store(&request, &response);
+
+        assert_eq!(cache.len(), 1);
+        assert!(cache.used_bytes() >= cache_key(&request).len());
     }
 
     #[test]
