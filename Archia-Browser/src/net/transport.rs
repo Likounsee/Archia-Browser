@@ -2160,15 +2160,11 @@ mod limit_tests {
             stream.write_all(b"not a TLS record").unwrap();
         });
 
-        let request = Request::new(
-            Url::parse(&format!("https://127.0.0.1:{}/", address.port())).unwrap(),
-        );
+        let request =
+            Request::new(Url::parse(&format!("https://127.0.0.1:{}/", address.port())).unwrap());
         assert_eq!(
-            HttpTransport::with_timeouts(
-                Duration::from_secs(2),
-                Duration::from_secs(2)
-            )
-            .send(&request),
+            HttpTransport::with_timeouts(Duration::from_secs(2), Duration::from_secs(2))
+                .send(&request),
             Err(TransportError::TlsFailed)
         );
         server.join().unwrap();
