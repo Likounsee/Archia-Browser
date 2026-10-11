@@ -155,11 +155,7 @@ impl Browser {
         width: u32,
         height: u32,
     ) -> Option<surface::BudgetedSoftwareSurface> {
-        surface::SoftwareSurface::try_new_with_budget(
-            width,
-            height,
-            Arc::clone(&self.memory),
-        )
+        surface::SoftwareSurface::try_new_with_budget(width, height, Arc::clone(&self.memory))
     }
 
     pub fn tabs(&self) -> &core::tabs::TabManager {
@@ -459,15 +455,15 @@ mod tests {
                 Ok(net::Response::new(200)
                     .with_header("cache-control", "no-store")
                     .with_header("content-type", "text/html")
-                    .with_body(b"<html><body>This page exceeds a tiny budget</body></html>".to_vec()))
+                    .with_body(
+                        b"<html><body>This page exceeds a tiny budget</body></html>".to_vec(),
+                    ))
             }
         }
 
         let browser = Browser::with_memory_limit(32);
-        let loader = browser.document_loader(
-            net::pipeline::NetworkPipeline::new(AllowAll),
-            MockTransport,
-        );
+        let loader =
+            browser.document_loader(net::pipeline::NetworkPipeline::new(AllowAll), MockTransport);
         let request = net::Request::new(net::Url::parse("https://example.org/").unwrap());
 
         assert!(matches!(
@@ -498,10 +494,8 @@ mod tests {
         }
 
         let browser = Browser::with_memory_limit(4096);
-        let loader = browser.document_loader(
-            net::pipeline::NetworkPipeline::new(AllowAll),
-            MockTransport,
-        );
+        let loader =
+            browser.document_loader(net::pipeline::NetworkPipeline::new(AllowAll), MockTransport);
         let request = net::Request::new(net::Url::parse("https://example.org/").unwrap());
         let page = loader
             .load(&request, crate::layout::LayoutViewport::new(64, 32))
@@ -564,10 +558,8 @@ mod tests {
         }
 
         let browser = Browser::with_memory_limit(4096);
-        let loader = browser.document_loader(
-            net::pipeline::NetworkPipeline::new(AllowAll),
-            MockTransport,
-        );
+        let loader =
+            browser.document_loader(net::pipeline::NetworkPipeline::new(AllowAll), MockTransport);
         let request = net::Request::new(net::Url::parse("https://example.org/").unwrap());
         loader
             .load(&request, crate::layout::LayoutViewport::new(64, 32))
