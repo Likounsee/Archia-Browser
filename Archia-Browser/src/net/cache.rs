@@ -320,7 +320,10 @@ fn response_can_store(response: &Response) -> bool {
                     .split(',')
                     .any(|d| trim_http_ows(d).eq_ignore_ascii_case("no-cache"))
             })
-        // A 200 response carrying Content-Range is still a partial representation;\n        // caching it under the full-resource key could serve truncated content later.\n        && !response_has_header(response, "content-range")\n        && !response_has_header(response, "vary")
+        // A 200 response carrying Content-Range is still a partial representation;
+        // caching it under the full-resource key could serve truncated content later.
+        && !response_has_header(response, "content-range")
+        && !response_has_header(response, "vary")
 }
 
 fn trim_http_ows(value: &str) -> &str {
