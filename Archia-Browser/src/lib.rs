@@ -444,6 +444,40 @@ mod tests {
     use super::*;
 
     #[test]
+    fn page_load_fails_cleanly_when_shared_memory_budget_cannot_fit_document() {
+        #[derive(Debug, Default)]
+        struct AllowAll;
+        impl net::pipeline::RequestPolicyEngine for AllowAll {
+            fn decide(&self, _: &net::Request) -> net::pipeline::PolicyDecision {
+                net::pipeline::PolicyDecision::Allow
+            }
+        }
+        #[derive(Debug)]
+        struct MockTransport;
+        impl net::Transport for MockTransport {
+            fn send(&self, _: &net::Request) -> Result<net::Response, net::TransportError> {
+                Ok(net::Response::new(200)
+                    .with_header("cache-control", "no-store")
+                    .with_header("content-type", "text/html")
+                    .with_body(b"<html><body>This page exceeds a tiny budget</body></html>".to_vec()))
+            }
+        }
+
+        let browser = Browser::with_memory_limit(32);
+        let loader = browser.document_loader(
+            net::pipeline::NetworkPipeline::new(AllowAll),
+            MockTransport,
+        );
+        let request = net::Request::new(net::Url::parse("https://example.org/").unwrap());
+
+        assert!(matches!(
+            loader.load(&request, crate::layout::LayoutViewport::new(64, 32)),
+            Err(net::DocumentLoadError::MemoryBudgetExceeded)
+        ));
+        assert_eq!(browser.memory().used(), 0);
+    }
+
+    #[test]
     fn retained_page_holds_and_releases_its_memory_reservation() {
         #[derive(Debug, Default)]
         struct AllowAll;
