@@ -1680,7 +1680,6 @@ mod tests {
         assert!(file_url_path("/tmp/%00secret").is_err());
     }
 
-    #[cfg(windows)]
     #[test]
     fn local_file_transport_rejects_nul_after_percent_decoding() {
         for path in ["/tmp/safe%00hidden", "/tmp/%00", "/tmp/safe%00/../secret"] {
