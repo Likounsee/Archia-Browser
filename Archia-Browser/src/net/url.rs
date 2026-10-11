@@ -102,13 +102,7 @@ impl Url {
     /// has no per-document opaque-origin identity, so equating two file paths
     /// would be an unsafe assumption for security-sensitive decisions.
     pub fn same_origin(&self, other: &Self) -> bool {
-        if self.scheme == "file" || other.scheme == "file" {
-            return false;
-        }
-
-        self.scheme == other.scheme
-            && self.host().eq_ignore_ascii_case(other.host())
-            && self.origin_port() == other.origin_port()
+        crate::security::origin::same_origin_urls(self, other)
     }
 
     pub fn same_document(&self, other: &Self) -> bool {
@@ -699,6 +693,32 @@ mod tests {
                 left.same_origin(&right),
                 expected,
                 "unexpected origin comparison: {left} vs {right}"
+            );
+        }
+    }
+
+    #[test]
+    fn same_origin_uses_the_canonical_security_origin_implementation() {
+        use crate::security::origin::Origin;
+
+        let cases = [
+            ("https://example.org/a", "https://EXAMPLE.org:443/b"),
+            ("http://example.org/", "https://example.org/"),
+            ("http://[::1]/", "http://[0:0:0:0:0:0:0:1]:80/"),
+            ("custom://example.org/a", "custom://example.org:80/b"),
+            ("file:///tmp/a", "file:///tmp/a"),
+            ("file:///tmp/a", "file:///tmp/b"),
+        ];
+
+        for (left, right) in cases {
+            let left = Url::parse(left).unwrap();
+            let right = Url::parse(right).unwrap();
+            let expected =
+                Origin::from_url(&left).same_origin(&Origin::from_url(&right));
+            assert_eq!(
+                left.same_origin(&right),
+                expected,
+                "URL and security origin comparisons diverged for {left} and {right}"
             );
         }
     }
