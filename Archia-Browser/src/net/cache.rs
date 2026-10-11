@@ -653,10 +653,8 @@ mod tests {
         use std::sync::Arc;
 
         let budget = Arc::new(MemoryBudget::new(512));
-        let first =
-            Request::new(super::super::Url::parse("https://example.org/first").unwrap());
-        let second =
-            Request::new(super::super::Url::parse("https://example.org/second").unwrap());
+        let first = Request::new(super::super::Url::parse("https://example.org/first").unwrap());
+        let second = Request::new(super::super::Url::parse("https://example.org/second").unwrap());
         let response = Response::new(200)
             .with_header("cache-control", "max-age=60")
             .with_header("content-type", "text/plain")
@@ -675,7 +673,11 @@ mod tests {
 
         cache.store(&first, &replacement);
 
-        assert_eq!(cache.len(), 2, "replacement should preserve the unrelated entry");
+        assert_eq!(
+            cache.len(),
+            2,
+            "replacement should preserve the unrelated entry"
+        );
         assert_eq!(cache.get(&first).unwrap().body, replacement.body);
         assert!(cache.get(&second).is_some());
         assert!(budget.used() <= budget.limit());
