@@ -813,10 +813,7 @@ mod tests {
             cache.store(
                 &request,
                 &Response::new(200)
-                    .with_header(
-                        "cache-control",
-                        format!("{private_directive}, max-age=60"),
-                    )
+                    .with_header("cache-control", format!("{private_directive}, max-age=60"))
                     .with_body(b"private account response".to_vec()),
             );
 
