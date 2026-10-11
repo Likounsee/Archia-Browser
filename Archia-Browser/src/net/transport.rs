@@ -2138,6 +2138,7 @@ mod tests {
 #[cfg(test)]
 mod limit_tests {
     use super::*;
+    use crate::net::Url;
 
     #[test]
     fn tls_handshake_rejects_non_tls_peer_as_tls_failure() {
