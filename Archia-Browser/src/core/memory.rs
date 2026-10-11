@@ -186,6 +186,24 @@ mod tests {
     }
 
     #[test]
+    fn budget_handles_limit_boundaries_zero_and_integer_overflow() {
+        let budget = MemoryBudget::new(8);
+
+        assert!(budget.try_reserve(7), "N-1 must fit");
+        assert_eq!(budget.snapshot(), MemorySnapshot { limit: 8, used: 7, available: 1 });
+        assert!(budget.try_reserve(1), "the exact limit N must fit");
+        assert_eq!(budget.snapshot(), MemorySnapshot { limit: 8, used: 8, available: 0 });
+        assert!(!budget.try_reserve(1), "N+1 must be rejected");
+        assert!(!budget.try_reserve(usize::MAX), "addition overflow must be rejected");
+        assert_eq!(budget.used(), 8, "rejected reservations must not change accounting");
+
+        budget.release(8);
+        assert!(budget.try_reserve(0), "zero-byte reservations are valid at an empty budget");
+        assert_eq!(budget.used(), 0);
+        assert_eq!(budget.available(), 8);
+    }
+
+    #[test]
     fn failed_reservation_does_not_release_bytes_owned_by_another_reservation() {
         let budget = Arc::new(MemoryBudget::new(1024));
         assert!(budget.try_reserve(700));
