@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 pub mod core;
 pub mod css;
 pub mod document;
@@ -73,7 +75,7 @@ impl net::pipeline::RequestPolicyEngine for LocalFilePolicy {
 
 pub struct Browser {
     version: &'static str,
-    memory: core::memory::MemoryBudget,
+    memory: Arc<core::memory::MemoryBudget>,
     tabs: core::tabs::TabManager,
 }
 
@@ -84,7 +86,7 @@ impl Browser {
 
         Self {
             version: env!("CARGO_PKG_VERSION"),
-            memory: core::memory::MemoryBudget::new(512 * 1024 * 1024),
+            memory: Arc::new(core::memory::MemoryBudget::new(512 * 1024 * 1024)),
             tabs,
         }
     }
@@ -95,6 +97,22 @@ impl Browser {
 
     pub fn memory(&self) -> &core::memory::MemoryBudget {
         &self.memory
+    }
+
+    /// Create a software surface charged to this browser's shared memory budget.
+    ///
+    /// The returned surface keeps its reservation alive for as long as its pixel
+    /// buffer is retained, and releases it automatically when dropped.
+    pub fn try_create_software_surface(
+        &self,
+        width: u32,
+        height: u32,
+    ) -> Option<surface::BudgetedSoftwareSurface> {
+        surface::SoftwareSurface::try_new_with_budget(
+            width,
+            height,
+            Arc::clone(&self.memory),
+        )
     }
 
     pub fn tabs(&self) -> &core::tabs::TabManager {
@@ -368,6 +386,24 @@ impl Default for Browser {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn browser_software_surfaces_use_and_release_the_shared_memory_budget() {
+        let browser = Browser::new();
+        assert_eq!(browser.memory().used(), 0);
+
+        {
+            let surface = browser
+                .try_create_software_surface(64, 32)
+                .expect("a small surface should fit in the browser memory budget");
+            assert_eq!(surface.width(), 64);
+            assert_eq!(surface.height(), 32);
+            assert_eq!(browser.memory().used(), 64 * 32 * 4);
+        }
+
+        assert_eq!(browser.memory().used(), 0);
+        assert_eq!(browser.memory().available(), browser.memory().limit());
+    }
 
     #[test]
     fn browser_retains_loaded_page_for_rendering() {
