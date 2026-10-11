@@ -1233,7 +1233,10 @@ mod tests {
         jar.store(&https, "__Http-session=script; Secure");
         jar.store(&https, "__Http-session=missing-secure; HttpOnly");
         jar.store(&https, "__Http-session=missing-http-only; Secure");
-        jar.store(&https, "__Host-Http-session=missing-host; Secure; HttpOnly; Path=/; Domain=example.org");
+        jar.store(
+            &https,
+            "__Host-Http-session=missing-host; Secure; HttpOnly; Path=/; Domain=example.org",
+        );
         assert!(jar.is_empty());
 
         jar.store(&https, "__Http-session=valid; Secure; HttpOnly");
