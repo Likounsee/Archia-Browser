@@ -155,14 +155,13 @@ mod tests {
         ];
 
         for resource_kind in resource_kinds {
-            let request = Request::new(
-                super::super::Url::parse("https://blocked.example/resource").unwrap(),
-            )
-            .with_method(HttpMethod::Get)
-            .with_policy(RequestPolicy {
-                resource_kind,
-                ..Default::default()
-            });
+            let request =
+                Request::new(super::super::Url::parse("https://blocked.example/resource").unwrap())
+                    .with_method(HttpMethod::Get)
+                    .with_policy(RequestPolicy {
+                        resource_kind,
+                        ..Default::default()
+                    });
 
             assert!(
                 matches!(
