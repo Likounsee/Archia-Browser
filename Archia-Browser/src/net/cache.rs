@@ -175,7 +175,14 @@ impl HttpCache {
 
             if previous_reserved >= bytes {
                 // Reuse the old reservation(s) for same-sized or smaller responses.
-                // This also works when the shared budget is completely full.
+                // Shrink them for smaller replacements so unused capacity returns
+                // to the shared budget instead of remaining charged indefinitely.
+                let mut remaining = bytes;
+                for reservation in &previous_reservations {
+                    let retained = remaining.min(reservation.bytes());
+                    reservation.shrink_to(retained);
+                    remaining = remaining.saturating_sub(retained);
+                }
                 drop(previous);
                 previous_reservations
             } else {
@@ -746,6 +753,38 @@ mod tests {
         assert_eq!(cache.len(), 1);
         assert!(budget.used() > before);
         assert!(budget.used() <= budget.limit());
+    }
+
+    #[test]
+    fn smaller_replacement_releases_excess_shared_memory() {
+        use std::sync::Arc;
+        use crate::core::memory::MemoryBudget;
+
+        let budget = Arc::new(MemoryBudget::new(4096));
+        let request = make_request("https://example.org/resource");
+        let original = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_body(vec![b'o'; 512]);
+        let replacement = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_body(vec![b'n'; 32]);
+        let mut cache = HttpCache::with_memory_budget(4096, Arc::clone(&budget));
+
+        cache.store(&request, &original);
+        let used_before = budget.used();
+        cache.store(&request, &replacement);
+
+        assert_eq!(cache.get(&request).unwrap().body, replacement.body);
+        assert_eq!(cache.len(), 1);
+        assert!(
+            budget.used() < used_before,
+            "a smaller replacement must release the old entry's excess reservation"
+        );
+        assert_eq!(
+            budget.used(),
+            accounted_response_bytes(&replacement) + cache_key(&request).len(),
+            "shared accounting must match the replacement's retained response and key"
+        );
     }
 
     #[test]
