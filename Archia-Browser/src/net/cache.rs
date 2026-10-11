@@ -701,7 +701,11 @@ mod tests {
         cache.store(&request, &response);
 
         assert_eq!(cache.len(), 0, "cache entry must not exceed shared budget");
-        assert_eq!(budget.used(), 200, "live resource reservation must remain intact");
+        assert_eq!(
+            budget.used(),
+            200,
+            "live resource reservation must remain intact"
+        );
         assert_eq!(budget.available(), 56);
         drop(live_resource);
         assert_eq!(budget.used(), 0);
