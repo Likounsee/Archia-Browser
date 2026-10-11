@@ -3,6 +3,17 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 static NEXT_OPAQUE_ORIGIN_ID: AtomicU64 = AtomicU64::new(1);
 
+/// Compare URL origins through the canonical origin implementation.
+/// File URLs remain opaque because a URL value does not carry a document's
+/// opaque-origin identity; separately parsed file URLs must never compare equal.
+pub(crate) fn same_origin_urls(left: &Url, right: &Url) -> bool {
+    if left.scheme() == "file" || right.scheme() == "file" {
+        return false;
+    }
+
+    Origin::from_url(left).same_origin(&Origin::from_url(right))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Origin {
     scheme: String,
