@@ -1694,7 +1694,10 @@ mod tests {
                 "relative file URL path must not depend on process working directory: {path}"
             );
         }
-        assert_eq!(file_url_path("/tmp/absolute.txt").unwrap(), std::path::PathBuf::from("/tmp/absolute.txt"));
+        assert_eq!(
+            file_url_path("/tmp/absolute.txt").unwrap(),
+            std::path::PathBuf::from("/tmp/absolute.txt")
+        );
     }
 
     #[test]
