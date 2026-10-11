@@ -16,7 +16,7 @@ struct CachedResponse {
     stored_at: Instant,
     initial_age: u64,
     expires_at: Instant,
-    _reservation: Option<Arc<MemoryReservation>>,
+    _reservations: Vec<Arc<MemoryReservation>>,
 }
 
 #[derive(Debug)]
@@ -157,32 +157,37 @@ impl HttpCache {
                 return;
             }
             let previous = self.entries.remove(&key);
-            // Reuse an existing reservation when it already covers the replacement.
-            // This lets same-sized updates work even when the shared budget is full,
-            // without briefly charging both versions of the same cache entry.
-            let reusable = previous
+            let previous_reservations = previous
                 .as_ref()
-                .and_then(|entry| entry._reservation.as_ref())
-                .filter(|reservation| reservation.bytes() >= bytes)
-                .cloned();
+                .map(|entry| entry._reservations.clone())
+                .unwrap_or_default();
+            let previous_reserved = previous_reservations
+                .iter()
+                .fold(0usize, |total, reservation| {
+                    total.saturating_add(reservation.bytes())
+                });
 
-            if let Some(reservation) = reusable {
+            if previous_reserved >= bytes {
+                // Reuse the old reservation(s) for same-sized or smaller responses.
+                // This also works when the shared budget is completely full.
                 drop(previous);
-                Some(reservation)
+                previous_reservations
             } else {
+                // Reserve only the growth above the old entry's reservation. Keeping
+                // the old reservation avoids a transient double charge and lets larger
+                // replacements fit whenever their incremental cost is available.
+                let additional = bytes.saturating_sub(previous_reserved);
                 let reservation = loop {
-                    if budget.available() >= bytes {
+                    if budget.available() >= additional {
                         if let Some(reservation) =
-                            MemoryReservation::try_new(Arc::clone(budget), bytes)
+                            MemoryReservation::try_new(Arc::clone(budget), additional)
                         {
-                            break Some(Arc::new(reservation));
+                            break Arc::new(reservation);
                         }
                     }
                     // Shared allocations may race with this cache. Reclaim LRU entries
-                    // until the reservation succeeds or there is nothing left to evict.
+                    // until the incremental reservation succeeds or no entry remains.
                     if self.entries.remove_oldest().is_none() {
-                        // Keep the old representation if the replacement cannot be
-                        // reserved. Its reservation remains alive in the previous value.
                         if let Some(previous) = previous {
                             let previous_bytes = accounted_response_bytes(&previous.response);
                             self.entries.insert(key.clone(), previous, previous_bytes);
@@ -190,10 +195,10 @@ impl HttpCache {
                         return;
                     }
                 };
-                // The new reservation is secured before releasing the old one, so a
-                // failed replacement never destroys a still-usable cached response.
+                let mut reservations = previous_reservations;
+                reservations.push(reservation);
                 drop(previous);
-                reservation
+                reservations
             }
         } else {
             None
@@ -206,7 +211,7 @@ impl HttpCache {
                 stored_at: Instant::now(),
                 initial_age: age,
                 expires_at,
-                _reservation: reservation,
+                _reservations: reservation,
             },
             bytes,
         );
@@ -708,6 +713,31 @@ mod tests {
         assert_eq!(cache.len(), 1);
         assert!(cache.get(&first).is_none());
         assert!(cache.get(&second).is_some());
+        assert!(budget.used() <= budget.limit());
+    }
+
+    #[test]
+    fn larger_replacement_reserves_only_incremental_shared_memory() {
+        use std::sync::Arc;
+        use crate::core::memory::MemoryBudget;
+
+        let budget = Arc::new(MemoryBudget::new(512));
+        let request = make_request("https://example.org/resource");
+        let original = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_body(vec![b'o'; 64]);
+        let replacement = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_body(vec![b'n'; 128]);
+        let mut cache = HttpCache::with_memory_budget(4096, Arc::clone(&budget));
+
+        cache.store(&request, &original);
+        let before = budget.used();
+        cache.store(&request, &replacement);
+
+        assert_eq!(cache.get(&request).unwrap().body, replacement.body);
+        assert_eq!(cache.len(), 1);
+        assert!(budget.used() > before);
         assert!(budget.used() <= budget.limit());
     }
 
