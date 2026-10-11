@@ -227,6 +227,13 @@ impl CookieJar {
         if cookie.name.starts_with("__Secure-") && (!cookie.secure || !url.is_secure()) {
             return;
         }
+        // The HTTP prefixes additionally prove that the cookie was set by
+        // an HTTP response rather than a script-created document.cookie value.
+        if cookie.name.starts_with("__Http-")
+            && (!cookie.secure || !cookie.http_only || !url.is_secure())
+        {
+            return;
+        }
         if cookie.name.starts_with("__Host-")
             && (!cookie.secure
                 || !url.is_secure()
@@ -1216,6 +1223,26 @@ mod tests {
                 .as_deref(),
             Some("__Secure-sid=good; __Host-sid=host")
         );
+    }
+
+    #[test]
+    fn enforces_http_only_cookie_prefixes() {
+        let https = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&https, "__Http-session=script; Secure");
+        jar.store(&https, "__Http-session=missing-secure; HttpOnly");
+        jar.store(&https, "__Http-session=missing-http-only; Secure");
+        jar.store(&https, "__Host-Http-session=missing-host; Secure; HttpOnly; Path=/; Domain=example.org");
+        assert!(jar.is_empty());
+
+        jar.store(&https, "__Http-session=valid; Secure; HttpOnly");
+        jar.store(&https, "__Host-Http-session=valid; Secure; HttpOnly; Path=/");
+        assert_eq!(
+            jar.header_for(&https).as_deref(),
+            Some("__Http-session=valid; __Host-Http-session=valid")
+        );
+        assert_eq!(jar.script_visible_header_for(&https), None);
     }
 
     #[test]
