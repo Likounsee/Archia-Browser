@@ -469,7 +469,7 @@ mod tests {
             MockTransport,
             512,
         );
-        assert_eq!(loader.cache_capacity_bytes(), 512);
+        assert_eq!(loader.cache_capacity_bytes(), Some(512));
     }
 
     #[test]
