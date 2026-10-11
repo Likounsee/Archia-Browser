@@ -278,6 +278,9 @@ fn request_can_store(request: &Request) -> bool {
             .any(|(_, value)| {
                 has_cache_directive(Some(value), "no-store")
                     || has_cache_directive(Some(value), "no-cache")
+                    // This cache does not implement field-specific private semantics.
+                    // Conservatively reject every private response to avoid cross-user reuse.
+                    || has_cache_directive(Some(value), "private")
             })
         && !has_pragma_no_cache(request)
 }
@@ -790,6 +793,39 @@ mod tests {
         assert!(cache.get(&no_cache).is_none());
         let no_store = request.with_header("cache-control", "no-store");
         assert!(cache.get(&no_store).is_none());
+    }
+
+    #[test]
+    fn private_responses_are_not_cached_and_evict_older_entries() {
+        for private_directive in ["private", "private=\"set-cookie\""] {
+            let mut cache = HttpCache::default();
+            let request = make_request("https://example.org/account");
+            cache.store(
+                &request,
+                &Response::new(200)
+                    .with_header("cache-control", "public, max-age=60")
+                    .with_body(b"previous public response".to_vec()),
+            );
+            assert!(cache.get(&request).is_some());
+
+            // This implementation cannot safely strip named private fields,
+            // so both bare and field-qualified private directives are non-cacheable.
+            cache.store(
+                &request,
+                &Response::new(200)
+                    .with_header(
+                        "cache-control",
+                        format!("{private_directive}, max-age=60"),
+                    )
+                    .with_body(b"private account response".to_vec()),
+            );
+
+            assert!(
+                cache.get(&request).is_none(),
+                "private response must not be cached: {private_directive}"
+            );
+            assert!(cache.is_empty());
+        }
     }
 
     #[test]
