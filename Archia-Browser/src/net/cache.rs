@@ -264,6 +264,7 @@ fn request_can_use_cache(request: &Request) -> bool {
         // cache does not implement partial-response merging or If-Range.
         && !has_request_header(request, "range")
         && !has_request_header(request, "if-range")
+        && !request_has_conditional_headers(request)
         && !request
             .headers
             .iter()
@@ -287,6 +288,7 @@ fn request_can_store(request: &Request) -> bool {
         // cache does not implement partial-response merging or If-Range.
         && !has_request_header(request, "range")
         && !has_request_header(request, "if-range")
+        && !request_has_conditional_headers(request)
         && !request
             .headers
             .iter()
@@ -297,6 +299,17 @@ fn request_can_store(request: &Request) -> bool {
                     || has_cache_directive(Some(value), "no-cache")
             })
         && !has_pragma_no_cache(request)
+}
+
+fn request_has_conditional_headers(request: &Request) -> bool {
+    [
+        "if-match",
+        "if-none-match",
+        "if-modified-since",
+        "if-unmodified-since",
+    ]
+    .iter()
+    .any(|name| has_request_header(request, name))
 }
 
 fn has_request_header(request: &Request, wanted: &str) -> bool {
@@ -1452,4 +1465,35 @@ mod tests {
         );
         assert_eq!(cache.get(&request).unwrap().body, b"full representation");
     }
+    #[test]
+    fn conditional_requests_bypass_cache_until_revalidation_is_supported() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/resource");
+        cache.store(
+            &request,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_body(b"cached full representation".to_vec()),
+        );
+
+        for (name, value) in [
+            ("If-Match", "\"etag\""),
+            ("If-None-Match", "\"etag\""),
+            ("If-Modified-Since", "Sun, 06 Nov 1994 08:49:37 GMT"),
+            ("If-Unmodified-Since", "Sun, 06 Nov 1994 08:49:37 GMT"),
+        ] {
+            let conditional = request.clone().with_header(name, value);
+            assert!(cache.get(&conditional).is_none(), "{name} must not be ignored");
+            cache.store(
+                &conditional,
+                &Response::new(304).with_header("cache-control", "max-age=60"),
+            );
+            assert_eq!(
+                cache.get(&request).unwrap().body,
+                b"cached full representation",
+                "{name} must not poison the unconditional cached representation"
+            );
+        }
+    }
+
 }
