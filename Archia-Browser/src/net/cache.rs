@@ -610,8 +610,10 @@ mod tests {
         use crate::core::memory::MemoryBudget;
 
         let budget = Arc::new(MemoryBudget::new(512));
-        let first = Request::new(super::super::Url::parse("https://example.org/first").unwrap());
-        let second = Request::new(super::super::Url::parse("https://example.org/second").unwrap());
+        let first =
+            Request::new(super::super::Url::parse("https://example.org/first").unwrap());
+        let second =
+            Request::new(super::super::Url::parse("https://example.org/second").unwrap());
         let response = Response::new(200)
             .with_header("cache-control", "max-age=60")
             .with_header("content-type", "text/plain")
