@@ -174,9 +174,17 @@ impl HttpTransport {
                             .windows(4)
                             .position(|window| window == b"\r\n\r\n")
                             .map(|position| position + 4);
-                        if header_end.is_none() && bytes.len() > self.max_header_size {
+                    }
+                    // Enforce the header limit as soon as the delimiter arrives.
+                    // A single read can cross the limit and contain the delimiter;
+                    // checking only while it is absent would otherwise defer rejection
+                    // until the entire response has been buffered.
+                    if let Some(end) = header_end {
+                        if end.saturating_sub(4) > self.max_header_size {
                             return Err(TransportError::ResponseTooLarge);
                         }
+                    } else if bytes.len() > self.max_header_size {
+                        return Err(TransportError::ResponseTooLarge);
                     }
                     if bytes.len() > self.max_response_size {
                         return Err(TransportError::ResponseTooLarge);
@@ -2278,6 +2286,58 @@ mod limit_tests {
             1024,
         );
         assert_eq!(result, Err(TransportError::ConnectionFailed));
+    }
+
+    #[test]
+    fn rejects_oversized_headers_immediately_when_delimiter_arrives_in_same_read() {
+        use std::io;
+
+        struct CountingStream {
+            bytes: Vec<u8>,
+            offset: usize,
+            reads: usize,
+        }
+
+        impl Read for CountingStream {
+            fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+                self.reads += 1;
+                if self.offset == self.bytes.len() {
+                    return Ok(0);
+                }
+                let count = output.len().min(self.bytes.len() - self.offset);
+                output[..count].copy_from_slice(&self.bytes[self.offset..self.offset + count]);
+                self.offset += count;
+                Ok(count)
+            }
+        }
+
+        impl Write for CountingStream {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                Ok(bytes.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let mut wire = b"HTTP/1.1 200 OK\r\nX-Large: ".to_vec();
+        wire.extend(std::iter::repeat_n(b'a', 16_400));
+        wire.extend_from_slice(b"\r\n\r\nBODY");
+        let mut stream = CountingStream {
+            bytes: wire,
+            offset: 0,
+            reads: 0,
+        };
+        let transport = HttpTransport::new().with_limits(1024 * 1024, 16 * 1024);
+
+        assert_eq!(
+            transport.read_response(&mut stream, super::super::HttpMethod::Get),
+            Err(TransportError::ResponseTooLarge)
+        );
+        // The oversized header is rejected on the read that reveals its end,
+        // without another read to EOF or buffering the rest of the response.
+        assert_eq!(stream.reads, 2);
     }
 
     #[test]
