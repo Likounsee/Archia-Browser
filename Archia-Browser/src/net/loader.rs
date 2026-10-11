@@ -2129,6 +2129,70 @@ mod tests {
             .any(|(name, value)| name.eq_ignore_ascii_case("accept") && value == "text/html"));
     }
 
+
+    #[test]
+    fn cross_origin_307_and_308_preserve_entity_but_strip_credentials() {
+        #[derive(Debug)]
+        struct RedirectTransport {
+            redirect_status: u16,
+            requests: std::sync::Mutex<Vec<Request>>,
+        }
+
+        impl Transport for RedirectTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                let mut requests = self.requests.lock().unwrap();
+                requests.push(request.clone());
+                if requests.len() == 1 {
+                    Ok(Response::new(self.redirect_status)
+                        .with_header("location", "https://other.example/landing"))
+                } else {
+                    Ok(Response::new(200)
+                        .with_header("content-type", "text/html")
+                        .with_body(b"<html><body>landed</body></html>".to_vec()))
+                }
+            }
+        }
+
+        for status in [307, 308] {
+            let transport = RedirectTransport {
+                redirect_status: status,
+                requests: std::sync::Mutex::new(Vec::new()),
+            };
+            let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
+            let request = Request::new(Url::parse("https://example.org/submit").unwrap())
+                .with_method(HttpMethod::Post)
+                .with_body(b"payload must survive".to_vec())
+                .with_header("content-type", "application/octet-stream")
+                .with_header("authorization", "Bearer secret")
+                .with_header("x-api-key", "private-key")
+                .with_header("accept", "text/html");
+
+            loader
+                .load(&request, LayoutViewport::new(320, 200))
+                .unwrap();
+
+            let requests = loader.transport.requests.lock().unwrap();
+            assert_eq!(requests.len(), 2, "status {status}");
+            let redirected = &requests[1];
+            assert_eq!(redirected.method, HttpMethod::Post, "status {status}");
+            assert_eq!(redirected.body, b"payload must survive", "status {status}");
+            assert!(
+                has_header_case_insensitive(&redirected.headers, "content-type"),
+                "entity metadata must survive status {status}"
+            );
+            for name in ["authorization", "x-api-key", "cookie"] {
+                assert!(
+                    !has_header_case_insensitive(&redirected.headers, name),
+                    "{name} must not cross origins on status {status}"
+                );
+            }
+            assert!(redirected
+                .headers
+                .iter()
+                .any(|(name, value)| name.eq_ignore_ascii_case("accept") && value == "text/html"));
+        }
+    }
+
     #[test]
     fn non_get_methods_are_preserved_for_307_and_308() {
         assert!(!should_switch_to_get(HttpMethod::Post, 307));
