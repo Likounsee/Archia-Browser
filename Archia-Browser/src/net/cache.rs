@@ -156,6 +156,10 @@ impl HttpCache {
             // An entry larger than the entire shared budget cannot ever fit; do not
             // evict useful entries for an impossible insertion.
             if bytes > budget.limit() {
+                // The new representation cannot fit, but it still supersedes
+                // the old one for this key. Invalidate only this entry; do not
+                // evict unrelated cached responses for an impossible insertion.
+                self.entries.remove(&key);
                 return;
             }
             let previous = self.entries.remove(&key);
@@ -757,6 +761,38 @@ mod tests {
 
         assert_eq!(cache.len(), 1);
         assert!(cache.used_bytes() >= cache_key(&request).len());
+    }
+
+    #[test]
+    fn oversized_shared_budget_replacement_invalidates_only_same_key() {
+        let budget = Arc::new(MemoryBudget::new(512));
+        let mut cache = HttpCache::with_memory_budget(4096, Arc::clone(&budget));
+        let replaced = make_request("https://example.org/replaced");
+        let unrelated = make_request("https://example.org/unrelated");
+        cache.store(
+            &replaced,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_body(vec![b'a'; 64]),
+        );
+        cache.store(
+            &unrelated,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_body(vec![b'b'; 64]),
+        );
+        assert_eq!(cache.len(), 2);
+
+        cache.store(
+            &replaced,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_body(vec![b'x'; 1024]),
+        );
+
+        assert!(cache.get(&replaced).is_none());
+        assert_eq!(cache.get(&unrelated).unwrap().body, vec![b'b'; 64]);
+        assert_eq!(cache.len(), 1);
     }
 
     #[test]
