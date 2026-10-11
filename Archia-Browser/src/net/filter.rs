@@ -199,7 +199,6 @@ fn party_context(url: &str, first_party: Option<&crate::net::Url>) -> Option<Par
     })
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
