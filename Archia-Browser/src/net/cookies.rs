@@ -1335,13 +1335,17 @@ mod tests {
         assert_eq!(jar.len(), 1);
         assert_eq!(jar.header_for(&url).as_deref(), Some("sid=two"));
     }
+
     #[test]
     fn same_site_none_requires_secure_attribute() {
         let url = Url::parse("https://example.org/").unwrap();
         let mut jar = CookieJar::new();
 
         jar.store(&url, "cross_site=insecure; SameSite=None");
-        assert!(jar.is_empty(), "SameSite=None without Secure must be rejected");
+        assert!(
+            jar.is_empty(),
+            "SameSite=None without Secure must be rejected"
+        );
 
         jar.store(&url, "cross_site=secure; SameSite=None; Secure");
         assert_eq!(
