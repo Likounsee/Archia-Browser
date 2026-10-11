@@ -1452,5 +1452,4 @@ mod tests {
         );
         assert_eq!(cache.get(&request).unwrap().body, b"full representation");
     }
-
 }
