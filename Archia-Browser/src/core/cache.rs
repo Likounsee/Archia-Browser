@@ -82,6 +82,13 @@ impl<T> ResourceCache<T> {
         Some(entry.value)
     }
 
+    /// Evict the least-recently-used entry and return its value.
+    pub fn remove_oldest(&mut self) -> Option<T> {
+        let entry = self.entries.pop_front()?;
+        self.used = self.used.saturating_sub(entry.bytes);
+        Some(entry.value)
+    }
+
     /// Removes entries that do not satisfy `keep`, releasing their accounted bytes.
     pub fn retain(&mut self, mut keep: impl FnMut(&CacheEntry<T>) -> bool) {
         let mut used = self.used;
@@ -182,6 +189,19 @@ mod tests {
         assert_eq!(cache.get("a"), None);
         assert_eq!(cache.get("b"), Some(&2));
         assert_eq!(cache.used(), 4);
+    }
+
+    #[test]
+    fn remove_oldest_evicts_least_recently_used_entry_and_releases_bytes() {
+        let mut cache = ResourceCache::new(10);
+        cache.insert("first", 1, 3);
+        cache.insert("second", 2, 3);
+        assert_eq!(cache.get("first"), Some(&1));
+
+        assert_eq!(cache.remove_oldest(), Some(2));
+        assert_eq!(cache.get("second"), None);
+        assert_eq!(cache.get("first"), Some(&1));
+        assert_eq!(cache.used(), 3);
     }
 
     #[test]
