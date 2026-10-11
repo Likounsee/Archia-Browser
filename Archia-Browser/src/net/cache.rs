@@ -278,9 +278,6 @@ fn request_can_store(request: &Request) -> bool {
             .any(|(_, value)| {
                 has_cache_directive(Some(value), "no-store")
                     || has_cache_directive(Some(value), "no-cache")
-                    // This cache does not implement field-specific private semantics.
-                    // Conservatively reject every private response to avoid cross-user reuse.
-                    || has_cache_directive(Some(value), "private")
             })
         && !has_pragma_no_cache(request)
 }
@@ -310,6 +307,9 @@ fn response_can_store(response: &Response) -> bool {
             .any(|(_, value)| {
                 has_cache_directive(Some(value), "no-store")
                     || has_cache_directive(Some(value), "no-cache")
+                    // This cache does not implement field-specific private semantics.
+                    // Conservatively reject every private response to avoid cross-user reuse.
+                    || has_cache_directive(Some(value), "private")
             })
         && !response
             .headers
