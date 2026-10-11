@@ -1,6 +1,10 @@
 use std::time::{Duration, Instant};
 
-use crate::core::cache::ResourceCache;
+use crate::core::{
+    cache::ResourceCache,
+    memory::{MemoryBudget, MemoryReservation},
+};
+use std::sync::Arc;
 
 use super::{HttpMethod, Request, Response};
 
@@ -12,11 +16,13 @@ struct CachedResponse {
     stored_at: Instant,
     initial_age: u64,
     expires_at: Instant,
+    _reservation: Option<Arc<MemoryReservation>>,
 }
 
 #[derive(Debug)]
 pub struct HttpCache {
     entries: ResourceCache<CachedResponse>,
+    memory_budget: Option<Arc<MemoryBudget>>,
 }
 
 impl Default for HttpCache {
@@ -29,6 +35,15 @@ impl HttpCache {
     pub fn new(capacity: usize) -> Self {
         Self {
             entries: ResourceCache::new(capacity),
+            memory_budget: None,
+        }
+    }
+
+    /// Create a cache whose retained response bytes also count against a shared browser budget.
+    pub fn with_memory_budget(capacity: usize, memory_budget: Arc<MemoryBudget>) -> Self {
+        Self {
+            entries: ResourceCache::new(capacity),
+            memory_budget: Some(memory_budget),
         }
     }
 
@@ -139,6 +154,19 @@ impl HttpCache {
             })
             .saturating_add(64);
 
+        // Cache entries participate in the browser-wide budget when one is supplied.
+        // The reservation follows the entry and is released on eviction or cache drop.
+        let reservation = match &self.memory_budget {
+            Some(budget) => {
+                let Some(reservation) = MemoryReservation::try_new(Arc::clone(budget), bytes)
+                else {
+                    return;
+                };
+                Some(Arc::new(reservation))
+            }
+            None => None,
+        };
+
         self.entries.insert(
             key,
             CachedResponse {
@@ -146,6 +174,7 @@ impl HttpCache {
                 stored_at: Instant::now(),
                 initial_age: age,
                 expires_at,
+                _reservation: reservation,
             },
             bytes,
         );
@@ -557,6 +586,28 @@ fn has_pragma_no_cache(request: &Request) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn shared_memory_budget_tracks_cached_response_lifetime() {
+        use std::sync::Arc;
+        use crate::core::memory::MemoryBudget;
+
+        let budget = Arc::new(MemoryBudget::new(4096));
+        let request = Request::new(super::super::Url::parse("https://example.org/").unwrap());
+        let response = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_header("content-type", "text/plain")
+            .with_body(vec![b'x'; 128]);
+
+        {
+            let mut cache = HttpCache::with_memory_budget(2048, Arc::clone(&budget));
+            cache.store(&request, &response);
+            assert_eq!(cache.len(), 1);
+            assert!(budget.used() > 0);
+        }
+
+        assert_eq!(budget.used(), 0);
+    }
+
     use super::*;
     use crate::net::Url;
 
