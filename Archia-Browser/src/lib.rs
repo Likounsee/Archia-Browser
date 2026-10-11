@@ -324,6 +324,14 @@ impl Browser {
         true
     }
 
+    /// Render into a surface created from this browser's shared memory budget.
+    pub fn render_current_page_budgeted(
+        &self,
+        surface: &mut crate::surface::BudgetedSoftwareSurface,
+    ) -> bool {
+        self.render_current_page(surface)
+    }
+
     pub fn current_url(&self) -> Option<&net::Url> {
         self.tabs
             .active_tab()
@@ -386,6 +394,42 @@ impl Default for Browser {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn browser_can_render_into_a_budgeted_surface() {
+        #[derive(Debug, Default)]
+        struct AllowAll;
+        impl net::pipeline::RequestPolicyEngine for AllowAll {
+            fn decide(&self, _: &net::Request) -> net::pipeline::PolicyDecision {
+                net::pipeline::PolicyDecision::Allow
+            }
+        }
+        #[derive(Debug)]
+        struct MockTransport;
+        impl net::Transport for MockTransport {
+            fn send(&self, _: &net::Request) -> Result<net::Response, net::TransportError> {
+                Ok(net::Response::new(200)
+                    .with_header("content-type", "text/html")
+                    .with_body(b"<body>Budgeted</body>".to_vec()))
+            }
+        }
+
+        let loader =
+            net::DocumentLoader::new(net::pipeline::NetworkPipeline::new(AllowAll), MockTransport);
+        let request = net::Request::new(net::Url::parse("https://example.org/").unwrap());
+        let mut browser = Browser::new();
+        browser
+            .load_request(
+                &loader,
+                &request,
+                crate::layout::LayoutViewport::new(64, 32),
+            )
+            .unwrap();
+
+        let mut surface = browser.try_create_software_surface(64, 32).unwrap();
+        assert!(browser.render_current_page_budgeted(&mut surface));
+        assert_eq!(browser.memory().used(), 64 * 32 * 4);
+    }
 
     #[test]
     fn browser_software_surfaces_use_and_release_the_shared_memory_budget() {
