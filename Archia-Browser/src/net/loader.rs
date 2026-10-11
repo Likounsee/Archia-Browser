@@ -8,7 +8,10 @@ use crate::{
     html::{parse, HtmlTokenizer, Node},
     layout::LayoutViewport,
 };
-use std::{collections::HashSet, sync::{Arc, Mutex}};
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DocumentLoadError {
@@ -54,9 +57,7 @@ impl<P, T> DocumentLoader<P, T> {
 
     pub fn with_cache_capacity(mut self, capacity: usize) -> Self {
         let cache = match &self.memory_budget {
-            Some(budget) => {
-                super::HttpCache::with_memory_budget(capacity, Arc::clone(budget))
-            }
+            Some(budget) => super::HttpCache::with_memory_budget(capacity, Arc::clone(budget)),
             None => super::HttpCache::new(capacity),
         };
         self.cache = Mutex::new(cache);
@@ -263,12 +264,8 @@ where
 
             let html = String::from_utf8_lossy(&response.body);
             let stylesheet = self.load_linked_stylesheets(&current.url, &html);
-            let mut page = Page::from_html_at(
-                Some(current.url.clone()),
-                &html,
-                &stylesheet,
-                viewport,
-            );
+            let mut page =
+                Page::from_html_at(Some(current.url.clone()), &html, &stylesheet, viewport);
 
             if let Some(budget) = &self.memory_budget {
                 // DOM, styled tree, layout and display-list allocations are larger
@@ -295,8 +292,7 @@ where
                         estimated_page_bytes,
                     );
                 }
-                let reservation =
-                    reservation.ok_or(DocumentLoadError::MemoryBudgetExceeded)?;
+                let reservation = reservation.ok_or(DocumentLoadError::MemoryBudgetExceeded)?;
                 page.attach_memory_reservation(Arc::new(reservation));
             }
 
@@ -782,8 +778,8 @@ mod tests {
 
     #[test]
     fn changing_cache_capacity_after_shared_budget_keeps_cache_accounted() {
-        use std::sync::Arc;
         use crate::core::memory::MemoryBudget;
+        use std::sync::Arc;
 
         #[derive(Debug)]
         struct CacheableTransport;
