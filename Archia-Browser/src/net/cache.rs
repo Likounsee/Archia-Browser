@@ -220,7 +220,8 @@ fn request_forces_cache_bypass(request: &Request) -> bool {
         .iter()
         .filter(|(name, _)| name.eq_ignore_ascii_case("cache-control"))
         .any(|(_, value)| {
-            has_cache_directive(Some(value), "no-cache")
+            cache_control_is_malformed(value)
+                || has_cache_directive(Some(value), "no-cache")
                 || has_cache_directive(Some(value), "no-store")
                 || has_cache_max_age_zero(Some(value))
         })
@@ -258,7 +259,8 @@ fn request_can_use_cache(request: &Request) -> bool {
             .iter()
             .filter(|(name, _)| name.eq_ignore_ascii_case("cache-control"))
             .any(|(_, value)| {
-                has_cache_directive(Some(value), "no-cache")
+                cache_control_is_malformed(value)
+                    || has_cache_directive(Some(value), "no-cache")
                     || has_cache_directive(Some(value), "no-store")
                     || has_cache_max_age_zero(Some(value))
             })
@@ -276,7 +278,8 @@ fn request_can_store(request: &Request) -> bool {
             .iter()
             .filter(|(name, _)| name.eq_ignore_ascii_case("cache-control"))
             .any(|(_, value)| {
-                has_cache_directive(Some(value), "no-store")
+                cache_control_is_malformed(value)
+                    || has_cache_directive(Some(value), "no-store")
                     || has_cache_directive(Some(value), "no-cache")
             })
         && !has_pragma_no_cache(request)
@@ -305,7 +308,8 @@ fn response_can_store(response: &Response) -> bool {
             .iter()
             .filter(|(name, _)| name.eq_ignore_ascii_case("cache-control"))
             .any(|(_, value)| {
-                has_cache_directive(Some(value), "no-store")
+                cache_control_is_malformed(value)
+                    || has_cache_directive(Some(value), "no-store")
                     || has_cache_directive(Some(value), "no-cache")
                     // This cache does not implement field-specific private semantics.
                     // Conservatively reject every private response to avoid cross-user reuse.
@@ -328,6 +332,27 @@ fn response_can_store(response: &Response) -> bool {
 
 fn trim_http_ows(value: &str) -> &str {
     value.trim_matches(|character| character == ' ' || character == '\t')
+}
+
+/// Reject malformed quoted Cache-Control values rather than accidentally
+/// ignoring directives hidden behind an unterminated quoted string.
+fn cache_control_is_malformed(value: &str) -> bool {
+    let mut quoted = false;
+    let mut escaped = false;
+
+    for byte in value.bytes() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if quoted && byte == b'\\' {
+            escaped = true;
+        } else if byte == b'"' {
+            quoted = !quoted;
+        }
+    }
+
+    quoted || escaped
 }
 
 fn cache_control_directives(value: &str) -> Vec<&str> {
@@ -562,6 +587,49 @@ mod tests {
         );
         assert!(cache.get(&first).is_none());
         assert!(cache.get(&second).is_some());
+    }
+
+    #[test]
+    fn malformed_cache_control_never_reuses_or_stores_a_response() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/malformed-cache-control");
+        let valid = Response::new(200)
+            .with_header("cache-control", "public, max-age=60")
+            .with_body(b"older public response".to_vec());
+        cache.store(&request, &valid);
+        assert!(cache.get(&request).is_some());
+
+        // The second header has an unterminated quoted value. A naive
+        // comma-split parser could miss the no-store directive inside it.
+        let malformed = Response::new(200)
+            .with_header("cache-control", "public, max-age=60")
+            .with_header("Cache-Control", r#"extension="unterminated, no-store"#)
+            .with_body(b"must not replace cached content".to_vec());
+        cache.store(&request, &malformed);
+
+        assert!(cache.is_empty());
+        assert!(cache.get(&request).is_none());
+    }
+
+    #[test]
+    fn malformed_request_cache_control_bypasses_cache() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/malformed-request");
+        cache.store(
+            &request,
+            &Response::new(200)
+                .with_header("cache-control", "public, max-age=60")
+                .with_body(b"cached".to_vec()),
+        );
+
+        let mut malformed_request = request.clone();
+        malformed_request.headers.insert(
+            "cache-control".to_owned(),
+            r#"extension="unterminated, max-age=0"#.to_owned(),
+        );
+
+        assert!(cache.get(&malformed_request).is_none());
+        assert!(cache.is_empty());
     }
 
     #[test]
