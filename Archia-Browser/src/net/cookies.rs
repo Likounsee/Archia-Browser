@@ -1424,7 +1424,7 @@ mod tests {
 
         assert_eq!(
             jar.header_for(&url).as_deref(),
-            Some("sid=account; sid=root")
+            Some("sid=root")
         );
         assert_eq!(jar.len(), 1);
     }
