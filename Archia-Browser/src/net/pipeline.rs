@@ -200,10 +200,9 @@ mod tests {
         let pipeline = NetworkPipeline::new(FilterPolicy(filter));
         let sends = Arc::new(AtomicUsize::new(0));
         let transport = CountingTransport(Arc::clone(&sends));
-        let request = Request::new(
-            super::super::Url::parse("https://EXAMPLE.ORG/resource").unwrap(),
-        )
-        .with_method(HttpMethod::Get);
+        let request =
+            Request::new(super::super::Url::parse("https://EXAMPLE.ORG/resource").unwrap())
+                .with_method(HttpMethod::Get);
 
         assert_eq!(
             request.url.authority(),
