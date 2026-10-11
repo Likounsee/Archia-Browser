@@ -190,9 +190,23 @@ mod tests {
         let budget = MemoryBudget::new(8);
 
         assert!(budget.try_reserve(7), "N-1 must fit");
-        assert_eq!(budget.snapshot(), MemorySnapshot { limit: 8, used: 7, available: 1 });
+        assert_eq!(
+            budget.snapshot(),
+            MemorySnapshot {
+                limit: 8,
+                used: 7,
+                available: 1,
+            }
+        );
         assert!(budget.try_reserve(1), "the exact limit N must fit");
-        assert_eq!(budget.snapshot(), MemorySnapshot { limit: 8, used: 8, available: 0 });
+        assert_eq!(
+            budget.snapshot(),
+            MemorySnapshot {
+                limit: 8,
+                used: 8,
+                available: 0,
+            }
+        );
         assert!(!budget.try_reserve(1), "N+1 must be rejected");
         assert!(!budget.try_reserve(usize::MAX), "addition overflow must be rejected");
         assert_eq!(budget.used(), 8, "rejected reservations must not change accounting");
