@@ -2034,6 +2034,38 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn local_file_transport_keeps_the_original_granted_root_handle() {
+        let base = std::env::temp_dir().join(format!(
+            "archia-browser-pinned-root-{}",
+            std::process::id()
+        ));
+        let root = base.join("granted");
+        let moved_root = base.join("granted-original");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("page.txt"), b"authorized-original").unwrap();
+
+        let url = super::super::Url::parse(&local_file_test_url(&root.join("page.txt"))).unwrap();
+        let transport = LocalFileTransport::new().with_allowed_roots([root.clone()]);
+
+        // Replace the configured pathname after granting access. The transport
+        // must continue to resolve against its pinned directory handle, not the
+        // new object that happens to occupy the same pathname.
+        std::fs::rename(&root, &moved_root).unwrap();
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("page.txt"), b"replacement-secret").unwrap();
+
+        let response = transport.send(&Request::new(url)).unwrap();
+        assert_eq!(response.body, b"authorized-original");
+
+        std::fs::remove_file(root.join("page.txt")).unwrap();
+        std::fs::remove_dir(root).unwrap();
+        std::fs::remove_file(moved_root.join("page.txt")).unwrap();
+        std::fs::remove_dir(moved_root).unwrap();
+        std::fs::remove_dir(base).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn openat2_does_not_escape_during_concurrent_parent_swap() {
         use std::os::unix::fs::symlink;
         use std::sync::atomic::{AtomicBool, Ordering};
