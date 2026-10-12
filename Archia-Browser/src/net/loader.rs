@@ -1122,6 +1122,7 @@ mod tests {
                 assert_eq!(request.url.path(), "/style.css");
                 Ok(Response::new(200)
                     .with_header("content-type", "text/css")
+                    .with_header("cache-control", "public, max-age=3600")
                     .with_body(vec![b'a'; 512 * 1024]))
             }
         }
