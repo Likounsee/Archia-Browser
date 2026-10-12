@@ -493,7 +493,7 @@ fn open_local_root_handle(
     Ok(unsafe { std::fs::File::from_raw_fd(fd as i32) })
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", test))]
 fn open_local_file_confined(
     canonical_root: &std::path::Path,
     canonical_path: &std::path::Path,
