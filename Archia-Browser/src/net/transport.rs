@@ -321,7 +321,7 @@ fn open_local_file_without_following_links(
         use std::os::unix::fs::OpenOptionsExt;
         // Linux O_NOFOLLOW. Keep this platform-specific instead of assuming
         // the numeric value is shared by every Unix-like OS.
-        return std::fs::OpenOptions::new()
+        std::fs::OpenOptions::new()
             .read(true)
             .custom_flags(0x0002_0000)
             .open(path)
@@ -330,7 +330,7 @@ fn open_local_file_without_following_links(
     #[cfg(target_os = "android")]
     {
         use std::os::unix::fs::OpenOptionsExt;
-        return std::fs::OpenOptions::new()
+        std::fs::OpenOptions::new()
             .read(true)
             .custom_flags(0x0002_0000)
             .open(path)
@@ -347,7 +347,7 @@ fn open_local_file_without_following_links(
     {
         use std::os::unix::fs::OpenOptionsExt;
         // O_NOFOLLOW on the BSD/Darwin family.
-        return std::fs::OpenOptions::new()
+        std::fs::OpenOptions::new()
             .read(true)
             .custom_flags(0x0000_0100)
             .open(path)
@@ -358,7 +358,7 @@ fn open_local_file_without_following_links(
         use std::os::windows::fs::OpenOptionsExt;
         // FILE_FLAG_OPEN_REPARSE_POINT opens the reparse point itself. The
         // opened handle is checked with file_type().is_symlink() below.
-        return std::fs::OpenOptions::new()
+        std::fs::OpenOptions::new()
             .read(true)
             .custom_flags(0x0020_0000)
             .open(path)
