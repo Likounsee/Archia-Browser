@@ -284,7 +284,7 @@ impl LocalFileTransport {
                     // on Unix. This preserves the original directory object if
                     // the path changes during canonicalization; compare its
                     // identity with the resolved name before accepting the grant.
-                    #[cfg(unix)]
+                    #[cfg(any(unix, windows))]
                     let directory = open_local_root_handle_verified(root).ok()?;
 
                     let canonical_path = std::fs::canonicalize(root).ok()?;
@@ -309,7 +309,25 @@ impl LocalFileTransport {
                     }
 
                     #[cfg(windows)]
-                    let directory = open_local_root_handle_verified(&canonical_path).ok()?;
+                    {
+                        use std::os::windows::fs::MetadataExt;
+
+                        // The grant handle was opened from the caller-supplied path
+                        // before canonicalization. Re-open the resolved name and
+                        // require both names to identify the same filesystem object;
+                        // otherwise a concurrent rename/reparse swap could grant a
+                        // different directory than the one the caller selected.
+                        let resolved = open_local_root_handle_verified(&canonical_path).ok()?;
+                        let granted_metadata = directory.metadata().ok()?;
+                        let resolved_metadata = resolved.metadata().ok()?;
+                        if granted_metadata.volume_serial_number()
+                            != resolved_metadata.volume_serial_number()
+                            || granted_metadata.file_index() != resolved_metadata.file_index()
+                            || granted_metadata.file_index().is_none()
+                        {
+                            return None;
+                        }
+                    }
 
                     Some(AuthorizedRootHandle {
                         canonical_path,
