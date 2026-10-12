@@ -795,6 +795,39 @@ mod tests {
     };
 
     #[test]
+    fn page_memory_budget_rejects_oversized_page_and_releases_cache_charge() {
+        use crate::core::memory::MemoryBudget;
+        use std::sync::Arc;
+
+        #[derive(Debug)]
+        struct SmallHtmlTransport;
+
+        impl Transport for SmallHtmlTransport {
+            fn send(&self, _: &Request) -> Result<Response, TransportError> {
+                Ok(Response::new(200)
+                    .with_header("cache-control", "max-age=60")
+                    .with_header("content-type", "text/html")
+                    .with_body(b"<html><body>budget</body></html>".to_vec()))
+            }
+        }
+
+        let budget = Arc::new(MemoryBudget::new(64));
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), SmallHtmlTransport)
+            .with_shared_memory_budget(Arc::clone(&budget));
+        let request = Request::new(Url::parse("https://example.org/").unwrap());
+
+        assert!(matches!(
+            loader.load(&request, LayoutViewport::new(64, 32)),
+            Err(DocumentLoadError::MemoryBudgetExceeded)
+        ));
+        assert_eq!(
+            budget.used(),
+            0,
+            "a rejected page must not leave its cache reservation charged"
+        );
+    }
+
+    #[test]
     fn changing_cache_capacity_after_shared_budget_keeps_cache_accounted() {
         use crate::core::memory::MemoryBudget;
         use std::sync::Arc;
