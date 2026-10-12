@@ -78,12 +78,13 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                     {
                         while suppressed_stack.len() > position {
                             if let Some(open) = suppressed_stack.pop() {
-                                let remove_entry = if let Some(positions) = suppressed_positions.get_mut(&open) {
-                                    positions.pop();
-                                    positions.is_empty()
-                                } else {
-                                    false
-                                };
+                                let remove_entry =
+                                    if let Some(positions) = suppressed_positions.get_mut(&open) {
+                                        positions.pop();
+                                        positions.is_empty()
+                                    } else {
+                                        false
+                                    };
                                 if remove_entry {
                                     suppressed_positions.remove(&open);
                                 }
