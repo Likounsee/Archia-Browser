@@ -310,7 +310,7 @@ impl Transport for LocalFileTransport {
         reject_symlink_path_components(&path)?;
         let canonical_path =
             std::fs::canonicalize(&path).map_err(|_| TransportError::ConnectionFailed)?;
-        let mut inside_allowed_root = false;
+        let mut authorized_root = None;
         for root in &self.allowed_roots {
             // Roots are explicit grants from the embedding application, so
             // resolve a trusted root's own aliases before validating it.
@@ -321,14 +321,17 @@ impl Transport for LocalFileTransport {
                 continue;
             }
             if canonical_path.starts_with(&canonical_root) {
-                inside_allowed_root = true;
+                authorized_root = Some(canonical_root);
                 break;
             }
         }
-        if !inside_allowed_root {
-            return Err(TransportError::ConnectionFailed);
-        }
-        let file = open_local_file_without_following_links(&path)?;
+        let canonical_root = authorized_root.ok_or(TransportError::ConnectionFailed)?;
+        // On Linux, perform the final open relative to a directory handle with
+        // openat2(RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS).
+        // The path checks above are not the security boundary: this handle-relative
+        // resolution prevents a concurrent parent rename/symlink swap from
+        // redirecting the final open outside the already-opened root handle.
+        let file = open_local_file_confined(&canonical_root, &canonical_path, &path)?;
         let metadata = file
             .metadata()
             .map_err(|_| TransportError::ConnectionFailed)?;
@@ -394,6 +397,103 @@ fn reject_symlink_path_components(path: &std::path::Path) -> Result<(), Transpor
         }
     }
     Ok(())
+}
+
+/// Open a previously validated target while anchoring resolution to an opened root.
+#[cfg(target_os = "linux")]
+fn open_local_file_confined(
+    canonical_root: &std::path::Path,
+    canonical_path: &std::path::Path,
+    original_path: &std::path::Path,
+) -> Result<std::fs::File, TransportError> {
+    use std::ffi::CString;
+    use std::os::fd::FromRawFd;
+    use std::os::unix::ffi::OsStrExt;
+
+    #[repr(C)]
+    struct OpenHow {
+        flags: u64,
+        mode: u64,
+        resolve: u64,
+    }
+
+    // Linux openat2(2). If the kernel does not support it, fail closed rather
+    // than silently falling back to pathname-based access.
+    const SYS_OPENAT2: isize = 437;
+    const AT_FDCWD: i32 = -100;
+    const O_CLOEXEC: u64 = 0x80000;
+    const O_DIRECTORY: u64 = 0x10000;
+    const RESOLVE_NO_MAGICLINKS: u64 = 0x02;
+    const RESOLVE_NO_SYMLINKS: u64 = 0x04;
+    const RESOLVE_BENEATH: u64 = 0x08;
+
+    unsafe extern "C" {
+        fn syscall(number: isize, ...) -> isize;
+    }
+
+    let root_c = CString::new(canonical_root.as_os_str().as_bytes())
+        .map_err(|_| TransportError::ConnectionFailed)?;
+    let root_how = OpenHow {
+        flags: O_CLOEXEC | O_DIRECTORY,
+        mode: 0,
+        // Root is absolute, so RESOLVE_BENEATH is intentionally omitted here.
+        resolve: RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS,
+    };
+    // SAFETY: pointers reference live NUL-terminated storage and OpenHow has
+    // the Linux ABI layout required by openat2.
+    let root_fd = unsafe {
+        syscall(
+            SYS_OPENAT2,
+            AT_FDCWD,
+            root_c.as_ptr(),
+            &root_how as *const OpenHow,
+            std::mem::size_of::<OpenHow>(),
+        )
+    };
+    if root_fd < 0 {
+        return Err(TransportError::ConnectionFailed);
+    }
+    // SAFETY: successful openat2 returned a new owned file descriptor.
+    let root_file = unsafe { std::fs::File::from_raw_fd(root_fd as i32) };
+
+    let relative = canonical_path
+        .strip_prefix(canonical_root)
+        .map_err(|_| TransportError::ConnectionFailed)?;
+    if relative.as_os_str().is_empty() {
+        return Err(TransportError::ConnectionFailed);
+    }
+    let relative_c = CString::new(relative.as_os_str().as_bytes())
+        .map_err(|_| TransportError::ConnectionFailed)?;
+    let file_how = OpenHow {
+        flags: O_CLOEXEC,
+        mode: 0,
+        resolve: RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS,
+    };
+    // SAFETY: root_file owns a valid directory fd; relative_c is NUL-terminated
+    // and OpenHow remains alive for the duration of the syscall.
+    let file_fd = unsafe {
+        syscall(
+            SYS_OPENAT2,
+            std::os::fd::AsRawFd::as_raw_fd(&root_file),
+            relative_c.as_ptr(),
+            &file_how as *const OpenHow,
+            std::mem::size_of::<OpenHow>(),
+        )
+    };
+    if file_fd < 0 {
+        return Err(TransportError::ConnectionFailed);
+    }
+    // SAFETY: successful openat2 returned a new owned file descriptor.
+    Ok(unsafe { std::fs::File::from_raw_fd(file_fd as i32) })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn open_local_file_confined(
+    _canonical_root: &std::path::Path,
+    _canonical_path: &std::path::Path,
+    original_path: &std::path::Path,
+) -> Result<std::fs::File, TransportError> {
+    open_local_file_without_following_links(original_path)
 }
 
 /// Open a local file without following a symlink at the final path component.
