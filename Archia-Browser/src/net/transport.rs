@@ -782,8 +782,8 @@ fn open_local_root_handle_verified(
     let opened = current
         .metadata()
         .map_err(|_| TransportError::ConnectionFailed)?;
-    let named = std::fs::symlink_metadata(&absolute)
-        .map_err(|_| TransportError::ConnectionFailed)?;
+    let named =
+        std::fs::symlink_metadata(&absolute).map_err(|_| TransportError::ConnectionFailed)?;
     if !opened.is_dir()
         || !named.is_dir()
         || named.file_type().is_symlink()
