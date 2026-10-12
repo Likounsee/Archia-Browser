@@ -334,19 +334,21 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
     };
     let mut i = 0;
 
-    if i < chars.len() && (chars[i].is_ascii_alphabetic() || chars[i] == '_' || chars[i] == '*') {
+    if i < chars.len() && chars[i] == '*' {
+        // The universal selector is a complete simple selector by itself and
+        // may also be combined with classes, attributes, or pseudo-classes.
+        i += 1;
+    } else if i < chars.len() && (chars[i].is_ascii_alphabetic() || chars[i] == '_') {
         let start = i;
         while i < chars.len() && is_name_char(chars[i]) {
             i += 1;
         }
-        if chars[start] != '*' {
-            simple.tag = Some(
-                chars[start..i]
-                    .iter()
-                    .collect::<String>()
-                    .to_ascii_lowercase(),
-            );
-        }
+        simple.tag = Some(
+            chars[start..i]
+                .iter()
+                .collect::<String>()
+                .to_ascii_lowercase(),
+        );
     }
 
     while i < chars.len() {
