@@ -2544,7 +2544,7 @@ mod tests {
         std::fs::write(real_root.join("page.txt"), b"must-not-be-granted").unwrap();
         symlink(&real_root, &alias_root).unwrap();
 
-        let transport = LocalFileTransport::new().with_allowed_roots([alias_root]);
+        let transport = LocalFileTransport::new().with_allowed_roots([alias_root.clone()]);
         assert!(
             transport.authorized_root_handles.is_empty(),
             "a symlink in the user-supplied grant path must not be hidden by canonicalization"
