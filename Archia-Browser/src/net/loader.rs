@@ -485,6 +485,7 @@ where
                 let mut cache = self.cache.lock().ok()?;
                 cache.get(&request)
             };
+            let response_was_cached = cached_response.is_some();
             let response = if let Some(response) = cached_response {
                 response
             } else {
@@ -538,17 +539,17 @@ where
             // String. Charge that temporary allocation before conversion; the
             // final expanded stylesheet is charged separately by the document
             // reservation before the page tree is constructed.
-            // Never parse a partial stylesheet just because this document has
-            // exhausted most of its CSS budget. A cached full response may be
-            // larger than the remaining allowance even if it was valid when first
-            // cached; reject it as a whole and invalidate that unusable cache entry.
-            if response.body.len() > *remaining_css_bytes {
+            // A cached response must fit in full: parsing a truncated cached
+            // representation would make cache behavior depend on request order.
+            // A fresh oversized network response may still contribute a bounded
+            // prefix, but is never retained in the cache above.
+            if response_was_cached && response.body.len() > *remaining_css_bytes {
                 if let Ok(mut cache) = self.cache.lock() {
                     cache.invalidate(&request);
                 }
                 return None;
             }
-            let bounded_body = response.body.as_slice();
+            let bounded_body = &response.body[..response.body.len().min(*remaining_css_bytes)];
             let temporary_css_reservation = if let Some(budget) = &self.memory_budget {
                 let estimated_temporary_bytes = bounded_body.len().saturating_mul(4);
                 let reservation = crate::core::memory::MemoryReservation::try_new(
@@ -3067,15 +3068,10 @@ mod tests {
 
         let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), OversizedHtmlTransport);
         let request = Request::new(Url::parse("https://example.org/large").unwrap());
-        let page = loader
-            .load(&request, LayoutViewport::new(320, 200))
-            .expect("the bounded HTML prefix remains a valid document");
-
-        assert!(page.document.text_content().contains("retained-prefix"));
-        assert!(!page
-            .document
-            .text_content()
-            .contains("untrusted-tail-marker"));
+        assert!(matches!(
+            loader.load(&request, LayoutViewport::new(320, 200)),
+            Err(DocumentLoadError::DocumentTooLarge)
+        ));
     }
 
     #[test]
@@ -3113,3 +3109,4 @@ mod tests {
         );
     }
 }
+\n
