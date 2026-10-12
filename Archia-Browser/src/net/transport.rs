@@ -1818,6 +1818,24 @@ mod tests {
     }
 
     #[test]
+    fn local_file_transport_never_receives_encoded_traversal_or_separators() {
+        // Keep the URL parser and the filesystem transport aligned: encoded
+        // dot segments and encoded path separators must be rejected before
+        // a local filesystem path can be opened.
+        for input in [
+            "file:///tmp/%2e%2e/etc/passwd",
+            "file:///tmp/%2E%2E/etc/passwd",
+            "file:///tmp/private%2fsecret.txt",
+            "file:///tmp/private%2Fsecret.txt",
+        ] {
+            assert!(
+                super::super::Url::parse(input).is_err(),
+                "unsafe file URL must be rejected before transport: {input}"
+            );
+        }
+    }
+
+    #[test]
     fn local_file_transport_rejects_remote_authorities_and_userinfo() {
         // Remote file authorities can cause platform-dependent network-share
         // access (notably UNC paths on Windows). Userinfo must not turn a
