@@ -14,6 +14,7 @@ pub struct MemorySnapshot {
 pub struct MemoryBudget {
     limit: usize,
     used: AtomicUsize,
+    live_resources: AtomicUsize,
 }
 
 impl MemoryBudget {
@@ -21,6 +22,7 @@ impl MemoryBudget {
         Self {
             limit,
             used: AtomicUsize::new(0),
+            live_resources: AtomicUsize::new(0),
         }
     }
 
@@ -61,6 +63,52 @@ impl MemoryBudget {
                 Err(actual) => current = actual,
             }
         }
+    }
+
+    /// Reserve one live-object slot shared by every subsystem using this budget.
+    /// This independently bounds zero-byte resources and metadata allocations.
+    pub fn try_reserve_resource_slot(&self, max_live: usize) -> bool {
+        let mut current = self.live_resources.load(Ordering::Acquire);
+        loop {
+            if current >= max_live {
+                return false;
+            }
+            let Some(next) = current.checked_add(1) else {
+                return false;
+            };
+            match self.live_resources.compare_exchange_weak(
+                current,
+                next,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => return true,
+                Err(actual) => current = actual,
+            }
+        }
+    }
+
+    /// Release a previously reserved live-object slot.
+    pub fn release_resource_slot(&self) {
+        let mut current = self.live_resources.load(Ordering::Acquire);
+        loop {
+            let Some(next) = current.checked_sub(1) else {
+                return;
+            };
+            match self.live_resources.compare_exchange_weak(
+                current,
+                next,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => return,
+                Err(actual) => current = actual,
+            }
+        }
+    }
+
+    pub fn live_resources(&self) -> usize {
+        self.live_resources.load(Ordering::Acquire)
     }
 
     pub const fn limit(&self) -> usize {
