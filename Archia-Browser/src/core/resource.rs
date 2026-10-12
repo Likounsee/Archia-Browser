@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use super::memory::{MemoryBudget, MemoryReservation, MemoryResourceSlot, MAX_LIVE_BUDGETED_OBJECTS};
+use super::memory::{
+    MemoryBudget, MemoryReservation, MemoryResourceSlot, MAX_LIVE_BUDGETED_OBJECTS,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ResourceId(u64);
