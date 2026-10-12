@@ -1290,11 +1290,19 @@ mod tests {
                             br#"<link rel="stylesheet" href="/style.css"><body>Budget</body>"#
                                 .to_vec(),
                         ))
-                } else {
+                } else if request.url.path() == "/style.css" {
                     Ok(Response::new(200)
                         .with_header("content-type", "text/css")
                         .with_header("cache-control", "no-store")
-                        .with_body(b"body { color: red; }".to_vec()))
+                        .with_body(
+                            br#"@import url("/nested.css"); body { color: red; }"#.to_vec(),
+                        ))
+                } else {
+                    assert_eq!(request.url.path(), "/nested.css");
+                    Ok(Response::new(200)
+                        .with_header("content-type", "text/css")
+                        .with_header("cache-control", "no-store")
+                        .with_body(b"p { color: blue; }".to_vec()))
                 }
             }
         }
