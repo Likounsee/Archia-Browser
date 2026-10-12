@@ -301,8 +301,9 @@ mod tests {
     #[test]
     fn matching_ancestor_end_tag_recovers_after_suppressed_subtree() {
         let mut html = "<div>".repeat(MAX_DOM_DEPTH + 1);
-        html.push_str("hidden</div><p>visible</p>");
+        html.push_str("hidden</div>");
         html.push_str(&"</div>".repeat(MAX_DOM_DEPTH));
+        html.push_str("<p>visible</p>");
 
         let root = parse(&HtmlTokenizer::tokenize(&html));
 
