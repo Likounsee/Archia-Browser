@@ -4,8 +4,19 @@ use crate::net::Url;
 
 const MAX_COOKIE_PAIR_BYTES: usize = 4096;
 const MAX_COOKIE_HEADER_BYTES: usize = 8192;
+const MAX_COOKIE_JAR_BYTES: usize = 1024 * 1024;
 const MAX_COOKIES: usize = 3000;
 const MAX_COOKIES_PER_DOMAIN: usize = 180;
+
+fn cookie_storage_bytes(cookie: &Cookie) -> usize {
+    cookie
+        .name
+        .len()
+        .saturating_add(cookie.value.len())
+        .saturating_add(cookie.domain.len())
+        .saturating_add(cookie.path.len())
+        .saturating_add(128)
+}
 
 fn trim_cookie_ows(value: &str) -> &str {
     value.trim_matches(|character| character == ' ' || character == '\t')
@@ -281,6 +292,16 @@ impl CookieJar {
                 .count()
                 >= MAX_COOKIES_PER_DOMAIN
         {
+            return;
+        }
+
+        // Count retained cookie data and a conservative per-entry metadata
+        // allowance. Count and per-cookie caps alone still permit several
+        // megabytes of attacker-controlled values across many domains.
+        let used_bytes = self.cookies.iter().fold(0usize, |total, existing| {
+            total.saturating_add(cookie_storage_bytes(existing))
+        });
+        if used_bytes.saturating_add(cookie_storage_bytes(&cookie)) > MAX_COOKIE_JAR_BYTES {
             return;
         }
         self.cookies.push(cookie);
@@ -1287,6 +1308,30 @@ mod tests {
             jar.store(&url, &format!("cookie{index}=value"));
         }
         assert_eq!(jar.len(), MAX_COOKIES_PER_DOMAIN);
+    }
+
+    #[test]
+    fn cookie_jar_enforces_total_retained_byte_cap() {
+        let mut jar = CookieJar::new();
+        let value = "v".repeat(MAX_COOKIE_PAIR_BYTES - 32);
+        let mut accepted = 0usize;
+
+        for index in 0..400 {
+            let url = Url::parse(&format!("https://host{index}.example.test/")).unwrap();
+            let set_cookie = format!("session{index}={value}; Path=/; Secure");
+            let before = jar.len();
+            jar.store(&url, &set_cookie);
+            if jar.len() > before {
+                accepted += 1;
+            }
+        }
+
+        let retained_bytes = jar.cookies.iter().fold(0usize, |total, cookie| {
+            total.saturating_add(cookie_storage_bytes(cookie))
+        });
+        assert!(accepted > 0, "initial cookies should fit");
+        assert!(retained_bytes <= MAX_COOKIE_JAR_BYTES);
+        assert!(jar.len() < 400, "byte cap should reject later cookies");
     }
 
     #[test]
