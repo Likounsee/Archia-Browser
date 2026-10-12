@@ -22,6 +22,9 @@ pub enum ResourceType {
     Other,
 }
 
+const MAX_FILTER_RULES: usize = 4096;
+const MAX_FILTER_PATTERN_BYTES: usize = 4096;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FilterRule {
     pattern: String,
@@ -107,6 +110,13 @@ pub struct RequestFilter {
 
 impl RequestFilter {
     pub fn add_rule(&mut self, rule: FilterRule) {
+        // Rules are user/configuration supplied and evaluated for each request.
+        // Bound both retained memory and worst-case per-request scan cost.
+        if self.rules.len() >= MAX_FILTER_RULES
+            || rule.pattern.len() > MAX_FILTER_PATTERN_BYTES
+        {
+            return;
+        }
         self.rules.push(rule);
     }
     pub fn len(&self) -> usize {
@@ -220,6 +230,28 @@ mod tests {
         assert_eq!(
             party_context("https://example.org:443/resource", Some(&implicit_https)),
             Some(PartyContext::FirstParty)
+        );
+    }
+
+    #[test]
+    fn filter_bounds_rule_count_and_pattern_size() {
+        let mut filter = RequestFilter::default();
+        for index in 0..=MAX_FILTER_RULES {
+            filter.add_rule(FilterRule::block(format!("host-{index}.example")));
+        }
+        assert_eq!(filter.len(), MAX_FILTER_RULES);
+
+        let mut fresh = RequestFilter::default();
+        fresh.add_rule(FilterRule::block("x".repeat(MAX_FILTER_PATTERN_BYTES + 1)));
+        assert!(fresh.is_empty());
+        fresh.add_rule(FilterRule::block("allowed.example"));
+        assert_eq!(fresh.len(), 1);
+        assert_eq!(
+            fresh.decide(
+                "https://allowed.example/resource",
+                Some(ResourceType::Document)
+            ),
+            FilterDecision::Block
         );
     }
 
