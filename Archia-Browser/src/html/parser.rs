@@ -10,6 +10,7 @@ const VOID_ELEMENTS: &[&str] = &[
 const MAX_DOM_DEPTH: usize = 256;
 const MAX_DOM_NODES: usize = 50_000;
 const MAX_DOM_ATTRIBUTE_BYTES: usize = 4 * 1024 * 1024;
+const MAX_DOM_TEXT_BYTES: usize = 4 * 1024 * 1024;
 const MAX_DOM_TOKENS: usize = 100_000;
 
 const BLOCK_CLOSES_P: &[&str] = &[
@@ -61,6 +62,9 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
     // Direct-token callers can bypass the tokenizer's input-byte ceiling. Bound
     // copied attribute storage independently across the retained DOM.
     let mut retained_attribute_bytes = 0usize;
+    // Direct-token callers can bypass the tokenizer's input-byte ceiling. Bound
+    // copied text and comments so retained DOM payloads stay finite as well.
+    let mut retained_text_bytes = 0usize;
 
     for token in tokens.iter().take(MAX_DOM_TOKENS) {
         if !suppressed_stack.is_empty() {
@@ -106,16 +110,29 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
         match token {
             HtmlToken::Doctype(_) => {}
             HtmlToken::Comment(comment) => {
-                if created_nodes < MAX_DOM_NODES {
-                    append_node(&mut root, &mut stack, Node::comment(comment));
-                    created_nodes += 1;
+                if created_nodes >= MAX_DOM_NODES {
+                    continue;
                 }
+                let remaining = MAX_DOM_TEXT_BYTES.saturating_sub(retained_text_bytes);
+                let retained = bounded_utf8_prefix(comment, remaining);
+                if retained.is_empty() {
+                    continue;
+                }
+                append_node(&mut root, &mut stack, Node::comment(retained));
+                retained_text_bytes += retained.len();
+                created_nodes += 1;
             }
             HtmlToken::Text(text) => {
                 if text.is_empty() || created_nodes >= MAX_DOM_NODES {
                     continue;
                 }
-                append_node(&mut root, &mut stack, Node::text(text));
+                let remaining = MAX_DOM_TEXT_BYTES.saturating_sub(retained_text_bytes);
+                let retained = bounded_utf8_prefix(text, remaining);
+                if retained.is_empty() {
+                    continue;
+                }
+                append_node(&mut root, &mut stack, Node::text(retained));
+                retained_text_bytes += retained.len();
                 created_nodes += 1;
             }
             HtmlToken::StartTag {
@@ -203,6 +220,14 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
     }
 
     normalize_document_structure(root)
+}
+
+fn bounded_utf8_prefix(input: &str, max_bytes: usize) -> &str {
+    let mut end = input.len().min(max_bytes);
+    while !input.is_char_boundary(end) {
+        end -= 1;
+    }
+    &input[..end]
 }
 
 fn append_node(root: &mut Node, stack: &mut [Node], node: Node) {
@@ -440,6 +465,33 @@ mod tests {
             None,
             "an attribute beyond the shared byte budget must not be copied into the DOM"
         );
+    }
+
+    #[test]
+    fn direct_tokens_cannot_bypass_the_dom_text_and_comment_byte_budget() {
+        use super::super::dom::NodeKind;
+
+        let comment = "c".repeat(MAX_DOM_TEXT_BYTES / 2 + 1);
+        let text = "é".repeat(MAX_DOM_TEXT_BYTES);
+        let tokens = vec![HtmlToken::Comment(comment), HtmlToken::Text(text)];
+
+        let root = parse(&tokens);
+        let body = &root.children[0].children[1];
+        let NodeKind::Comment(comment) = &body.children[0].kind else {
+            panic!("expected retained comment");
+        };
+        let NodeKind::Text(text) = &body.children[1].kind else {
+            panic!("expected retained text");
+        };
+
+        assert_eq!(comment.len(), MAX_DOM_TEXT_BYTES / 2 + 1);
+        assert_eq!(
+            comment.len() + text.len(),
+            MAX_DOM_TEXT_BYTES,
+            "comment and text payloads share one retained-byte budget"
+        );
+        assert!(text.is_char_boundary(text.len()));
+        assert_eq!(root.text_content().len(), text.len());
     }
 
     #[test]
