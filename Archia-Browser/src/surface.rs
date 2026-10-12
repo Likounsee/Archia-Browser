@@ -1,5 +1,5 @@
 use crate::{
-    core::memory::{MemoryBudget, MemoryReservation, MAX_LIVE_BUDGETED_OBJECTS},
+    core::memory::{MemoryBudget, MemoryReservation, MemoryResourceSlot, MAX_LIVE_BUDGETED_OBJECTS},
     html::{Node, NodeKind},
 };
 use std::sync::Arc;
@@ -74,13 +74,7 @@ pub struct SoftwareSurface {
 pub struct BudgetedSoftwareSurface {
     surface: SoftwareSurface,
     _reservation: MemoryReservation,
-    budget: Arc<MemoryBudget>,
-}
-
-impl Drop for BudgetedSoftwareSurface {
-    fn drop(&mut self) {
-        self.budget.release_resource_slot();
-    }
+    _slot: MemoryResourceSlot,
 }
 
 impl std::ops::Deref for BudgetedSoftwareSurface {
@@ -128,21 +122,16 @@ impl SoftwareSurface {
         if byte_len > MAX_SOFTWARE_SURFACE_BYTES {
             return None;
         }
-        if !budget.try_reserve_resource_slot(MAX_LIVE_BUDGETED_OBJECTS) {
-            return None;
-        }
-        let Some(reservation) = MemoryReservation::try_new(Arc::clone(&budget), byte_len) else {
-            budget.release_resource_slot();
-            return None;
-        };
-        let Some(surface) = Self::try_new(width, height) else {
-            budget.release_resource_slot();
-            return None;
-        };
+        let slot = MemoryBudget::try_reserve_resource_slot_guard(
+            Arc::clone(&budget),
+            MAX_LIVE_BUDGETED_OBJECTS,
+        )?;
+        let reservation = MemoryReservation::try_new(Arc::clone(&budget), byte_len)?;
+        let surface = Self::try_new(width, height)?;
         Some(BudgetedSoftwareSurface {
             surface,
             _reservation: reservation,
-            budget,
+            _slot: slot,
         })
     }
 
