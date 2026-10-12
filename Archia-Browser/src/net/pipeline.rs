@@ -63,7 +63,19 @@ impl<P: RequestPolicyEngine> NetworkPipeline<P> {
     /// Callers that can serve a response from a cache must still check policy
     /// first; a cache hit must never bypass filtering or resource restrictions.
     pub fn check_policy(&self, request: &Request) -> Result<(), TransportError> {
-        if self.policy.decide(request) == PolicyDecision::Block {
+        // A secure document must not load cleartext HTTP subresources. Keep
+        // this invariant in the shared pipeline so future resource loaders
+        // cannot accidentally bypass a loader-specific mixed-content check.
+        // Top-level document navigation is intentionally exempt: following an
+        // HTTP link is navigation, not mixed content within the current page.
+        let is_mixed_content = request.policy.resource_kind != ResourceKind::Document
+            && request
+                .policy
+                .first_party
+                .as_ref()
+                .is_some_and(|first_party| first_party.is_secure())
+            && request.url.scheme() == "http";
+        if is_mixed_content || self.policy.decide(request) == PolicyDecision::Block {
             return Err(TransportError::BlockedByPolicy);
         }
         Ok(())
@@ -177,6 +189,66 @@ mod tests {
             0,
             "a blocked request must never reach the transport"
         );
+    }
+
+    #[test]
+    fn secure_documents_cannot_load_http_subresources_through_shared_pipeline() {
+        #[derive(Debug, Default)]
+        struct AllowAll;
+
+        impl RequestPolicyEngine for AllowAll {
+            fn decide(&self, _: &Request) -> PolicyDecision {
+                PolicyDecision::Allow
+            }
+        }
+
+        let pipeline = NetworkPipeline::new(AllowAll);
+        let secure_page = super::super::Url::parse("https://example.org/page").unwrap();
+        for resource_kind in [
+            ResourceKind::Stylesheet,
+            ResourceKind::Script,
+            ResourceKind::Image,
+            ResourceKind::Font,
+            ResourceKind::Media,
+            ResourceKind::Fetch,
+            ResourceKind::Other,
+        ] {
+            let mut request =
+                Request::new(super::super::Url::parse("http://cdn.example/resource").unwrap());
+            request.policy = RequestPolicy {
+                resource_kind,
+                first_party: Some(secure_page.clone()),
+                ..RequestPolicy::default()
+            };
+            assert_eq!(
+                pipeline.check_policy(&request),
+                Err(TransportError::BlockedByPolicy),
+                "cleartext subresource should be blocked: {resource_kind:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn mixed_content_guard_does_not_block_top_level_http_navigation() {
+        #[derive(Debug, Default)]
+        struct AllowAll;
+
+        impl RequestPolicyEngine for AllowAll {
+            fn decide(&self, _: &Request) -> PolicyDecision {
+                PolicyDecision::Allow
+            }
+        }
+
+        let pipeline = NetworkPipeline::new(AllowAll);
+        let mut request =
+            Request::new(super::super::Url::parse("http://example.org/next").unwrap());
+        request.policy = RequestPolicy {
+            resource_kind: ResourceKind::Document,
+            first_party: Some(super::super::Url::parse("https://example.org/page").unwrap()),
+            ..RequestPolicy::default()
+        };
+
+        assert_eq!(pipeline.check_policy(&request), Ok(()));
     }
 
     #[test]
