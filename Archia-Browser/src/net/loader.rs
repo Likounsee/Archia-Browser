@@ -791,6 +791,60 @@ fn collect_stylesheet_links(node: &Node, links: &mut Vec<String>) {
 }
 
 fn parse_import_reference(statement: &str) -> Option<String> {
+    let statement = strip_css_comments(statement);
+    parse_import_reference_without_comments(&statement)
+}
+
+/// Remove CSS comments without changing quoted strings or escaped quote handling.
+/// Replacing comments with a space prevents adjacent tokens from being joined.
+fn strip_css_comments(css: &str) -> String {
+    let bytes = css.as_bytes();
+    let mut output = String::with_capacity(css.len());
+    let mut index = 0;
+    let mut quote = None;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        let next = bytes.get(index + 1).copied();
+
+        if let Some(active_quote) = quote {
+            output.push(byte as char);
+            if byte == b'\\' {
+                index += 1;
+                if let Some(escaped) = bytes.get(index).copied() {
+                    output.push(escaped as char);
+                    index += 1;
+                }
+                continue;
+            }
+            if byte == active_quote {
+                quote = None;
+            }
+            index += 1;
+            continue;
+        }
+
+        if byte == b'/' && next == Some(b'*') {
+            output.push(' ');
+            index += 2;
+            while index < bytes.len() {
+                if bytes[index] == b'*' && bytes.get(index + 1) == Some(&b'/') {
+                    index += 2;
+                    break;
+                }
+                index += 1;
+            }
+        } else {
+            if matches!(byte, b'\\'' | b'"') {
+                quote = Some(byte);
+            }
+            output.push(byte as char);
+            index += 1;
+        }
+    }
+    output
+}
+
+fn parse_import_reference_without_comments(statement: &str) -> Option<String> {
     let statement = statement.trim();
     let import = statement.get(..7)?;
     if !import.eq_ignore_ascii_case("@import") {
@@ -3182,6 +3236,22 @@ mod tests {
                 "malformed import must be ignored: {statement}"
             );
         }
+    }
+
+    #[test]
+    fn css_import_parser_ignores_comments_but_preserves_quoted_comment_markers() {
+        assert_eq!(
+            parse_import_reference("/* header */ @import /* url */ url('theme.css');"),
+            Some("theme.css".to_owned())
+        );
+        assert_eq!(
+            parse_import_reference(r#"@import "theme/*not-a-comment*/.css";"#),
+            Some("theme/*not-a-comment*/.css".to_owned())
+        );
+        assert_eq!(
+            parse_import_reference("/* only a comment; */ body { color: red; }"),
+            None
+        );
     }
 
     #[test]
