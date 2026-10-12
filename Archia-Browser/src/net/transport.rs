@@ -760,6 +760,12 @@ fn open_local_root_handle_verified(
             )
         };
         if fd < 0 {
+            #[cfg(target_os = "macos")]
+            eprintln!(
+                "secure root walk failed at {:?}: {}",
+                component,
+                std::io::Error::last_os_error()
+            );
             return Err(TransportError::ConnectionFailed);
         }
         current = unsafe { std::fs::File::from_raw_fd(fd) };
