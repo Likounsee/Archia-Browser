@@ -4021,11 +4021,11 @@ mod limit_tests {
     #[test]
     fn response_framing_rejects_ambiguous_or_unsupported_transfer_codings() {
         for wire in [
-            &b"HTTP/1.1 200 OK\\r\\nContent-Length: 0\\r\\nTransfer-Encoding: chunked\\r\\n\\r\\n"[..],
-            &b"HTTP/1.1 200 OK\\r\\nTransfer-Encoding: gzip, chunked\\r\\n\\r\\n0\\r\\n\\r\\n"[..],
-            &b"HTTP/1.1 200 OK\\r\\nTransfer-Encoding: chunked, chunked\\r\\n\\r\\n0\\r\\n\\r\\n"[..],
-            &b"HTTP/1.1 200 OK\\r\\nContent-Length: +0\\r\\n\\r\\n"[..],
-            &b"HTTP/1.1 200 OK\\r\\nContent-Length: 0, 0\\r\\n\\r\\n"[..],
+            &b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nTransfer-Encoding: chunked\r\n\r\n"[..],
+            &b"HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip, chunked\r\n\r\n0\r\n\r\n"[..],
+            &b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked, chunked\r\n\r\n0\r\n\r\n"[..],
+            &b"HTTP/1.1 200 OK\r\nContent-Length: +0\r\n\r\n"[..],
+            &b"HTTP/1.1 200 OK\r\nContent-Length: 0, 0\r\n\r\n"[..],
         ] {
             assert_eq!(
                 parse_http_response(wire, 1024, 1024),
