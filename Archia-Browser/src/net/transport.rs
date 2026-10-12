@@ -636,7 +636,7 @@ fn open_local_root_handle_verified(
     Ok(directory)
 }
 
-#[cfg(all(unix, not(target_os = "linux")))]
+#[cfg(all(unix, not(target_os = "linux"), test))]
 fn open_local_file_confined(
     canonical_root: &std::path::Path,
     canonical_path: &std::path::Path,
