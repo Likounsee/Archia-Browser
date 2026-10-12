@@ -280,11 +280,11 @@ impl LocalFileTransport {
                     // requested path and the resulting directory must be clean.
                     reject_symlink_path_components(root).ok()?;
 
-                    // On Linux, pin the user-supplied path before canonicalizing
-                    // it. If an attacker swaps the path while canonicalize()
-                    // runs, the canonical path must still identify this exact
-                    // opened directory or the grant is rejected.
-                    #[cfg(target_os = "linux")]
+                    // Pin the caller-supplied directory before canonicalizing
+                    // on Unix. This preserves the original directory object if
+                    // the path changes during canonicalization; compare its
+                    // identity with the resolved name before accepting the grant.
+                    #[cfg(unix)]
                     let directory = open_local_root_handle_verified(root).ok()?;
 
                     let canonical_path = std::fs::canonicalize(root).ok()?;
@@ -293,7 +293,7 @@ impl LocalFileTransport {
                         return None;
                     }
 
-                    #[cfg(target_os = "linux")]
+                    #[cfg(unix)]
                     {
                         use std::os::unix::fs::MetadataExt;
 
@@ -308,7 +308,7 @@ impl LocalFileTransport {
                         }
                     }
 
-                    #[cfg(not(target_os = "linux"))]
+                    #[cfg(windows)]
                     let directory = open_local_root_handle_verified(&canonical_path).ok()?;
 
                     Some(AuthorizedRootHandle {
