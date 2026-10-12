@@ -108,6 +108,21 @@ impl MemoryReservation {
         self.bytes.load(Ordering::Acquire)
     }
 
+    /// Extend an existing reservation without temporarily releasing its current
+    /// charge. Returns false without changing accounting if the extra budget
+    /// cannot be acquired.
+    pub fn try_grow_by(&self, additional: usize) -> bool {
+        if additional == 0 {
+            return true;
+        }
+        if !self.budget.try_reserve(additional) {
+            return false;
+        }
+
+        self.bytes.fetch_add(additional, Ordering::AcqRel);
+        true
+    }
+
     /// Reduce an existing reservation and immediately return the excess budget.
     /// Reservations can be shared by cache entries through `Arc`, so the
     /// byte count is atomic and remains consistent for every owner.
@@ -173,6 +188,26 @@ mod tests {
             "shared owner still holds its reservation"
         );
         drop(shared);
+        assert_eq!(budget.used(), 0);
+    }
+
+    #[test]
+    fn reservation_growth_is_atomic_with_respect_to_budget_failure() {
+        let budget = Arc::new(MemoryBudget::new(10));
+        let reservation = MemoryReservation::try_new(Arc::clone(&budget), 6).unwrap();
+
+        assert!(!reservation.try_grow_by(5));
+        assert_eq!(reservation.bytes(), 6);
+        assert_eq!(budget.used(), 6);
+
+        assert!(reservation.try_grow_by(4));
+        assert_eq!(reservation.bytes(), 10);
+        assert_eq!(budget.used(), 10);
+        assert!(!reservation.try_grow_by(1));
+        assert_eq!(reservation.bytes(), 10);
+        assert_eq!(budget.used(), 10);
+
+        drop(reservation);
         assert_eq!(budget.used(), 0);
     }
 
