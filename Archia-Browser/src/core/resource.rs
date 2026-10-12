@@ -183,6 +183,36 @@ mod tests {
     }
 
     #[test]
+    fn concurrent_managers_cannot_overrun_shared_live_resource_quota() {
+        const WORKERS: usize = 16;
+        let budget = Arc::new(MemoryBudget::new(0));
+        let workers: Vec<_> = (0..WORKERS)
+            .map(|_| {
+                let budget = Arc::clone(&budget);
+                std::thread::spawn(move || {
+                    let mut manager = ResourceManager::with_budget(budget);
+                    let mut resources = Vec::new();
+                    while let Some(resource) = manager.allocate(0) {
+                        resources.push(resource);
+                    }
+                    resources
+                })
+            })
+            .collect();
+
+        let resources: Vec<_> = workers
+            .into_iter()
+            .map(|worker| worker.join().expect("resource worker must not panic"))
+            .collect();
+        let allocated: usize = resources.iter().map(Vec::len).sum();
+
+        assert_eq!(allocated, MAX_LIVE_RESOURCES);
+        assert_eq!(budget.live_resources(), MAX_LIVE_RESOURCES);
+        drop(resources);
+        assert_eq!(budget.live_resources(), 0);
+    }
+
+    #[test]
     fn resources_consume_and_release_budget() {
         let mut manager = ResourceManager::new(4096);
         let resource = manager.allocate(1024).unwrap();
