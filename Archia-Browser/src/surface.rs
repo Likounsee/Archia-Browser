@@ -626,6 +626,25 @@ mod tests {
     }
 
     #[test]
+    fn surface_and_resource_byte_allocations_share_one_budget() {
+        let budget = Arc::new(MemoryBudget::new(32));
+        let mut resources = ResourceManager::with_budget(Arc::clone(&budget));
+        let resource = resources
+            .allocate(32)
+            .expect("resource should consume the full shared byte budget");
+
+        assert!(SoftwareSurface::try_new_with_budget(1, 1, Arc::clone(&budget)).is_none());
+        assert_eq!(budget.used(), 32);
+
+        drop(resource);
+        let surface = SoftwareSurface::try_new_with_budget(1, 1, Arc::clone(&budget))
+            .expect("released resource bytes should be reusable by a surface");
+        assert_eq!(budget.used(), 4);
+        drop(surface);
+        assert_eq!(budget.used(), 0);
+    }
+
+    #[test]
     fn budgeted_surface_refuses_allocations_over_the_shared_budget() {
         let budget = Arc::new(MemoryBudget::new(8 * 4 * 4 - 1));
         assert!(SoftwareSurface::try_new_with_budget(8, 4, Arc::clone(&budget)).is_none());
