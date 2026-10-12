@@ -47,11 +47,10 @@ const BLOCK_CLOSES_P: &[&str] = &[
 pub fn parse(tokens: &[HtmlToken]) -> Node {
     let mut root = Node::document();
     let mut stack: Vec<Node> = Vec::new();
-    // Keep malformed hostile nesting from making open-element searches
-    // quadratic or creating a tree too deep for recursive DOM consumers.
-    // Once the limit is reached, discard a bounded-depth subtree. Track only
-    // nesting depth here: retaining/searching tag names would recreate an
-    // attacker-controlled quadratic scan on this hostile-input path.
+    // Keep malformed hostile nesting from creating a tree too deep for
+    // recursive DOM consumers. Once the limit is reached, discard that subtree;
+    // an indexed tag stack lets matching end tags recover without repeated
+    // linear scans through attacker-controlled nesting.
     let mut suppressed_stack: Vec<String> = Vec::new();
     // Index open suppressed tags by name so matching close tags do not scan the
     // entire attacker-controlled nesting stack on every token.
