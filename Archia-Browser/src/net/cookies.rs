@@ -279,31 +279,36 @@ impl CookieJar {
             return;
         }
 
-        self.cookies.retain(|existing| {
-            !(existing.name == cookie.name
+        // Validate the replacement against the jar limits before removing
+        // the existing cookie. A rejected oversized replacement must not
+        // destroy a previously valid value.
+        let is_replacement = |existing: &&Cookie| {
+            existing.name == cookie.name
                 && existing.domain == cookie.domain
-                && existing.path == cookie.path)
-        });
-        if self.cookies.len() >= MAX_COOKIES
-            || self
-                .cookies
-                .iter()
-                .filter(|existing| existing.domain == cookie.domain)
-                .count()
-                >= MAX_COOKIES_PER_DOMAIN
-        {
+                && existing.path == cookie.path
+        };
+        let existing_count = self.cookies.iter().filter(|existing| !is_replacement(existing)).count();
+        let domain_count = self
+            .cookies
+            .iter()
+            .filter(|existing| !is_replacement(existing) && existing.domain == cookie.domain)
+            .count();
+        if existing_count >= MAX_COOKIES || domain_count >= MAX_COOKIES_PER_DOMAIN {
             return;
         }
 
         // Count retained cookie data and a conservative per-entry metadata
         // allowance. Count and per-cookie caps alone still permit several
         // megabytes of attacker-controlled values across many domains.
-        let used_bytes = self.cookies.iter().fold(0usize, |total, existing| {
-            total.saturating_add(cookie_storage_bytes(existing))
-        });
+        let used_bytes = self.cookies.iter().filter(|existing| !is_replacement(existing)).fold(
+            0usize,
+            |total, existing| total.saturating_add(cookie_storage_bytes(existing)),
+        );
         if used_bytes.saturating_add(cookie_storage_bytes(&cookie)) > MAX_COOKIE_JAR_BYTES {
             return;
         }
+
+        self.cookies.retain(|existing| !is_replacement(&existing));
         self.cookies.push(cookie);
     }
 
@@ -1308,6 +1313,29 @@ mod tests {
             jar.store(&url, &format!("cookie{index}=value"));
         }
         assert_eq!(jar.len(), MAX_COOKIES_PER_DOMAIN);
+    }
+
+    #[test]
+    fn rejected_oversized_replacement_preserves_existing_cookie() {
+        let mut jar = CookieJar::new();
+        let url = Url::parse("https://example.org/").unwrap();
+        jar.store(&url, "session=original");
+
+        // Fill the jar close to its total byte cap, leaving too little room
+        // for this replacement while keeping the original cookie valid.
+        let value = "v".repeat(MAX_COOKIE_PAIR_BYTES - 32);
+        for index in 0..250 {
+            let other_url =
+                Url::parse(&format!("https://host{index}.example.test/")).unwrap();
+            let set_cookie = format!("large{index}={value}; Path=/; Secure");
+            jar.store(&other_url, &set_cookie);
+        }
+
+        let original_count = jar.len();
+        jar.store(&url, &format!("session={}", "x".repeat(MAX_COOKIE_PAIR_BYTES - 32)));
+
+        assert_eq!(jar.len(), original_count);
+        assert_eq!(jar.header_for(&url).as_deref(), Some("session=original"));
     }
 
     #[test]
