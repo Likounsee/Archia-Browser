@@ -30,15 +30,16 @@ impl<T> ResourceCache<T> {
         // so empty entries cannot bypass the cache capacity.
         let bytes = bytes.max(key.len()).max(1);
 
+        // Reject oversized entries before mutating the cache. In particular,
+        // an oversized replacement must not evict the previous valid value.
+        if bytes > self.capacity {
+            return;
+        }
+
         if let Some(position) = self.entries.iter().position(|entry| entry.key == key) {
             if let Some(previous) = self.entries.remove(position) {
                 self.used = self.used.saturating_sub(previous.bytes);
             }
-        }
-
-        // Reject oversized entries before evicting unrelated cache entries.
-        if bytes > self.capacity {
-            return;
         }
 
         while bytes > self.capacity.saturating_sub(self.used) {
@@ -179,16 +180,16 @@ mod tests {
     }
 
     #[test]
-    fn oversized_replacement_removes_only_the_replaced_entry() {
+    fn oversized_replacement_preserves_previous_entry() {
         let mut cache = ResourceCache::new(10);
         cache.insert("a", 1, 4);
         cache.insert("b", 2, 4);
 
         cache.insert("a", 3, 11);
 
-        assert_eq!(cache.get("a"), None);
+        assert_eq!(cache.get("a"), Some(&1));
         assert_eq!(cache.get("b"), Some(&2));
-        assert_eq!(cache.used(), 4);
+        assert_eq!(cache.used(), 8);
     }
 
     #[test]
