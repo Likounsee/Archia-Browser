@@ -174,9 +174,7 @@ where
                 // documents. Caching an arbitrary 200 response before MIME validation
                 // can poison a later request for the same URL (for example, CSS served
                 // to a navigation).
-                if is_html_response(&response)
-                    && response.body.len() <= MAX_HTML_DOCUMENT_BYTES
-                {
+                if is_html_response(&response) && response.body.len() <= MAX_HTML_DOCUMENT_BYTES {
                     self.cache
                         .lock()
                         .map_err(|_| DocumentLoadError::InternalStatePoisoned)?
@@ -976,11 +974,8 @@ mod tests {
         }
 
         let budget = Arc::new(MemoryBudget::new(16 * 1024 * 1024));
-        let loader = DocumentLoader::new(
-            NetworkPipeline::new(AllowAll),
-            OversizedHtmlTransport,
-        )
-        .with_shared_memory_budget(Arc::clone(&budget));
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), OversizedHtmlTransport)
+            .with_shared_memory_budget(Arc::clone(&budget));
         let request = Request::new(Url::parse("https://example.org/oversized").unwrap());
 
         assert!(matches!(
@@ -1235,9 +1230,8 @@ mod tests {
         }
 
         let memory_budget = Arc::new(crate::core::memory::MemoryBudget::new(1024 * 1024));
-        let loader =
-            DocumentLoader::new(NetworkPipeline::new(AllowAll), StylesheetTransport)
-                .with_shared_memory_budget(Arc::clone(&memory_budget));
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), StylesheetTransport)
+            .with_shared_memory_budget(Arc::clone(&memory_budget));
         let document_url = Url::parse("https://example.org/index.html").unwrap();
 
         let css = loader.load_linked_stylesheets(
@@ -1272,10 +1266,7 @@ mod tests {
             }
         }
 
-        let loader = DocumentLoader::new(
-            NetworkPipeline::new(AllowAll),
-            ReusedStylesheetTransport,
-        );
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), ReusedStylesheetTransport);
         let document_url = Url::parse("https://example.org/index.html").unwrap();
         let css = loader.load_linked_stylesheets(
             &document_url,
@@ -1355,10 +1346,7 @@ mod tests {
                 target: target.to_owned(),
                 requests: Mutex::new(Vec::new()),
             };
-            let loader = DocumentLoader::new(
-                NetworkPipeline::new(AllowAll),
-                transport,
-            );
+            let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
             let request = Request::new(Url::parse("https://example.org/page").unwrap());
             let page = loader
                 .load(&request, LayoutViewport::new(320, 200))
@@ -1397,9 +1385,7 @@ mod tests {
                     Ok(Response::new(200)
                         .with_header("content-type", "text/css")
                         .with_header("cache-control", "no-store")
-                        .with_body(
-                            br#"@import url("/nested.css"); body { color: red; }"#.to_vec(),
-                        ))
+                        .with_body(br#"@import url("/nested.css"); body { color: red; }"#.to_vec()))
                 } else {
                     assert_eq!(request.url.path(), "/nested.css");
                     Ok(Response::new(200)
@@ -1411,13 +1397,13 @@ mod tests {
         }
 
         let budget = Arc::new(MemoryBudget::new(16 * 1024));
-        let loader = DocumentLoader::new(
-            NetworkPipeline::new(AllowAll),
-            PageAndStylesheetTransport,
-        )
-        .with_shared_memory_budget(Arc::clone(&budget));
+        let loader =
+            DocumentLoader::new(NetworkPipeline::new(AllowAll), PageAndStylesheetTransport)
+                .with_shared_memory_budget(Arc::clone(&budget));
         let request = Request::new(Url::parse("https://example.org/page").unwrap());
-        let page = loader.load(&request, LayoutViewport::new(320, 200)).unwrap();
+        let page = loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .unwrap();
 
         assert_eq!(page.document.text_content(), "Budget");
         assert!(
@@ -1780,8 +1766,8 @@ mod tests {
                     .to_vec(),
             );
         // A successful HTTP response is not automatically a stylesheet.
-        let mislabeled = Response::new(200)
-            .with_body(b"body { background-color: #102030; }".to_vec());
+        let mislabeled =
+            Response::new(200).with_body(b"body { background-color: #102030; }".to_vec());
         let loader = DocumentLoader::new(
             NetworkPipeline::new(AllowAll),
             SequenceTransport {
@@ -1830,8 +1816,7 @@ mod tests {
                     .with_header("content-type", "text/html")
                     .with_header("cache-control", "max-age=60")
                     .with_body(
-                        br#"<link rel="stylesheet" href="/wrong.css"><body>Page</body>"#
-                            .to_vec(),
+                        br#"<link rel="stylesheet" href="/wrong.css"><body>Page</body>"#.to_vec(),
                     ))
             }
         }
@@ -2150,14 +2135,20 @@ mod tests {
         let transport = RedirectChainTransport {
             requests: Mutex::new(Vec::new()),
         };
-        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport)
-            .with_max_redirects(0);
+        let loader =
+            DocumentLoader::new(NetworkPipeline::new(AllowAll), transport).with_max_redirects(0);
         let request = Request::new(Url::parse("https://example.org/page").unwrap());
 
-        let page = loader.load(&request, LayoutViewport::new(320, 200)).unwrap();
+        let page = loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .unwrap();
         assert_eq!(page.document.text_content(), "Safe");
         let requests = loader.transport.requests.lock().unwrap();
-        assert_eq!(requests.len(), 2, "zero redirects must still allow the initial request");
+        assert_eq!(
+            requests.len(),
+            2,
+            "zero redirects must still allow the initial request"
+        );
         assert_eq!(requests[1], "https://example.org/style.css");
     }
 
@@ -3121,5 +3112,4 @@ mod tests {
             Some("https://example.org/theme.css".to_owned())
         );
     }
-
 }
