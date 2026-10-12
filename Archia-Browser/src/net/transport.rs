@@ -724,7 +724,7 @@ fn open_local_root_handle_verified(
     let mut current = {
         let fd = unsafe {
             libc::open(
-                b"/\0".as_ptr().cast(),
+                c"/".as_ptr(),
                 libc::O_RDONLY | libc::O_CLOEXEC | libc::O_DIRECTORY,
             )
         };
