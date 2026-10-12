@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use super::memory::{MemoryBudget, MemoryReservation};
-
-const MAX_LIVE_RESOURCES: usize = 4096;
+use super::memory::{MemoryBudget, MemoryReservation, MAX_LIVE_BUDGETED_OBJECTS};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ResourceId(u64);
@@ -57,7 +55,7 @@ impl ResourceManager {
     pub fn allocate(&mut self, bytes: usize) -> Option<Resource> {
         // Byte budgets do not constrain zero-byte allocations. The object
         // quota lives in MemoryBudget so all managers sharing it share one cap.
-        if !self.budget.try_reserve_resource_slot(MAX_LIVE_RESOURCES) {
+        if !self.budget.try_reserve_resource_slot(MAX_LIVE_BUDGETED_OBJECTS) {
             return None;
         }
 
@@ -120,7 +118,7 @@ mod tests {
     fn failed_memory_reservation_does_not_leak_live_resource_slots() {
         let mut manager = ResourceManager::new(0);
 
-        for _ in 0..MAX_LIVE_RESOURCES * 2 {
+        for _ in 0..MAX_LIVE_BUDGETED_OBJECTS * 2 {
             assert!(manager.allocate(1).is_none());
         }
 
@@ -144,18 +142,18 @@ mod tests {
         let mut manager = ResourceManager::new(0);
         let mut resources = Vec::new();
 
-        for _ in 0..MAX_LIVE_RESOURCES {
+        for _ in 0..MAX_LIVE_BUDGETED_OBJECTS {
             resources.push(manager.allocate(0).expect("slot should be available"));
         }
         assert!(manager.allocate(0).is_none());
-        assert_eq!(manager.budget.live_resources(), MAX_LIVE_RESOURCES);
+        assert_eq!(manager.budget.live_resources(), MAX_LIVE_BUDGETED_OBJECTS);
 
         resources.pop();
-        assert_eq!(manager.budget.live_resources(), MAX_LIVE_RESOURCES - 1);
+        assert_eq!(manager.budget.live_resources(), MAX_LIVE_BUDGETED_OBJECTS - 1);
         let replacement = manager
             .allocate(0)
             .expect("released slot should be reusable");
-        assert_eq!(manager.budget.live_resources(), MAX_LIVE_RESOURCES);
+        assert_eq!(manager.budget.live_resources(), MAX_LIVE_BUDGETED_OBJECTS);
         drop(replacement);
     }
 
@@ -164,19 +162,19 @@ mod tests {
         let budget = Arc::new(MemoryBudget::new(0));
         let mut first = ResourceManager::with_budget(Arc::clone(&budget));
         let mut second = ResourceManager::with_budget(Arc::clone(&budget));
-        let mut resources = Vec::with_capacity(MAX_LIVE_RESOURCES);
+        let mut resources = Vec::with_capacity(MAX_LIVE_BUDGETED_OBJECTS);
 
-        for _ in 0..MAX_LIVE_RESOURCES {
+        for _ in 0..MAX_LIVE_BUDGETED_OBJECTS {
             resources.push(first.allocate(0).expect("shared slot should be available"));
         }
         assert!(second.allocate(0).is_none());
-        assert_eq!(budget.live_resources(), MAX_LIVE_RESOURCES);
+        assert_eq!(budget.live_resources(), MAX_LIVE_BUDGETED_OBJECTS);
 
         drop(resources.pop());
         let replacement = second
             .allocate(0)
             .expect("a slot released by another manager must be reusable");
-        assert_eq!(budget.live_resources(), MAX_LIVE_RESOURCES);
+        assert_eq!(budget.live_resources(), MAX_LIVE_BUDGETED_OBJECTS);
         drop(replacement);
         drop(resources);
         assert_eq!(budget.live_resources(), 0);
@@ -206,8 +204,8 @@ mod tests {
             .collect();
         let allocated: usize = resources.iter().map(Vec::len).sum();
 
-        assert_eq!(allocated, MAX_LIVE_RESOURCES);
-        assert_eq!(budget.live_resources(), MAX_LIVE_RESOURCES);
+        assert_eq!(allocated, MAX_LIVE_BUDGETED_OBJECTS);
+        assert_eq!(budget.live_resources(), MAX_LIVE_BUDGETED_OBJECTS);
         drop(resources);
         assert_eq!(budget.live_resources(), 0);
     }

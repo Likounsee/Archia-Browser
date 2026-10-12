@@ -1,3 +1,5 @@
+pub(crate) const MAX_LIVE_BUDGETED_OBJECTS: usize = 4096;
+
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,

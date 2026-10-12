@@ -1,5 +1,5 @@
 use crate::{
-    core::memory::{MemoryBudget, MemoryReservation},
+    core::memory::{MemoryBudget, MemoryReservation, MAX_LIVE_BUDGETED_OBJECTS},
     html::{Node, NodeKind},
 };
 use std::sync::Arc;
@@ -74,6 +74,13 @@ pub struct SoftwareSurface {
 pub struct BudgetedSoftwareSurface {
     surface: SoftwareSurface,
     _reservation: MemoryReservation,
+    budget: Arc<MemoryBudget>,
+}
+
+impl Drop for BudgetedSoftwareSurface {
+    fn drop(&mut self) {
+        self.budget.release_resource_slot();
+    }
 }
 
 impl std::ops::Deref for BudgetedSoftwareSurface {
@@ -121,11 +128,21 @@ impl SoftwareSurface {
         if byte_len > MAX_SOFTWARE_SURFACE_BYTES {
             return None;
         }
-        let reservation = MemoryReservation::try_new(budget, byte_len)?;
-        let surface = Self::try_new(width, height)?;
+        if !budget.try_reserve_resource_slot(MAX_LIVE_BUDGETED_OBJECTS) {
+            return None;
+        }
+        let Some(reservation) = MemoryReservation::try_new(Arc::clone(&budget), byte_len) else {
+            budget.release_resource_slot();
+            return None;
+        };
+        let Some(surface) = Self::try_new(width, height) else {
+            budget.release_resource_slot();
+            return None;
+        };
         Some(BudgetedSoftwareSurface {
             surface,
             _reservation: reservation,
+            budget,
         })
     }
 
@@ -515,6 +532,52 @@ pub fn paint_background(surface: &mut SoftwareSurface, node: &Node, color: Color
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::resource::ResourceManager;
+
+    #[test]
+    fn budgeted_surfaces_share_live_object_quota_with_resources() {
+        let budget = Arc::new(MemoryBudget::new(0));
+        let mut surfaces = Vec::new();
+
+        for _ in 0..MAX_LIVE_BUDGETED_OBJECTS {
+            surfaces.push(
+                SoftwareSurface::try_new_with_budget(0, 0, Arc::clone(&budget))
+                    .expect("live-object slot should be available"),
+            );
+        }
+
+        assert!(SoftwareSurface::try_new_with_budget(0, 0, Arc::clone(&budget)).is_none());
+        let mut resources = ResourceManager::with_budget(Arc::clone(&budget));
+        assert!(resources.allocate(0).is_none());
+        assert_eq!(budget.live_resources(), MAX_LIVE_BUDGETED_OBJECTS);
+
+        drop(surfaces.pop());
+        let resource = resources
+            .allocate(0)
+            .expect("dropping a surface should release a shared live-object slot");
+        assert_eq!(budget.live_resources(), MAX_LIVE_BUDGETED_OBJECTS);
+
+        drop(resource);
+        drop(surfaces);
+        assert_eq!(budget.live_resources(), 0);
+    }
+
+    #[test]
+    fn failed_budgeted_surface_allocation_releases_live_object_slot() {
+        let budget = Arc::new(MemoryBudget::new(0));
+
+        assert!(SoftwareSurface::try_new_with_budget(8, 4, Arc::clone(&budget)).is_none());
+        assert_eq!(budget.used(), 0);
+        assert_eq!(budget.live_resources(), 0);
+
+        let mut resources = ResourceManager::with_budget(Arc::clone(&budget));
+        let resource = resources
+            .allocate(0)
+            .expect("failed surface allocation must return its live-object slot");
+        assert_eq!(budget.live_resources(), 1);
+        drop(resource);
+        assert_eq!(budget.live_resources(), 0);
+    }
 
     #[test]
     fn extreme_rounded_rectangle_radii_do_not_overflow() {
