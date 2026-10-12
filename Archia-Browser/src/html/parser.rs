@@ -80,6 +80,16 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 attributes,
                 self_closing: _,
             } => {
+                // Apply the most common HTML implied-end-tag rules before
+                // inserting a new element. Without these, malformed-but-common
+                // markup such as adjacent anchors or options produces a DOM
+                // tree different from browser expectations.
+                for implied_end in implied_end_tags_for_start(name) {
+                    if has_open(&stack, implied_end) {
+                        close_element(&mut root, &mut stack, implied_end);
+                    }
+                }
+
                 if (name == "p" || is_block_closing_p(name)) && has_open(&stack, "p") {
                     close_element(&mut root, &mut stack, "p");
                 }
@@ -136,6 +146,20 @@ fn has_open_list_item_in_current_list(stack: &[Node]) -> bool {
         }
     }
     false
+}
+
+fn implied_end_tags_for_start(name: &str) -> &'static [&'static str] {
+    match name {
+        "a" => &["a"],
+        "button" => &["button"],
+        "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
+            &["h1", "h2", "h3", "h4", "h5", "h6"]
+        }
+        "dt" | "dd" => &["dt", "dd"],
+        "option" => &["option"],
+        "optgroup" => &["option", "optgroup"],
+        _ => &[],
+    }
 }
 
 fn is_block_closing_p(name: &str) -> bool {
@@ -350,6 +374,56 @@ mod tests {
         assert_eq!(nested_list.children.len(), 1);
         assert_eq!(nested_list.children[0].text_content(), "inner");
         assert_eq!(outer_list.children[1].text_content(), "second");
+    }
+
+    #[test]
+    fn adjacent_anchors_and_buttons_do_not_nest() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<a href='/first'>one<a href='/second'>two</a><button>first<button>second</button>",
+        ));
+        let body = &root.children[0].children[1];
+
+        assert_eq!(body.children[0].tag_name(), Some("a"));
+        assert_eq!(body.children[0].text_content(), "one");
+        assert_eq!(body.children[1].tag_name(), Some("a"));
+        assert_eq!(body.children[1].text_content(), "two");
+        assert_eq!(body.children[2].tag_name(), Some("button"));
+        assert_eq!(body.children[2].text_content(), "first");
+        assert_eq!(body.children[3].tag_name(), Some("button"));
+        assert_eq!(body.children[3].text_content(), "second");
+    }
+
+    #[test]
+    fn headings_and_definition_terms_close_previous_peers() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<h1>one<h2>two</h2><dl><dt>term<dd>definition</dd></dl>",
+        ));
+        let body = &root.children[0].children[1];
+
+        assert_eq!(body.children[0].tag_name(), Some("h1"));
+        assert_eq!(body.children[0].text_content(), "one");
+        assert_eq!(body.children[1].tag_name(), Some("h2"));
+        let list = &body.children[2];
+        assert_eq!(list.children[0].tag_name(), Some("dt"));
+        assert_eq!(list.children[0].text_content(), "term");
+        assert_eq!(list.children[1].tag_name(), Some("dd"));
+        assert_eq!(list.children[1].text_content(), "definition");
+    }
+
+    #[test]
+    fn options_close_before_the_next_option_or_group() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<select><option>one<option>two<optgroup><option>three</optgroup></select>",
+        ));
+        let select = root.find_first_element("select").unwrap();
+
+        assert_eq!(select.children[0].tag_name(), Some("option"));
+        assert_eq!(select.children[0].text_content(), "one");
+        assert_eq!(select.children[1].tag_name(), Some("option"));
+        assert_eq!(select.children[1].text_content(), "two");
+        assert_eq!(select.children[2].tag_name(), Some("optgroup"));
+        assert_eq!(select.children[2].children[0].tag_name(), Some("option"));
+        assert_eq!(select.children[2].children[0].text_content(), "three");
     }
 
     #[test]
