@@ -729,7 +729,10 @@ fn parse_import_reference(statement: &str) -> Option<String> {
         return None;
     }
 
-    let reference = if statement.get(..4).is_some_and(|prefix| prefix.eq_ignore_ascii_case("url(")) {
+    let reference = if statement
+        .get(..4)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("url("))
+    {
         let value = &statement[4..];
         let end = value.find(')')?;
         if !value[end + 1..].trim().is_empty() {
@@ -739,7 +742,11 @@ fn parse_import_reference(statement: &str) -> Option<String> {
         if value.is_empty() {
             return None;
         }
-        if let Some(quote) = value.chars().next().filter(|quote| matches!(quote, '"' | '\'')) {
+        if let Some(quote) = value
+            .chars()
+            .next()
+            .filter(|quote| matches!(quote, '"' | '\''))
+        {
             if value.len() < 2 || !value.ends_with(quote) {
                 return None;
             }
@@ -749,7 +756,7 @@ fn parse_import_reference(statement: &str) -> Option<String> {
             }
             inner.to_owned()
         } else {
-            if value.contains(['"', '\'']) {
+            if value.contains('"') || value.contains('\'') {
                 return None;
             }
             value.to_owned()
