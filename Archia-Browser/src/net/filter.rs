@@ -112,9 +112,7 @@ impl RequestFilter {
     pub fn add_rule(&mut self, rule: FilterRule) {
         // Rules are user/configuration supplied and evaluated for each request.
         // Bound both retained memory and worst-case per-request scan cost.
-        if self.rules.len() >= MAX_FILTER_RULES
-            || rule.pattern.len() > MAX_FILTER_PATTERN_BYTES
-        {
+        if self.rules.len() >= MAX_FILTER_RULES || rule.pattern.len() > MAX_FILTER_PATTERN_BYTES {
             return;
         }
         self.rules.push(rule);
