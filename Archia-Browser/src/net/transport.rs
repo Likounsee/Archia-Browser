@@ -778,12 +778,18 @@ fn open_local_root_handle_verified(
         .map_err(|_| TransportError::ConnectionFailed)?;
     let named =
         std::fs::symlink_metadata(canonical_root).map_err(|_| TransportError::ConnectionFailed)?;
+    let opened_volume = opened.volume_serial_number();
+    let named_volume = named.volume_serial_number();
+    let opened_index = opened.file_index();
+    let named_index = named.file_index();
     if !opened.is_dir()
         || !named.is_dir()
         || opened.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
         || named.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-        || opened.volume_serial_number() != named.volume_serial_number()
-        || opened.file_index() != named.file_index()
+        || opened_volume.is_none()
+        || opened_volume != named_volume
+        || opened_index.is_none()
+        || opened_index != named_index
     {
         return Err(TransportError::ConnectionFailed);
     }
