@@ -170,8 +170,12 @@ where
                 // avoid charging the shared cache budget for a response that cannot
                 // become a page; the validation path below also invalidates any old
                 // representation for the same key.
-                if !(is_html_response(&response)
-                    && response.body.len() > MAX_HTML_DOCUMENT_BYTES)
+                // Cache only representations this loader can actually consume as
+                // documents. Caching an arbitrary 200 response before MIME validation
+                // can poison a later request for the same URL (for example, CSS served
+                // to a navigation).
+                if is_html_response(&response)
+                    && response.body.len() <= MAX_HTML_DOCUMENT_BYTES
                 {
                     self.cache
                         .lock()
@@ -494,7 +498,10 @@ where
                 // than the remaining document CSS budget. The transport has a
                 // broader generic response ceiling; caching this body here
                 // would let one CSS resource consume far more than its share.
-                if response.body.len() <= *remaining_css_bytes {
+                // Do not retain a successful but unusable representation as a
+                // stylesheet. In particular, an HTML response with a long freshness
+                // lifetime must not poison later stylesheet loads for this URL.
+                if is_css_response(&response) && response.body.len() <= *remaining_css_bytes {
                     self.cache.lock().ok()?.store(&request, &response);
                 }
                 response
