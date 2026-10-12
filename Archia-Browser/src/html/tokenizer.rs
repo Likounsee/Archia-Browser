@@ -146,12 +146,13 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
     }
 
     let mut attributes = BTreeMap::new();
+    let mut parsed_attribute_count = 0usize;
     let mut self_closing = false;
     loop {
         while chars.peek().is_some_and(|c| c.is_whitespace()) {
             chars.next();
         }
-        if chars.peek().is_none() || attributes.len() >= MAX_HTML_ATTRIBUTES_PER_TAG {
+        if chars.peek().is_none() || parsed_attribute_count >= MAX_HTML_ATTRIBUTES_PER_TAG {
             break;
         }
         if chars.peek() == Some(&'/') {
@@ -163,6 +164,10 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
             break;
         }
 
+        // Bound work as well as retained map entries. Duplicate attributes
+        // do not increase BTreeMap::len(), so using that length alone lets an
+        // attacker force a full scan of millions of duplicate attributes.
+        parsed_attribute_count += 1;
         let mut attr_name = String::new();
         let mut attr_name_too_long = false;
         while let Some(&ch) = chars.peek() {
@@ -320,6 +325,21 @@ mod tests {
             panic!("expected start tag");
         };
         assert_eq!(attributes.len(), MAX_HTML_ATTRIBUTES_PER_TAG);
+    }
+
+    #[test]
+    fn duplicate_attributes_count_toward_per_tag_parse_limit() {
+        let duplicates = (0..(MAX_HTML_ATTRIBUTES_PER_TAG + 20))
+            .map(|_| " id=first")
+            .collect::<String>();
+        let input = format!("<div{duplicates} title=late>");
+        let tokens = HtmlTokenizer::tokenize(&input);
+
+        let HtmlToken::StartTag { attributes, .. } = &tokens[0] else {
+            panic!("expected start tag");
+        };
+        assert_eq!(attributes.get("id").map(String::as_str), Some("first"));
+        assert!(!attributes.contains_key("title"));
     }
 
     #[test]
