@@ -450,7 +450,13 @@ where
                 let location = response
                     .header("location")
                     .filter(|value| !value.trim().is_empty())?;
-                current = current.resolve(location).ok()?;
+                let next = current.resolve(location).ok()?;
+                // Keep stylesheet redirects within the document's local-file
+                // or network trust domain, in both directions.
+                if (current.scheme() == "file") != (next.scheme() == "file") {
+                    return None;
+                }
+                current = next;
                 continue;
             }
 
@@ -1620,6 +1626,46 @@ mod tests {
             2,
             "the stylesheet redirect loop should stop after one stylesheet request"
         );
+    }
+
+    #[test]
+    fn refuses_local_stylesheet_redirects_to_network_urls() {
+        #[derive(Debug)]
+        struct LocalToNetworkRedirectTransport {
+            requests: std::sync::Mutex<Vec<String>>,
+        }
+
+        impl Transport for LocalToNetworkRedirectTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                self.requests.lock().unwrap().push(request.url.to_string());
+                if request.policy.resource_kind == ResourceKind::Document {
+                    return Ok(Response::new(200)
+                        .with_header("content-type", "text/html")
+                        .with_body(
+                            br#"<link rel="stylesheet" href="file:///tmp/site.css"><body>Safe</body>"#
+                                .to_vec(),
+                        ));
+                }
+
+                assert_eq!(request.url.scheme(), "file");
+                Ok(Response::new(302)
+                    .with_header("location", "https://cdn.example/private.css"))
+            }
+        }
+
+        let transport = LocalToNetworkRedirectTransport {
+            requests: std::sync::Mutex::new(Vec::new()),
+        };
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
+        let request = Request::new(Url::parse("file:///tmp/index.html").unwrap());
+        let page = loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .unwrap();
+
+        assert_eq!(page.document.text_content(), "Safe");
+        let requests = loader.transport.requests.lock().unwrap();
+        assert_eq!(requests.len(), 2, "network redirect target must not be requested");
+        assert!(requests.iter().all(|url| url.starts_with("file:")));
     }
 
     #[test]
