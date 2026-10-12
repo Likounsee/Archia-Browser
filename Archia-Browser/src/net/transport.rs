@@ -2049,7 +2049,12 @@ mod tests {
 
     #[test]
     fn tls_server_name_rejects_invalid_dns_names() {
-        for host in ["", "bad host.example", "example.com/path", "example.com:443"] {
+        for host in [
+            "",
+            "bad host.example",
+            "example.com/path",
+            "example.com:443",
+        ] {
             assert!(
                 tls_server_name(host).is_err(),
                 "invalid TLS server name must be rejected: {host:?}"
