@@ -201,9 +201,11 @@ where
                     }
                 }
 
-                // Remote content must never navigate the browser into the local
-                // filesystem through an HTTP redirect.
-                if current.url.scheme() != "file" && url.scheme() == "file" {
+                // Do not allow redirects to cross the local-file/network trust
+                // boundary in either direction. Remote responses must not open
+                // local files, and a local document must not silently initiate a
+                // network navigation through its redirect response.
+                if (current.url.scheme() == "file") != (url.scheme() == "file") {
                     return Err(DocumentLoadError::InvalidRedirect);
                 }
                 // Do not silently downgrade a secure top-level navigation to
@@ -1975,6 +1977,20 @@ mod tests {
         let loader =
             DocumentLoader::new(NetworkPipeline::new(AllowAll), MockTransport { response });
         let request = Request::new(Url::parse("https://example.org/").unwrap());
+
+        assert!(matches!(
+            loader.load(&request, LayoutViewport::new(320, 200)),
+            Err(DocumentLoadError::InvalidRedirect)
+        ));
+    }
+
+    #[test]
+    fn refuses_local_document_redirects_to_network_urls() {
+        let response =
+            Response::new(302).with_header("location", "https://example.org/remote");
+        let loader =
+            DocumentLoader::new(NetworkPipeline::new(AllowAll), MockTransport { response });
+        let request = Request::new(Url::parse("file:///tmp/start.html").unwrap());
 
         assert!(matches!(
             loader.load(&request, LayoutViewport::new(320, 200)),
