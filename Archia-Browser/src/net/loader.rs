@@ -266,13 +266,14 @@ where
 
             let html = String::from_utf8_lossy(&response.body);
             let stylesheet = self.load_linked_stylesheets(&current.url, &html);
-            let mut page =
-                Page::from_html_at(Some(current.url.clone()), &html, &stylesheet, viewport);
 
-            if let Some(budget) = &self.memory_budget {
-                // DOM, styled tree, layout and display-list allocations are larger
-                // than the source markup. Use a conservative input-size estimate;
-                // this is accounting, not an exact heap measurement.
+            // Reserve the estimated retained page footprint before constructing
+            // the DOM, styled tree, layout and display list. Reserving afterwards
+            // would let a page allocate its largest structures before the shared
+            // budget had a chance to reject it.
+            let reservation = if let Some(budget) = &self.memory_budget {
+                // This is a conservative input-size estimate, not an exact heap
+                // measurement; it must still be charged before Page construction.
                 let estimated_page_bytes = html
                     .len()
                     .saturating_mul(8)
@@ -294,8 +295,17 @@ where
                         estimated_page_bytes,
                     );
                 }
-                let reservation = reservation.ok_or(DocumentLoadError::MemoryBudgetExceeded)?;
-                page.attach_memory_reservation(Arc::new(reservation));
+                Some(Arc::new(
+                    reservation.ok_or(DocumentLoadError::MemoryBudgetExceeded)?,
+                ))
+            } else {
+                None
+            };
+
+            let mut page =
+                Page::from_html_at(Some(current.url.clone()), &html, &stylesheet, viewport);
+            if let Some(reservation) = reservation {
+                page.attach_memory_reservation(reservation);
             }
 
             return Ok(page);
