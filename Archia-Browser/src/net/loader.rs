@@ -798,49 +798,40 @@ fn parse_import_reference(statement: &str) -> Option<String> {
 /// Remove CSS comments without changing quoted strings or escaped quote handling.
 /// Replacing comments with a space prevents adjacent tokens from being joined.
 fn strip_css_comments(css: &str) -> String {
-    let bytes = css.as_bytes();
+    let mut chars = css.chars().peekable();
     let mut output = String::with_capacity(css.len());
-    let mut index = 0;
     let mut quote = None;
-    while index < bytes.len() {
-        let byte = bytes[index];
-        let next = bytes.get(index + 1).copied();
 
+    while let Some(character) = chars.next() {
         if let Some(active_quote) = quote {
-            output.push(byte as char);
-            if byte == b'\\' {
-                index += 1;
-                if let Some(escaped) = bytes.get(index).copied() {
-                    output.push(escaped as char);
-                    index += 1;
+            output.push(character);
+            if character == '\\\\' {
+                if let Some(escaped) = chars.next() {
+                    output.push(escaped);
                 }
-                continue;
-            }
-            if byte == active_quote {
+            } else if character == active_quote {
                 quote = None;
             }
-            index += 1;
             continue;
         }
 
-        if byte == b'/' && next == Some(b'*') {
+        if character == '/' && chars.peek() == Some(&'*') {
+            chars.next();
             output.push(' ');
-            index += 2;
-            while index < bytes.len() {
-                if bytes[index] == b'*' && bytes.get(index + 1) == Some(&b'/') {
-                    index += 2;
+            while let Some(comment_character) = chars.next() {
+                if comment_character == '*' && chars.peek() == Some(&'/') {
+                    chars.next();
                     break;
                 }
-                index += 1;
             }
         } else {
-            if matches!(byte, b'\\'' | b'"') {
-                quote = Some(byte);
+            if matches!(character, '\\'' | '"') {
+                quote = Some(character);
             }
-            output.push(byte as char);
-            index += 1;
+            output.push(character);
         }
     }
+
     output
 }
 
