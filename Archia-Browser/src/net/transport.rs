@@ -231,11 +231,11 @@ impl Transport for HttpTransport {
 pub struct LocalFileTransport {
     max_file_size: usize,
     allowed_roots: Vec<std::path::PathBuf>,
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     authorized_root_handles: Vec<AuthorizedRootHandle>,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 #[derive(Debug, Clone)]
 struct AuthorizedRootHandle {
     canonical_path: std::path::PathBuf,
@@ -255,7 +255,7 @@ impl LocalFileTransport {
             // Fail closed until the embedding application explicitly grants
             // access to one or more local directories.
             allowed_roots: Vec::new(),
-            #[cfg(target_os = "linux")]
+            #[cfg(unix)]
             authorized_root_handles: Vec::new(),
         }
     }
@@ -267,7 +267,7 @@ impl LocalFileTransport {
         roots: impl IntoIterator<Item = std::path::PathBuf>,
     ) -> Self {
         self.allowed_roots = roots.into_iter().collect();
-        #[cfg(target_os = "linux")]
+        #[cfg(unix)]
         {
             self.authorized_root_handles = self
                 .allowed_roots
@@ -333,10 +333,8 @@ impl Transport for LocalFileTransport {
             return Err(TransportError::ConnectionFailed);
         }
 
-        // Reject symlinks before canonicalization as an early, defense-in-depth
-        // check. Linux additionally enforces confinement during the actual open
-        // with openat2 relative to a directory handle. Other platforms still
-        // require a native handle-relative implementation.
+        // Pathname checks are defense in depth. The actual open must be anchored
+        // to the pinned grant handle to prevent concurrent symlink/rename swaps.
         reject_symlink_path_components(&path)?;
         let canonical_path =
             std::fs::canonicalize(&path).map_err(|_| TransportError::ConnectionFailed)?;
@@ -356,11 +354,9 @@ impl Transport for LocalFileTransport {
             }
         }
         let canonical_root = authorized_root.ok_or(TransportError::ConnectionFailed)?;
-        // On Linux, perform the final open relative to a directory handle with
-        // openat2(RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS).
-        // The path checks above are not the security boundary: this handle-relative
-        // resolution prevents a concurrent parent rename/symlink swap from
-        // redirecting the final open outside the already-opened root handle.
+        // Open relative to the directory handle captured when access was granted.
+        // Linux uses openat2; other Unix platforms walk each component with openat
+        // and O_NOFOLLOW, so a concurrent parent swap cannot escape the root.
         #[cfg(target_os = "linux")]
         let file = {
             let pinned_root = self
@@ -377,7 +373,23 @@ impl Transport for LocalFileTransport {
                 &canonical_path,
             )?
         };
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(all(unix, not(target_os = "linux")))]
+        let file = {
+            let pinned_root = self
+                .authorized_root_handles
+                .iter()
+                .find(|root| {
+                    canonical_path.starts_with(&root.canonical_path)
+                        && root.canonical_path == canonical_root
+                })
+                .ok_or(TransportError::ConnectionFailed)?;
+            open_local_file_confined_from_handle(
+                &pinned_root.directory,
+                &pinned_root.canonical_path,
+                &canonical_path,
+            )?
+        };
+        #[cfg(not(unix))]
         let file = open_local_file_confined(&canonical_root, &canonical_path, &path)?;
         let metadata = file
             .metadata()
@@ -586,11 +598,116 @@ fn open_local_file_confined_from_handle(
     Ok(unsafe { std::fs::File::from_raw_fd(fd as i32) })
 }
 
-// Non-Linux platforms deliberately deny local-file reads until a native,
-// handle-relative implementation can enforce the same confinement guarantees
-// as Linux openat2. Pathname checks and final-component no-follow flags alone
-// do not prevent an intermediate directory/reparse-point swap.
-#[cfg(not(target_os = "linux"))]
+// macOS and BSD do not all provide Linux openat2. Walk from a pinned directory
+// descriptor instead, opening every component relative to the previous handle.
+// O_NOFOLLOW applies to each component, not just the final pathname.
+#[cfg(all(unix, not(target_os = "linux")))]
+fn open_local_root_handle_verified(
+    canonical_root: &std::path::Path,
+) -> Result<std::fs::File, TransportError> {
+    use std::os::unix::fs::MetadataExt;
+
+    use std::os::unix::ffi::OsStrExt;
+    let path = std::ffi::CString::new(canonical_root.as_os_str().as_bytes())
+        .map_err(|_| TransportError::ConnectionFailed)?;
+    // SAFETY: path is NUL-terminated and remains alive during open().
+    let fd = unsafe {
+        libc::open(
+            path.as_ptr(),
+            libc::O_RDONLY | libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NOFOLLOW,
+        )
+    };
+    if fd < 0 {
+        return Err(TransportError::ConnectionFailed);
+    }
+    // SAFETY: successful open() returned a newly owned descriptor.
+    let directory = unsafe { <std::fs::File as std::os::fd::FromRawFd>::from_raw_fd(fd) };
+    let opened = directory.metadata().map_err(|_| TransportError::ConnectionFailed)?;
+    let named = std::fs::symlink_metadata(canonical_root)
+        .map_err(|_| TransportError::ConnectionFailed)?;
+    if !opened.is_dir()
+        || !named.is_dir()
+        || named.file_type().is_symlink()
+        || opened.dev() != named.dev()
+        || opened.ino() != named.ino()
+    {
+        return Err(TransportError::ConnectionFailed);
+    }
+    Ok(directory)
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn open_local_file_confined(
+    canonical_root: &std::path::Path,
+    canonical_path: &std::path::Path,
+    _original_path: &std::path::Path,
+) -> Result<std::fs::File, TransportError> {
+    let root = open_local_root_handle_verified(canonical_root)?;
+    open_local_file_confined_from_handle(&root, canonical_root, canonical_path)
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn open_local_file_confined_from_handle(
+    root_file: &std::fs::File,
+    canonical_root: &std::path::Path,
+    canonical_path: &std::path::Path,
+) -> Result<std::fs::File, TransportError> {
+    use std::ffi::CString;
+    use std::os::fd::{AsRawFd, FromRawFd};
+    use std::os::unix::ffi::OsStrExt;
+    use std::path::Component;
+
+    let relative = canonical_path
+        .strip_prefix(canonical_root)
+        .map_err(|_| TransportError::ConnectionFailed)?;
+    let components: Vec<_> = relative
+        .components()
+        .map(|component| match component {
+            Component::Normal(value) => Ok(value),
+            _ => Err(TransportError::ConnectionFailed),
+        })
+        .collect::<Result<_, _>>()?;
+    if components.is_empty() {
+        return Err(TransportError::ConnectionFailed);
+    }
+
+    // Duplicate the root descriptor so each intermediate directory can be
+    // safely replaced by a newly opened descriptor without losing the grant.
+    let root_dup = unsafe { libc::fcntl(root_file.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 0) };
+    if root_dup < 0 {
+        return Err(TransportError::ConnectionFailed);
+    }
+    let mut current = unsafe { std::fs::File::from_raw_fd(root_dup) };
+    for (index, component) in components.iter().enumerate() {
+        let name = CString::new(component.as_bytes())
+            .map_err(|_| TransportError::ConnectionFailed)?;
+        let is_final = index + 1 == components.len();
+        let mut flags = libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW;
+        if !is_final {
+            flags |= libc::O_DIRECTORY;
+        }
+        // SAFETY: current owns a valid directory descriptor for intermediates;
+        // name is NUL-terminated and remains alive throughout openat().
+        let fd = unsafe { libc::openat(current.as_raw_fd(), name.as_ptr(), flags) };
+        if fd < 0 {
+            return Err(TransportError::ConnectionFailed);
+        }
+        // SAFETY: successful openat() returned a newly owned descriptor.
+        let next = unsafe { std::fs::File::from_raw_fd(fd) };
+        if !is_final
+            && !next.metadata().map_err(|_| TransportError::ConnectionFailed)?.is_dir()
+        {
+            return Err(TransportError::ConnectionFailed);
+        }
+        current = next;
+    }
+    Ok(current)
+}
+
+// Windows currently remains fail-closed: CreateFileW's reparse-point flag only
+// protects the final component. A correct implementation needs NT relative opens
+// (RootDirectory + OBJ_DONT_REPARSE) for every path component, not pathname checks.
+#[cfg(not(unix))]
 fn open_local_file_confined(
     _canonical_root: &std::path::Path,
     _canonical_path: &std::path::Path,
