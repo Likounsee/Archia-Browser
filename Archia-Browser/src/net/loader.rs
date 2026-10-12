@@ -701,7 +701,7 @@ fn next_css_statement(css: &str, start: usize) -> Option<(&str, usize)> {
             continue;
         }
 
-            if byte == b'\\' {
+        if byte == b'/' && next == Some(b'*') {
             in_comment = true;
             index += 2;
         } else if matches!(byte, b'\'' | b'"') {
