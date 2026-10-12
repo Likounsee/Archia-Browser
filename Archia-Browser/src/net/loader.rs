@@ -27,6 +27,7 @@ pub enum DocumentLoadError {
 }
 
 const MAX_REDIRECTS: usize = 10;
+const MAX_HTML_DOCUMENT_BYTES: usize = 4 * 1024 * 1024;
 const MAX_STYLESHEET_BYTES_PER_DOCUMENT: usize = 2 * 1024 * 1024;
 
 pub struct DocumentLoader<P, T> {
@@ -264,13 +265,18 @@ where
                 return Err(DocumentLoadError::UnsupportedContentType);
             }
 
-            let html = String::from_utf8_lossy(&response.body);
+            // Bound the bytes we decode and hand to the HTML tokenizer. The
+            // response body has already been received by the transport, but this
+            // prevents oversized documents from causing additional unbounded
+            // string, token, and DOM work in the loader.
+            let html_bytes = &response.body[..response.body.len().min(MAX_HTML_DOCUMENT_BYTES)];
 
-            // Charge the document before parsing it to discover linked stylesheets:
-            // that discovery itself builds a temporary DOM from untrusted HTML.
-            // The estimate is input-based, not an exact heap measurement.
+            // Reserve before UTF-8 decoding (which may allocate a replacement
+            // string for invalid input) and before linked-stylesheet discovery
+            // builds a temporary DOM. This is an input-based estimate, not an
+            // exact heap measurement.
             let mut reservation = if let Some(budget) = &self.memory_budget {
-                let estimated_html_bytes = html.len().saturating_mul(8).max(1);
+                let estimated_html_bytes = html_bytes.len().saturating_mul(8).max(1);
                 let mut reservation = crate::core::memory::MemoryReservation::try_new(
                     Arc::clone(budget),
                     estimated_html_bytes,
@@ -291,6 +297,8 @@ where
             } else {
                 None
             };
+
+            let html = String::from_utf8_lossy(html_bytes);
 
             let stylesheet = self.load_linked_stylesheets(&current.url, &html);
             if let Some(reservation) = &reservation {
@@ -2556,4 +2564,33 @@ mod tests {
             assert_eq!(page.document.text_content(), "Safe");
         }
     }
+    #[test]
+    fn oversized_html_is_capped_before_decoding_and_parsing() {
+        #[derive(Debug)]
+        struct OversizedHtmlTransport;
+
+        impl Transport for OversizedHtmlTransport {
+            fn send(&self, _: &Request) -> Result<Response, TransportError> {
+                let mut body = b"<html><body>retained-prefix</body></html>".to_vec();
+                body.resize(MAX_HTML_DOCUMENT_BYTES + 1024, b' ');
+                body.extend_from_slice(b"untrusted-tail-marker");
+                Ok(Response::new(200)
+                    .with_header("content-type", "text/html")
+                    .with_body(body))
+            }
+        }
+
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            OversizedHtmlTransport,
+        );
+        let request = Request::new(Url::parse("https://example.org/large").unwrap());
+        let page = loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .expect("the bounded HTML prefix remains a valid document");
+
+        assert!(page.document.text_content().contains("retained-prefix"));
+        assert!(!page.document.text_content().contains("untrusted-tail-marker"));
+    }
+
 }
