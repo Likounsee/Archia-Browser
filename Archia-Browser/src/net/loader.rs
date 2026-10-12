@@ -1298,8 +1298,8 @@ mod tests {
 
         assert_eq!(page.document.text_content(), "Budget");
         assert!(
-            budget.used() > page.url().map_or(0, |_| 0),
-            "page and retained stylesheet allocations must remain charged"
+            budget.used() > 512,
+            "HTML plus retained stylesheet bytes must both be charged"
         );
         drop(page);
         assert_eq!(
