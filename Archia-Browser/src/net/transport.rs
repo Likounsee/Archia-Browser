@@ -2603,6 +2603,7 @@ mod tests {
         std::fs::write(outside.join("page.txt"), b"OUTSIDE-SECRET").unwrap();
 
         let stop = Arc::new(AtomicBool::new(false));
+        let exposed_outside = Arc::new(AtomicBool::new(false));
         let worker_stop = Arc::clone(&stop);
         let worker_root = root.clone();
         let worker_parked = parked.clone();
@@ -2623,14 +2624,14 @@ mod tests {
         });
 
         let url = super::super::Url::parse(&local_file_test_url(&root.join("page.txt"))).unwrap();
-        for _ in 0..200 {
+        for _ in 0..500 {
             let transport = LocalFileTransport::new().with_allowed_roots([root.clone()]);
             if !transport.authorized_root_handles.is_empty() {
                 if let Ok(response) = transport.send(&Request::new(url.clone())) {
-                    assert_eq!(
-                        response.body, b"inside",
-                        "a root grant racing with a symlink swap must never expose outside content"
-                    );
+                    if response.body != b"inside" {
+                        exposed_outside.store(true, Ordering::Relaxed);
+                        break;
+                    }
                 }
             }
         }
@@ -2648,6 +2649,10 @@ mod tests {
         std::fs::remove_dir(root).unwrap();
         std::fs::remove_dir(outside).unwrap();
         std::fs::remove_dir(base).unwrap();
+        assert!(
+            !exposed_outside.load(Ordering::Relaxed),
+            "a root grant racing with a symlink swap must never expose outside content"
+        );
     }
 
     #[cfg(any(unix, windows))]
