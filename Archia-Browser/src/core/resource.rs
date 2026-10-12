@@ -51,10 +51,7 @@ impl ResourceManager {
 
     /// Create a resource manager that shares accounting with other browser subsystems.
     pub fn with_budget(budget: Arc<MemoryBudget>) -> Self {
-        Self {
-            budget,
-            next_id: 1,
-        }
+        Self { budget, next_id: 1 }
     }
 
     pub fn allocate(&mut self, bytes: usize) -> Option<Resource> {
@@ -151,16 +148,10 @@ mod tests {
             resources.push(manager.allocate(0).expect("slot should be available"));
         }
         assert!(manager.allocate(0).is_none());
-        assert_eq!(
-            manager.budget.live_resources(),
-            MAX_LIVE_RESOURCES
-        );
+        assert_eq!(manager.budget.live_resources(), MAX_LIVE_RESOURCES);
 
         resources.pop();
-        assert_eq!(
-            manager.budget.live_resources(),
-            MAX_LIVE_RESOURCES - 1
-        );
+        assert_eq!(manager.budget.live_resources(), MAX_LIVE_RESOURCES - 1);
         let replacement = manager
             .allocate(0)
             .expect("released slot should be reusable");
