@@ -704,7 +704,7 @@ fn next_css_statement(css: &str, start: usize) -> Option<(&str, usize)> {
         if byte == b'/' && next == Some(b'*') {
             in_comment = true;
             index += 2;
-        } else if matches!(byte, b'\\'' | b'"') {
+        } else if matches!(byte, b'\'' | b'"') {
             quote = Some(byte);
             index += 1;
         } else if byte == b';' {
@@ -3140,7 +3140,7 @@ mod tests {
 
     #[test]
     fn css_statement_scanner_does_not_split_semicolons_inside_comments_or_strings() {
-        let css = r#"/* ; @import \"commented-out.css\"; still a comment */ body::before { content: \"a;b\"; } @import \"real.css\";"#;
+        let css = r#"/* ; @import "commented-out.css"; still a comment */ body::before { content: "a;b"; } @import "real.css";"#;
         let mut statements = Vec::new();
         let mut start = 0;
         while start < css.len() {
