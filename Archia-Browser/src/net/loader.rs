@@ -448,7 +448,13 @@ where
                     Ok(response) => response,
                     Err(_) => return None,
                 };
-                self.cache.lock().ok()?.store(&request, &response);
+                // Do not retain a stylesheet response that is already larger
+                // than the remaining document CSS budget. The transport has a
+                // broader generic response ceiling; caching this body here
+                // would let one CSS resource consume far more than its share.
+                if response.body.len() <= *remaining_css_bytes {
+                    self.cache.lock().ok()?.store(&request, &response);
+                }
                 response
             };
 
@@ -474,7 +480,12 @@ where
                 return None;
             }
 
-            let css = String::from_utf8_lossy(&response.body).into_owned();
+            // Bound the conversion's input before UTF-8 replacement can
+            // expand malformed byte sequences into a much larger temporary
+            // String. Final output is independently clipped by the shared
+            // CSS-byte budget in append_css_with_budget.
+            let bounded_body = &response.body[..response.body.len().min(*remaining_css_bytes)];
+            let css = String::from_utf8_lossy(bounded_body).into_owned();
             return Some(self.expand_stylesheet_imports(
                 document_url,
                 &current,
