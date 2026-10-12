@@ -308,26 +308,7 @@ impl LocalFileTransport {
                         }
                     }
 
-                    #[cfg(windows)]
-                    {
-                        use std::os::windows::fs::MetadataExt;
 
-                        // The grant handle was opened from the caller-supplied path
-                        // before canonicalization. Re-open the resolved name and
-                        // require both names to identify the same filesystem object;
-                        // otherwise a concurrent rename/reparse swap could grant a
-                        // different directory than the one the caller selected.
-                        let resolved = open_local_root_handle_verified(&canonical_path).ok()?;
-                        let granted_metadata = directory.metadata().ok()?;
-                        let resolved_metadata = resolved.metadata().ok()?;
-                        if granted_metadata.volume_serial_number()
-                            != resolved_metadata.volume_serial_number()
-                            || granted_metadata.file_index() != resolved_metadata.file_index()
-                            || granted_metadata.file_index().is_none()
-                        {
-                            return None;
-                        }
-                    }
 
                     Some(AuthorizedRootHandle {
                         canonical_path,
@@ -690,6 +671,7 @@ fn open_local_root_handle_verified(
     requested_root: &std::path::Path,
 ) -> Result<std::fs::File, TransportError> {
     use std::os::fd::{AsRawFd, FromRawFd};
+    use std::os::unix::ffi::OsStrExt;
     use std::os::unix::fs::MetadataExt;
     use std::path::Component;
 
