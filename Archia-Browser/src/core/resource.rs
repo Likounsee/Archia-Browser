@@ -155,10 +155,7 @@ mod tests {
         let replacement = manager
             .allocate(0)
             .expect("released slot should be reusable");
-        assert_eq!(
-            manager.budget.live_resources(),
-            MAX_LIVE_RESOURCES
-        );
+        assert_eq!(manager.budget.live_resources(), MAX_LIVE_RESOURCES);
         drop(replacement);
     }
 
