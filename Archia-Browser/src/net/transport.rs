@@ -687,30 +687,77 @@ fn open_local_file_confined_from_handle(
 // O_NOFOLLOW applies to each component, not just the final pathname.
 #[cfg(all(unix, not(target_os = "linux")))]
 fn open_local_root_handle_verified(
-    canonical_root: &std::path::Path,
+    requested_root: &std::path::Path,
 ) -> Result<std::fs::File, TransportError> {
+    use std::os::fd::{AsRawFd, FromRawFd};
     use std::os::unix::fs::MetadataExt;
+    use std::path::Component;
 
-    use std::os::unix::ffi::OsStrExt;
-    let path = std::ffi::CString::new(canonical_root.as_os_str().as_bytes())
-        .map_err(|_| TransportError::ConnectionFailed)?;
-    // SAFETY: path is NUL-terminated and remains alive during open().
-    let fd = unsafe {
-        libc::open(
-            path.as_ptr(),
-            libc::O_RDONLY | libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NOFOLLOW,
-        )
+    // Resolve relative grants against the process working directory, then walk
+    // from the filesystem root. Opening only the final absolute pathname with
+    // O_NOFOLLOW would still allow an intermediate directory to be swapped for
+    // a symlink between the earlier pathname check and this open.
+    let absolute = if requested_root.is_absolute() {
+        requested_root.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|_| TransportError::ConnectionFailed)?
+            .join(requested_root)
     };
-    if fd < 0 {
-        return Err(TransportError::ConnectionFailed);
+    let mut current = {
+        let fd = unsafe {
+            libc::open(
+                b"/\\0".as_ptr().cast(),
+                libc::O_RDONLY | libc::O_CLOEXEC | libc::O_DIRECTORY,
+            )
+        };
+        if fd < 0 {
+            return Err(TransportError::ConnectionFailed);
+        }
+        unsafe { std::fs::File::from_raw_fd(fd) }
+    };
+
+    let components: Vec<_> = absolute
+        .components()
+        .filter_map(|component| match component {
+            Component::RootDir | Component::CurDir => None,
+            Component::Normal(name) => Some(Ok(name)),
+            // Prefixes are not expected on Unix; parent components are rejected
+            // rather than normalized across a potentially replaced directory.
+            Component::Prefix(_) | Component::ParentDir => {
+                Some(Err(TransportError::ConnectionFailed))
+            }
+        })
+        .collect::<Result<_, _>>()?;
+
+    for component in components {
+        let name = std::ffi::CString::new(component.as_bytes())
+            .map_err(|_| TransportError::ConnectionFailed)?;
+        let fd = unsafe {
+            libc::openat(
+                current.as_raw_fd(),
+                name.as_ptr(),
+                libc::O_RDONLY | libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NOFOLLOW,
+            )
+        };
+        if fd < 0 {
+            return Err(TransportError::ConnectionFailed);
+        }
+        current = unsafe { std::fs::File::from_raw_fd(fd) };
+        if !current
+            .metadata()
+            .map_err(|_| TransportError::ConnectionFailed)?
+            .is_dir()
+        {
+            return Err(TransportError::ConnectionFailed);
+        }
     }
-    // SAFETY: successful open() returned a newly owned descriptor.
-    let directory = unsafe { <std::fs::File as std::os::fd::FromRawFd>::from_raw_fd(fd) };
-    let opened = directory
+
+    let opened = current
         .metadata()
         .map_err(|_| TransportError::ConnectionFailed)?;
-    let named =
-        std::fs::symlink_metadata(canonical_root).map_err(|_| TransportError::ConnectionFailed)?;
+    let named = std::fs::symlink_metadata(&absolute)
+        .map_err(|_| TransportError::ConnectionFailed)?;
     if !opened.is_dir()
         || !named.is_dir()
         || named.file_type().is_symlink()
@@ -719,7 +766,7 @@ fn open_local_root_handle_verified(
     {
         return Err(TransportError::ConnectionFailed);
     }
-    Ok(directory)
+    Ok(current)
 }
 
 #[cfg(all(unix, not(target_os = "linux")))]
