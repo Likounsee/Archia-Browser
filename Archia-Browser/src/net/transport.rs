@@ -504,8 +504,8 @@ fn reject_symlink_path_components(path: &std::path::Path) -> Result<(), Transpor
             continue;
         }
 
-        let metadata = std::fs::symlink_metadata(&current)
-            .map_err(|_| TransportError::ConnectionFailed)?;
+        let metadata =
+            std::fs::symlink_metadata(&current).map_err(|_| TransportError::ConnectionFailed)?;
         if metadata.file_type().is_symlink() {
             // macOS exposes /var and /tmp as system-managed aliases to
             // /private/var and /private/tmp. Permit only those exact aliases;
