@@ -2216,6 +2216,29 @@ mod tests {
         std::fs::remove_dir(base).unwrap();
     }
 
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn local_file_transport_fails_closed_without_handle_relative_confinement() {
+        let directory = std::env::temp_dir().join(format!(
+            "archia-browser-nonlinux-file-deny-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("page.txt");
+        std::fs::write(&path, b"must not be exposed").unwrap();
+        let request = Request::new(Url::parse(&local_file_test_url(&path)).unwrap());
+        let result = LocalFileTransport::new()
+            .with_allowed_roots([directory.clone()])
+            .send(&request);
+        assert_eq!(
+            result,
+            Err(TransportError::ConnectionFailed),
+            "local file access must remain disabled until this platform has race-safe handle-relative opening"
+        );
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir(&directory);
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn local_file_transport_loads_html() {
