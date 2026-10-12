@@ -1819,7 +1819,6 @@ mod tests {
             "a local file URL must not traverse an existing parent-directory symlink"
         );
 
-        std::fs::remove_file(link_directory.join("secret.html")).ok();
         std::fs::remove_file(target).unwrap();
         std::fs::remove_file(link_directory).unwrap();
         std::fs::remove_dir(real_directory).unwrap();
