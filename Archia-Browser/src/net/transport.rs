@@ -2678,10 +2678,8 @@ mod tests {
         use std::sync::atomic::{AtomicBool, Ordering};
         use std::sync::Arc;
 
-        let base = std::env::temp_dir().join(format!(
-            "archia-browser-openat-race-{}",
-            std::process::id()
-        ));
+        let base =
+            std::env::temp_dir().join(format!("archia-browser-openat-race-{}", std::process::id()));
         let root_path = base.join("root");
         let outside = base.join("outside");
         let parent = root_path.join("parent");
