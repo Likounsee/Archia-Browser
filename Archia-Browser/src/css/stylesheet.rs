@@ -35,8 +35,7 @@ impl StyleSheet {
         };
         let mut rules = Vec::new();
         let mut total_selectors = 0usize;
-        for (selector_text, declaration_text) in parse_rule_blocks(input, MAX_STYLE_RULES)
-        {
+        for (selector_text, declaration_text) in parse_rule_blocks(input, MAX_STYLE_RULES) {
             if total_selectors >= MAX_TOTAL_SELECTORS {
                 break;
             }
