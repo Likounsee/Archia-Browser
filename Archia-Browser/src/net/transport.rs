@@ -4009,13 +4009,19 @@ mod limit_tests {
             .with_method(super::super::HttpMethod::Post)
             .with_header("Content-Length", "2");
         mismatched.body = b"abc".to_vec();
-        assert_eq!(validate_request(&mismatched), Err(TransportError::InvalidRequest));
+        assert_eq!(
+            validate_request(&mismatched),
+            Err(TransportError::InvalidRequest)
+        );
 
         let mut unsupported = Request::new(Url::parse("http://127.0.0.1/upload").unwrap())
             .with_method(super::super::HttpMethod::Post)
             .with_header("Transfer-Encoding", "chunked");
         unsupported.body = b"3\\r\\nabc\\r\\n0\\r\\n\\r\\n".to_vec();
-        assert_eq!(validate_request(&unsupported), Err(TransportError::InvalidRequest));
+        assert_eq!(
+            validate_request(&unsupported),
+            Err(TransportError::InvalidRequest)
+        );
     }
 
     #[test]
