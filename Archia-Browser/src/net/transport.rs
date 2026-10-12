@@ -279,12 +279,38 @@ impl LocalFileTransport {
                     // was redirected. Check the resolved path too, so both the
                     // requested path and the resulting directory must be clean.
                     reject_symlink_path_components(root).ok()?;
+
+                    // On Linux, pin the user-supplied path before canonicalizing
+                    // it. If an attacker swaps the path while canonicalize()
+                    // runs, the canonical path must still identify this exact
+                    // opened directory or the grant is rejected.
+                    #[cfg(target_os = "linux")]
+                    let directory = open_local_root_handle_verified(root).ok()?;
+
                     let canonical_path = std::fs::canonicalize(root).ok()?;
                     reject_symlink_path_components(&canonical_path).ok()?;
                     if !canonical_path.is_dir() {
                         return None;
                     }
+
+                    #[cfg(target_os = "linux")]
+                    {
+                        use std::os::unix::fs::MetadataExt;
+
+                        let opened = directory.metadata().ok()?;
+                        let named = std::fs::symlink_metadata(&canonical_path).ok()?;
+                        if !named.is_dir()
+                            || named.file_type().is_symlink()
+                            || opened.dev() != named.dev()
+                            || opened.ino() != named.ino()
+                        {
+                            return None;
+                        }
+                    }
+
+                    #[cfg(not(target_os = "linux"))]
                     let directory = open_local_root_handle_verified(&canonical_path).ok()?;
+
                     Some(AuthorizedRootHandle {
                         canonical_path,
                         directory: Arc::new(directory),
