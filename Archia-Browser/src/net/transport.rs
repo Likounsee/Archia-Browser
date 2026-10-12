@@ -2006,6 +2006,78 @@ mod tests {
         std::fs::remove_dir(base).unwrap();
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn openat2_does_not_escape_during_concurrent_parent_swap() {
+        use std::os::unix::fs::symlink;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        let base = std::env::temp_dir().join(format!(
+            "archia-browser-openat2-race-{}",
+            std::process::id()
+        ));
+        let root_path = base.join("root");
+        let outside = base.join("outside");
+        let parent = root_path.join("parent");
+        let parked = root_path.join("parent-parked");
+        std::fs::create_dir_all(&parent).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(parent.join("target.txt"), b"inside").unwrap();
+        std::fs::write(outside.join("target.txt"), b"OUTSIDE-SECRET").unwrap();
+
+        let root = std::fs::canonicalize(&root_path).unwrap();
+        let target = root.join("parent").join("target.txt");
+        let stop = Arc::new(AtomicBool::new(false));
+        let worker_stop = Arc::clone(&stop);
+        let worker_parent = parent.clone();
+        let worker_parked = parked.clone();
+        let worker_outside = outside.clone();
+
+        let worker = std::thread::spawn(move || {
+            while !worker_stop.load(Ordering::Relaxed) {
+                // Each transition deliberately creates a window where the
+                // requested component is either absent or a symlink outside.
+                // openat2 must fail closed or open the original in-root file.
+                if std::fs::rename(&worker_parent, &worker_parked).is_err() {
+                    std::thread::yield_now();
+                    continue;
+                }
+                let linked = symlink(&worker_outside, &worker_parent).is_ok();
+                if linked {
+                    let _ = std::fs::remove_file(&worker_parent);
+                }
+                let _ = std::fs::rename(&worker_parked, &worker_parent);
+            }
+        });
+
+        for _ in 0..500 {
+            match open_local_file_confined(&root, &target, &target) {
+                Ok(mut file) => {
+                    let mut contents = Vec::new();
+                    file.read_to_end(&mut contents).unwrap();
+                    assert_ne!(
+                        contents,
+                        b"OUTSIDE-SECRET",
+                        "a concurrent parent-directory swap must never expose the outside file"
+                    );
+                    assert_eq!(contents, b"inside");
+                }
+                Err(TransportError::ConnectionFailed) => {}
+                Err(error) => panic!("unexpected open error during race: {error:?}"),
+            }
+        }
+
+        stop.store(true, Ordering::Relaxed);
+        worker.join().unwrap();
+        std::fs::remove_file(parent.join("target.txt")).unwrap();
+        std::fs::remove_dir(parent).unwrap();
+        std::fs::remove_file(outside.join("target.txt")).unwrap();
+        std::fs::remove_dir(outside).unwrap();
+        std::fs::remove_dir(root).unwrap();
+        std::fs::remove_dir(base).unwrap();
+    }
+
     #[cfg(unix)]
     #[test]
     fn local_file_transport_rejects_parent_directory_symlinks() {
