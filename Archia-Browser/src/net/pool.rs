@@ -2,6 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use super::{Request, Response, Transport, TransportError};
 
+const MAX_POOLED_CONNECTIONS: usize = 256;
+
 pub trait Connection: Send + Sync {
     fn send(&self, request: &Request) -> Result<Response, TransportError>;
 }
@@ -17,10 +19,15 @@ impl ConnectionPool {
     }
 
     pub fn add(&self, connection: Arc<dyn Connection>) {
-        self.connections
+        let mut connections = self
+            .connections
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .push(connection);
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        // Bound retained connection handles even if callers repeatedly add
+        // entries to this public pool. Existing connections remain usable.
+        if connections.len() < MAX_POOLED_CONNECTIONS {
+            connections.push(connection);
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -82,6 +89,16 @@ mod tests {
         fn send(&self, _: &Request) -> Result<Response, TransportError> {
             Ok(Response::new(200))
         }
+    }
+
+    #[test]
+    fn pool_bounds_retained_connection_handles() {
+        let pool = ConnectionPool::new();
+        for _ in 0..=MAX_POOLED_CONNECTIONS {
+            pool.add(Arc::new(OkConnection));
+        }
+
+        assert_eq!(pool.len(), MAX_POOLED_CONNECTIONS);
     }
 
     #[test]
