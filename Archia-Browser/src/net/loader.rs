@@ -24,6 +24,7 @@ pub enum DocumentLoadError {
     NoCurrentDocument,
     InternalStatePoisoned,
     MemoryBudgetExceeded,
+    DocumentTooLarge,
 }
 
 const MAX_REDIRECTS: usize = 10;
@@ -265,11 +266,17 @@ where
                 return Err(DocumentLoadError::UnsupportedContentType);
             }
 
-            // Bound the bytes we decode and hand to the HTML tokenizer. The
-            // response body has already been received by the transport, but this
-            // prevents oversized documents from causing additional unbounded
-            // string, token, and DOM work in the loader.
-            let html_bytes = &response.body[..response.body.len().min(MAX_HTML_DOCUMENT_BYTES)];
+            // Reject rather than silently parse a truncated document. A partial
+            // HTML tree can change security-relevant structure (including base URLs
+            // and resource links), and the rejected response must not remain cached.
+            if response.body.len() > MAX_HTML_DOCUMENT_BYTES {
+                self.cache
+                    .lock()
+                    .map_err(|_| DocumentLoadError::InternalStatePoisoned)?
+                    .invalidate(&current);
+                return Err(DocumentLoadError::DocumentTooLarge);
+            }
+            let html_bytes = response.body.as_slice();
 
             // Reserve before UTF-8 decoding (which may allocate a replacement
             // string for invalid input) and before linked-stylesheet discovery
@@ -812,6 +819,41 @@ mod tests {
         pipeline::{PolicyDecision, RequestPolicyEngine},
         Response, Url,
     };
+
+    #[test]
+    fn oversized_html_is_rejected_and_not_retained_in_shared_cache() {
+        use crate::core::memory::MemoryBudget;
+        use std::sync::Arc;
+
+        #[derive(Debug)]
+        struct OversizedHtmlTransport;
+        impl Transport for OversizedHtmlTransport {
+            fn send(&self, _: &Request) -> Result<Response, TransportError> {
+                Ok(Response::new(200)
+                    .with_header("cache-control", "max-age=60")
+                    .with_header("content-type", "text/html")
+                    .with_body(vec![b'a'; MAX_HTML_DOCUMENT_BYTES + 1]))
+            }
+        }
+
+        let budget = Arc::new(MemoryBudget::new(16 * 1024 * 1024));
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            OversizedHtmlTransport,
+        )
+        .with_shared_memory_budget(Arc::clone(&budget));
+        let request = Request::new(Url::parse("https://example.org/oversized").unwrap());
+
+        assert!(matches!(
+            loader.load(&request, LayoutViewport::new(64, 32)),
+            Err(DocumentLoadError::DocumentTooLarge)
+        ));
+        assert_eq!(
+            budget.used(),
+            0,
+            "an oversized document must not remain charged to the cache budget"
+        );
+    }
 
     #[test]
     fn page_memory_budget_rejects_oversized_page_and_releases_cache_charge() {
