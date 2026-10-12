@@ -679,7 +679,7 @@ fn next_css_statement(css: &str, start: usize) -> Option<(&str, usize)> {
         let next = bytes.get(index + 1).copied();
 
         if in_comment {
-            if byte == b'\\' {
+            if byte == b'*' && next == Some(b'/') {
                 in_comment = false;
                 index += 2;
             } else {
