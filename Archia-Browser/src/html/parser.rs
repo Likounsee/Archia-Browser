@@ -464,9 +464,13 @@ mod tests {
         ];
 
         let root = parse(&tokens);
-        let paragraph = root.find_first_element("p").expect("valid paragraph is retained");
+        let paragraph = root
+            .find_first_element("p")
+            .expect("valid paragraph is retained");
         assert_eq!(paragraph.text_content(), "retained");
-        assert!(root.find_first_element(&"x".repeat(MAX_DOM_TAG_NAME_BYTES + 1)).is_none());
+        assert!(root
+            .find_first_element(&"x".repeat(MAX_DOM_TAG_NAME_BYTES + 1))
+            .is_none());
     }
 
     #[test]
