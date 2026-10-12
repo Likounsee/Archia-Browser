@@ -1,5 +1,7 @@
 use std::collections::VecDeque;
 
+const MAX_CACHE_ENTRIES: usize = 4096;
+
 #[derive(Debug)]
 pub struct CacheEntry<T> {
     pub key: String,
@@ -40,6 +42,16 @@ impl<T> ResourceCache<T> {
             if let Some(previous) = self.entries.remove(position) {
                 self.used = self.used.saturating_sub(previous.bytes);
             }
+        }
+
+        // Byte capacity alone is insufficient when callers configure a very
+        // large cache: thousands of tiny entries still consume metadata and
+        // make linear lookup increasingly expensive.
+        while self.entries.len() >= MAX_CACHE_ENTRIES {
+            let Some(oldest) = self.entries.pop_front() else {
+                break;
+            };
+            self.used = self.used.saturating_sub(oldest.bytes);
         }
 
         while bytes > self.capacity.saturating_sub(self.used) {
@@ -131,6 +143,19 @@ mod tests {
         zero_capacity.insert("empty", (), 0);
         assert_eq!(zero_capacity.len(), 0);
         assert_eq!(zero_capacity.used(), 0);
+    }
+
+    #[test]
+    fn cache_entry_count_is_bounded_even_with_large_byte_capacity() {
+        let mut cache = ResourceCache::new(usize::MAX);
+        for index in 0..=MAX_CACHE_ENTRIES {
+            cache.insert(format!("key-{index}"), index, 1);
+        }
+
+        assert_eq!(cache.len(), MAX_CACHE_ENTRIES);
+        assert!(cache.get("key-0").is_none());
+        assert_eq!(cache.get(&format!("key-{MAX_CACHE_ENTRIES}")), Some(&MAX_CACHE_ENTRIES));
+        assert!(cache.used() <= cache.capacity());
     }
 
     #[test]
