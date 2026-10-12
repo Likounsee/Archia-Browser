@@ -230,6 +230,7 @@ impl Transport for HttpTransport {
 #[derive(Debug, Clone, Copy)]
 pub struct LocalFileTransport {
     max_file_size: usize,
+    allowed_roots: Vec<std::path::PathBuf>,
 }
 
 impl Default for LocalFileTransport {
@@ -242,7 +243,20 @@ impl LocalFileTransport {
     pub const fn new() -> Self {
         Self {
             max_file_size: 8 * 1024 * 1024,
+            // Fail closed until the embedding application explicitly grants
+            // access to one or more local directories.
+            allowed_roots: Vec::new(),
         }
+    }
+
+    /// Restrict file URLs to the supplied directories. Roots must exist and
+    /// be directories; an empty list denies all local-file reads.
+    pub fn with_allowed_roots(
+        mut self,
+        roots: impl IntoIterator<Item = std::path::PathBuf>,
+    ) -> Self {
+        self.allowed_roots = roots.into_iter().collect();
+        self
     }
 
     pub const fn with_max_file_size(mut self, max_file_size: usize) -> Self {
@@ -268,11 +282,35 @@ impl Transport for LocalFileTransport {
         }
 
         let path = file_url_path(request.url.path())?;
-        // Reject already-present symlinks in every path component, not only
-        // the leaf. The final open still uses no-follow flags and validates
-        // the opened handle. This pathname walk is defense in depth, not a
-        // race-free substitute for directory-handle-relative opens.
+        // No local files are accessible until the embedding application
+        // explicitly configures allowed roots.
+        if self.allowed_roots.is_empty() {
+            return Err(TransportError::ConnectionFailed);
+        }
+
+        // Reject symlinks before canonicalization so a link cannot be used to
+        // escape a configured root. The opened leaf is independently protected
+        // by no-follow flags below. Pathname checks still cannot eliminate a
+        // concurrent parent-directory swap; see the P0-FILE-03 roadmap entry.
         reject_symlink_path_components(&path)?;
+        let canonical_path =
+            std::fs::canonicalize(&path).map_err(|_| TransportError::ConnectionFailed)?;
+        let mut inside_allowed_root = false;
+        for root in &self.allowed_roots {
+            reject_symlink_path_components(root)?;
+            let canonical_root =
+                std::fs::canonicalize(root).map_err(|_| TransportError::ConnectionFailed)?;
+            if !canonical_root.is_dir() {
+                continue;
+            }
+            if canonical_path.starts_with(&canonical_root) {
+                inside_allowed_root = true;
+                break;
+            }
+        }
+        if !inside_allowed_root {
+            return Err(TransportError::ConnectionFailed);
+        }
         let file = open_local_file_without_following_links(&path)?;
         let metadata = file
             .metadata()
@@ -1784,7 +1822,9 @@ mod tests {
 
         let request = Request::new(Url::parse(&local_file_test_url(&link)).unwrap());
         assert_eq!(
-            LocalFileTransport::new().send(&request),
+            LocalFileTransport::new()
+                .with_allowed_roots([directory.clone()])
+                .send(&request),
             Err(TransportError::ConnectionFailed),
             "a local file URL must not follow a final-component symlink"
         );
@@ -1814,7 +1854,9 @@ mod tests {
             Url::parse(&local_file_test_url(&link_directory.join("secret.html"))).unwrap(),
         );
         assert_eq!(
-            LocalFileTransport::new().send(&request),
+            LocalFileTransport::new()
+                .with_allowed_roots([base.clone()])
+                .send(&request),
             Err(TransportError::ConnectionFailed),
             "a local file URL must not traverse an existing parent-directory symlink"
         );
@@ -1826,13 +1868,63 @@ mod tests {
     }
 
     #[test]
+    fn local_file_transport_denies_reads_without_an_explicit_root() {
+        let directory = std::env::temp_dir().join(format!(
+            "archia-browser-local-deny-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("secret.txt");
+        std::fs::write(&path, b"secret").unwrap();
+        let request = Request::new(Url::parse(&local_file_test_url(&path)).unwrap());
+
+        assert_eq!(
+            LocalFileTransport::new().send(&request),
+            Err(TransportError::ConnectionFailed)
+        );
+
+        std::fs::remove_file(path).unwrap();
+        std::fs::remove_dir(directory).unwrap();
+    }
+
+    #[test]
+    fn local_file_transport_rejects_files_outside_allowed_roots() {
+        let base = std::env::temp_dir().join(format!(
+            "archia-browser-root-policy-{}",
+            std::process::id()
+        ));
+        let allowed = base.join("allowed");
+        let outside = base.join("outside");
+        std::fs::create_dir_all(&allowed).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        let path = outside.join("secret.txt");
+        std::fs::write(&path, b"secret").unwrap();
+        let request = Request::new(Url::parse(&local_file_test_url(&path)).unwrap());
+
+        assert_eq!(
+            LocalFileTransport::new()
+                .with_allowed_roots([allowed.clone()])
+                .send(&request),
+            Err(TransportError::ConnectionFailed)
+        );
+
+        std::fs::remove_file(path).unwrap();
+        std::fs::remove_dir(outside).unwrap();
+        std::fs::remove_dir(allowed).unwrap();
+        std::fs::remove_dir(base).unwrap();
+    }
+
+    #[test]
     fn local_file_transport_loads_html() {
         let path =
             std::env::temp_dir().join(format!("archia-browser-local-{}.html", std::process::id()));
         std::fs::write(&path, b"<body>Local</body>").unwrap();
         let url = local_file_test_url(&path);
         let request = Request::new(super::super::Url::parse(&url).unwrap());
-        let response = LocalFileTransport::new().send(&request).unwrap();
+        let response = LocalFileTransport::new()
+            .with_allowed_roots([path.parent().unwrap().to_path_buf()])
+            .send(&request)
+            .unwrap();
         assert_eq!(response.status, 200);
         assert_eq!(
             response.content_type.as_deref(),
@@ -1843,7 +1935,10 @@ mod tests {
 
         let head_request = Request::new(super::super::Url::parse(&url).unwrap())
             .with_method(crate::net::HttpMethod::Head);
-        let head_response = LocalFileTransport::new().send(&head_request).unwrap();
+        let head_response = LocalFileTransport::new()
+            .with_allowed_roots([path.parent().unwrap().to_path_buf()])
+            .send(&head_request)
+            .unwrap();
         assert_eq!(head_response.header("content-length"), Some("18"));
         assert!(head_response.body.is_empty());
         std::fs::remove_file(path).unwrap();
@@ -1858,7 +1953,9 @@ mod tests {
         std::fs::write(&path, b"12345").unwrap();
         let url = local_file_test_url(&path);
         let request = Request::new(super::super::Url::parse(&url).unwrap());
-        let transport = LocalFileTransport::new().with_max_file_size(4);
+        let transport = LocalFileTransport::new()
+            .with_allowed_roots([path.parent().unwrap().to_path_buf()])
+            .with_max_file_size(4);
         assert_eq!(
             transport.send(&request),
             Err(TransportError::ResponseTooLarge)
