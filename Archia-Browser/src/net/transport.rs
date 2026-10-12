@@ -2039,7 +2039,6 @@ mod tests {
     use super::*;
     use crate::net::Url;
 
-
     // URL paths always use forward slashes, including Windows drive paths.
     // Path::display() alone emits backslashes on Windows, which the URL parser
     // correctly rejects as ambiguous separators.
