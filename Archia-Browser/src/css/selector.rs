@@ -929,14 +929,37 @@ mod tests {
     #[test]
     fn rejects_empty_selector_parts_and_dangling_combinators() {
         for input in [
-            ">", "+", "~", "div >", "div +", "div ~", "> div", "+ div", "~ div",
-            "div > + span", "div ~ ~ span", "div + > span",
+            ">",
+            "+",
+            "~",
+            "div >",
+            "div +",
+            "div ~",
+            "> div",
+            "+ div",
+            "~ div",
+            "div > + span",
+            "div ~ ~ span",
+            "div + > span",
         ] {
-            assert!(Selector::parse(input).is_none(), "accepted invalid selector: {input}");
+            assert!(
+                Selector::parse(input).is_none(),
+                "accepted invalid selector: {input}"
+            );
         }
 
-        for input in ["div", "div > span", "div + span", "div ~ span", "*", ".card"] {
-            assert!(Selector::parse(input).is_some(), "rejected valid selector: {input}");
+        for input in [
+            "div",
+            "div > span",
+            "div + span",
+            "div ~ span",
+            "*",
+            ".card",
+        ] {
+            assert!(
+                Selector::parse(input).is_some(),
+                "rejected valid selector: {input}"
+            );
         }
     }
 
