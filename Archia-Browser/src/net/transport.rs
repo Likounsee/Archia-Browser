@@ -268,10 +268,11 @@ impl Transport for LocalFileTransport {
         }
 
         let path = file_url_path(request.url.path())?;
-        // Open without following a final-component symlink/reparse point. A
-        // pre-open symlink_metadata() check is insufficient: the path can be
-        // swapped between that check and open (TOCTOU). Inspect the opened
-        // handle below, never metadata obtained from the pathname.
+        // Reject already-present symlinks in every path component, not only
+        // the leaf. The final open still uses no-follow flags and validates
+        // the opened handle. This pathname walk is defense in depth, not a
+        // race-free substitute for directory-handle-relative opens.
+        reject_symlink_path_components(&path)?;
         let file = open_local_file_without_following_links(&path)?;
         let metadata = file
             .metadata()
@@ -309,6 +310,26 @@ impl Transport for LocalFileTransport {
             .with_header("content-length", content_length.to_string())
             .with_body(body))
     }
+}
+
+/// Reject pathnames that currently contain a symlink/reparse point in any
+/// component. The final component is independently protected by the open flags
+/// below. Because this check walks pathnames, it cannot by itself eliminate a
+/// concurrent parent-directory swap; a directory-handle-relative implementation
+/// is still required before claiming full race-resistant local-file confinement.
+fn reject_symlink_path_components(path: &std::path::Path) -> Result<(), TransportError> {
+    use std::path::PathBuf;
+
+    let mut current = PathBuf::new();
+    for component in path.components() {
+        current.push(component.as_os_str());
+        let metadata = std::fs::symlink_metadata(&current)
+            .map_err(|_| TransportError::ConnectionFailed)?;
+        if metadata.file_type().is_symlink() {
+            return Err(TransportError::ConnectionFailed);
+        }
+    }
+    Ok(())
 }
 
 /// Open a local file without following a symlink at the final path component.
@@ -1771,6 +1792,38 @@ mod tests {
         std::fs::remove_file(link).unwrap();
         std::fs::remove_file(target).unwrap();
         std::fs::remove_dir(directory).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_file_transport_rejects_parent_directory_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let base = std::env::temp_dir().join(format!(
+            "archia-browser-parent-symlink-{}",
+            std::process::id()
+        ));
+        let real_directory = base.join("real");
+        let link_directory = base.join("linked");
+        std::fs::create_dir_all(&real_directory).unwrap();
+        let target = real_directory.join("secret.html");
+        std::fs::write(&target, b"must not follow parent symlink").unwrap();
+        symlink(&real_directory, &link_directory).unwrap();
+
+        let request = Request::new(
+            Url::parse(&local_file_test_url(&link_directory.join("secret.html"))).unwrap(),
+        );
+        assert_eq!(
+            LocalFileTransport::new().send(&request),
+            Err(TransportError::ConnectionFailed),
+            "a local file URL must not traverse an existing parent-directory symlink"
+        );
+
+        std::fs::remove_file(link_directory.join("secret.html")).ok();
+        std::fs::remove_file(target).unwrap();
+        std::fs::remove_file(link_directory).unwrap();
+        std::fs::remove_dir(real_directory).unwrap();
+        std::fs::remove_dir(base).unwrap();
     }
 
     #[test]
