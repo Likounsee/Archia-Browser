@@ -81,7 +81,12 @@ impl HtmlTokenizer {
             {
                 tokens.push(HtmlToken::Doctype(inside[8..].trim().to_owned()));
             } else if let Some(name) = inside.strip_prefix('/') {
-                tokens.push(HtmlToken::EndTag(name.trim().to_ascii_lowercase()));
+                // Keep closing-tag work bounded too; otherwise oversized names
+                // bypass the start-tag cap and are retained as large tokens.
+                let name = name.trim();
+                if name.len() <= MAX_HTML_TAG_NAME_BYTES {
+                    tokens.push(HtmlToken::EndTag(name.to_ascii_lowercase()));
+                }
             } else if let Some((name, attributes, self_closing)) = parse_start_tag(inside) {
                 let is_raw_text = matches!(name.as_str(), "script" | "style");
                 tokens.push(HtmlToken::StartTag {
@@ -362,6 +367,25 @@ mod tests {
         let name = "x".repeat(MAX_HTML_TAG_NAME_BYTES + 1);
         let tokens = HtmlTokenizer::tokenize(&format!("<{name} id=retained>"));
         assert!(tokens.is_empty());
+    }
+
+    #[test]
+    fn discards_overlong_end_tag_names_but_keeps_following_markup() {
+        let name = "x".repeat(MAX_HTML_TAG_NAME_BYTES + 1);
+        let tokens = HtmlTokenizer::tokenize(&format!("</{name}><p>retained</p>"));
+
+        assert_eq!(
+            tokens,
+            vec![
+                HtmlToken::StartTag {
+                    name: "p".to_owned(),
+                    attributes: BTreeMap::new(),
+                    self_closing: false,
+                },
+                HtmlToken::Text("retained".to_owned()),
+                HtmlToken::EndTag("p".to_owned()),
+            ]
+        );
     }
 
     #[test]
