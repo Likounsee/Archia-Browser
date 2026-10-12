@@ -227,7 +227,7 @@ impl Transport for HttpTransport {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct LocalFileTransport {
     max_file_size: usize,
     allowed_roots: Vec<std::path::PathBuf>,
