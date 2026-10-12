@@ -466,6 +466,25 @@ fn reject_symlink_path_components(path: &std::path::Path) -> Result<(), Transpor
         let metadata =
             std::fs::symlink_metadata(&current).map_err(|_| TransportError::ConnectionFailed)?;
         if metadata.file_type().is_symlink() {
+            // macOS exposes /var and /tmp as system-managed aliases to
+            // /private/var and /private/tmp. Permit only those exact aliases;
+            // arbitrary symlinks in user-controlled path components remain denied.
+            #[cfg(target_os = "macos")]
+            {
+                let expected_target = if current == std::path::Path::new("/var") {
+                    Some(std::path::Path::new("/private/var"))
+                } else if current == std::path::Path::new("/tmp") {
+                    Some(std::path::Path::new("/private/tmp"))
+                } else {
+                    None
+                };
+                if expected_target.is_some_and(|expected| {
+                    std::fs::canonicalize(&current)
+                        .is_ok_and(|resolved| resolved == expected)
+                }) {
+                    continue;
+                }
+            }
             return Err(TransportError::ConnectionFailed);
         }
     }
