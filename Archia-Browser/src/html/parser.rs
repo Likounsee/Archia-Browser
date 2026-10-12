@@ -407,7 +407,6 @@ mod tests {
         assert_eq!(body.text_content().len(), MAX_DOM_NODES);
     }
 
-
     #[test]
     fn direct_tokens_cannot_bypass_the_dom_attribute_byte_budget() {
         let oversized_value = "x".repeat(MAX_DOM_ATTRIBUTE_BYTES + 1);
