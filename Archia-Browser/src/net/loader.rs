@@ -1046,11 +1046,9 @@ mod tests {
         }
 
         let memory_budget = Arc::new(crate::core::memory::MemoryBudget::new(8 * 1024 * 1024));
-        let loader = DocumentLoader::new(
-            NetworkPipeline::new(AllowAll),
-            OversizedStylesheetTransport,
-        )
-        .with_shared_memory_budget(Arc::clone(&memory_budget));
+        let loader =
+            DocumentLoader::new(NetworkPipeline::new(AllowAll), OversizedStylesheetTransport)
+                .with_shared_memory_budget(Arc::clone(&memory_budget));
         let document_url = Url::parse("https://example.org/index.html").unwrap();
         let css = loader.load_linked_stylesheets(
             &document_url,
