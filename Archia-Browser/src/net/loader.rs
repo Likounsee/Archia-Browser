@@ -265,23 +265,15 @@ where
             }
 
             let html = String::from_utf8_lossy(&response.body);
-            let stylesheet = self.load_linked_stylesheets(&current.url, &html);
 
-            // Reserve the estimated retained page footprint before constructing
-            // the DOM, styled tree, layout and display list. Reserving afterwards
-            // would let a page allocate its largest structures before the shared
-            // budget had a chance to reject it.
-            let reservation = if let Some(budget) = &self.memory_budget {
-                // This is a conservative input-size estimate, not an exact heap
-                // measurement; it must still be charged before Page construction.
-                let estimated_page_bytes = html
-                    .len()
-                    .saturating_mul(8)
-                    .saturating_add(stylesheet.len().saturating_mul(4))
-                    .max(1);
+            // Charge the document before parsing it to discover linked stylesheets:
+            // that discovery itself builds a temporary DOM from untrusted HTML.
+            // The estimate is input-based, not an exact heap measurement.
+            let mut reservation = if let Some(budget) = &self.memory_budget {
+                let estimated_html_bytes = html.len().saturating_mul(8).max(1);
                 let mut reservation = crate::core::memory::MemoryReservation::try_new(
                     Arc::clone(budget),
-                    estimated_page_bytes,
+                    estimated_html_bytes,
                 );
                 if reservation.is_none() {
                     // Cached responses are reclaimable; retained page data takes
@@ -292,20 +284,28 @@ where
                         .clear();
                     reservation = crate::core::memory::MemoryReservation::try_new(
                         Arc::clone(budget),
-                        estimated_page_bytes,
+                        estimated_html_bytes,
                     );
                 }
-                Some(Arc::new(
-                    reservation.ok_or(DocumentLoadError::MemoryBudgetExceeded)?,
-                ))
+                Some(reservation.ok_or(DocumentLoadError::MemoryBudgetExceeded)?)
             } else {
                 None
             };
 
+            let stylesheet = self.load_linked_stylesheets(&current.url, &html);
+            if let Some(reservation) = &reservation {
+                // CSS expansion is independently capped per document. Charge its
+                // retained bytes before constructing the final styled/layout tree.
+                let estimated_css_bytes = stylesheet.len().saturating_mul(4);
+                if !reservation.try_grow_by(estimated_css_bytes) {
+                    return Err(DocumentLoadError::MemoryBudgetExceeded);
+                }
+            }
+
             let mut page =
                 Page::from_html_at(Some(current.url.clone()), &html, &stylesheet, viewport);
-            if let Some(reservation) = reservation {
-                page.attach_memory_reservation(reservation);
+            if let Some(reservation) = reservation.take() {
+                page.attach_memory_reservation(Arc::new(reservation));
             }
 
             return Ok(page);
