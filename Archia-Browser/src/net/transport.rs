@@ -2083,8 +2083,7 @@ mod tests {
                     let mut contents = Vec::new();
                     file.read_to_end(&mut contents).unwrap();
                     assert_ne!(
-                        contents,
-                        b"OUTSIDE-SECRET",
+                        contents, b"OUTSIDE-SECRET",
                         "a concurrent parent-directory swap must never expose the outside file"
                     );
                     assert_eq!(contents, b"inside");
