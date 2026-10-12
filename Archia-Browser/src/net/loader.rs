@@ -1986,8 +1986,7 @@ mod tests {
 
     #[test]
     fn refuses_local_document_redirects_to_network_urls() {
-        let response =
-            Response::new(302).with_header("location", "https://example.org/remote");
+        let response = Response::new(302).with_header("location", "https://example.org/remote");
         let loader =
             DocumentLoader::new(NetworkPipeline::new(AllowAll), MockTransport { response });
         let request = Request::new(Url::parse("file:///tmp/start.html").unwrap());
