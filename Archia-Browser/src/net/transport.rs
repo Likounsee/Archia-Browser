@@ -2035,10 +2035,8 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn local_file_transport_keeps_the_original_granted_root_handle() {
-        let base = std::env::temp_dir().join(format!(
-            "archia-browser-pinned-root-{}",
-            std::process::id()
-        ));
+        let base =
+            std::env::temp_dir().join(format!("archia-browser-pinned-root-{}", std::process::id()));
         let root = base.join("granted");
         let moved_root = base.join("granted-original");
         std::fs::create_dir_all(&root).unwrap();
