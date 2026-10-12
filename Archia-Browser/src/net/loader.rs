@@ -165,10 +165,19 @@ where
                     .pipeline
                     .execute(&self.transport, &current)
                     .map_err(DocumentLoadError::Network)?;
-                self.cache
-                    .lock()
-                    .map_err(|_| DocumentLoadError::InternalStatePoisoned)?
-                    .store(&current, &response);
+                // Do not transiently retain an HTML document that the loader
+                // will reject for exceeding its parser input limit. In particular,
+                // avoid charging the shared cache budget for a response that cannot
+                // become a page; the validation path below also invalidates any old
+                // representation for the same key.
+                if !(is_html_response(&response)
+                    && response.body.len() > MAX_HTML_DOCUMENT_BYTES)
+                {
+                    self.cache
+                        .lock()
+                        .map_err(|_| DocumentLoadError::InternalStatePoisoned)?
+                        .store(&current, &response);
+                }
                 response
             };
 
