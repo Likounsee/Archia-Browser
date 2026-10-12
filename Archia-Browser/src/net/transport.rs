@@ -622,9 +622,11 @@ fn open_local_root_handle_verified(
     }
     // SAFETY: successful open() returned a newly owned descriptor.
     let directory = unsafe { <std::fs::File as std::os::fd::FromRawFd>::from_raw_fd(fd) };
-    let opened = directory.metadata().map_err(|_| TransportError::ConnectionFailed)?;
-    let named = std::fs::symlink_metadata(canonical_root)
+    let opened = directory
+        .metadata()
         .map_err(|_| TransportError::ConnectionFailed)?;
+    let named =
+        std::fs::symlink_metadata(canonical_root).map_err(|_| TransportError::ConnectionFailed)?;
     if !opened.is_dir()
         || !named.is_dir()
         || named.file_type().is_symlink()
@@ -679,8 +681,8 @@ fn open_local_file_confined_from_handle(
     }
     let mut current = unsafe { std::fs::File::from_raw_fd(root_dup) };
     for (index, component) in components.iter().enumerate() {
-        let name = CString::new(component.as_bytes())
-            .map_err(|_| TransportError::ConnectionFailed)?;
+        let name =
+            CString::new(component.as_bytes()).map_err(|_| TransportError::ConnectionFailed)?;
         let is_final = index + 1 == components.len();
         let mut flags = libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW;
         if !is_final {
@@ -695,7 +697,10 @@ fn open_local_file_confined_from_handle(
         // SAFETY: successful openat() returned a newly owned descriptor.
         let next = unsafe { std::fs::File::from_raw_fd(fd) };
         if !is_final
-            && !next.metadata().map_err(|_| TransportError::ConnectionFailed)?.is_dir()
+            && !next
+                .metadata()
+                .map_err(|_| TransportError::ConnectionFailed)?
+                .is_dir()
         {
             return Err(TransportError::ConnectionFailed);
         }
