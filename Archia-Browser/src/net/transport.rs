@@ -1776,7 +1776,6 @@ mod tests {
     }
 
     #[cfg(windows)]
-    #[cfg(windows)]
     #[test]
     fn local_file_transport_rejects_unc_and_drive_relative_paths() {
         for path in [
