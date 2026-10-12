@@ -1040,12 +1040,17 @@ mod tests {
                 assert_eq!(request.url.path(), "/style.css");
                 Ok(Response::new(200)
                     .with_header("content-type", "text/css")
+                    .with_header("cache-control", "public, max-age=3600")
                     .with_body(vec![b'a'; MAX_STYLESHEET_BYTES_PER_DOCUMENT + 128]))
             }
         }
 
-        let loader =
-            DocumentLoader::new(NetworkPipeline::new(AllowAll), OversizedStylesheetTransport);
+        let memory_budget = Arc::new(crate::core::memory::MemoryBudget::new(8 * 1024 * 1024));
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            OversizedStylesheetTransport,
+        )
+        .with_shared_memory_budget(Arc::clone(&memory_budget));
         let document_url = Url::parse("https://example.org/index.html").unwrap();
         let css = loader.load_linked_stylesheets(
             &document_url,
@@ -1053,6 +1058,11 @@ mod tests {
         );
 
         assert_eq!(css.len(), MAX_STYLESHEET_BYTES_PER_DOCUMENT);
+        assert_eq!(
+            memory_budget.used(),
+            0,
+            "an oversized stylesheet must not be retained in the shared-budget cache"
+        );
     }
 
     #[derive(Debug, Default)]
