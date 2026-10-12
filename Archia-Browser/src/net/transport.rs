@@ -259,6 +259,21 @@ impl LocalFileTransport {
         self
     }
 
+    /// Create a transport scoped to the directory containing an explicitly
+    /// selected local-file URL. Sibling resources are allowed; other paths are
+    /// denied by the same root-confinement checks used by `with_allowed_roots`.
+    pub fn for_file_url(url: &super::Url) -> Result<Self, TransportError> {
+        if url.scheme() != "file" {
+            return Err(TransportError::UnsupportedScheme);
+        }
+        let path = file_url_path(url.path())?;
+        let root = path
+            .parent()
+            .ok_or(TransportError::InvalidRequest)?
+            .to_path_buf();
+        Ok(Self::new().with_allowed_roots([root]))
+    }
+
     pub const fn with_max_file_size(mut self, max_file_size: usize) -> Self {
         self.max_file_size = max_file_size;
         self
