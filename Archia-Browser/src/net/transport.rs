@@ -273,6 +273,12 @@ impl LocalFileTransport {
                 .allowed_roots
                 .iter()
                 .filter_map(|root| {
+                    // Check the caller-supplied spelling before canonicalization:
+                    // canonicalize() follows a symlink at the selected root and
+                    // would otherwise erase evidence that the grant path itself
+                    // was redirected. Check the resolved path too, so both the
+                    // requested path and the resulting directory must be clean.
+                    reject_symlink_path_components(root).ok()?;
                     let canonical_path = std::fs::canonicalize(root).ok()?;
                     reject_symlink_path_components(&canonical_path).ok()?;
                     if !canonical_path.is_dir() {
@@ -2520,6 +2526,33 @@ mod tests {
         std::fs::remove_file(outside.join("secret.txt")).unwrap();
         std::fs::remove_dir(outside).unwrap();
         std::fs::remove_dir(root_path).unwrap();
+        std::fs::remove_dir(base).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_file_transport_rejects_a_symlink_used_as_the_granted_root() {
+        use std::os::unix::fs::symlink;
+
+        let base = std::env::temp_dir().join(format!(
+            "archia-browser-symlink-root-{}",
+            std::process::id()
+        ));
+        let real_root = base.join("real");
+        let alias_root = base.join("alias");
+        std::fs::create_dir_all(&real_root).unwrap();
+        std::fs::write(real_root.join("page.txt"), b"must-not-be-granted").unwrap();
+        symlink(&real_root, &alias_root).unwrap();
+
+        let transport = LocalFileTransport::new().with_allowed_roots([alias_root]);
+        assert!(
+            transport.authorized_root_handles.is_empty(),
+            "a symlink in the user-supplied grant path must not be hidden by canonicalization"
+        );
+
+        std::fs::remove_file(real_root.join("page.txt")).unwrap();
+        std::fs::remove_file(alias_root).unwrap();
+        std::fs::remove_dir(real_root).unwrap();
         std::fs::remove_dir(base).unwrap();
     }
 
