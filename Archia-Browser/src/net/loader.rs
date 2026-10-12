@@ -506,9 +506,32 @@ where
 
             // Bound the conversion's input before UTF-8 replacement can
             // expand malformed byte sequences into a much larger temporary
-            // String. Final output is independently clipped by the shared
-            // CSS-byte budget in append_css_with_budget.
+            // String. Charge that temporary allocation before conversion; the
+            // final expanded stylesheet is charged separately by the document
+            // reservation before the page tree is constructed.
             let bounded_body = &response.body[..response.body.len().min(*remaining_css_bytes)];
+            let _temporary_css_reservation = if let Some(budget) = &self.memory_budget {
+                let estimated_temporary_bytes = bounded_body.len().saturating_mul(4);
+                let reservation = crate::core::memory::MemoryReservation::try_new(
+                    Arc::clone(budget),
+                    estimated_temporary_bytes,
+                )
+                .or_else(|| {
+                    // Cache entries are reclaimable; temporary parsing work must
+                    // take precedence over retaining responses when memory is tight.
+                    self.cache.lock().ok()?.clear();
+                    crate::core::memory::MemoryReservation::try_new(
+                        Arc::clone(budget),
+                        estimated_temporary_bytes,
+                    )
+                });
+                let Some(reservation) = reservation else {
+                    return None;
+                };
+                Some(reservation)
+            } else {
+                None
+            };
             let css = String::from_utf8_lossy(bounded_body).into_owned();
             return Some(self.expand_stylesheet_imports(
                 document_url,
