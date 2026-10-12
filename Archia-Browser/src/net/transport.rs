@@ -311,7 +311,6 @@ impl Transport for LocalFileTransport {
     }
 }
 
-
 /// Open a local file without following a symlink at the final path component.
 /// Unsupported platforms fail closed rather than silently following links.
 fn open_local_file_without_following_links(
@@ -337,7 +336,14 @@ fn open_local_file_without_following_links(
             .open(path)
             .map_err(|_| TransportError::ConnectionFailed);
     }
-    #[cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd", target_os = "dragonfly"))]
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd",
+        target_os = "dragonfly"
+    ))]
     {
         use std::os::unix::fs::OpenOptionsExt;
         // O_NOFOLLOW on the BSD/Darwin family.
@@ -1747,19 +1753,15 @@ mod tests {
     fn local_file_transport_rejects_final_component_symlinks() {
         use std::os::unix::fs::symlink;
 
-        let directory = std::env::temp_dir().join(format!(
-            "archia-browser-symlink-{}",
-            std::process::id()
-        ));
+        let directory =
+            std::env::temp_dir().join(format!("archia-browser-symlink-{}", std::process::id()));
         std::fs::create_dir_all(&directory).unwrap();
         let target = directory.join("target.html");
         let link = directory.join("link.html");
         std::fs::write(&target, b"<body>must not follow</body>").unwrap();
         symlink(&target, &link).unwrap();
 
-        let request = Request::new(
-            Url::parse(&local_file_test_url(&link)).unwrap(),
-        );
+        let request = Request::new(Url::parse(&local_file_test_url(&link)).unwrap());
         assert_eq!(
             LocalFileTransport::new().send(&request),
             Err(TransportError::ConnectionFailed),
