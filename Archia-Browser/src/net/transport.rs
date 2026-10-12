@@ -2161,7 +2161,7 @@ mod tests {
         std::fs::remove_dir(base).unwrap();
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     #[test]
     fn local_file_transport_keeps_the_original_granted_root_handle() {
         let base =
