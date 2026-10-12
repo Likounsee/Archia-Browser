@@ -1344,10 +1344,7 @@ mod tests {
         );
 
         assert_eq!(jar.len(), original_count);
-        assert_eq!(
-            jar.header_for(&url).as_deref(),
-            Some("session=original")
-        );
+        assert_eq!(jar.header_for(&url).as_deref(), Some("session=original"));
     }
 
     #[test]
