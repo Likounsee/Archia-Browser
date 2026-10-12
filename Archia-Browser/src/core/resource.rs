@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::memory::{MemoryBudget, MemoryReservation, MAX_LIVE_BUDGETED_OBJECTS};
+use super::memory::{MemoryBudget, MemoryReservation, MemoryResourceSlot, MAX_LIVE_BUDGETED_OBJECTS};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ResourceId(u64);
@@ -18,13 +18,7 @@ impl ResourceId {
 pub struct Resource {
     id: ResourceId,
     reservation: MemoryReservation,
-    budget: Arc<MemoryBudget>,
-}
-
-impl Drop for Resource {
-    fn drop(&mut self) {
-        self.budget.release_resource_slot();
-    }
+    _slot: MemoryResourceSlot,
 }
 
 impl Resource {
@@ -55,27 +49,21 @@ impl ResourceManager {
     pub fn allocate(&mut self, bytes: usize) -> Option<Resource> {
         // Byte budgets do not constrain zero-byte allocations. The object
         // quota lives in MemoryBudget so all managers sharing it share one cap.
-        if !self
-            .budget
-            .try_reserve_resource_slot(MAX_LIVE_BUDGETED_OBJECTS)
-        {
-            return None;
-        }
+        let slot = MemoryBudget::try_reserve_resource_slot_guard(
+            Arc::clone(&self.budget),
+            MAX_LIVE_BUDGETED_OBJECTS,
+        )?;
 
-        let Some(reservation) = MemoryReservation::try_new(Arc::clone(&self.budget), bytes) else {
-            self.budget.release_resource_slot();
-            return None;
-        };
+        // The slot guard and byte reservation both roll back automatically if
+        // a later allocation or ID check fails.
+        let reservation = MemoryReservation::try_new(Arc::clone(&self.budget), bytes)?;
         let id = ResourceId::new(self.next_id);
-        let Some(next_id) = self.next_id.checked_add(1) else {
-            self.budget.release_resource_slot();
-            return None;
-        };
+        let next_id = self.next_id.checked_add(1)?;
         self.next_id = next_id;
         Some(Resource {
             id,
             reservation,
-            budget: Arc::clone(&self.budget),
+            _slot: slot,
         })
     }
 
