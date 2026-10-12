@@ -734,9 +734,29 @@ fn open_local_root_handle_verified(
 ) -> Result<std::fs::File, TransportError> {
     use std::os::windows::ffi::OsStrExt;
     use std::os::windows::fs::MetadataExt;
-    use std::os::windows::io::FromRawHandle;
+    use std::os::windows::io::{AsRawHandle, FromRawHandle};
 
     type Handle = *mut std::ffi::c_void;
+    #[repr(C)]
+    #[derive(Clone, Copy, Default)]
+    struct FileTime {
+        low: u32,
+        high: u32,
+    }
+    #[repr(C)]
+    #[derive(Default)]
+    struct ByHandleFileInformation {
+        attributes: u32,
+        creation_time: FileTime,
+        last_access_time: FileTime,
+        last_write_time: FileTime,
+        volume_serial_number: u32,
+        file_size_high: u32,
+        file_size_low: u32,
+        number_of_links: u32,
+        file_index_high: u32,
+        file_index_low: u32,
+    }
     unsafe extern "system" {
         fn CreateFileW(
             name: *const u16,
@@ -747,6 +767,22 @@ fn open_local_root_handle_verified(
             flags: u32,
             template: Handle,
         ) -> Handle;
+        fn GetFileInformationByHandle(
+            handle: Handle,
+            information: *mut ByHandleFileInformation,
+        ) -> i32;
+    }
+    fn file_identity(file: &std::fs::File) -> Option<(u32, u64)> {
+        let mut information = ByHandleFileInformation::default();
+        // SAFETY: file owns a valid Windows handle and information is writable.
+        let success = unsafe {
+            GetFileInformationByHandle(file.as_raw_handle().cast(), &mut information)
+        };
+        (success != 0).then_some((
+            information.volume_serial_number,
+            (u64::from(information.file_index_high) << 32)
+                | u64::from(information.file_index_low),
+        ))
     }
     const INVALID_HANDLE_VALUE: Handle = -1isize as Handle;
     const GENERIC_READ: u32 = 0x8000_0000;
@@ -778,18 +814,38 @@ fn open_local_root_handle_verified(
         .map_err(|_| TransportError::ConnectionFailed)?;
     let named =
         std::fs::symlink_metadata(canonical_root).map_err(|_| TransportError::ConnectionFailed)?;
-    let opened_volume = opened.volume_serial_number();
-    let named_volume = named.volume_serial_number();
-    let opened_index = opened.file_index();
-    let named_index = named.file_index();
+    // Open the name a second time so identity is compared using the stable
+    // Win32 handle API rather than Rust's still-unstable MetadataExt identity APIs.
+    let named_file = {
+        let mut wide: Vec<u16> = canonical_root.as_os_str().encode_wide().collect();
+        wide.push(0);
+        let handle = unsafe {
+            CreateFileW(
+                wide.as_ptr(),
+                GENERIC_READ | FILE_READ_ATTRIBUTES,
+                SHARE_ALL,
+                std::ptr::null_mut(),
+                OPEN_EXISTING,
+                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+                std::ptr::null_mut(),
+            )
+        };
+        if handle == INVALID_HANDLE_VALUE {
+            return Err(TransportError::ConnectionFailed);
+        }
+        // SAFETY: CreateFileW returned a new owned handle.
+        unsafe { std::fs::File::from_raw_handle(handle) }
+    };
+    let named_opened = named_file
+        .metadata()
+        .map_err(|_| TransportError::ConnectionFailed)?;
     if !opened.is_dir()
         || !named.is_dir()
         || opened.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
         || named.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-        || opened_volume.is_none()
-        || opened_volume != named_volume
-        || opened_index.is_none()
-        || opened_index != named_index
+        || named_opened.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+        || file_identity(&directory).is_none()
+        || file_identity(&directory) != file_identity(&named_file)
     {
         return Err(TransportError::ConnectionFailed);
     }
