@@ -2333,7 +2333,7 @@ mod tests {
         std::fs::remove_dir(base).unwrap();
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(unix))]
     #[test]
     fn local_file_transport_fails_closed_without_handle_relative_confinement() {
         let directory = std::env::temp_dir().join(format!(
@@ -2356,7 +2356,7 @@ mod tests {
         let _ = std::fs::remove_dir(&directory);
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     #[test]
     fn local_file_transport_loads_html() {
         let path =
@@ -2387,7 +2387,7 @@ mod tests {
         std::fs::remove_file(path).unwrap();
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     #[test]
     fn local_file_transport_enforces_size_limit_for_get_and_head() {
         let path = std::env::temp_dir().join(format!(
