@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::{dom::Node, tokenizer::HtmlToken};
 
 const VOID_ELEMENTS: &[&str] = &[
@@ -51,19 +53,43 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
     // nesting depth here: retaining/searching tag names would recreate an
     // attacker-controlled quadratic scan on this hostile-input path.
     let mut suppressed_stack: Vec<String> = Vec::new();
+    // Index open suppressed tags by name so matching close tags do not scan the
+    // entire attacker-controlled nesting stack on every token.
+    let mut suppressed_positions: HashMap<String, Vec<usize>> = HashMap::new();
 
     for token in tokens.iter().take(MAX_DOM_TOKENS) {
         if !suppressed_stack.is_empty() {
             match token {
                 HtmlToken::StartTag { name, .. } if !VOID_ELEMENTS.contains(&name.as_str()) => {
+                    let position = suppressed_stack.len();
                     suppressed_stack.push(name.clone());
+                    suppressed_positions
+                        .entry(name.clone())
+                        .or_default()
+                        .push(position);
                 }
                 HtmlToken::EndTag(name) if !VOID_ELEMENTS.contains(&name.as_str()) => {
                     // Mirror the parser's matching-end-tag behavior inside the
                     // discarded subtree. Unmatched/void end tags must not reduce
                     // the suppression depth and expose hostile nested markup.
-                    if let Some(position) = suppressed_stack.iter().rposition(|open| open == name) {
-                        suppressed_stack.truncate(position);
+                    if let Some(position) = suppressed_positions
+                        .get(name)
+                        .and_then(|positions| positions.last())
+                        .copied()
+                    {
+                        while suppressed_stack.len() > position {
+                            if let Some(open) = suppressed_stack.pop() {
+                                let remove_entry = if let Some(positions) = suppressed_positions.get_mut(&open) {
+                                    positions.pop();
+                                    positions.is_empty()
+                                } else {
+                                    false
+                                };
+                                if remove_entry {
+                                    suppressed_positions.remove(&open);
+                                }
+                            }
+                        }
                     }
                 }
                 _ => {}
