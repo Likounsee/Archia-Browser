@@ -1182,6 +1182,58 @@ mod tests {
         );
     }
 
+    #[test]
+    fn stylesheet_redirects_cannot_downgrade_https_or_cross_into_local_files() {
+        use std::sync::Mutex;
+
+        #[derive(Debug)]
+        struct RedirectingStylesheetTransport {
+            target: String,
+            requests: Mutex<Vec<String>>,
+        }
+
+        impl Transport for RedirectingStylesheetTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                self.requests.lock().unwrap().push(request.url.to_string());
+                if request.policy.resource_kind == ResourceKind::Document {
+                    return Ok(Response::new(200)
+                        .with_header("content-type", "text/html")
+                        .with_body(
+                            br#"<link rel="stylesheet" href="/style.css"><body>Safe</body>"#
+                                .to_vec(),
+                        ));
+                }
+                assert_eq!(request.policy.resource_kind, ResourceKind::Stylesheet);
+                Ok(Response::new(302).with_header("location", self.target.clone()))
+            }
+        }
+
+        for target in ["http://example.org/insecure.css", "file:///etc/passwd"] {
+            let transport = RedirectingStylesheetTransport {
+                target: target.to_owned(),
+                requests: Mutex::new(Vec::new()),
+            };
+            let loader = DocumentLoader::new(
+                NetworkPipeline::new(AllowAll),
+                transport,
+            );
+            let request = Request::new(Url::parse("https://example.org/page").unwrap());
+            let page = loader
+                .load(&request, LayoutViewport::new(320, 200))
+                .unwrap();
+
+            assert_eq!(page.document.text_content(), "Safe");
+            let requests = loader.transport.requests.lock().unwrap();
+            assert_eq!(
+                requests.len(),
+                2,
+                "the redirect target must never be requested: {target}"
+            );
+            assert_eq!(requests[0], "https://example.org/page");
+            assert_eq!(requests[1], "https://example.org/style.css");
+        }
+    }
+
     #[derive(Debug, Default)]
     struct AllowAll;
 
