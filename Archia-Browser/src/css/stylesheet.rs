@@ -680,9 +680,9 @@ mod tests {
             .map(|index| format!(".class-{index} {{ color: red; }}"))
             .collect::<String>();
 
-        let stylesheet = StyleSheet::parse(&css);
+        let blocks = parse_rule_blocks(&css, MAX_STYLE_RULES);
 
-        assert_eq!(stylesheet.rules.len(), MAX_STYLE_RULES);
+        assert_eq!(blocks.len(), MAX_STYLE_RULES);
     }
 
     #[test]
