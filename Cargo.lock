@@ -7,6 +7,7 @@ name = "archia-browser"
 version = "0.1.0"
 dependencies = [
  "httpdate",
+ "libc",
  "psl",
  "rustls",
  "webpki-roots",
