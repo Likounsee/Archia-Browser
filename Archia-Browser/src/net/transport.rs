@@ -278,7 +278,7 @@ impl LocalFileTransport {
                     if !canonical_path.is_dir() {
                         return None;
                     }
-                    let directory = open_local_root_handle(&canonical_path).ok()?;
+                    let directory = open_local_root_handle_verified(&canonical_path).ok()?;
                     Some(AuthorizedRootHandle {
                         canonical_path,
                         directory: Arc::new(directory),
@@ -445,6 +445,33 @@ fn reject_symlink_path_components(path: &std::path::Path) -> Result<(), Transpor
 }
 
 /// Open a previously validated target while anchoring resolution to an opened root.
+#[cfg(target_os = "linux")]
+fn open_local_root_handle_verified(
+    canonical_root: &std::path::Path,
+) -> Result<std::fs::File, TransportError> {
+    use std::os::unix::fs::MetadataExt;
+
+    let directory = open_local_root_handle(canonical_root)?;
+    let opened_metadata = directory
+        .metadata()
+        .map_err(|_| TransportError::ConnectionFailed)?;
+    let path_metadata = std::fs::symlink_metadata(canonical_root)
+        .map_err(|_| TransportError::ConnectionFailed)?;
+
+    // The pathname can be replaced between canonicalization and openat2.
+    // Verify that the opened directory is the same filesystem object currently
+    // named by the granted canonical path; otherwise refuse the grant.
+    if !opened_metadata.is_dir()
+        || !path_metadata.is_dir()
+        || path_metadata.file_type().is_symlink()
+        || opened_metadata.dev() != path_metadata.dev()
+        || opened_metadata.ino() != path_metadata.ino()
+    {
+        return Err(TransportError::ConnectionFailed);
+    }
+    Ok(directory)
+}
+
 #[cfg(target_os = "linux")]
 fn open_local_root_handle(
     canonical_root: &std::path::Path,
