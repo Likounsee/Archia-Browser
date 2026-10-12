@@ -1766,6 +1766,52 @@ mod tests {
     }
 
     #[test]
+    fn unusable_stylesheet_responses_are_not_retained_in_cache() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+
+        struct CountingTransport(Arc<AtomicUsize>);
+
+        impl Transport for CountingTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                if request.policy.resource_kind == ResourceKind::Stylesheet {
+                    self.0.fetch_add(1, Ordering::SeqCst);
+                    return Ok(Response::new(200)
+                        .with_header("content-type", "text/html")
+                        .with_header("cache-control", "max-age=60")
+                        .with_body(b"<html>not CSS</html>".to_vec()));
+                }
+                Ok(Response::new(200)
+                    .with_header("content-type", "text/html")
+                    .with_header("cache-control", "max-age=60")
+                    .with_body(
+                        br#"<link rel="stylesheet" href="/wrong.css"><body>Page</body>"#
+                            .to_vec(),
+                    ))
+            }
+        }
+
+        let stylesheet_requests = Arc::new(AtomicUsize::new(0));
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            CountingTransport(Arc::clone(&stylesheet_requests)),
+        );
+        let request = Request::new(Url::parse("https://example.org/index.html").unwrap());
+        let viewport = LayoutViewport::new(320, 200);
+
+        loader.load(&request, viewport).unwrap();
+        loader.load(&request, viewport).unwrap();
+
+        assert_eq!(
+            stylesheet_requests.load(Ordering::SeqCst),
+            2,
+            "a response with the wrong MIME type must not poison the stylesheet cache"
+        );
+    }
+
+    #[test]
     fn loads_linked_stylesheet_into_page_styles() {
         #[derive(Debug)]
         struct SequenceTransport {
