@@ -1,4 +1,3 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use super::memory::{MemoryBudget, MemoryReservation};
@@ -21,12 +20,12 @@ impl ResourceId {
 pub struct Resource {
     id: ResourceId,
     reservation: MemoryReservation,
-    live_resources: Arc<AtomicUsize>,
+    budget: Arc<MemoryBudget>,
 }
 
 impl Drop for Resource {
     fn drop(&mut self) {
-        self.live_resources.fetch_sub(1, Ordering::AcqRel);
+        self.budget.release_resource_slot();
     }
 }
 
@@ -42,7 +41,6 @@ impl Resource {
 #[derive(Debug)]
 pub struct ResourceManager {
     budget: Arc<MemoryBudget>,
-    live_resources: Arc<AtomicUsize>,
     next_id: u64,
 }
 
@@ -55,45 +53,31 @@ impl ResourceManager {
     pub fn with_budget(budget: Arc<MemoryBudget>) -> Self {
         Self {
             budget,
-            live_resources: Arc::new(AtomicUsize::new(0)),
             next_id: 1,
         }
     }
 
     pub fn allocate(&mut self, bytes: usize) -> Option<Resource> {
-        // Byte budgets do not constrain zero-byte allocations. Bound live
-        // objects independently so callers cannot exhaust memory with
-        // arbitrarily many empty resources.
-        let mut live = self.live_resources.load(Ordering::Acquire);
-        loop {
-            if live >= MAX_LIVE_RESOURCES {
-                return None;
-            }
-            match self.live_resources.compare_exchange_weak(
-                live,
-                live + 1,
-                Ordering::AcqRel,
-                Ordering::Acquire,
-            ) {
-                Ok(_) => break,
-                Err(actual) => live = actual,
-            }
+        // Byte budgets do not constrain zero-byte allocations. The object
+        // quota lives in MemoryBudget so all managers sharing it share one cap.
+        if !self.budget.try_reserve_resource_slot(MAX_LIVE_RESOURCES) {
+            return None;
         }
 
         let Some(reservation) = MemoryReservation::try_new(Arc::clone(&self.budget), bytes) else {
-            self.live_resources.fetch_sub(1, Ordering::AcqRel);
+            self.budget.release_resource_slot();
             return None;
         };
         let id = ResourceId::new(self.next_id);
         let Some(next_id) = self.next_id.checked_add(1) else {
-            self.live_resources.fetch_sub(1, Ordering::AcqRel);
+            self.budget.release_resource_slot();
             return None;
         };
         self.next_id = next_id;
         Some(Resource {
             id,
             reservation,
-            live_resources: Arc::clone(&self.live_resources),
+            budget: Arc::clone(&self.budget),
         })
     }
 
@@ -127,7 +111,7 @@ mod tests {
         assert_eq!(manager.memory().used(), 0);
         assert_eq!(manager.memory().available(), 4096);
         assert_eq!(
-            manager.live_resources.load(Ordering::Acquire),
+            manager.budget.live_resources(),
             0,
             "an exhausted resource ID must release its live-object slot"
         );
@@ -145,7 +129,7 @@ mod tests {
 
         assert_eq!(manager.memory().used(), 0);
         assert_eq!(
-            manager.live_resources.load(Ordering::Acquire),
+            manager.budget.live_resources(),
             0,
             "failed byte-budget reservations must release the live-object slot"
         );
