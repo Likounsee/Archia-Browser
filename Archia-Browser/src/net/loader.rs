@@ -706,7 +706,21 @@ fn collect_stylesheet_links(node: &Node, links: &mut Vec<String>) {
 
 fn parse_import_reference(statement: &str) -> Option<String> {
     let statement = statement.trim();
-    let statement = statement.strip_prefix("@import")?.trim_start();
+    let import = statement.get(..7)?;
+    if !import.eq_ignore_ascii_case("@import") {
+        return None;
+    }
+    let remainder = &statement[7..];
+    // Require a token boundary so malformed at-keywords such as @imported
+    // cannot be interpreted as a resource URL.
+    if !remainder.starts_with(char::is_whitespace)
+        && !remainder.starts_with('"')
+        && !remainder.starts_with('\'')
+        && !remainder.to_ascii_lowercase().starts_with("url(")
+    {
+        return None;
+    }
+    let statement = remainder.trim_start();
     if !statement.ends_with(';') {
         return None;
     }
@@ -715,19 +729,44 @@ fn parse_import_reference(statement: &str) -> Option<String> {
         return None;
     }
 
-    if let Some(value) = statement.strip_prefix("url(") {
+    let reference = if statement.get(..4).is_some_and(|prefix| prefix.eq_ignore_ascii_case("url(")) {
+        let value = &statement[4..];
         let end = value.find(')')?;
         if !value[end + 1..].trim().is_empty() {
             return None;
         }
-        return Some(value[..end].trim().trim_matches(['"', '\'']).to_owned());
-    }
+        let value = value[..end].trim();
+        if value.is_empty() {
+            return None;
+        }
+        if let Some(quote) = value.chars().next().filter(|quote| matches!(quote, '"' | '\'')) {
+            if value.len() < 2 || !value.ends_with(quote) {
+                return None;
+            }
+            let inner = &value[1..value.len() - 1];
+            if inner.is_empty() || inner.contains(quote) {
+                return None;
+            }
+            inner.to_owned()
+        } else {
+            if value.contains(['"', '\'']) {
+                return None;
+            }
+            value.to_owned()
+        }
+    } else {
+        let quote = statement.chars().next()?;
+        if !matches!(quote, '"' | '\'') || !statement.ends_with(quote) {
+            return None;
+        }
+        let inner = &statement[1..statement.len() - 1];
+        if inner.is_empty() || inner.contains(quote) {
+            return None;
+        }
+        inner.to_owned()
+    };
 
-    let quote = statement.chars().next()?;
-    if !matches!(quote, '"' | '\'') || !statement.ends_with(quote) {
-        return None;
-    }
-    Some(statement[1..statement.len() - 1].to_owned())
+    (!reference.trim().is_empty()).then_some(reference)
 }
 
 fn is_css_response(response: &Response) -> bool {
@@ -2944,4 +2983,40 @@ mod tests {
             .text_content()
             .contains("untrusted-tail-marker"));
     }
+
+    #[test]
+    fn css_import_parser_rejects_malformed_and_empty_references() {
+        for statement in [
+            "@imported \"theme.css\";",
+            "@import url();",
+            "@import url(   );",
+            "@import \"\";",
+            "@import url(\"theme.css');",
+            "@import url(theme.css) trailing;",
+            "@import url(theme.css",
+        ] {
+            assert_eq!(
+                parse_import_reference(statement),
+                None,
+                "malformed import must be ignored: {statement}"
+            );
+        }
+    }
+
+    #[test]
+    fn css_import_parser_accepts_case_insensitive_keyword_and_url_function() {
+        assert_eq!(
+            parse_import_reference("@IMPORT URL(\"theme.css\");"),
+            Some("theme.css".to_owned())
+        );
+        assert_eq!(
+            parse_import_reference("@import 'nested.css';"),
+            Some("nested.css".to_owned())
+        );
+        assert_eq!(
+            parse_import_reference("@import url(https://example.org/theme.css);"),
+            Some("https://example.org/theme.css".to_owned())
+        );
+    }
+
 }
