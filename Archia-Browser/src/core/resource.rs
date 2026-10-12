@@ -55,7 +55,10 @@ impl ResourceManager {
     pub fn allocate(&mut self, bytes: usize) -> Option<Resource> {
         // Byte budgets do not constrain zero-byte allocations. The object
         // quota lives in MemoryBudget so all managers sharing it share one cap.
-        if !self.budget.try_reserve_resource_slot(MAX_LIVE_BUDGETED_OBJECTS) {
+        if !self
+            .budget
+            .try_reserve_resource_slot(MAX_LIVE_BUDGETED_OBJECTS)
+        {
             return None;
         }
 
@@ -149,7 +152,10 @@ mod tests {
         assert_eq!(manager.budget.live_resources(), MAX_LIVE_BUDGETED_OBJECTS);
 
         resources.pop();
-        assert_eq!(manager.budget.live_resources(), MAX_LIVE_BUDGETED_OBJECTS - 1);
+        assert_eq!(
+            manager.budget.live_resources(),
+            MAX_LIVE_BUDGETED_OBJECTS - 1
+        );
         let replacement = manager
             .allocate(0)
             .expect("released slot should be reusable");
