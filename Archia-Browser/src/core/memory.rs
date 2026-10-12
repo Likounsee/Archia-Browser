@@ -224,7 +224,8 @@ mod tests {
 
         let successful_growths = workers
             .into_iter()
-            .filter(|worker| worker.join().expect("growth worker must not panic"))
+            .map(|worker| worker.join().expect("growth worker must not panic"))
+            .filter(|grew| *grew)
             .count();
 
         assert_eq!(successful_growths, 4);
