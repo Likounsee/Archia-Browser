@@ -303,10 +303,10 @@ impl Transport for LocalFileTransport {
             return Err(TransportError::ConnectionFailed);
         }
 
-        // Reject symlinks before canonicalization so a link cannot be used to
-        // escape a configured root. The opened leaf is independently protected
-        // by no-follow flags below. Pathname checks still cannot eliminate a
-        // concurrent parent-directory swap; see the P0-FILE-03 roadmap entry.
+        // Reject symlinks before canonicalization as an early, defense-in-depth
+        // check. Linux additionally enforces confinement during the actual open
+        // with openat2 relative to a directory handle. Other platforms still
+        // require a native handle-relative implementation.
         reject_symlink_path_components(&path)?;
         let canonical_path =
             std::fs::canonicalize(&path).map_err(|_| TransportError::ConnectionFailed)?;
@@ -371,10 +371,8 @@ impl Transport for LocalFileTransport {
 }
 
 /// Reject pathnames that currently contain a symlink/reparse point in any
-/// component. The final component is independently protected by the open flags
-/// below. Because this check walks pathnames, it cannot by itself eliminate a
-/// concurrent parent-directory swap; a directory-handle-relative implementation
-/// is still required before claiming full race-resistant local-file confinement.
+/// component. This is defense in depth only: security-sensitive confinement
+/// must be enforced by the actual open operation, not just this pathname walk.
 fn reject_symlink_path_components(path: &std::path::Path) -> Result<(), TransportError> {
     use std::path::{Component, PathBuf};
 
@@ -409,6 +407,7 @@ fn open_local_file_confined(
     use std::ffi::CString;
     use std::os::fd::FromRawFd;
     use std::os::unix::ffi::OsStrExt;
+    let _ = original_path;
 
     #[repr(C)]
     struct OpenHow {
