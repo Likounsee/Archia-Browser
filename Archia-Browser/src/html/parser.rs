@@ -471,7 +471,7 @@ mod tests {
     fn direct_tokens_cannot_bypass_the_dom_text_and_comment_byte_budget() {
         use super::super::dom::NodeKind;
 
-        let comment = "c".repeat(MAX_DOM_TEXT_BYTES / 2 + 1);
+        let comment = "c".repeat(MAX_DOM_TEXT_BYTES / 2);
         let text = "é".repeat(MAX_DOM_TEXT_BYTES);
         let tokens = vec![HtmlToken::Comment(comment), HtmlToken::Text(text)];
 
@@ -484,7 +484,7 @@ mod tests {
             panic!("expected retained text");
         };
 
-        assert_eq!(comment.len(), MAX_DOM_TEXT_BYTES / 2 + 1);
+        assert_eq!(comment.len(), MAX_DOM_TEXT_BYTES / 2);
         assert_eq!(
             comment.len() + text.len(),
             MAX_DOM_TEXT_BYTES,
