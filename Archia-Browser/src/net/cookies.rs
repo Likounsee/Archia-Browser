@@ -287,7 +287,11 @@ impl CookieJar {
                 && existing.domain == cookie.domain
                 && existing.path == cookie.path
         };
-        let existing_count = self.cookies.iter().filter(|existing| !is_replacement(existing)).count();
+        let existing_count = self
+            .cookies
+            .iter()
+            .filter(|existing| !is_replacement(existing))
+            .count();
         let domain_count = self
             .cookies
             .iter()
@@ -300,10 +304,13 @@ impl CookieJar {
         // Count retained cookie data and a conservative per-entry metadata
         // allowance. Count and per-cookie caps alone still permit several
         // megabytes of attacker-controlled values across many domains.
-        let used_bytes = self.cookies.iter().filter(|existing| !is_replacement(existing)).fold(
-            0usize,
-            |total, existing| total.saturating_add(cookie_storage_bytes(existing)),
-        );
+        let used_bytes = self
+            .cookies
+            .iter()
+            .filter(|existing| !is_replacement(existing))
+            .fold(0usize, |total, existing| {
+                total.saturating_add(cookie_storage_bytes(existing))
+            });
         if used_bytes.saturating_add(cookie_storage_bytes(&cookie)) > MAX_COOKIE_JAR_BYTES {
             return;
         }
@@ -1325,17 +1332,22 @@ mod tests {
         // for this replacement while keeping the original cookie valid.
         let value = "v".repeat(MAX_COOKIE_PAIR_BYTES - 32);
         for index in 0..250 {
-            let other_url =
-                Url::parse(&format!("https://host{index}.example.test/")).unwrap();
+            let other_url = Url::parse(&format!("https://host{index}.example.test/")).unwrap();
             let set_cookie = format!("large{index}={value}; Path=/; Secure");
             jar.store(&other_url, &set_cookie);
         }
 
         let original_count = jar.len();
-        jar.store(&url, &format!("session={}", "x".repeat(MAX_COOKIE_PAIR_BYTES - 32)));
+        jar.store(
+            &url,
+            &format!("session={}", "x".repeat(MAX_COOKIE_PAIR_BYTES - 32)),
+        );
 
         assert_eq!(jar.len(), original_count);
-        assert_eq!(jar.header_for(&url).as_deref(), Some("session=original"));
+        assert_eq!(
+            jar.header_for(&url).as_deref(),
+            Some("session=original")
+        );
     }
 
     #[test]
