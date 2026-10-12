@@ -703,9 +703,14 @@ fn open_local_root_handle_verified(
     // the opened grant after resolution.
     #[cfg(target_os = "macos")]
     {
-        reject_symlink_path_components(&absolute)?;
-        absolute =
-            std::fs::canonicalize(&absolute).map_err(|_| TransportError::ConnectionFailed)?;
+        reject_symlink_path_components(&absolute).map_err(|error| {
+            eprintln!("macOS root spelling rejected {:?}: {:?}", absolute, error);
+            error
+        })?;
+        absolute = std::fs::canonicalize(&absolute).map_err(|error| {
+            eprintln!("macOS root canonicalization failed {:?}: {}", absolute, error);
+            TransportError::ConnectionFailed
+        })?;
     }
 
     let mut current = {
@@ -745,6 +750,8 @@ fn open_local_root_handle_verified(
             )
         };
         if fd < 0 {
+            #[cfg(target_os = "macos")]
+            eprintln!("macOS secure root walk failed at {:?}: {}", component, std::io::Error::last_os_error());
             return Err(TransportError::ConnectionFailed);
         }
         current = unsafe { std::fs::File::from_raw_fd(fd) };
