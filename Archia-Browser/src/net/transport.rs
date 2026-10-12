@@ -1959,6 +1959,52 @@ mod tests {
         std::fs::remove_dir(directory).unwrap();
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn openat2_confines_file_open_to_the_authorized_root_handle() {
+        use std::os::unix::fs::symlink;
+
+        let base = std::env::temp_dir().join(format!(
+            "archia-browser-openat2-confinement-{}",
+            std::process::id()
+        ));
+        let root_path = base.join("root");
+        let outside = base.join("outside");
+        std::fs::create_dir_all(&root_path).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+
+        let allowed = root_path.join("allowed.txt");
+        let secret = outside.join("secret.txt");
+        std::fs::write(&allowed, b"allowed").unwrap();
+        std::fs::write(&secret, b"outside-secret").unwrap();
+
+        let root = std::fs::canonicalize(&root_path).unwrap();
+        let mut opened = open_local_file_confined(&root, &allowed, &allowed)
+            .expect("an ordinary file beneath the granted root should open");
+        let mut contents = String::new();
+        opened.read_to_string(&mut contents).unwrap();
+        assert_eq!(contents, "allowed");
+
+        // The target path is lexically below the root, but the intermediate
+        // component redirects outside it. Exercise the final open directly so
+        // this verifies openat2 itself, independently of pathname pre-checks.
+        let link = root.join("escape");
+        symlink(&outside, &link).unwrap();
+        let escaped_path = link.join("secret.txt");
+        assert_eq!(
+            open_local_file_confined(&root, &escaped_path, &escaped_path).err(),
+            Some(TransportError::ConnectionFailed),
+            "openat2 must reject an intermediate symlink that escapes the root"
+        );
+
+        std::fs::remove_file(link).unwrap();
+        std::fs::remove_file(allowed).unwrap();
+        std::fs::remove_file(secret).unwrap();
+        std::fs::remove_dir(root).unwrap();
+        std::fs::remove_dir(outside).unwrap();
+        std::fs::remove_dir(base).unwrap();
+    }
+
     #[cfg(unix)]
     #[test]
     fn local_file_transport_rejects_parent_directory_symlinks() {
