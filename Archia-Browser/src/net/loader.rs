@@ -1642,14 +1642,13 @@ mod tests {
                     return Ok(Response::new(200)
                         .with_header("content-type", "text/html")
                         .with_body(
-                            br#"<link rel="stylesheet" href="file:///tmp/site.css"><body>Safe</body>"#
-                                .to_vec(),
-                        ));
+                        br#"<link rel="stylesheet" href="file:///tmp/site.css"><body>Safe</body>"#
+                            .to_vec(),
+                    ));
                 }
 
                 assert_eq!(request.url.scheme(), "file");
-                Ok(Response::new(302)
-                    .with_header("location", "https://cdn.example/private.css"))
+                Ok(Response::new(302).with_header("location", "https://cdn.example/private.css"))
             }
         }
 
@@ -1664,7 +1663,11 @@ mod tests {
 
         assert_eq!(page.document.text_content(), "Safe");
         let requests = loader.transport.requests.lock().unwrap();
-        assert_eq!(requests.len(), 2, "network redirect target must not be requested");
+        assert_eq!(
+            requests.len(),
+            2,
+            "network redirect target must not be requested"
+        );
         assert!(requests.iter().all(|url| url.starts_with("file:")));
     }
 
