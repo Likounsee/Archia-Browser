@@ -2015,10 +2015,8 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn macos_system_temp_alias_is_supported_by_secure_root_walk() {
-        let root = std::env::temp_dir().join(format!(
-            "archia-browser-macos-alias-{}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("archia-browser-macos-alias-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
 
         let transport = LocalFileTransport::new().with_allowed_roots([root.clone()]);
