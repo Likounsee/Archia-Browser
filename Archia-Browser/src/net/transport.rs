@@ -697,30 +697,15 @@ fn open_local_root_handle_verified(
             .join(requested_root)
     };
 
-    // macOS exposes /var and /tmp as OS-managed aliases to /private.
-    // The caller validates the original spelling first (allowing only those
-    // exact aliases); resolve that spelling here, then walk the resolved path
-    // component-by-component with O_NOFOLLOW so the actual grant remains pinned.
+    // Validate the supplied spelling before resolving macOS's system-managed
+    // /var and /tmp aliases. The resolved path is then walked component by
+    // component with O_NOFOLLOW, so intermediate components cannot redirect
+    // the opened grant after resolution.
     #[cfg(target_os = "macos")]
     {
-        let resolved =
-            std::fs::canonicalize(&absolute).map_err(|_| TransportError::ConnectionFailed)?;
-        let is_system_alias = ["/var", "/tmp"].iter().any(|alias| {
-            let alias = std::path::Path::new(alias);
-            absolute == alias
-                || absolute.starts_with(alias)
-                    && std::fs::symlink_metadata(alias)
-                        .is_ok_and(|metadata| metadata.file_type().is_symlink())
-                    && std::fs::canonicalize(alias).is_ok_and(|target| {
-                        target == std::path::Path::new("/private/var")
-                            && alias == std::path::Path::new("/var")
-                            || target == std::path::Path::new("/private/tmp")
-                                && alias == std::path::Path::new("/tmp")
-                    })
-        });
-        if is_system_alias {
-            absolute = resolved;
-        }
+        reject_symlink_path_components(&absolute)?;
+        absolute = std::fs::canonicalize(&absolute)
+            .map_err(|_| TransportError::ConnectionFailed)?;
     }
 
     let mut current = {
@@ -760,12 +745,6 @@ fn open_local_root_handle_verified(
             )
         };
         if fd < 0 {
-            #[cfg(target_os = "macos")]
-            eprintln!(
-                "secure root walk failed at {:?}: {}",
-                component,
-                std::io::Error::last_os_error()
-            );
             return Err(TransportError::ConnectionFailed);
         }
         current = unsafe { std::fs::File::from_raw_fd(fd) };
