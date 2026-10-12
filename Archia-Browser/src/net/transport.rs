@@ -231,6 +231,15 @@ impl Transport for HttpTransport {
 pub struct LocalFileTransport {
     max_file_size: usize,
     allowed_roots: Vec<std::path::PathBuf>,
+    #[cfg(target_os = "linux")]
+    authorized_root_handles: Vec<AuthorizedRootHandle>,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone)]
+struct AuthorizedRootHandle {
+    canonical_path: std::path::PathBuf,
+    directory: Arc<std::fs::File>,
 }
 
 impl Default for LocalFileTransport {
@@ -246,6 +255,8 @@ impl LocalFileTransport {
             // Fail closed until the embedding application explicitly grants
             // access to one or more local directories.
             allowed_roots: Vec::new(),
+            #[cfg(target_os = "linux")]
+            authorized_root_handles: Vec::new(),
         }
     }
 
@@ -256,6 +267,25 @@ impl LocalFileTransport {
         roots: impl IntoIterator<Item = std::path::PathBuf>,
     ) -> Self {
         self.allowed_roots = roots.into_iter().collect();
+        #[cfg(target_os = "linux")]
+        {
+            self.authorized_root_handles = self
+                .allowed_roots
+                .iter()
+                .filter_map(|root| {
+                    let canonical_path = std::fs::canonicalize(root).ok()?;
+                    reject_symlink_path_components(&canonical_path).ok()?;
+                    if !canonical_path.is_dir() {
+                        return None;
+                    }
+                    let directory = open_local_root_handle(&canonical_path).ok()?;
+                    Some(AuthorizedRootHandle {
+                        canonical_path,
+                        directory: Arc::new(directory),
+                    })
+                })
+                .collect();
+        }
         self
     }
 
@@ -331,6 +361,23 @@ impl Transport for LocalFileTransport {
         // The path checks above are not the security boundary: this handle-relative
         // resolution prevents a concurrent parent rename/symlink swap from
         // redirecting the final open outside the already-opened root handle.
+        #[cfg(target_os = "linux")]
+        let file = {
+            let pinned_root = self
+                .authorized_root_handles
+                .iter()
+                .find(|root| {
+                    canonical_path.starts_with(&root.canonical_path)
+                        && root.canonical_path == canonical_root
+                })
+                .ok_or(TransportError::ConnectionFailed)?;
+            open_local_file_confined_from_handle(
+                &pinned_root.directory,
+                &pinned_root.canonical_path,
+                &canonical_path,
+            )?
+        };
+        #[cfg(not(target_os = "linux"))]
         let file = open_local_file_confined(&canonical_root, &canonical_path, &path)?;
         let metadata = file
             .metadata()
