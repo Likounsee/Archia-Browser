@@ -697,35 +697,29 @@ fn open_local_root_handle_verified(
             .join(requested_root)
     };
 
-    // macOS intentionally exposes /var and /tmp as symlink aliases for paths
-    // under /private. The component walk below refuses all symlinks, so map
-    // only these two OS-managed aliases to their verified physical targets
-    // before walking; arbitrary user-controlled symlink components still fail.
+    // macOS exposes /var and /tmp as OS-managed aliases to /private.
+    // The caller validates the original spelling first (allowing only those
+    // exact aliases); resolve that spelling here, then walk the resolved path
+    // component-by-component with O_NOFOLLOW so the actual grant remains pinned.
     #[cfg(target_os = "macos")]
     {
-        for (alias, target) in [
-            (
-                std::path::Path::new("/var"),
-                std::path::Path::new("/private/var"),
-            ),
-            (
-                std::path::Path::new("/tmp"),
-                std::path::Path::new("/private/tmp"),
-            ),
-        ] {
-            if absolute == alias || absolute.starts_with(alias) {
-                let is_expected_alias = std::fs::symlink_metadata(alias)
-                    .is_ok_and(|metadata| metadata.file_type().is_symlink())
-                    && std::fs::canonicalize(alias).is_ok_and(|resolved| resolved == target);
-                if is_expected_alias {
-                    absolute = target.join(
-                        absolute
-                            .strip_prefix(alias)
-                            .map_err(|_| TransportError::ConnectionFailed)?,
-                    );
-                }
-                break;
-            }
+        let resolved = std::fs::canonicalize(&absolute)
+            .map_err(|_| TransportError::ConnectionFailed)?;
+        let is_system_alias = ["/var", "/tmp"].iter().any(|alias| {
+            let alias = std::path::Path::new(alias);
+            absolute == alias
+                || absolute.starts_with(alias)
+                    && std::fs::symlink_metadata(alias)
+                        .is_ok_and(|metadata| metadata.file_type().is_symlink())
+                    && std::fs::canonicalize(alias).is_ok_and(|target| {
+                        target == std::path::Path::new("/private/var")
+                            && alias == std::path::Path::new("/var")
+                            || target == std::path::Path::new("/private/tmp")
+                                && alias == std::path::Path::new("/tmp")
+                    })
+        });
+        if is_system_alias {
+            absolute = resolved;
         }
     }
 
