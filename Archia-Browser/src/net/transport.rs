@@ -703,8 +703,8 @@ fn open_local_root_handle_verified(
     // component-by-component with O_NOFOLLOW so the actual grant remains pinned.
     #[cfg(target_os = "macos")]
     {
-        let resolved = std::fs::canonicalize(&absolute)
-            .map_err(|_| TransportError::ConnectionFailed)?;
+        let resolved =
+            std::fs::canonicalize(&absolute).map_err(|_| TransportError::ConnectionFailed)?;
         let is_system_alias = ["/var", "/tmp"].iter().any(|alias| {
             let alias = std::path::Path::new(alias);
             absolute == alias
