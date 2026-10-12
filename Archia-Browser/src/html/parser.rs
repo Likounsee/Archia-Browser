@@ -454,9 +454,15 @@ mod tests {
 
         assert_eq!(table.children.len(), 2);
         assert_eq!(table.children[0].tag_name(), Some("tbody"));
-        assert_eq!(table.children[0].children[0].children[0].text_content(), "first");
+        assert_eq!(
+            table.children[0].children[0].children[0].text_content(),
+            "first"
+        );
         assert_eq!(table.children[1].tag_name(), Some("tbody"));
-        assert_eq!(table.children[1].children[0].children[0].text_content(), "second");
+        assert_eq!(
+            table.children[1].children[0].children[0].text_content(),
+            "second"
+        );
     }
 
     #[test]
