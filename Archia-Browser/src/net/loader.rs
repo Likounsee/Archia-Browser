@@ -1317,7 +1317,7 @@ mod tests {
         let request = Request::new(Url::parse(&url).unwrap());
         let loader = DocumentLoader::new(
             NetworkPipeline::new(AllowAll),
-            super::super::LocalFileTransport::new(),
+            super::super::LocalFileTransport::for_file_url(&request.url).unwrap(),
         );
         let page = loader
             .load(&request, LayoutViewport::new(320, 200))
@@ -1442,18 +1442,26 @@ mod tests {
 
         struct RootTransport {
             document: Response,
+            allowed_root: std::path::PathBuf,
         }
         impl Transport for RootTransport {
             fn send(&self, request: &Request) -> Result<Response, TransportError> {
                 if request.policy.resource_kind == ResourceKind::Stylesheet {
-                    return super::super::LocalFileTransport::new().send(request);
+                    return super::super::LocalFileTransport::new()
+                        .with_allowed_roots([self.allowed_root.clone()])
+                        .send(request);
                 }
                 Ok(self.document.clone())
             }
         }
 
-        let loader =
-            DocumentLoader::new(NetworkPipeline::new(AllowAll), RootTransport { document });
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            RootTransport {
+                document,
+                allowed_root: root.clone(),
+            },
+        );
         let page = loader
             .load(&request, LayoutViewport::new(320, 200))
             .unwrap();
