@@ -212,6 +212,30 @@ mod tests {
     }
 
     #[test]
+    fn concurrent_reservation_growth_never_exceeds_shared_budget() {
+        let budget = Arc::new(MemoryBudget::new(100));
+        let reservation = Arc::new(MemoryReservation::try_new(Arc::clone(&budget), 20).unwrap());
+        let workers: Vec<_> = (0..8)
+            .map(|_| {
+                let reservation = Arc::clone(&reservation);
+                std::thread::spawn(move || reservation.try_grow_by(20))
+            })
+            .collect();
+
+        let successful_growths = workers
+            .into_iter()
+            .filter(|worker| worker.join().expect("growth worker must not panic"))
+            .count();
+
+        assert_eq!(successful_growths, 4);
+        assert_eq!(reservation.bytes(), 100);
+        assert_eq!(budget.used(), 100);
+
+        drop(reservation);
+        assert_eq!(budget.used(), 0);
+    }
+
+    #[test]
     fn budget_prevents_overcommit() {
         let budget = MemoryBudget::new(1024);
         assert!(budget.try_reserve(1024));
