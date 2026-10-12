@@ -2012,6 +2012,25 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_system_temp_alias_is_supported_by_secure_root_walk() {
+        let root = std::env::temp_dir().join(format!(
+            "archia-browser-macos-alias-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+
+        let transport = LocalFileTransport::new().with_allowed_roots([root.clone()]);
+        assert_eq!(
+            transport.authorized_root_handles.len(),
+            1,
+            "the OS-managed /var -> /private/var alias must not prevent granting a temp directory"
+        );
+
+        std::fs::remove_dir(root).unwrap();
+    }
+
     #[test]
     fn detects_common_local_web_asset_content_types_case_insensitively() {
         for (path, expected) in [
