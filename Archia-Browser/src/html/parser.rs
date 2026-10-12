@@ -8,6 +8,7 @@ const VOID_ELEMENTS: &[&str] = &[
 ];
 
 const MAX_DOM_DEPTH: usize = 256;
+const MAX_DOM_TAG_NAME_BYTES: usize = 1_024;
 const MAX_DOM_NODES: usize = 50_000;
 const MAX_DOM_ATTRIBUTE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_DOM_TEXT_BYTES: usize = 4 * 1024 * 1024;
@@ -140,6 +141,11 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 attributes,
                 self_closing: _,
             } => {
+                // Direct-token callers can bypass the tokenizer's tag-name cap.
+                // Reject oversized names before cloning them into the DOM or stacks.
+                if name.len() > MAX_DOM_TAG_NAME_BYTES {
+                    continue;
+                }
                 // Bound retained DOM nodes independently of token and byte limits.
                 // Once saturated, discard each new subtree without allocating a Node
                 // or cloning its attributes; matching end tags recover below.
@@ -211,7 +217,13 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                     stack.push(node);
                 }
             }
-            HtmlToken::EndTag(name) => close_element(&mut root, &mut stack, name),
+            HtmlToken::EndTag(name) => {
+                // Avoid expensive comparisons against every open element when a
+                // direct-token caller supplies an unbounded closing-tag name.
+                if name.len() <= MAX_DOM_TAG_NAME_BYTES {
+                    close_element(&mut root, &mut stack, name);
+                }
+            }
         }
     }
 
@@ -430,6 +442,31 @@ mod tests {
 
         assert_eq!(body.child_count(), MAX_DOM_NODES);
         assert_eq!(body.text_content().len(), MAX_DOM_NODES);
+    }
+
+    #[test]
+    fn direct_tokens_cannot_bypass_the_dom_tag_name_byte_budget() {
+        let oversized_name = "x".repeat(MAX_DOM_TAG_NAME_BYTES + 1);
+        let tokens = vec![
+            HtmlToken::StartTag {
+                name: oversized_name.clone(),
+                attributes: Default::default(),
+                self_closing: false,
+            },
+            HtmlToken::EndTag(oversized_name),
+            HtmlToken::StartTag {
+                name: "p".to_owned(),
+                attributes: Default::default(),
+                self_closing: false,
+            },
+            HtmlToken::Text("retained".to_owned()),
+            HtmlToken::EndTag("p".to_owned()),
+        ];
+
+        let root = parse(&tokens);
+        let paragraph = root.find_first_element("p").expect("valid paragraph is retained");
+        assert_eq!(paragraph.text_content(), "retained");
+        assert!(root.find_first_element(&"x".repeat(MAX_DOM_TAG_NAME_BYTES + 1)).is_none());
     }
 
     #[test]
