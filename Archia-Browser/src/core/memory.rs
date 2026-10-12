@@ -255,8 +255,7 @@ mod tests {
     #[test]
     fn concurrent_growth_and_shrink_keep_reservation_and_budget_in_sync() {
         let budget = Arc::new(MemoryBudget::new(4096));
-        let reservation =
-            Arc::new(MemoryReservation::try_new(Arc::clone(&budget), 1024).unwrap());
+        let reservation = Arc::new(MemoryReservation::try_new(Arc::clone(&budget), 1024).unwrap());
         let grower = {
             let reservation = Arc::clone(&reservation);
             std::thread::spawn(move || {
