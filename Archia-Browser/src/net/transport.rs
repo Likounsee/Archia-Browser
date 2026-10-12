@@ -268,14 +268,15 @@ impl Transport for LocalFileTransport {
         }
 
         let path = file_url_path(request.url.path())?;
-        // Inspect the opened handle, not the pathname: metadata(path) followed by
-        // open(path) can validate one filesystem object and then read another if
-        // the path is replaced between those operations.
-        let file = std::fs::File::open(&path).map_err(|_| TransportError::ConnectionFailed)?;
+        // Open without following a final-component symlink/reparse point. A
+        // pre-open symlink_metadata() check is insufficient: the path can be
+        // swapped between that check and open (TOCTOU). Inspect the opened
+        // handle below, never metadata obtained from the pathname.
+        let file = open_local_file_without_following_links(&path)?;
         let metadata = file
             .metadata()
             .map_err(|_| TransportError::ConnectionFailed)?;
-        if !metadata.is_file() {
+        if !metadata.is_file() || metadata.file_type().is_symlink() {
             return Err(TransportError::ConnectionFailed);
         }
         if metadata.len() > self.max_file_size as u64 {
@@ -307,6 +308,70 @@ impl Transport for LocalFileTransport {
             .with_header("content-type", content_type)
             .with_header("content-length", content_length.to_string())
             .with_body(body))
+    }
+}
+
+
+/// Open a local file without following a symlink at the final path component.
+/// Unsupported platforms fail closed rather than silently following links.
+fn open_local_file_without_following_links(
+    path: &std::path::Path,
+) -> Result<std::fs::File, TransportError> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        // Linux O_NOFOLLOW. Keep this platform-specific instead of assuming
+        // the numeric value is shared by every Unix-like OS.
+        return std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(0x0002_0000)
+            .open(path)
+            .map_err(|_| TransportError::ConnectionFailed);
+    }
+    #[cfg(target_os = "android")]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        return std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(0x0002_0000)
+            .open(path)
+            .map_err(|_| TransportError::ConnectionFailed);
+    }
+    #[cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd", target_os = "dragonfly"))]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        // O_NOFOLLOW on the BSD/Darwin family.
+        return std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(0x0000_0100)
+            .open(path)
+            .map_err(|_| TransportError::ConnectionFailed);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // FILE_FLAG_OPEN_REPARSE_POINT opens the reparse point itself. The
+        // opened handle is checked with file_type().is_symlink() below.
+        return std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(0x0020_0000)
+            .open(path)
+            .map_err(|_| TransportError::ConnectionFailed);
+    }
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd",
+        target_os = "dragonfly",
+        windows
+    )))]
+    {
+        let _ = path;
+        Err(TransportError::ConnectionFailed)
     }
 }
 
@@ -1675,6 +1740,35 @@ mod tests {
             percent_decode("/tmp/caf%C3%A9.html").unwrap(),
             "/tmp/café.html"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_file_transport_rejects_final_component_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let directory = std::env::temp_dir().join(format!(
+            "archia-browser-symlink-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let target = directory.join("target.html");
+        let link = directory.join("link.html");
+        std::fs::write(&target, b"<body>must not follow</body>").unwrap();
+        symlink(&target, &link).unwrap();
+
+        let request = Request::new(
+            Url::parse(&local_file_test_url(&link)).unwrap(),
+        );
+        assert_eq!(
+            LocalFileTransport::new().send(&request),
+            Err(TransportError::ConnectionFailed),
+            "a local file URL must not follow a final-component symlink"
+        );
+
+        std::fs::remove_file(link).unwrap();
+        std::fs::remove_file(target).unwrap();
+        std::fs::remove_dir(directory).unwrap();
     }
 
     #[test]
