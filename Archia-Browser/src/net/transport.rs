@@ -697,13 +697,39 @@ fn open_local_root_handle_verified(
     // from the filesystem root. Opening only the final absolute pathname with
     // O_NOFOLLOW would still allow an intermediate directory to be swapped for
     // a symlink between the earlier pathname check and this open.
-    let absolute = if requested_root.is_absolute() {
+    let mut absolute = if requested_root.is_absolute() {
         requested_root.to_path_buf()
     } else {
         std::env::current_dir()
             .map_err(|_| TransportError::ConnectionFailed)?
             .join(requested_root)
     };
+
+    // macOS intentionally exposes /var and /tmp as symlink aliases for paths
+    // under /private. The component walk below refuses all symlinks, so map
+    // only these two OS-managed aliases to their verified physical targets
+    // before walking; arbitrary user-controlled symlink components still fail.
+    #[cfg(target_os = "macos")]
+    {
+        for (alias, target) in [
+            (std::path::Path::new("/var"), std::path::Path::new("/private/var")),
+            (std::path::Path::new("/tmp"), std::path::Path::new("/private/tmp")),
+        ] {
+            if absolute == alias || absolute.starts_with(alias) {
+                let is_expected_alias = std::fs::symlink_metadata(alias)
+                    .is_ok_and(|metadata| metadata.file_type().is_symlink())
+                    && std::fs::canonicalize(alias).is_ok_and(|resolved| resolved == target);
+                if is_expected_alias {
+                    absolute = target.join(
+                        absolute.strip_prefix(alias)
+                            .map_err(|_| TransportError::ConnectionFailed)?,
+                    );
+                }
+                break;
+            }
+        }
+    }
+
     let mut current = {
         let fd = unsafe {
             libc::open(
