@@ -9,6 +9,7 @@ const VOID_ELEMENTS: &[&str] = &[
 
 const MAX_DOM_DEPTH: usize = 256;
 const MAX_DOM_NODES: usize = 50_000;
+const MAX_DOM_ATTRIBUTE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_DOM_TOKENS: usize = 100_000;
 
 const BLOCK_CLOSES_P: &[&str] = &[
@@ -57,6 +58,9 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
     // entire attacker-controlled nesting stack on every token.
     let mut suppressed_positions: HashMap<String, Vec<usize>> = HashMap::new();
     let mut created_nodes = 0usize;
+    // Direct-token callers can bypass the tokenizer's input-byte ceiling. Bound
+    // copied attribute storage independently across the retained DOM.
+    let mut retained_attribute_bytes = 0usize;
 
     for token in tokens.iter().take(MAX_DOM_TOKENS) {
         if !suppressed_stack.is_empty() {
@@ -165,7 +169,19 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
 
                 let mut node = Node::element(name.clone());
                 for (attribute, value) in attributes {
+                    let Some(attribute_bytes) = attribute.len().checked_add(value.len()) else {
+                        continue;
+                    };
+                    let Some(next_attribute_bytes) =
+                        retained_attribute_bytes.checked_add(attribute_bytes)
+                    else {
+                        continue;
+                    };
+                    if next_attribute_bytes > MAX_DOM_ATTRIBUTE_BYTES {
+                        continue;
+                    }
                     node.set_attribute(attribute, value);
+                    retained_attribute_bytes = next_attribute_bytes;
                 }
 
                 // In HTML syntax, the self-closing flag is ignored for
@@ -389,6 +405,38 @@ mod tests {
 
         assert_eq!(body.child_count(), MAX_DOM_NODES);
         assert_eq!(body.text_content().len(), MAX_DOM_NODES);
+    }
+
+
+    #[test]
+    fn direct_tokens_cannot_bypass_the_dom_attribute_byte_budget() {
+        let oversized_value = "x".repeat(MAX_DOM_ATTRIBUTE_BYTES + 1);
+        let tokens = vec![
+            HtmlToken::StartTag {
+                name: "div".to_owned(),
+                attributes: vec![("data-huge".to_owned(), oversized_value)],
+                self_closing: false,
+            },
+            HtmlToken::StartTag {
+                name: "p".to_owned(),
+                attributes: vec![("id".to_owned(), "retained".to_owned())],
+                self_closing: false,
+            },
+            HtmlToken::EndTag("p".to_owned()),
+            HtmlToken::EndTag("div".to_owned()),
+        ];
+
+        let root = parse(&tokens);
+        let paragraph = root.find_first_element("p").expect("paragraph is retained");
+
+        assert_eq!(paragraph.attribute("id"), Some("retained"));
+        assert_eq!(
+            root.find_first_element("div")
+                .expect("div is retained")
+                .attribute("data-huge"),
+            None,
+            "an attribute beyond the shared byte budget must not be copied into the DOM"
+        );
     }
 
     #[test]
