@@ -50,15 +50,22 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
     // Once the limit is reached, discard a bounded-depth subtree. Track only
     // nesting depth here: retaining/searching tag names would recreate an
     // attacker-controlled quadratic scan on this hostile-input path.
-    let mut suppressed_depth = 0usize;
+    let mut suppressed_stack: Vec<String> = Vec::new();
 
     for token in tokens.iter().take(MAX_DOM_TOKENS) {
-        if suppressed_depth > 0 {
+        if !suppressed_stack.is_empty() {
             match token {
                 HtmlToken::StartTag { name, .. } if !VOID_ELEMENTS.contains(&name.as_str()) => {
-                    suppressed_depth = suppressed_depth.saturating_add(1);
+                    suppressed_stack.push(name.clone());
                 }
-                HtmlToken::EndTag(_) => suppressed_depth -= 1,
+                HtmlToken::EndTag(name) if !VOID_ELEMENTS.contains(&name.as_str()) => {
+                    // Mirror the parser's matching-end-tag behavior inside the
+                    // discarded subtree. Unmatched/void end tags must not reduce
+                    // the suppression depth and expose hostile nested markup.
+                    if let Some(position) = suppressed_stack.iter().rposition(|open| open == name) {
+                        suppressed_stack.truncate(position);
+                    }
+                }
                 _ => {}
             }
             continue;
@@ -109,7 +116,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 if VOID_ELEMENTS.contains(&name.as_str()) {
                     append_node(&mut root, &mut stack, node);
                 } else if stack.len() >= MAX_DOM_DEPTH {
-                    suppressed_depth = 1;
+                    suppressed_stack.push(name.clone());
                 } else {
                     stack.push(node);
                 }
@@ -267,6 +274,35 @@ mod tests {
         html.push_str("discarded");
         html.push_str(&"</div>".repeat(MAX_DOM_DEPTH + 32));
         html.push_str("<p>visible</p>");
+
+        let root = parse(&HtmlTokenizer::tokenize(&html));
+
+        assert_eq!(root.text_content(), "visible");
+        assert!(root.find_first_element("p").is_some());
+    }
+
+    #[test]
+    fn unmatched_and_void_end_tags_cannot_escape_suppressed_subtree() {
+        let mut html = "<div>".repeat(MAX_DOM_DEPTH + 1);
+        html.push_str("hidden</br></unknown></img>");
+        html.push_str(&"<span>".repeat(8));
+        html.push_str("still hidden</div>");
+        html.push_str(&"</span>".repeat(8));
+        html.push_str(&"</div>".repeat(MAX_DOM_DEPTH));
+        html.push_str("<p>visible</p>");
+
+        let root = parse(&HtmlTokenizer::tokenize(&html));
+
+        assert_eq!(root.text_content(), "visible");
+        assert!(root.find_first_element("p").is_some());
+        assert!(root.find_first_element("span").is_none());
+    }
+
+    #[test]
+    fn matching_ancestor_end_tag_recovers_after_suppressed_subtree() {
+        let mut html = "<div>".repeat(MAX_DOM_DEPTH + 1);
+        html.push_str("hidden</div><p>visible</p>");
+        html.push_str(&"</div>".repeat(MAX_DOM_DEPTH));
 
         let root = parse(&HtmlTokenizer::tokenize(&html));
 
