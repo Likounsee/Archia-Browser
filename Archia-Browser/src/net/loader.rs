@@ -407,6 +407,7 @@ where
         )
     }
 
+    #[allow(clippy::too_many_arguments)] // Recursive loading carries shared per-document budgets and reservations.
     fn load_stylesheet_resource_at(
         &self,
         document_url: &super::Url,
@@ -565,9 +566,7 @@ where
                         estimated_temporary_bytes,
                     )
                 });
-                let Some(reservation) = reservation else {
-                    return None;
-                };
+                let reservation = reservation?;
                 Some(reservation)
             } else {
                 None
@@ -602,6 +601,7 @@ where
         None
     }
 
+    #[allow(clippy::too_many_arguments)] // Recursive imports share the same request, byte, and memory accounting.
     fn expand_stylesheet_imports(
         &self,
         document_url: &super::Url,
