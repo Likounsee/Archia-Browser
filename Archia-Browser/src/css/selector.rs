@@ -310,6 +310,12 @@ impl Selector {
 }
 
 fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
+    // A combinator must always have a selector on both sides. Without this
+    // guard, inputs such as `div >` or `>` were accepted as empty selectors.
+    if chars.is_empty() {
+        return None;
+    }
+
     let mut simple = SimpleSelector {
         tag: None,
         id: None,
@@ -909,6 +915,20 @@ mod tests {
             attributes.insert("lang".into(), "en-US".into());
         }
         node
+    }
+
+    #[test]
+    fn rejects_empty_selector_parts_and_dangling_combinators() {
+        for input in [
+            ">", "+", "~", "div >", "div +", "div ~", "> div", "+ div", "~ div",
+            "div > + span", "div ~ ~ span", "div + > span",
+        ] {
+            assert!(Selector::parse(input).is_none(), "accepted invalid selector: {input}");
+        }
+
+        for input in ["div", "div > span", "div + span", "div ~ span", "*", ".card"] {
+            assert!(Selector::parse(input).is_some(), "rejected valid selector: {input}");
+        }
     }
 
     #[test]
