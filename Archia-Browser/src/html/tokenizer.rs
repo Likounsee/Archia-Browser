@@ -169,7 +169,7 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
             if ch.is_whitespace() || matches!(ch, '=' | '/') {
                 break;
             }
-            if attr_name.len().saturating_add(ch.len_utf8()) <= MAX_HTML_ATTRIBUTE_NAME_BYTES {
+            if attr_name.len() + ch.len_utf8() <= MAX_HTML_ATTRIBUTE_NAME_BYTES {
                 attr_name.push(ch.to_ascii_lowercase());
             } else {
                 attr_name_too_long = true;
@@ -199,7 +199,7 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
                     if ch == q {
                         break;
                     }
-                    if value.len().saturating_add(ch.len_utf8()) <= MAX_HTML_ATTRIBUTE_VALUE_BYTES {
+                    if value.len() + ch.len_utf8() <= MAX_HTML_ATTRIBUTE_VALUE_BYTES {
                         value.push(ch);
                     } else {
                         value_too_long = true;
