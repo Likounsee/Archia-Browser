@@ -777,10 +777,10 @@ fn open_local_root_handle_verified(
         // SAFETY: file owns a valid Windows handle and information is writable.
         let success =
             unsafe { GetFileInformationByHandle(file.as_raw_handle().cast(), &mut information) };
-        (success != 0).then_some((
-            information.volume_serial_number,
-            (u64::from(information.file_index_high) << 32) | u64::from(information.file_index_low),
-        ))
+        let index =
+            (u64::from(information.file_index_high) << 32) | u64::from(information.file_index_low);
+        // A zero file index cannot establish a stable object identity, so fail closed.
+        (success != 0 && index != 0).then_some((information.volume_serial_number, index))
     }
     const INVALID_HANDLE_VALUE: Handle = -1isize as Handle;
     const GENERIC_READ: u32 = 0x8000_0000;
@@ -837,13 +837,15 @@ fn open_local_root_handle_verified(
     let named_opened = named_file
         .metadata()
         .map_err(|_| TransportError::ConnectionFailed)?;
+    let directory_identity = file_identity(&directory);
+    let named_identity = file_identity(&named_file);
     if !opened.is_dir()
         || !named.is_dir()
         || opened.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
         || named.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
         || named_opened.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-        || file_identity(&directory).is_none()
-        || file_identity(&directory) != file_identity(&named_file)
+        || directory_identity.is_none()
+        || directory_identity != named_identity
     {
         return Err(TransportError::ConnectionFailed);
     }
