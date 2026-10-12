@@ -413,12 +413,12 @@ mod tests {
         let tokens = vec![
             HtmlToken::StartTag {
                 name: "div".to_owned(),
-                attributes: vec![("data-huge".to_owned(), oversized_value)],
+                attributes: [("data-huge".to_owned(), oversized_value)].into_iter().collect(),
                 self_closing: false,
             },
             HtmlToken::StartTag {
                 name: "p".to_owned(),
-                attributes: vec![("id".to_owned(), "retained".to_owned())],
+                attributes: [("id".to_owned(), "retained".to_owned())].into_iter().collect(),
                 self_closing: false,
             },
             HtmlToken::EndTag("p".to_owned()),
