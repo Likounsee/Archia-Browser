@@ -35,8 +35,7 @@ impl StyleSheet {
         };
         let mut rules = Vec::new();
         let mut total_selectors = 0usize;
-        for (selector_text, declaration_text) in
-            parse_rule_blocks(input).into_iter().take(MAX_STYLE_RULES)
+        for (selector_text, declaration_text) in parse_rule_blocks(input, MAX_STYLE_RULES)
         {
             if total_selectors >= MAX_TOTAL_SELECTORS {
                 break;
@@ -247,7 +246,7 @@ impl StyleSheet {
 
 /// Scan only top-level qualified rules. Unlike splitting on braces, this respects
 /// comments, quoted strings, escaped characters and nested delimiters.
-fn parse_rule_blocks(input: &str) -> Vec<(String, String)> {
+fn parse_rule_blocks(input: &str, max_blocks: usize) -> Vec<(String, String)> {
     let mut blocks = Vec::new();
     let mut prelude = String::new();
     let mut body = String::new();
@@ -320,6 +319,9 @@ fn parse_rule_blocks(input: &str) -> Vec<(String, String)> {
                     let selector = prelude.trim().to_owned();
                     if !selector.is_empty() {
                         blocks.push((selector, std::mem::take(&mut body)));
+                        if blocks.len() >= max_blocks {
+                            return blocks;
+                        }
                     }
                     prelude.clear();
                     body.clear();
@@ -672,6 +674,17 @@ fn normalize_declaration_value(value: &str) -> (String, bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stylesheet_parser_stops_collecting_after_rule_limit() {
+        let css = (0..(MAX_STYLE_RULES + 100))
+            .map(|index| format!(".class-{index} {{ color: red; }}"))
+            .collect::<String>();
+
+        let stylesheet = StyleSheet::parse(&css);
+
+        assert_eq!(stylesheet.rules.len(), MAX_STYLE_RULES);
+    }
 
     #[test]
     fn matching_rules_with_siblings_handles_empty_path() {
