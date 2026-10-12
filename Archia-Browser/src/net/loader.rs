@@ -2580,17 +2580,17 @@ mod tests {
             }
         }
 
-        let loader = DocumentLoader::new(
-            NetworkPipeline::new(AllowAll),
-            OversizedHtmlTransport,
-        );
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), OversizedHtmlTransport);
         let request = Request::new(Url::parse("https://example.org/large").unwrap());
         let page = loader
             .load(&request, LayoutViewport::new(320, 200))
             .expect("the bounded HTML prefix remains a valid document");
 
         assert!(page.document.text_content().contains("retained-prefix"));
-        assert!(!page.document.text_content().contains("untrusted-tail-marker"));
+        assert!(!page
+            .document
+            .text_content()
+            .contains("untrusted-tail-marker"));
     }
 
 }
