@@ -156,6 +156,9 @@ fn implied_end_tags_for_start(name: &str) -> &'static [&'static str] {
         "dt" | "dd" => &["dt", "dd"],
         "option" => &["option"],
         "optgroup" => &["option", "optgroup"],
+        "td" | "th" => &["td", "th"],
+        "tr" => &["td", "th", "tr"],
+        "thead" | "tbody" | "tfoot" => &["td", "th", "tr", "thead", "tbody", "tfoot"],
         _ => &[],
     }
 }
@@ -422,6 +425,38 @@ mod tests {
         assert_eq!(select.children[2].tag_name(), Some("optgroup"));
         assert_eq!(select.children[2].children[0].tag_name(), Some("option"));
         assert_eq!(select.children[2].children[0].text_content(), "three");
+    }
+
+    #[test]
+    fn table_cells_close_before_the_next_cell_and_row() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<table><tbody><tr><td>one<td>two<tr><th>three</table>",
+        ));
+        let table = root.find_first_element("table").unwrap();
+        let tbody = table.find_first_element("tbody").unwrap();
+
+        assert_eq!(tbody.children.len(), 2);
+        assert_eq!(tbody.children[0].tag_name(), Some("tr"));
+        assert_eq!(tbody.children[0].children.len(), 2);
+        assert_eq!(tbody.children[0].children[0].text_content(), "one");
+        assert_eq!(tbody.children[0].children[1].text_content(), "two");
+        assert_eq!(tbody.children[1].tag_name(), Some("tr"));
+        assert_eq!(tbody.children[1].children[0].tag_name(), Some("th"));
+        assert_eq!(tbody.children[1].children[0].text_content(), "three");
+    }
+
+    #[test]
+    fn table_section_start_closes_an_open_row_and_cell() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<table><tbody><tr><td>first<tbody><tr><td>second",
+        ));
+        let table = root.find_first_element("table").unwrap();
+
+        assert_eq!(table.children.len(), 2);
+        assert_eq!(table.children[0].tag_name(), Some("tbody"));
+        assert_eq!(table.children[0].children[0].children[0].text_content(), "first");
+        assert_eq!(table.children[1].tag_name(), Some("tbody"));
+        assert_eq!(table.children[1].children[0].children[0].text_content(), "second");
     }
 
     #[test]
