@@ -497,6 +497,7 @@ fn open_local_file_confined(
 
 /// Open a local file without following a symlink at the final path component.
 /// Unsupported platforms fail closed rather than silently following links.
+#[cfg(not(target_os = "linux"))]
 fn open_local_file_without_following_links(
     path: &std::path::Path,
 ) -> Result<std::fs::File, TransportError> {
