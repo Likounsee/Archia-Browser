@@ -104,6 +104,15 @@ impl Selector {
             }
 
             if matches!(chars[i], '>' | '+' | '~') {
+                // Reject leading and consecutive explicit combinators instead of
+                // silently replacing the pending relationship.
+                if parts.is_empty()
+                    || pending
+                        .as_ref()
+                        .is_some_and(|combinator| !matches!(combinator, Combinator::Descendant))
+                {
+                    return None;
+                }
                 pending = Some(match chars[i] {
                     '>' => Combinator::Child,
                     '+' => Combinator::AdjacentSibling,
