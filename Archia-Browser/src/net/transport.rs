@@ -1871,10 +1871,8 @@ mod tests {
 
     #[test]
     fn local_file_transport_denies_reads_without_an_explicit_root() {
-        let directory = std::env::temp_dir().join(format!(
-            "archia-browser-local-deny-{}",
-            std::process::id()
-        ));
+        let directory =
+            std::env::temp_dir().join(format!("archia-browser-local-deny-{}", std::process::id()));
         std::fs::create_dir_all(&directory).unwrap();
         let path = directory.join("secret.txt");
         std::fs::write(&path, b"secret").unwrap();
@@ -1891,10 +1889,8 @@ mod tests {
 
     #[test]
     fn local_file_transport_rejects_files_outside_allowed_roots() {
-        let base = std::env::temp_dir().join(format!(
-            "archia-browser-root-policy-{}",
-            std::process::id()
-        ));
+        let base =
+            std::env::temp_dir().join(format!("archia-browser-root-policy-{}", std::process::id()));
         let allowed = base.join("allowed");
         let outside = base.join("outside");
         std::fs::create_dir_all(&allowed).unwrap();
