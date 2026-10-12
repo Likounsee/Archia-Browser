@@ -540,7 +540,17 @@ where
             // String. Charge that temporary allocation before conversion; the
             // final expanded stylesheet is charged separately by the document
             // reservation before the page tree is constructed.
-            let bounded_body = &response.body[..response.body.len().min(*remaining_css_bytes)];
+            // Never parse a partial stylesheet just because this document has
+            // exhausted most of its CSS budget. A cached full response may be
+            // larger than the remaining allowance even if it was valid when first
+            // cached; reject it as a whole and invalidate that unusable cache entry.
+            if response.body.len() > *remaining_css_bytes {
+                if let Ok(mut cache) = self.cache.lock() {
+                    cache.invalidate(&request);
+                }
+                return None;
+            }
+            let bounded_body = response.body.as_slice();
             let temporary_css_reservation = if let Some(budget) = &self.memory_budget {
                 let estimated_temporary_bytes = bounded_body.len().saturating_mul(4);
                 let reservation = crate::core::memory::MemoryReservation::try_new(
@@ -1244,6 +1254,39 @@ mod tests {
             memory_budget.used(),
             0,
             "failed CSS decoding must release any cache or temporary reservations"
+        );
+    }
+
+    #[test]
+    fn cached_stylesheet_is_not_truncated_to_fit_remaining_document_budget() {
+        #[derive(Debug)]
+        struct ReusedStylesheetTransport;
+
+        impl Transport for ReusedStylesheetTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                assert_eq!(request.url.path(), "/style.css");
+                Ok(Response::new(200)
+                    .with_header("content-type", "text/css")
+                    .with_header("cache-control", "public, max-age=3600")
+                    .with_body(vec![b'a'; 1536 * 1024]))
+            }
+        }
+
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            ReusedStylesheetTransport,
+        );
+        let document_url = Url::parse("https://example.org/index.html").unwrap();
+        let css = loader.load_linked_stylesheets(
+            &document_url,
+            r#"<link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/style.css">"#,
+            None,
+        );
+
+        assert_eq!(
+            css.len(),
+            1536 * 1024,
+            "the second cached stylesheet must be rejected whole, not partially appended"
         );
     }
 
