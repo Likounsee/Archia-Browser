@@ -2510,6 +2510,53 @@ mod tests {
         std::fs::remove_dir(base).unwrap();
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn windows_handle_relative_open_rejects_directory_junctions() {
+        use std::process::Command;
+
+        let base = std::env::temp_dir().join(format!(
+            "archia-browser-windows-junction-{}",
+            std::process::id()
+        ));
+        let root_path = base.join("root");
+        let outside = base.join("outside");
+        let junction = root_path.join("escape");
+        std::fs::create_dir_all(&root_path).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("secret.txt"), b"OUTSIDE-SECRET").unwrap();
+
+        // Junctions do not require the Developer Mode symlink privilege.
+        let output = Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(&junction)
+            .arg(&outside)
+            .output()
+            .expect("Windows cmd.exe must be available to create a junction");
+        assert!(
+            output.status.success(),
+            "could not create test junction: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let canonical_root = std::fs::canonicalize(&root_path).unwrap();
+        let root_handle = open_local_root_handle_verified(&canonical_root).unwrap();
+        let escaped_path = canonical_root.join("escape").join("secret.txt");
+        assert_eq!(
+            open_local_file_confined_from_handle(&root_handle, &canonical_root, &escaped_path)
+                .err(),
+            Some(TransportError::ConnectionFailed),
+            "handle-relative opening must reject an intermediate Windows directory junction"
+        );
+
+        drop(root_handle);
+        std::fs::remove_dir(&junction).unwrap();
+        std::fs::remove_file(outside.join("secret.txt")).unwrap();
+        std::fs::remove_dir(outside).unwrap();
+        std::fs::remove_dir(root_path).unwrap();
+        std::fs::remove_dir(base).unwrap();
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn openat2_does_not_escape_during_concurrent_parent_swap() {
