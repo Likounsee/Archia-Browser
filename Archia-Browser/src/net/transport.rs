@@ -2608,7 +2608,7 @@ mod tests {
         std::fs::remove_dir(base).unwrap();
     }
 
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     #[test]
     fn local_file_transport_fails_closed_without_handle_relative_confinement() {
         let directory = std::env::temp_dir().join(format!(
