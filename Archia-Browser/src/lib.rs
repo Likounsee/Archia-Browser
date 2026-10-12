@@ -222,9 +222,11 @@ impl Browser {
             .map_err(net::TransportError::InvalidUrl)
             .map_err(net::DocumentLoadError::Network)?;
         let request = net::Request::new(url);
+        let transport = net::LocalFileTransport::for_file_url(&request.url)
+            .map_err(net::DocumentLoadError::Network)?;
         let loader = net::DocumentLoader::new(
             net::pipeline::NetworkPipeline::new(LocalFilePolicy),
-            net::LocalFileTransport::new(),
+            transport,
         )
         .with_shared_memory_budget(Arc::clone(&self.memory));
         self.load_request(&loader, &request, viewport)
