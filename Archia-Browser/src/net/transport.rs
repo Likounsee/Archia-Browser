@@ -504,11 +504,8 @@ fn reject_symlink_path_components(path: &std::path::Path) -> Result<(), Transpor
             continue;
         }
 
-        let metadata = std::fs::symlink_metadata(&current).map_err(|error| {
-            #[cfg(target_os = "macos")]
-            eprintln!("macOS path metadata failed at {:?}: {}", current, error);
-            TransportError::ConnectionFailed
-        })?;
+        let metadata = std::fs::symlink_metadata(&current)
+            .map_err(|_| TransportError::ConnectionFailed)?;
         if metadata.file_type().is_symlink() {
             // macOS exposes /var and /tmp as system-managed aliases to
             // /private/var and /private/tmp. Permit only those exact aliases;
@@ -727,7 +724,7 @@ fn open_local_root_handle_verified(
     let mut current = {
         let fd = unsafe {
             libc::open(
-                b"/\\0".as_ptr().cast(),
+                b"/\0".as_ptr().cast(),
                 libc::O_RDONLY | libc::O_CLOEXEC | libc::O_DIRECTORY,
             )
         };
