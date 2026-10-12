@@ -1222,6 +1222,36 @@ mod tests {
     }
 
     #[test]
+    fn universal_selector_can_be_combined_with_other_simple_selectors() {
+        let element = node();
+
+        for input in ["*", "*.card", "*#main", "*[role=main]", "*:first-child"] {
+            assert!(
+                Selector::parse(input).is_some(),
+                "failed to parse valid universal selector combination: {input}"
+            );
+        }
+
+        assert!(Selector::parse("*.card").unwrap().matches(&element));
+        assert!(Selector::parse("*#main").unwrap().matches(&element));
+        assert!(Selector::parse("*[role=main]").unwrap().matches(&element));
+        assert_eq!(
+            Selector::parse("*.card").unwrap().specificity(),
+            Specificity::new(0, 1, 0)
+        );
+    }
+
+    #[test]
+    fn universal_selector_does_not_hide_invalid_suffixes() {
+        for input in ["*div", "*.", "*#", "*:", "*[role", "*:is()"] {
+            assert!(
+                Selector::parse(input).is_none(),
+                "accepted invalid universal selector: {input}"
+            );
+        }
+    }
+
+    #[test]
     fn parses_type_and_class() {
         let selector = Selector::parse(".card").unwrap();
         assert!(selector.matches(&node()));
