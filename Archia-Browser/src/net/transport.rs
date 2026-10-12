@@ -2628,8 +2628,7 @@ mod tests {
             if !transport.authorized_root_handles.is_empty() {
                 if let Ok(response) = transport.send(&Request::new(url.clone())) {
                     assert_eq!(
-                        response.body,
-                        b"inside",
+                        response.body, b"inside",
                         "a root grant racing with a symlink swap must never expose outside content"
                     );
                 }
