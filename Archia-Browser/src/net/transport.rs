@@ -325,7 +325,7 @@ fn open_local_file_without_following_links(
             .read(true)
             .custom_flags(0x0002_0000)
             .open(path)
-            .map_err(|_| TransportError::ConnectionFailed);
+            .map_err(|_| TransportError::ConnectionFailed)
     }
     #[cfg(target_os = "android")]
     {
@@ -334,7 +334,7 @@ fn open_local_file_without_following_links(
             .read(true)
             .custom_flags(0x0002_0000)
             .open(path)
-            .map_err(|_| TransportError::ConnectionFailed);
+            .map_err(|_| TransportError::ConnectionFailed)
     }
     #[cfg(any(
         target_os = "macos",
@@ -351,7 +351,7 @@ fn open_local_file_without_following_links(
             .read(true)
             .custom_flags(0x0000_0100)
             .open(path)
-            .map_err(|_| TransportError::ConnectionFailed);
+            .map_err(|_| TransportError::ConnectionFailed)
     }
     #[cfg(windows)]
     {
@@ -362,7 +362,7 @@ fn open_local_file_without_following_links(
             .read(true)
             .custom_flags(0x0020_0000)
             .open(path)
-            .map_err(|_| TransportError::ConnectionFailed);
+            .map_err(|_| TransportError::ConnectionFailed)
     }
     #[cfg(not(any(
         target_os = "linux",
