@@ -2582,6 +2582,75 @@ mod tests {
         std::fs::remove_dir(base).unwrap();
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn local_file_root_grant_does_not_follow_a_concurrent_symlink_swap() {
+        use std::os::unix::fs::symlink;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+        use std::thread;
+
+        let base = std::env::temp_dir().join(format!(
+            "archia-browser-root-grant-race-{}",
+            std::process::id()
+        ));
+        let root = base.join("root");
+        let parked = base.join("root-parked");
+        let outside = base.join("outside");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(root.join("page.txt"), b"inside").unwrap();
+        std::fs::write(outside.join("page.txt"), b"OUTSIDE-SECRET").unwrap();
+
+        let stop = Arc::new(AtomicBool::new(false));
+        let worker_stop = Arc::clone(&stop);
+        let worker_root = root.clone();
+        let worker_parked = parked.clone();
+        let worker_outside = outside.clone();
+        let worker = thread::spawn(move || {
+            while !worker_stop.load(Ordering::Relaxed) {
+                if std::fs::rename(&worker_root, &worker_parked).is_err() {
+                    thread::yield_now();
+                    continue;
+                }
+                let linked = symlink(&worker_outside, &worker_root).is_ok();
+                if linked {
+                    thread::yield_now();
+                    let _ = std::fs::remove_file(&worker_root);
+                }
+                let _ = std::fs::rename(&worker_parked, &worker_root);
+            }
+        });
+
+        let url = super::super::Url::parse(&local_file_test_url(&root.join("page.txt"))).unwrap();
+        for _ in 0..200 {
+            let transport = LocalFileTransport::new().with_allowed_roots([root.clone()]);
+            if !transport.authorized_root_handles.is_empty() {
+                if let Ok(response) = transport.send(&Request::new(url.clone())) {
+                    assert_eq!(
+                        response.body,
+                        b"inside",
+                        "a root grant racing with a symlink swap must never expose outside content"
+                    );
+                }
+            }
+        }
+
+        stop.store(true, Ordering::Relaxed);
+        worker.join().unwrap();
+        if parked.exists() {
+            if root.exists() {
+                let _ = std::fs::remove_file(&root);
+            }
+            std::fs::rename(&parked, &root).unwrap();
+        }
+        std::fs::remove_file(root.join("page.txt")).unwrap();
+        std::fs::remove_file(outside.join("page.txt")).unwrap();
+        std::fs::remove_dir(root).unwrap();
+        std::fs::remove_dir(outside).unwrap();
+        std::fs::remove_dir(base).unwrap();
+    }
+
     #[cfg(any(unix, windows))]
     #[test]
     fn local_file_transport_keeps_the_original_granted_root_handle() {
