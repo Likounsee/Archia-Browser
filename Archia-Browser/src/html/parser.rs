@@ -143,6 +143,10 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                     append_node(&mut root, &mut stack, node);
                 } else if stack.len() >= MAX_DOM_DEPTH {
                     suppressed_stack.push(name.clone());
+                    suppressed_positions
+                        .entry(name.clone())
+                        .or_default()
+                        .push(0);
                 } else {
                     stack.push(node);
                 }
