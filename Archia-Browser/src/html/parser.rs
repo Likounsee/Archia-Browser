@@ -380,10 +380,7 @@ mod tests {
 
     #[test]
     fn parser_caps_retained_dom_nodes_even_for_direct_tokens() {
-        let tokens = vec![
-            HtmlToken::Text("x".to_owned());
-            MAX_DOM_NODES + 100
-        ];
+        let tokens = vec![HtmlToken::Text("x".to_owned()); MAX_DOM_NODES + 100];
 
         let root = parse(&tokens);
         let body = root
