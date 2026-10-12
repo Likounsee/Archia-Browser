@@ -297,9 +297,11 @@ impl Transport for LocalFileTransport {
             std::fs::canonicalize(&path).map_err(|_| TransportError::ConnectionFailed)?;
         let mut inside_allowed_root = false;
         for root in &self.allowed_roots {
-            reject_symlink_path_components(root)?;
+            // Roots are explicit grants from the embedding application, so
+            // resolve a trusted root's own aliases before validating it.
             let canonical_root =
                 std::fs::canonicalize(root).map_err(|_| TransportError::ConnectionFailed)?;
+            reject_symlink_path_components(&canonical_root)?;
             if !canonical_root.is_dir() {
                 continue;
             }
