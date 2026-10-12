@@ -616,8 +616,7 @@ where
         let mut output = String::with_capacity(css.len().min(*remaining_css_bytes));
         let mut statement_start = 0;
         while statement_start < css.len() {
-            let Some((statement, next_statement_start)) =
-                next_css_statement(css, statement_start)
+            let Some((statement, next_statement_start)) = next_css_statement(css, statement_start)
             else {
                 break;
             };
