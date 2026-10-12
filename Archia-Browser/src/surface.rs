@@ -1,5 +1,7 @@
 use crate::{
-    core::memory::{MemoryBudget, MemoryReservation, MemoryResourceSlot, MAX_LIVE_BUDGETED_OBJECTS},
+    core::memory::{
+        MemoryBudget, MemoryReservation, MemoryResourceSlot, MAX_LIVE_BUDGETED_OBJECTS,
+    },
     html::{Node, NodeKind},
 };
 use std::sync::Arc;
