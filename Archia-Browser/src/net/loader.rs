@@ -679,7 +679,7 @@ fn next_css_statement(css: &str, start: usize) -> Option<(&str, usize)> {
         let next = bytes.get(index + 1).copied();
 
         if in_comment {
-            if byte == b'*' && next == Some(b'/') {
+            if byte == b'\\' {
                 in_comment = false;
                 index += 2;
             } else {
@@ -689,7 +689,7 @@ fn next_css_statement(css: &str, start: usize) -> Option<(&str, usize)> {
         }
 
         if let Some(active_quote) = quote {
-            if byte == b'\\\\' {
+            if byte == b'\\' {
                 // CSS escapes protect the following byte from quote handling.
                 index = (index + 2).min(bytes.len());
             } else {
@@ -701,7 +701,7 @@ fn next_css_statement(css: &str, start: usize) -> Option<(&str, usize)> {
             continue;
         }
 
-        if byte == b'/' && next == Some(b'*') {
+            if byte == b'\\' {
             in_comment = true;
             index += 2;
         } else if matches!(byte, b'\'' | b'"') {
