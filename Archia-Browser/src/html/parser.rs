@@ -8,6 +8,7 @@ const VOID_ELEMENTS: &[&str] = &[
 ];
 
 const MAX_DOM_DEPTH: usize = 256;
+const MAX_DOM_NODES: usize = 50_000;
 const MAX_DOM_TOKENS: usize = 100_000;
 
 const BLOCK_CLOSES_P: &[&str] = &[
@@ -55,6 +56,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
     // Index open suppressed tags by name so matching close tags do not scan the
     // entire attacker-controlled nesting stack on every token.
     let mut suppressed_positions: HashMap<String, Vec<usize>> = HashMap::new();
+    let mut created_nodes = 0usize;
 
     for token in tokens.iter().take(MAX_DOM_TOKENS) {
         if !suppressed_stack.is_empty() {
@@ -100,19 +102,37 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
         match token {
             HtmlToken::Doctype(_) => {}
             HtmlToken::Comment(comment) => {
-                append_node(&mut root, &mut stack, Node::comment(comment));
+                if created_nodes < MAX_DOM_NODES {
+                    append_node(&mut root, &mut stack, Node::comment(comment));
+                    created_nodes += 1;
+                }
             }
             HtmlToken::Text(text) => {
-                if text.is_empty() {
+                if text.is_empty() || created_nodes >= MAX_DOM_NODES {
                     continue;
                 }
                 append_node(&mut root, &mut stack, Node::text(text));
+                created_nodes += 1;
             }
             HtmlToken::StartTag {
                 name,
                 attributes,
                 self_closing: _,
             } => {
+                // Bound retained DOM nodes independently of token and byte limits.
+                // Once saturated, discard each new subtree without allocating a Node
+                // or cloning its attributes; matching end tags recover below.
+                if created_nodes >= MAX_DOM_NODES {
+                    if !VOID_ELEMENTS.contains(&name.as_str()) {
+                        suppressed_stack.push(name.clone());
+                        suppressed_positions
+                            .entry(name.clone())
+                            .or_default()
+                            .push(0);
+                    }
+                    continue;
+                }
+
                 // Apply the most common HTML implied-end-tag rules before
                 // inserting a new element. Without these, malformed-but-common
                 // markup such as adjacent anchors or options produces a DOM
@@ -131,6 +151,18 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                     close_element(&mut root, &mut stack, "li");
                 }
 
+                // Refuse over-deep elements before allocating a Node and copying
+                // attacker-controlled attributes. Void elements remain valid children
+                // at the maximum nesting depth.
+                if !VOID_ELEMENTS.contains(&name.as_str()) && stack.len() >= MAX_DOM_DEPTH {
+                    suppressed_stack.push(name.clone());
+                    suppressed_positions
+                        .entry(name.clone())
+                        .or_default()
+                        .push(0);
+                    continue;
+                }
+
                 let mut node = Node::element(name.clone());
                 for (attribute, value) in attributes {
                     node.set_attribute(attribute, value);
@@ -139,14 +171,9 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // In HTML syntax, the self-closing flag is ignored for
                 // ordinary HTML elements. Only void elements close without
                 // an end tag; treating <div/> as empty changes the DOM tree.
+                created_nodes += 1;
                 if VOID_ELEMENTS.contains(&name.as_str()) {
                     append_node(&mut root, &mut stack, node);
-                } else if stack.len() >= MAX_DOM_DEPTH {
-                    suppressed_stack.push(name.clone());
-                    suppressed_positions
-                        .entry(name.clone())
-                        .or_default()
-                        .push(0);
                 } else {
                     stack.push(node);
                 }
