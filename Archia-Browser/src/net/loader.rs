@@ -518,7 +518,13 @@ where
                 continue;
             }
 
-            if !(200..300).contains(&response.status) || !is_css_response(&response) {
+            // Network stylesheets require an explicit CSS MIME type. Local files
+            // may not carry HTTP metadata, so keep their existing file-loading path.
+            let implicit_local_css_type =
+                current.scheme() == "file" && response.content_type.is_none();
+            if !(200..300).contains(&response.status)
+                || (!implicit_local_css_type && !is_css_response(&response))
+            {
                 return None;
             }
 
@@ -726,7 +732,7 @@ fn parse_import_reference(statement: &str) -> Option<String> {
 
 fn is_css_response(response: &Response) -> bool {
     let Some(content_type) = response.content_type.as_deref() else {
-        return true;
+        return false;
     };
     let media_type = content_type
         .split(';')
@@ -1656,6 +1662,54 @@ mod tests {
         assert_eq!(page.document.text_content(), "LocalHello");
         assert!(!page.display_list.commands().is_empty());
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn network_stylesheets_without_css_mime_type_are_ignored() {
+        #[derive(Debug)]
+        struct SequenceTransport {
+            responses: std::sync::Mutex<Vec<Response>>,
+        }
+
+        impl Transport for SequenceTransport {
+            fn send(&self, _: &Request) -> Result<Response, TransportError> {
+                Ok(self.responses.lock().unwrap().remove(0))
+            }
+        }
+
+        let document = Response::new(200)
+            .with_header("content-type", "text/html")
+            .with_body(
+                br#"<head><link rel="stylesheet" href="/plain.txt"></head><body>Hello</body>"#
+                    .to_vec(),
+            );
+        // A successful HTTP response is not automatically a stylesheet.
+        let mislabeled = Response::new(200)
+            .with_body(b"body { background-color: #102030; }".to_vec());
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            SequenceTransport {
+                responses: std::sync::Mutex::new(vec![document, mislabeled]),
+            },
+        );
+        let request = Request::new(Url::parse("https://example.org/index.html").unwrap());
+
+        let page = loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .unwrap();
+        assert_eq!(page.document.text_content(), "Hello");
+        assert!(
+            !page.display_list.commands().iter().any(|command| {
+                matches!(
+                    command,
+                    crate::render::PaintCommand::FillRect {
+                        color: 0x102030ff,
+                        ..
+                    }
+                )
+            }),
+            "a network response without text/css must not be applied as a stylesheet"
+        );
     }
 
     #[test]
