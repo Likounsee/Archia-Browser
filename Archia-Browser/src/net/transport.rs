@@ -323,8 +323,8 @@ fn reject_symlink_path_components(path: &std::path::Path) -> Result<(), Transpor
     let mut current = PathBuf::new();
     for component in path.components() {
         current.push(component.as_os_str());
-        let metadata = std::fs::symlink_metadata(&current)
-            .map_err(|_| TransportError::ConnectionFailed)?;
+        let metadata =
+            std::fs::symlink_metadata(&current).map_err(|_| TransportError::ConnectionFailed)?;
         if metadata.file_type().is_symlink() {
             return Err(TransportError::ConnectionFailed);
         }
