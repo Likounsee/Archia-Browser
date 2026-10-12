@@ -446,6 +446,27 @@ fn decode_character_references(input: &str) -> String {
             "gt" => Some('>'),
             "quot" => Some('"'),
             "apos" => Some('\''),
+            // Common named references used by ordinary prose and typography.
+            // This is intentionally a bounded subset, not the full WHATWG table.
+            "nbsp" => Some('\u{00A0}'),
+            "copy" => Some('\u{00A9}'),
+            "reg" => Some('\u{00AE}'),
+            "trade" => Some('\u{2122}'),
+            "hellip" => Some('\u{2026}'),
+            "mdash" => Some('\u{2014}'),
+            "ndash" => Some('\u{2013}'),
+            "lsquo" => Some('\u{2018}'),
+            "rsquo" => Some('\u{2019}'),
+            "ldquo" => Some('\u{201C}'),
+            "rdquo" => Some('\u{201D}'),
+            "bull" => Some('\u{2022}'),
+            "euro" => Some('\u{20AC}'),
+            "times" => Some('\u{00D7}'),
+            "divide" => Some('\u{00F7}'),
+            "plusmn" => Some('\u{00B1}'),
+            "cent" => Some('\u{00A2}'),
+            "pound" => Some('\u{00A3}'),
+            "yen" => Some('\u{00A5}'),
             _ if reference.starts_with("#x") || reference.starts_with("#X") => {
                 u32::from_str_radix(&reference[2..], 16)
                     .ok()
@@ -480,6 +501,16 @@ mod character_reference_tests {
         assert_eq!(
             decode_character_references("&lt;div&gt; &amp; &#65; &#x1f600;"),
             "<div> & A 😀"
+        );
+    }
+
+    #[test]
+    fn decodes_common_named_typographic_references() {
+        assert_eq!(
+            decode_character_references(
+                "&nbsp;&copy; &reg; &trade; &hellip; &mdash; &ndash; &lsquo;x&rsquo; &ldquo;y&rdquo; &bull; &euro; &times; &divide; &plusmn; &cent; &pound; &yen;"
+            ),
+            "\u{00A0}\u{00A9} \u{00AE} \u{2122} \u{2026} \u{2014} \u{2013} \u{2018}x\u{2019} \u{201C}y\u{201D} \u{2022} \u{20AC} \u{00D7} \u{00F7} \u{00B1} \u{00A2} \u{00A3} \u{00A5}"
         );
     }
 
