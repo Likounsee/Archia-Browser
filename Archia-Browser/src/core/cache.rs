@@ -154,7 +154,10 @@ mod tests {
 
         assert_eq!(cache.len(), MAX_CACHE_ENTRIES);
         assert!(cache.get("key-0").is_none());
-        assert_eq!(cache.get(&format!("key-{MAX_CACHE_ENTRIES}")), Some(&MAX_CACHE_ENTRIES));
+        assert_eq!(
+            cache.get(&format!("key-{MAX_CACHE_ENTRIES}")),
+            Some(&MAX_CACHE_ENTRIES)
+        );
         assert!(cache.used() <= cache.capacity());
     }
 
