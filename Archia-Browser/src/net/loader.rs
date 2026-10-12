@@ -1261,6 +1261,54 @@ mod tests {
         }
     }
 
+    #[test]
+    fn retained_stylesheet_memory_stays_charged_for_the_page_lifetime() {
+        use crate::core::memory::MemoryBudget;
+        use std::sync::Arc;
+
+        #[derive(Debug)]
+        struct PageAndStylesheetTransport;
+        impl Transport for PageAndStylesheetTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                if request.policy.resource_kind == ResourceKind::Document {
+                    Ok(Response::new(200)
+                        .with_header("content-type", "text/html")
+                        .with_header("cache-control", "no-store")
+                        .with_body(
+                            br#"<link rel="stylesheet" href="/style.css"><body>Budget</body>"#
+                                .to_vec(),
+                        ))
+                } else {
+                    Ok(Response::new(200)
+                        .with_header("content-type", "text/css")
+                        .with_header("cache-control", "no-store")
+                        .with_body(b"body { color: red; }".to_vec()))
+                }
+            }
+        }
+
+        let budget = Arc::new(MemoryBudget::new(16 * 1024));
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            PageAndStylesheetTransport,
+        )
+        .with_shared_memory_budget(Arc::clone(&budget));
+        let request = Request::new(Url::parse("https://example.org/page").unwrap());
+        let page = loader.load(&request, LayoutViewport::new(320, 200)).unwrap();
+
+        assert_eq!(page.document.text_content(), "Budget");
+        assert!(
+            budget.used() > page.url().map_or(0, |_| 0),
+            "page and retained stylesheet allocations must remain charged"
+        );
+        drop(page);
+        assert_eq!(
+            budget.used(),
+            0,
+            "dropping the page must release its HTML and retained CSS reservation"
+        );
+    }
+
     #[derive(Debug, Default)]
     struct AllowAll;
 
