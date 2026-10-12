@@ -152,9 +152,7 @@ fn implied_end_tags_for_start(name: &str) -> &'static [&'static str] {
     match name {
         "a" => &["a"],
         "button" => &["button"],
-        "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
-            &["h1", "h2", "h3", "h4", "h5", "h6"]
-        }
+        "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => &["h1", "h2", "h3", "h4", "h5", "h6"],
         "dt" | "dd" => &["dt", "dd"],
         "option" => &["option"],
         "optgroup" => &["option", "optgroup"],
