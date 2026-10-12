@@ -109,6 +109,22 @@ impl MemoryBudget {
         }
     }
 
+    /// Acquire an RAII guard for a live-object slot.
+    ///
+    /// The slot is released on every exit path, including early returns and
+    /// unwinding, rather than relying on callers to pair manual increments
+    /// and decrements correctly.
+    pub fn try_reserve_resource_slot_guard(
+        budget: Arc<MemoryBudget>,
+        max_live: usize,
+    ) -> Option<MemoryResourceSlot> {
+        if budget.try_reserve_resource_slot(max_live) {
+            Some(MemoryResourceSlot { budget })
+        } else {
+            None
+        }
+    }
+
     pub fn live_resources(&self) -> usize {
         self.live_resources.load(Ordering::Acquire)
     }
@@ -130,6 +146,18 @@ impl MemoryBudget {
             used,
             available: self.limit.saturating_sub(used),
         }
+    }
+}
+
+/// RAII reservation for one live-object slot in a shared memory budget.
+#[derive(Debug)]
+pub struct MemoryResourceSlot {
+    budget: Arc<MemoryBudget>,
+}
+
+impl Drop for MemoryResourceSlot {
+    fn drop(&mut self) {
+        self.budget.release_resource_slot();
     }
 }
 
@@ -224,6 +252,19 @@ impl Drop for MemoryReservation {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resource_slot_guard_releases_on_drop_and_rejects_overcommit() {
+        let budget = Arc::new(MemoryBudget::new(0));
+        let slot = MemoryBudget::try_reserve_resource_slot_guard(Arc::clone(&budget), 1)
+            .expect("first live-object slot should fit");
+        assert_eq!(budget.live_resources(), 1);
+        assert!(MemoryBudget::try_reserve_resource_slot_guard(Arc::clone(&budget), 1).is_none());
+        assert_eq!(budget.live_resources(), 1);
+        drop(slot);
+        assert_eq!(budget.live_resources(), 0);
+        assert!(MemoryBudget::try_reserve_resource_slot_guard(Arc::clone(&budget), 1).is_some());
+    }
 
     #[test]
     fn reservation_releases_on_drop() {
