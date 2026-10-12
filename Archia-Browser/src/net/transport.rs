@@ -704,8 +704,8 @@ fn open_local_root_handle_verified(
     #[cfg(target_os = "macos")]
     {
         reject_symlink_path_components(&absolute)?;
-        absolute = std::fs::canonicalize(&absolute)
-            .map_err(|_| TransportError::ConnectionFailed)?;
+        absolute =
+            std::fs::canonicalize(&absolute).map_err(|_| TransportError::ConnectionFailed)?;
     }
 
     let mut current = {
