@@ -672,16 +672,6 @@ fn open_local_root_handle_verified(
     Ok(directory)
 }
 
-#[cfg(all(unix, not(target_os = "linux"), test))]
-fn open_local_file_confined(
-    canonical_root: &std::path::Path,
-    canonical_path: &std::path::Path,
-    _original_path: &std::path::Path,
-) -> Result<std::fs::File, TransportError> {
-    let root = open_local_root_handle_verified(canonical_root)?;
-    open_local_file_confined_from_handle(&root, canonical_root, canonical_path)
-}
-
 #[cfg(all(unix, not(target_os = "linux")))]
 fn open_local_file_confined_from_handle(
     root_file: &std::fs::File,
