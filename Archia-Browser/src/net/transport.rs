@@ -775,13 +775,11 @@ fn open_local_root_handle_verified(
     fn file_identity(file: &std::fs::File) -> Option<(u32, u64)> {
         let mut information = ByHandleFileInformation::default();
         // SAFETY: file owns a valid Windows handle and information is writable.
-        let success = unsafe {
-            GetFileInformationByHandle(file.as_raw_handle().cast(), &mut information)
-        };
+        let success =
+            unsafe { GetFileInformationByHandle(file.as_raw_handle().cast(), &mut information) };
         (success != 0).then_some((
             information.volume_serial_number,
-            (u64::from(information.file_index_high) << 32)
-                | u64::from(information.file_index_low),
+            (u64::from(information.file_index_high) << 32) | u64::from(information.file_index_low),
         ))
     }
     const INVALID_HANDLE_VALUE: Handle = -1isize as Handle;
