@@ -316,15 +316,11 @@ where
 
             let html = String::from_utf8_lossy(html_bytes);
 
-            let stylesheet = self.load_linked_stylesheets(&current.url, &html);
-            if let Some(reservation) = &reservation {
-                // CSS expansion is independently capped per document. Charge its
-                // retained bytes before constructing the final styled/layout tree.
-                let estimated_css_bytes = stylesheet.len().saturating_mul(4);
-                if !reservation.try_grow_by(estimated_css_bytes) {
-                    return Err(DocumentLoadError::MemoryBudgetExceeded);
-                }
-            }
+            // Charge retained stylesheet bytes before the per-resource temporary
+            // reservation is released, so the decoded CSS is never unaccounted for
+            // during the hand-off into the document's accumulated stylesheet.
+            let stylesheet =
+                self.load_linked_stylesheets(&current.url, &html, reservation.as_ref());
 
             let mut page =
                 Page::from_html_at(Some(current.url.clone()), &html, &stylesheet, viewport);
@@ -338,7 +334,12 @@ where
         Err(DocumentLoadError::RedirectLimitExceeded)
     }
 
-    fn load_linked_stylesheets(&self, document_url: &super::Url, html: &str) -> String {
+    fn load_linked_stylesheets(
+        &self,
+        document_url: &super::Url,
+        html: &str,
+        document_reservation: Option<&crate::core::memory::MemoryReservation>,
+    ) -> String {
         let document = parse(&HtmlTokenizer::tokenize(html));
         let mut links = Vec::new();
         collect_stylesheet_links(&document, &mut links);
@@ -367,6 +368,7 @@ where
                 url,
                 &mut request_budget,
                 &mut remaining_css_bytes,
+                document_reservation,
             ) else {
                 continue;
             };
@@ -386,8 +388,16 @@ where
         url: super::Url,
         request_budget: &mut usize,
         remaining_css_bytes: &mut usize,
+        document_reservation: Option<&crate::core::memory::MemoryReservation>,
     ) -> Option<String> {
-        self.load_stylesheet_resource_at(document_url, url, 0, request_budget, remaining_css_bytes)
+        self.load_stylesheet_resource_at(
+            document_url,
+            url,
+            0,
+            request_budget,
+            remaining_css_bytes,
+            document_reservation,
+        )
     }
 
     fn load_stylesheet_resource_at(
@@ -397,6 +407,7 @@ where
         import_depth: usize,
         request_budget: &mut usize,
         remaining_css_bytes: &mut usize,
+        document_reservation: Option<&crate::core::memory::MemoryReservation>,
     ) -> Option<String> {
         const MAX_IMPORT_DEPTH: usize = 8;
         if import_depth > MAX_IMPORT_DEPTH || *request_budget == 0 || *remaining_css_bytes == 0 {
@@ -533,14 +544,26 @@ where
                 None
             };
             let css = String::from_utf8_lossy(bounded_body).into_owned();
-            return Some(self.expand_stylesheet_imports(
+            let expanded = self.expand_stylesheet_imports(
                 document_url,
                 &current,
                 &css,
                 import_depth,
                 request_budget,
                 remaining_css_bytes,
-            ));
+                document_reservation,
+            );
+            // Only top-level linked stylesheets charge the document reservation;
+            // nested imports are included in that top-level expanded result.
+            // Reserve before this resource's temporary charge is dropped.
+            if import_depth == 0 {
+                if let Some(reservation) = document_reservation {
+                    if !reservation.try_grow_by(expanded.len().saturating_mul(4)) {
+                        return None;
+                    }
+                }
+            }
+            return Some(expanded);
         }
 
         None
@@ -554,6 +577,7 @@ where
         import_depth: usize,
         request_budget: &mut usize,
         remaining_css_bytes: &mut usize,
+        document_reservation: Option<&crate::core::memory::MemoryReservation>,
     ) -> String {
         let mut output = String::with_capacity(css.len().min(*remaining_css_bytes));
         for statement in css.split_inclusive(';') {
@@ -573,6 +597,7 @@ where
                     import_depth + 1,
                     request_budget,
                     remaining_css_bytes,
+                    document_reservation,
                 ) {
                     output.push_str(&imported);
                     if *remaining_css_bytes > 0 {
@@ -1136,6 +1161,7 @@ mod tests {
         let css = loader.load_linked_stylesheets(
             &document_url,
             r#"<link rel="stylesheet" href="/style.css">"#,
+            None,
         );
 
         assert!(
@@ -1172,6 +1198,7 @@ mod tests {
         let css = loader.load_linked_stylesheets(
             &document_url,
             r#"<link rel="stylesheet" href="/style.css">"#,
+            None,
         );
 
         assert_eq!(css.len(), MAX_STYLESHEET_BYTES_PER_DOCUMENT);
