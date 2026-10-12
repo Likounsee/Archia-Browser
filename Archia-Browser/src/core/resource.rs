@@ -137,9 +137,9 @@ mod tests {
         let resource = manager
             .allocate(0)
             .expect("a failed reservation must not exhaust object slots");
-        assert_eq!(manager.live_resources.load(Ordering::Acquire), 1);
+        assert_eq!(manager.budget.live_resources(), 1);
         drop(resource);
-        assert_eq!(manager.live_resources.load(Ordering::Acquire), 0);
+        assert_eq!(manager.budget.live_resources(), 0);
     }
 
     #[test]
@@ -152,23 +152,46 @@ mod tests {
         }
         assert!(manager.allocate(0).is_none());
         assert_eq!(
-            manager.live_resources.load(Ordering::Acquire),
+            manager.budget.live_resources(),
             MAX_LIVE_RESOURCES
         );
 
         resources.pop();
         assert_eq!(
-            manager.live_resources.load(Ordering::Acquire),
+            manager.budget.live_resources(),
             MAX_LIVE_RESOURCES - 1
         );
         let replacement = manager
             .allocate(0)
             .expect("released slot should be reusable");
         assert_eq!(
-            manager.live_resources.load(Ordering::Acquire),
+            manager.budget.live_resources(),
             MAX_LIVE_RESOURCES
         );
         drop(replacement);
+    }
+
+    #[test]
+    fn shared_budget_enforces_live_resource_limit_across_managers() {
+        let budget = Arc::new(MemoryBudget::new(0));
+        let mut first = ResourceManager::with_budget(Arc::clone(&budget));
+        let mut second = ResourceManager::with_budget(Arc::clone(&budget));
+        let mut resources = Vec::with_capacity(MAX_LIVE_RESOURCES);
+
+        for _ in 0..MAX_LIVE_RESOURCES {
+            resources.push(first.allocate(0).expect("shared slot should be available"));
+        }
+        assert!(second.allocate(0).is_none());
+        assert_eq!(budget.live_resources(), MAX_LIVE_RESOURCES);
+
+        drop(resources.pop());
+        let replacement = second
+            .allocate(0)
+            .expect("a slot released by another manager must be reusable");
+        assert_eq!(budget.live_resources(), MAX_LIVE_RESOURCES);
+        drop(replacement);
+        drop(resources);
+        assert_eq!(budget.live_resources(), 0);
     }
 
     #[test]
