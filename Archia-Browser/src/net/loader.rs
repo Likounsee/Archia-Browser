@@ -1113,6 +1113,42 @@ mod tests {
     }
 
     #[test]
+    fn stylesheet_decode_respects_a_tight_shared_memory_budget() {
+        #[derive(Debug)]
+        struct StylesheetTransport;
+
+        impl Transport for StylesheetTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                assert_eq!(request.url.path(), "/style.css");
+                Ok(Response::new(200)
+                    .with_header("content-type", "text/css")
+                    .with_body(vec![b'a'; 512 * 1024]))
+            }
+        }
+
+        let memory_budget = Arc::new(crate::core::memory::MemoryBudget::new(1024 * 1024));
+        let loader =
+            DocumentLoader::new(NetworkPipeline::new(AllowAll), StylesheetTransport)
+                .with_shared_memory_budget(Arc::clone(&memory_budget));
+        let document_url = Url::parse("https://example.org/index.html").unwrap();
+
+        let css = loader.load_linked_stylesheets(
+            &document_url,
+            r#"<link rel="stylesheet" href="/style.css">"#,
+        );
+
+        assert!(
+            css.is_empty(),
+            "CSS decoding must be skipped when its temporary allocation cannot be reserved"
+        );
+        assert_eq!(
+            memory_budget.used(),
+            0,
+            "failed CSS decoding must release any cache or temporary reservations"
+        );
+    }
+
+    #[test]
     fn linked_stylesheets_are_capped_at_the_document_byte_budget() {
         #[derive(Debug)]
         struct OversizedStylesheetTransport;
