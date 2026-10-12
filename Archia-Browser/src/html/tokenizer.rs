@@ -3,6 +3,10 @@ use std::collections::BTreeMap;
 // Bound scanning and retained token data for untrusted documents.
 const MAX_HTML_INPUT_BYTES: usize = 4 * 1024 * 1024;
 const MAX_HTML_TOKENS: usize = 100_000;
+const MAX_HTML_TAG_NAME_BYTES: usize = 1_024;
+const MAX_HTML_ATTRIBUTES_PER_TAG: usize = 256;
+const MAX_HTML_ATTRIBUTE_NAME_BYTES: usize = 1_024;
+const MAX_HTML_ATTRIBUTE_VALUE_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HtmlToken {
@@ -131,6 +135,9 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
         if ch.is_whitespace() || ch == '/' {
             break;
         }
+        if name.len().saturating_add(ch.len_utf8()) > MAX_HTML_TAG_NAME_BYTES {
+            return None;
+        }
         name.push(ch.to_ascii_lowercase());
         chars.next();
     }
@@ -144,7 +151,7 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
         while chars.peek().is_some_and(|c| c.is_whitespace()) {
             chars.next();
         }
-        if chars.peek().is_none() {
+        if chars.peek().is_none() || attributes.len() >= MAX_HTML_ATTRIBUTES_PER_TAG {
             break;
         }
         if chars.peek() == Some(&'/') {
@@ -157,14 +164,19 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
         }
 
         let mut attr_name = String::new();
+        let mut attr_name_too_long = false;
         while let Some(&ch) = chars.peek() {
             if ch.is_whitespace() || matches!(ch, '=' | '/') {
                 break;
             }
-            attr_name.push(ch.to_ascii_lowercase());
+            if attr_name.len().saturating_add(ch.len_utf8()) <= MAX_HTML_ATTRIBUTE_NAME_BYTES {
+                attr_name.push(ch.to_ascii_lowercase());
+            } else {
+                attr_name_too_long = true;
+            }
             chars.next();
         }
-        if attr_name.is_empty() {
+        if attr_name.is_empty() && !attr_name_too_long {
             chars.next();
             continue;
         }
@@ -173,6 +185,7 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
         }
 
         let mut value = String::new();
+        let mut value_too_long = false;
         if chars.peek() == Some(&'=') {
             chars.next();
             while chars.peek().is_some_and(|c| c.is_whitespace()) {
@@ -186,7 +199,11 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
                     if ch == q {
                         break;
                     }
-                    value.push(ch);
+                    if value.len().saturating_add(ch.len_utf8()) <= MAX_HTML_ATTRIBUTE_VALUE_BYTES {
+                        value.push(ch);
+                    } else {
+                        value_too_long = true;
+                    }
                 }
             } else {
                 // Slashes are valid inside unquoted attribute values
@@ -197,10 +214,19 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
                     if ch.is_whitespace() {
                         break;
                     }
-                    value.push(ch);
+                    if value.len().saturating_add(ch.len_utf8()) <= MAX_HTML_ATTRIBUTE_VALUE_BYTES {
+                        value.push(ch);
+                    } else {
+                        value_too_long = true;
+                    }
                     chars.next();
                 }
             }
+        }
+        // Discard overlong names/values instead of retaining a truncated
+        // security-sensitive attribute (for example, href or src).
+        if attr_name_too_long || value_too_long {
+            continue;
         }
         // HTML ignores duplicate attributes after the first occurrence.
         // Keeping the first value avoids parser differentials where policy
@@ -281,6 +307,41 @@ mod tests {
                 HtmlToken::EndTag("html".into()),
             ]
         );
+    }
+
+    #[test]
+    fn caps_attributes_retained_from_a_single_tag() {
+        let attributes = (0..(MAX_HTML_ATTRIBUTES_PER_TAG + 100))
+            .map(|index| format!(" a{index}=x"))
+            .collect::<String>();
+        let tokens = HtmlTokenizer::tokenize(&format!("<div{attributes}>"));
+
+        let HtmlToken::StartTag { attributes, .. } = &tokens[0] else {
+            panic!("expected start tag");
+        };
+        assert_eq!(attributes.len(), MAX_HTML_ATTRIBUTES_PER_TAG);
+    }
+
+    #[test]
+    fn discards_overlong_attribute_names_and_values() {
+        let long_name = "n".repeat(MAX_HTML_ATTRIBUTE_NAME_BYTES + 1);
+        let long_value = "v".repeat(MAX_HTML_ATTRIBUTE_VALUE_BYTES + 1);
+        let input = format!("<a href=\"safe\" {long_name}=x title=\"{long_value}\">");
+        let tokens = HtmlTokenizer::tokenize(&input);
+
+        let HtmlToken::StartTag { attributes, .. } = &tokens[0] else {
+            panic!("expected start tag");
+        };
+        assert_eq!(attributes.get("href").map(String::as_str), Some("safe"));
+        assert!(!attributes.contains_key(&long_name));
+        assert!(!attributes.contains_key("title"));
+    }
+
+    #[test]
+    fn discards_overlong_tag_names() {
+        let name = "x".repeat(MAX_HTML_TAG_NAME_BYTES + 1);
+        let tokens = HtmlTokenizer::tokenize(&format!("<{name} id=retained>"));
+        assert!(tokens.is_empty());
     }
 
     #[test]
