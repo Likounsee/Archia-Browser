@@ -672,6 +672,7 @@ fn next_css_statement(css: &str, start: usize) -> Option<(&str, usize)> {
     let mut index = start;
     let mut quote = None;
     let mut in_comment = false;
+    let mut block_depth = 0_usize;
 
     while index < bytes.len() {
         let byte = bytes[index];
@@ -706,7 +707,13 @@ fn next_css_statement(css: &str, start: usize) -> Option<(&str, usize)> {
         } else if matches!(byte, b'\'' | b'"') {
             quote = Some(byte);
             index += 1;
-        } else if byte == b';' {
+        } else if byte == b'{' {
+            block_depth = block_depth.saturating_add(1);
+            index += 1;
+        } else if byte == b'}' {
+            block_depth = block_depth.saturating_sub(1);
+            index += 1;
+        } else if byte == b';' && block_depth == 0 {
             let end = index + 1;
             return Some((&css[start..end], end));
         } else {
@@ -3149,7 +3156,7 @@ mod tests {
             start = next;
         }
 
-        assert_eq!(statements.len(), 2);
+        assert_eq!(statements.len(), 1);
         assert!(
             statements
                 .iter()
