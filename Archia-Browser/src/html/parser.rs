@@ -55,10 +55,12 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
     // recursive DOM consumers. Once the limit is reached, discard that subtree;
     // an indexed tag stack lets matching end tags recover without repeated
     // linear scans through attacker-controlled nesting.
-    let mut suppressed_stack: Vec<String> = Vec::new();
+    // Borrow tag names from the input tokens instead of cloning attacker-controlled strings.
+    // This keeps discarded deep subtrees from multiplying tag-name storage in memory.
+    let mut suppressed_stack: Vec<&str> = Vec::new();
     // Index open suppressed tags by name so matching close tags do not scan the
     // entire attacker-controlled nesting stack on every token.
-    let mut suppressed_positions: HashMap<String, Vec<usize>> = HashMap::new();
+    let mut suppressed_positions: HashMap<&str, Vec<usize>> = HashMap::new();
     let mut created_nodes = 0usize;
     // Direct-token callers can bypass the tokenizer's input-byte ceiling. Bound
     // copied attribute storage independently across the retained DOM.
@@ -72,9 +74,9 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
             match token {
                 HtmlToken::StartTag { name, .. } if !VOID_ELEMENTS.contains(&name.as_str()) => {
                     let position = suppressed_stack.len();
-                    suppressed_stack.push(name.clone());
+                    suppressed_stack.push(name.as_str());
                     suppressed_positions
-                        .entry(name.clone())
+                        .entry(name.as_str())
                         .or_default()
                         .push(position);
                 }
@@ -83,21 +85,21 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                     // discarded subtree. Unmatched/void end tags must not reduce
                     // the suppression depth and expose hostile nested markup.
                     if let Some(position) = suppressed_positions
-                        .get(name)
+                        .get(name.as_str())
                         .and_then(|positions| positions.last())
                         .copied()
                     {
                         while suppressed_stack.len() > position {
                             if let Some(open) = suppressed_stack.pop() {
                                 let remove_entry =
-                                    if let Some(positions) = suppressed_positions.get_mut(&open) {
+                                    if let Some(positions) = suppressed_positions.get_mut(open) {
                                         positions.pop();
                                         positions.is_empty()
                                     } else {
                                         false
                                     };
                                 if remove_entry {
-                                    suppressed_positions.remove(&open);
+                                    suppressed_positions.remove(open);
                                 }
                             }
                         }
@@ -151,9 +153,9 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // or cloning its attributes; matching end tags recover below.
                 if created_nodes >= MAX_DOM_NODES {
                     if !VOID_ELEMENTS.contains(&name.as_str()) {
-                        suppressed_stack.push(name.clone());
+                        suppressed_stack.push(name.as_str());
                         suppressed_positions
-                            .entry(name.clone())
+                            .entry(name.as_str())
                             .or_default()
                             .push(0);
                     }
@@ -182,9 +184,9 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // attacker-controlled attributes. Void elements remain valid children
                 // at the maximum nesting depth.
                 if !VOID_ELEMENTS.contains(&name.as_str()) && stack.len() >= MAX_DOM_DEPTH {
-                    suppressed_stack.push(name.clone());
+                    suppressed_stack.push(name.as_str());
                     suppressed_positions
-                        .entry(name.clone())
+                        .entry(name.as_str())
                         .or_default()
                         .push(0);
                     continue;
