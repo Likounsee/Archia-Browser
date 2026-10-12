@@ -373,11 +373,20 @@ impl Transport for LocalFileTransport {
 /// concurrent parent-directory swap; a directory-handle-relative implementation
 /// is still required before claiming full race-resistant local-file confinement.
 fn reject_symlink_path_components(path: &std::path::Path) -> Result<(), TransportError> {
-    use std::path::PathBuf;
+    use std::path::{Component, PathBuf};
 
     let mut current = PathBuf::new();
     for component in path.components() {
         current.push(component.as_os_str());
+
+        // On Windows, a Prefix component such as `C:` is not itself an
+        // absolute filesystem object: checking `C:` before the root separator
+        // can be interpreted as a drive-relative path and fail. Check the
+        // first real path object only after the root component has been added.
+        if matches!(component, Component::Prefix(_)) {
+            continue;
+        }
+
         let metadata =
             std::fs::symlink_metadata(&current).map_err(|_| TransportError::ConnectionFailed)?;
         if metadata.file_type().is_symlink() {
