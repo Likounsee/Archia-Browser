@@ -712,8 +712,14 @@ fn open_local_root_handle_verified(
     #[cfg(target_os = "macos")]
     {
         for (alias, target) in [
-            (std::path::Path::new("/var"), std::path::Path::new("/private/var")),
-            (std::path::Path::new("/tmp"), std::path::Path::new("/private/tmp")),
+            (
+                std::path::Path::new("/var"),
+                std::path::Path::new("/private/var"),
+            ),
+            (
+                std::path::Path::new("/tmp"),
+                std::path::Path::new("/private/tmp"),
+            ),
         ] {
             if absolute == alias || absolute.starts_with(alias) {
                 let is_expected_alias = std::fs::symlink_metadata(alias)
@@ -721,7 +727,8 @@ fn open_local_root_handle_verified(
                     && std::fs::canonicalize(alias).is_ok_and(|resolved| resolved == target);
                 if is_expected_alias {
                     absolute = target.join(
-                        absolute.strip_prefix(alias)
+                        absolute
+                            .strip_prefix(alias)
                             .map_err(|_| TransportError::ConnectionFailed)?,
                     );
                 }
