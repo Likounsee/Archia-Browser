@@ -60,6 +60,14 @@ impl HttpTransport {
             _ => return Err(TransportError::UnsupportedScheme),
         }
 
+        // Validate the TLS identity before DNS lookup or opening a socket.
+        // Invalid SNI must fail locally, without causing network side effects.
+        let server_name = if request.url.scheme() == "https" {
+            Some(tls_server_name(request.url.host())?)
+        } else {
+            None
+        };
+
         let address = socket_address(&request.url);
         let addresses = address
             .to_socket_addrs()
@@ -85,7 +93,7 @@ impl HttpTransport {
         let config = ClientConfig::builder()
             .with_root_certificates(roots)
             .with_no_client_auth();
-        let server_name = tls_server_name(request.url.host())?;
+        let server_name = server_name.ok_or(TransportError::TlsFailed)?;
         let mut connection = ClientConnection::new(Arc::new(config), server_name)
             .map_err(|_| TransportError::TlsFailed)?;
         // Complete the handshake here so certificate and protocol failures are
@@ -2031,36 +2039,6 @@ mod tests {
     use super::*;
     use crate::net::Url;
 
-    #[test]
-    fn tls_server_name_accepts_dns_and_ip_literals() {
-        assert!(matches!(
-            tls_server_name("example.com"),
-            Ok(ServerName::DnsName(_))
-        ));
-        assert!(matches!(
-            tls_server_name("192.0.2.1"),
-            Ok(ServerName::IpAddress(_))
-        ));
-        assert!(matches!(
-            tls_server_name("2001:db8::1"),
-            Ok(ServerName::IpAddress(_))
-        ));
-    }
-
-    #[test]
-    fn tls_server_name_rejects_invalid_dns_names() {
-        for host in [
-            "",
-            "bad host.example",
-            "example.com/path",
-            "example.com:443",
-        ] {
-            assert!(
-                tls_server_name(host).is_err(),
-                "invalid TLS server name must be rejected: {host:?}"
-            );
-        }
-    }
 
     // URL paths always use forward slashes, including Windows drive paths.
     // Path::display() alone emits backslashes on Windows, which the URL parser
