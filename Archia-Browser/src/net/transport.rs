@@ -2031,6 +2031,32 @@ mod tests {
     use super::*;
     use crate::net::Url;
 
+    #[test]
+    fn tls_server_name_accepts_dns_and_ip_literals() {
+        assert!(matches!(
+            tls_server_name("example.com"),
+            Ok(ServerName::DnsName(_))
+        ));
+        assert!(matches!(
+            tls_server_name("192.0.2.1"),
+            Ok(ServerName::IpAddress(_))
+        ));
+        assert!(matches!(
+            tls_server_name("2001:db8::1"),
+            Ok(ServerName::IpAddress(_))
+        ));
+    }
+
+    #[test]
+    fn tls_server_name_rejects_invalid_dns_names() {
+        for host in ["", "bad host.example", "example.com/path", "example.com:443"] {
+            assert!(
+                tls_server_name(host).is_err(),
+                "invalid TLS server name must be rejected: {host:?}"
+            );
+        }
+    }
+
     // URL paths always use forward slashes, including Windows drive paths.
     // Path::display() alone emits backslashes on Windows, which the URL parser
     // correctly rejects as ambiguous separators.
