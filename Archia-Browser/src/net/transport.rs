@@ -310,6 +310,18 @@ impl LocalFileTransport {
 
 
 
+                    #[cfg(windows)]
+                    {
+                        // Compare the original grant handle against the resolved
+                        // path using stable Win32 file identity, not unstable Rust APIs.
+                        let resolved = open_local_root_handle_verified(&canonical_path).ok()?;
+                        if windows_file_identity(&directory).is_none()
+                            || windows_file_identity(&directory) != windows_file_identity(&resolved)
+                        {
+                            return None;
+                        }
+                    }
+
                     Some(AuthorizedRootHandle {
                         canonical_path,
                         directory: Arc::new(directory),
@@ -848,6 +860,48 @@ fn open_local_file_confined_from_handle(
 // Windows: use NtCreateFile with OBJECT_ATTRIBUTES.RootDirectory so each
 // component is opened relative to the previously opened directory handle.
 // OBJ_DONT_REPARSE and FILE_OPEN_REPARSE_POINT reject reparse-point traversal.
+#[cfg(windows)]
+fn windows_file_identity(file: &std::fs::File) -> Option<(u32, u64)> {
+    use std::os::windows::io::AsRawHandle;
+
+    type Handle = *mut std::ffi::c_void;
+    #[repr(C)]
+    #[derive(Default)]
+    struct FileTime {
+        low: u32,
+        high: u32,
+    }
+    #[repr(C)]
+    #[derive(Default)]
+    struct ByHandleFileInformation {
+        attributes: u32,
+        creation_time: FileTime,
+        last_access_time: FileTime,
+        last_write_time: FileTime,
+        volume_serial_number: u32,
+        file_size_high: u32,
+        file_size_low: u32,
+        number_of_links: u32,
+        file_index_high: u32,
+        file_index_low: u32,
+    }
+    unsafe extern "system" {
+        fn GetFileInformationByHandle(
+            handle: Handle,
+            information: *mut ByHandleFileInformation,
+        ) -> i32;
+    }
+
+    let mut information = ByHandleFileInformation::default();
+    // SAFETY: the file owns a valid Windows handle and information is writable.
+    let success = unsafe {
+        GetFileInformationByHandle(file.as_raw_handle().cast(), &mut information)
+    };
+    let index =
+        (u64::from(information.file_index_high) << 32) | u64::from(information.file_index_low);
+    (success != 0 && index != 0).then_some((information.volume_serial_number, index))
+}
+
 #[cfg(windows)]
 fn open_local_root_handle_verified(
     canonical_root: &std::path::Path,
