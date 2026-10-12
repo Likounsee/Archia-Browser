@@ -614,7 +614,14 @@ where
         temporary_reservations: &mut Vec<crate::core::memory::MemoryReservation>,
     ) -> String {
         let mut output = String::with_capacity(css.len().min(*remaining_css_bytes));
-        for statement in css.split_inclusive(';') {
+        let mut statement_start = 0;
+        while statement_start < css.len() {
+            let Some((statement, next_statement_start)) =
+                next_css_statement(css, statement_start)
+            else {
+                break;
+            };
+            statement_start = next_statement_start;
             let trimmed = statement.trim();
             let Some(reference) = parse_import_reference(trimmed) else {
                 append_css_with_budget(&mut output, statement, remaining_css_bytes);
@@ -652,6 +659,63 @@ where
         }
         output
     }
+}
+
+/// Return the next CSS statement, ending at a semicolon outside strings and comments.
+/// This prevents semicolons inside comments from making commented-out @import text
+/// look like a real resource request.
+fn next_css_statement(css: &str, start: usize) -> Option<(&str, usize)> {
+    if start >= css.len() || !css.is_char_boundary(start) {
+        return None;
+    }
+
+    let bytes = css.as_bytes();
+    let mut index = start;
+    let mut quote = None;
+    let mut in_comment = false;
+
+    while index < bytes.len() {
+        let byte = bytes[index];
+        let next = bytes.get(index + 1).copied();
+
+        if in_comment {
+            if byte == b'*' && next == Some(b'/') {
+                in_comment = false;
+                index += 2;
+            } else {
+                index += 1;
+            }
+            continue;
+        }
+
+        if let Some(active_quote) = quote {
+            if byte == b'\\\\' {
+                // CSS escapes protect the following byte from quote handling.
+                index = (index + 2).min(bytes.len());
+            } else {
+                if byte == active_quote {
+                    quote = None;
+                }
+                index += 1;
+            }
+            continue;
+        }
+
+        if byte == b'/' && next == Some(b'*') {
+            in_comment = true;
+            index += 2;
+        } else if matches!(byte, b'\\'' | b'"') {
+            quote = Some(byte);
+            index += 1;
+        } else if byte == b';' {
+            let end = index + 1;
+            return Some((&css[start..end], end));
+        } else {
+            index += 1;
+        }
+    }
+
+    Some((&css[start..], css.len()))
 }
 
 fn append_css_with_budget(output: &mut String, text: &str, remaining: &mut usize) {
@@ -3072,6 +3136,26 @@ mod tests {
             loader.load(&request, LayoutViewport::new(320, 200)),
             Err(DocumentLoadError::DocumentTooLarge)
         ));
+    }
+
+    #[test]
+    fn css_statement_scanner_does_not_split_semicolons_inside_comments_or_strings() {
+        let css = r#"/* ; @import \"commented-out.css\"; still a comment */ body::before { content: \"a;b\"; } @import \"real.css\";"#;
+        let mut statements = Vec::new();
+        let mut start = 0;
+        while start < css.len() {
+            let (statement, next) = next_css_statement(css, start).unwrap();
+            assert!(next > start);
+            statements.push(statement);
+            start = next;
+        }
+
+        assert_eq!(statements.len(), 2);
+        assert!(parse_import_reference(statements[0]).is_none());
+        assert_eq!(
+            parse_import_reference(statements[1]),
+            Some("real.css".to_owned())
+        );
     }
 
     #[test]
