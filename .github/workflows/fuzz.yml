@@ -5,27 +5,9 @@ concurrency:
   cancel-in-progress: false
 
 on:
+  # Run the full fuzz campaign deliberately at the end of the P0 hardening
+  # phase, or on explicit manual request. Do not launch it on every code push.
   workflow_dispatch:
-  schedule:
-    - cron: "17 3 * * 1"
-  push:
-    branches: ["Archia-Browser"]
-    paths:
-      - "Cargo.lock"
-      - "fuzz/Cargo.toml"
-      - "fuzz/fuzz_targets/**"
-      - "fuzz/corpus/**"
-      - "Archia-Browser/src/net/url.rs"
-      - "Archia-Browser/src/net/loader.rs"
-      - "Archia-Browser/src/net/pipeline.rs"
-      - "Archia-Browser/src/net/cache.rs"
-      - "Archia-Browser/src/net/cookies.rs"
-      - "Archia-Browser/src/net/transport.rs"
-      - "Archia-Browser/src/security/**"
-      - "Archia-Browser/src/core/cache.rs"
-      - "Archia-Browser/src/html/**"
-      - "Archia-Browser/src/css/**"
-      - ".github/workflows/fuzz.yml"
 
 permissions:
   contents: read
