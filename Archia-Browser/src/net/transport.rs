@@ -479,8 +479,7 @@ fn reject_symlink_path_components(path: &std::path::Path) -> Result<(), Transpor
                     None
                 };
                 if expected_target.is_some_and(|expected| {
-                    std::fs::canonicalize(&current)
-                        .is_ok_and(|resolved| resolved == expected)
+                    std::fs::canonicalize(&current).is_ok_and(|resolved| resolved == expected)
                 }) {
                     continue;
                 }
