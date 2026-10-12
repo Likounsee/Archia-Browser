@@ -455,8 +455,8 @@ fn open_local_root_handle_verified(
     let opened_metadata = directory
         .metadata()
         .map_err(|_| TransportError::ConnectionFailed)?;
-    let path_metadata = std::fs::symlink_metadata(canonical_root)
-        .map_err(|_| TransportError::ConnectionFailed)?;
+    let path_metadata =
+        std::fs::symlink_metadata(canonical_root).map_err(|_| TransportError::ConnectionFailed)?;
 
     // The pathname can be replaced between canonicalization and openat2.
     // Verify that the opened directory is the same filesystem object currently
@@ -586,84 +586,17 @@ fn open_local_file_confined_from_handle(
     Ok(unsafe { std::fs::File::from_raw_fd(fd as i32) })
 }
 
+// Non-Linux platforms deliberately deny local-file reads until a native,
+// handle-relative implementation can enforce the same confinement guarantees
+// as Linux openat2. Pathname checks and final-component no-follow flags alone
+// do not prevent an intermediate directory/reparse-point swap.
 #[cfg(not(target_os = "linux"))]
 fn open_local_file_confined(
     _canonical_root: &std::path::Path,
     _canonical_path: &std::path::Path,
-    original_path: &std::path::Path,
+    _original_path: &std::path::Path,
 ) -> Result<std::fs::File, TransportError> {
-    open_local_file_without_following_links(original_path)
-}
-
-/// Open a local file without following a symlink at the final path component.
-/// Unsupported platforms fail closed rather than silently following links.
-#[cfg(not(target_os = "linux"))]
-fn open_local_file_without_following_links(
-    path: &std::path::Path,
-) -> Result<std::fs::File, TransportError> {
-    #[cfg(target_os = "linux")]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        // Linux O_NOFOLLOW. Keep this platform-specific instead of assuming
-        // the numeric value is shared by every Unix-like OS.
-        std::fs::OpenOptions::new()
-            .read(true)
-            .custom_flags(0x0002_0000)
-            .open(path)
-            .map_err(|_| TransportError::ConnectionFailed)
-    }
-    #[cfg(target_os = "android")]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        std::fs::OpenOptions::new()
-            .read(true)
-            .custom_flags(0x0002_0000)
-            .open(path)
-            .map_err(|_| TransportError::ConnectionFailed)
-    }
-    #[cfg(any(
-        target_os = "macos",
-        target_os = "ios",
-        target_os = "freebsd",
-        target_os = "openbsd",
-        target_os = "netbsd",
-        target_os = "dragonfly"
-    ))]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        // O_NOFOLLOW on the BSD/Darwin family.
-        std::fs::OpenOptions::new()
-            .read(true)
-            .custom_flags(0x0000_0100)
-            .open(path)
-            .map_err(|_| TransportError::ConnectionFailed)
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::OpenOptionsExt;
-        // FILE_FLAG_OPEN_REPARSE_POINT opens the reparse point itself. The
-        // opened handle is checked with file_type().is_symlink() below.
-        std::fs::OpenOptions::new()
-            .read(true)
-            .custom_flags(0x0020_0000)
-            .open(path)
-            .map_err(|_| TransportError::ConnectionFailed)
-    }
-    #[cfg(not(any(
-        target_os = "linux",
-        target_os = "android",
-        target_os = "macos",
-        target_os = "ios",
-        target_os = "freebsd",
-        target_os = "openbsd",
-        target_os = "netbsd",
-        target_os = "dragonfly",
-        windows
-    )))]
-    {
-        let _ = path;
-        Err(TransportError::ConnectionFailed)
-    }
+    Err(TransportError::ConnectionFailed)
 }
 
 fn file_url_path(url_path: &str) -> Result<std::path::PathBuf, TransportError> {
@@ -2283,6 +2216,7 @@ mod tests {
         std::fs::remove_dir(base).unwrap();
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn local_file_transport_loads_html() {
         let path =
@@ -2313,6 +2247,7 @@ mod tests {
         std::fs::remove_file(path).unwrap();
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn local_file_transport_enforces_size_limit_for_get_and_head() {
         let path = std::env::temp_dir().join(format!(
@@ -2374,6 +2309,7 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn local_file_transport_decodes_percent_escapes_exactly_once() {
         #[cfg(windows)]
