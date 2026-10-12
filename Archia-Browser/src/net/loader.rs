@@ -805,7 +805,7 @@ fn strip_css_comments(css: &str) -> String {
     while let Some(character) = chars.next() {
         if let Some(active_quote) = quote {
             output.push(character);
-            if character == '\\\\' {
+            if character == '\\' {
                 if let Some(escaped) = chars.next() {
                     output.push(escaped);
                 }
@@ -825,7 +825,7 @@ fn strip_css_comments(css: &str) -> String {
                 }
             }
         } else {
-            if matches!(character, '\\'' | '"') {
+            if matches!(character, '\'' | '"') {
                 quote = Some(character);
             }
             output.push(character);
