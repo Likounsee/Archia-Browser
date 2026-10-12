@@ -41,6 +41,22 @@ impl CssTokenizer {
             let Some(ch) = chars.next() else {
                 break;
             };
+
+            // CSS comments are lexical trivia, not declaration values. Consume
+            // them before tokenization, without interpreting comment markers
+            // inside quoted strings (which are handled in the string branch).
+            if ch == '/' && chars.peek() == Some(&'*') {
+                chars.next();
+                let mut previous = '\0';
+                for next in chars.by_ref() {
+                    if previous == '*' && next == '/' {
+                        break;
+                    }
+                    previous = next;
+                }
+                continue;
+            }
+
             match ch {
                 c if c.is_whitespace() => {
                     if !matches!(tokens.last(), Some(CssToken::Whitespace)) {
@@ -60,11 +76,20 @@ impl CssTokenizer {
                 '"' | '\'' => {
                     let quote = ch;
                     let mut value = String::new();
-                    for next in chars.by_ref() {
+                    while let Some(next) = chars.next() {
                         if next == quote {
                             break;
                         }
-                        value.push(next);
+                        if next == '\\' {
+                            // Keep CSS escapes intact while ensuring an escaped
+                            // quote does not prematurely terminate the string.
+                            value.push(next);
+                            if let Some(escaped) = chars.next() {
+                                value.push(escaped);
+                            }
+                        } else {
+                            value.push(next);
+                        }
                     }
                     tokens.push(CssToken::String(value));
                 }
@@ -151,6 +176,52 @@ mod tests {
 
         assert_eq!(tokens.len(), MAX_CSS_TOKENS);
         assert!(tokens.iter().all(|token| matches!(token, CssToken::Colon)));
+    }
+
+    #[test]
+    fn skips_comments_between_css_tokens() {
+        let tokens = CssTokenizer::tokenize("color/**/: /* value */ red;");
+        assert_eq!(
+            tokens,
+            vec![
+                CssToken::Ident("color".into()),
+                CssToken::Colon,
+                CssToken::Whitespace,
+                CssToken::Ident("red".into()),
+                CssToken::Semicolon,
+            ]
+        );
+    }
+
+    #[test]
+    fn preserves_comment_markers_and_escaped_quotes_inside_strings() {
+        let tokens = CssTokenizer::tokenize(r#"content: "a\\"b/*literal*/";"#);
+        assert_eq!(
+            tokens,
+            vec![
+                CssToken::Ident("content".into()),
+                CssToken::Colon,
+                CssToken::Whitespace,
+                CssToken::String(r#"a\\"b/*literal*/"#.into()),
+                CssToken::Semicolon,
+            ]
+        );
+    }
+
+    #[test]
+    fn unterminated_comment_consumes_the_remaining_input() {
+        let tokens = CssTokenizer::tokenize("color: red; /* unfinished");
+        assert_eq!(
+            tokens,
+            vec![
+                CssToken::Ident("color".into()),
+                CssToken::Colon,
+                CssToken::Whitespace,
+                CssToken::Ident("red".into()),
+                CssToken::Semicolon,
+                CssToken::Whitespace,
+            ]
+        );
     }
 
     #[test]
