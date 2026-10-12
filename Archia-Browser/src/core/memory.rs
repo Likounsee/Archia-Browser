@@ -119,8 +119,24 @@ impl MemoryReservation {
             return false;
         }
 
-        self.bytes.fetch_add(additional, Ordering::AcqRel);
-        true
+        // Growth and shrinkage can race through shared reservations. A CAS loop
+        // prevents a concurrent shrink from being overwritten by fetch_add.
+        let mut current = self.bytes.load(Ordering::Acquire);
+        loop {
+            let Some(next) = current.checked_add(additional) else {
+                self.budget.release(additional);
+                return false;
+            };
+            match self.bytes.compare_exchange_weak(
+                current,
+                next,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => return true,
+                Err(actual) => current = actual,
+            }
+        }
     }
 
     /// Reduce an existing reservation and immediately return the excess budget.
@@ -232,6 +248,36 @@ mod tests {
         assert_eq!(reservation.bytes(), 100);
         assert_eq!(budget.used(), 100);
 
+        drop(reservation);
+        assert_eq!(budget.used(), 0);
+    }
+
+    #[test]
+    fn concurrent_growth_and_shrink_keep_reservation_and_budget_in_sync() {
+        let budget = Arc::new(MemoryBudget::new(4096));
+        let reservation =
+            Arc::new(MemoryReservation::try_new(Arc::clone(&budget), 1024).unwrap());
+        let grower = {
+            let reservation = Arc::clone(&reservation);
+            std::thread::spawn(move || {
+                for _ in 0..2_000 {
+                    let _ = reservation.try_grow_by(1);
+                }
+            })
+        };
+        let shrinker = {
+            let reservation = Arc::clone(&reservation);
+            std::thread::spawn(move || {
+                for _ in 0..2_000 {
+                    reservation.shrink_to(1024);
+                }
+            })
+        };
+
+        grower.join().unwrap();
+        shrinker.join().unwrap();
+        assert_eq!(budget.used(), reservation.bytes());
+        assert!(reservation.bytes() <= budget.limit());
         drop(reservation);
         assert_eq!(budget.used(), 0);
     }
