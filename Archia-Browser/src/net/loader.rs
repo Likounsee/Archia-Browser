@@ -390,6 +390,10 @@ where
         remaining_css_bytes: &mut usize,
         document_reservation: Option<&crate::core::memory::MemoryReservation>,
     ) -> Option<String> {
+        // Keep each decoded resource's temporary charge alive through recursive
+        // @import expansion. The top-level result is charged to the document
+        // reservation before these temporary charges are released.
+        let mut temporary_reservations = Vec::new();
         self.load_stylesheet_resource_at(
             document_url,
             url,
@@ -397,6 +401,7 @@ where
             request_budget,
             remaining_css_bytes,
             document_reservation,
+            &mut temporary_reservations,
         )
     }
 
@@ -408,6 +413,7 @@ where
         request_budget: &mut usize,
         remaining_css_bytes: &mut usize,
         document_reservation: Option<&crate::core::memory::MemoryReservation>,
+        temporary_reservations: &mut Vec<crate::core::memory::MemoryReservation>,
     ) -> Option<String> {
         const MAX_IMPORT_DEPTH: usize = 8;
         if import_depth > MAX_IMPORT_DEPTH || *request_budget == 0 || *remaining_css_bytes == 0 {
@@ -521,7 +527,7 @@ where
             // final expanded stylesheet is charged separately by the document
             // reservation before the page tree is constructed.
             let bounded_body = &response.body[..response.body.len().min(*remaining_css_bytes)];
-            let _temporary_css_reservation = if let Some(budget) = &self.memory_budget {
+            let temporary_css_reservation = if let Some(budget) = &self.memory_budget {
                 let estimated_temporary_bytes = bounded_body.len().saturating_mul(4);
                 let reservation = crate::core::memory::MemoryReservation::try_new(
                     Arc::clone(budget),
@@ -543,6 +549,9 @@ where
             } else {
                 None
             };
+            if let Some(reservation) = temporary_css_reservation {
+                temporary_reservations.push(reservation);
+            }
             let css = String::from_utf8_lossy(bounded_body).into_owned();
             let expanded = self.expand_stylesheet_imports(
                 document_url,
@@ -552,6 +561,7 @@ where
                 request_budget,
                 remaining_css_bytes,
                 document_reservation,
+                temporary_reservations,
             );
             // Only top-level linked stylesheets charge the document reservation;
             // nested imports are included in that top-level expanded result.
@@ -578,6 +588,7 @@ where
         request_budget: &mut usize,
         remaining_css_bytes: &mut usize,
         document_reservation: Option<&crate::core::memory::MemoryReservation>,
+        temporary_reservations: &mut Vec<crate::core::memory::MemoryReservation>,
     ) -> String {
         let mut output = String::with_capacity(css.len().min(*remaining_css_bytes));
         for statement in css.split_inclusive(';') {
@@ -598,6 +609,7 @@ where
                     request_budget,
                     remaining_css_bytes,
                     document_reservation,
+                    temporary_reservations,
                 ) {
                     output.push_str(&imported);
                     if *remaining_css_bytes > 0 {
