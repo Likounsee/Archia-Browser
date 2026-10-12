@@ -2482,6 +2482,39 @@ mod tests {
         std::fs::remove_dir(base).unwrap();
     }
 
+    #[cfg(all(unix, not(target_os = "linux")))]
+    #[test]
+    fn openat_component_walk_rejects_intermediate_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let base = std::env::temp_dir().join(format!(
+            "archia-browser-openat-confinement-{}",
+            std::process::id()
+        ));
+        let root_path = base.join("root");
+        let outside = base.join("outside");
+        std::fs::create_dir_all(&root_path).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("secret.txt"), b"OUTSIDE-SECRET").unwrap();
+        symlink(&outside, root_path.join("escape")).unwrap();
+
+        let root = std::fs::canonicalize(&root_path).unwrap();
+        let root_handle = open_local_root_handle_verified(&root).unwrap();
+        let escaped_path = root.join("escape").join("secret.txt");
+        assert_eq!(
+            open_local_file_confined_from_handle(&root_handle, &root, &escaped_path).err(),
+            Some(TransportError::ConnectionFailed),
+            "openat component walking must reject an intermediate symlink instead of following it outside the granted root"
+        );
+
+        drop(root_handle);
+        std::fs::remove_file(root.join("escape")).unwrap();
+        std::fs::remove_file(outside.join("secret.txt")).unwrap();
+        std::fs::remove_dir(outside).unwrap();
+        std::fs::remove_dir(root_path).unwrap();
+        std::fs::remove_dir(base).unwrap();
+    }
+
     #[cfg(any(unix, windows))]
     #[test]
     fn local_file_transport_keeps_the_original_granted_root_handle() {
