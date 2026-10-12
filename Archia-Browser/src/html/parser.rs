@@ -379,6 +379,22 @@ mod tests {
     }
 
     #[test]
+    fn parser_caps_retained_dom_nodes_even_for_direct_tokens() {
+        let tokens = vec![
+            HtmlToken::Text("x".to_owned());
+            MAX_DOM_NODES + 100
+        ];
+
+        let root = parse(&tokens);
+        let body = root
+            .find_first_element("body")
+            .expect("normalization always creates a body");
+
+        assert_eq!(body.child_count(), MAX_DOM_NODES);
+        assert_eq!(body.text_content().len(), MAX_DOM_NODES);
+    }
+
+    #[test]
     fn builds_basic_tree() {
         let tokens = HtmlTokenizer::tokenize("<html><body>Hello</body></html>");
         let root = parse(&tokens);
