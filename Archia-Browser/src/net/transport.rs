@@ -231,11 +231,11 @@ impl Transport for HttpTransport {
 pub struct LocalFileTransport {
     max_file_size: usize,
     allowed_roots: Vec<std::path::PathBuf>,
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     authorized_root_handles: Vec<AuthorizedRootHandle>,
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 #[derive(Debug, Clone)]
 struct AuthorizedRootHandle {
     canonical_path: std::path::PathBuf,
@@ -255,7 +255,7 @@ impl LocalFileTransport {
             // Fail closed until the embedding application explicitly grants
             // access to one or more local directories.
             allowed_roots: Vec::new(),
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             authorized_root_handles: Vec::new(),
         }
     }
@@ -267,7 +267,7 @@ impl LocalFileTransport {
         roots: impl IntoIterator<Item = std::path::PathBuf>,
     ) -> Self {
         self.allowed_roots = roots.into_iter().collect();
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         {
             self.authorized_root_handles = self
                 .allowed_roots
@@ -389,7 +389,16 @@ impl Transport for LocalFileTransport {
                 &canonical_path,
             )?
         };
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        let file = {
+            let pinned_root = self
+                .authorized_root_handles
+                .iter()
+                .find(|root| canonical_path.starts_with(&root.canonical_path) && root.canonical_path == canonical_root)
+                .ok_or(TransportError::ConnectionFailed)?;
+            open_local_file_confined_from_handle(&pinned_root.directory, &pinned_root.canonical_path, &canonical_path)?
+        };
+        #[cfg(not(any(unix, windows)))]
         let file = open_local_file_confined(&canonical_root, &canonical_path, &path)?;
         let metadata = file
             .metadata()
@@ -709,10 +718,164 @@ fn open_local_file_confined_from_handle(
     Ok(current)
 }
 
-// Windows currently remains fail-closed: CreateFileW's reparse-point flag only
-// protects the final component. A correct implementation needs NT relative opens
-// (RootDirectory + OBJ_DONT_REPARSE) for every path component, not pathname checks.
-#[cfg(not(unix))]
+// Windows: use NtCreateFile with OBJECT_ATTRIBUTES.RootDirectory so each
+// component is opened relative to the previously opened directory handle.
+// OBJ_DONT_REPARSE and FILE_OPEN_REPARSE_POINT reject reparse-point traversal.
+#[cfg(windows)]
+fn open_local_root_handle_verified(
+    canonical_root: &std::path::Path,
+) -> Result<std::fs::File, TransportError> {
+    use std::os::windows::ffi::OsStrExt;
+    use std::os::windows::fs::MetadataExt;
+    use std::os::windows::io::FromRawHandle;
+
+    type Handle = *mut std::ffi::c_void;
+    unsafe extern "system" {
+        fn CreateFileW(name: *const u16, access: u32, share: u32,
+            security: *mut std::ffi::c_void, disposition: u32, flags: u32,
+            template: Handle) -> Handle;
+    }
+    const INVALID_HANDLE_VALUE: Handle = -1isize as Handle;
+    const GENERIC_READ: u32 = 0x8000_0000;
+    const FILE_READ_ATTRIBUTES: u32 = 0x80;
+    const SHARE_ALL: u32 = 0x7;
+    const OPEN_EXISTING: u32 = 3;
+    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+    let mut wide: Vec<u16> = canonical_root.as_os_str().encode_wide().collect();
+    wide.push(0);
+    let handle = unsafe { CreateFileW(wide.as_ptr(), GENERIC_READ | FILE_READ_ATTRIBUTES,
+        SHARE_ALL, std::ptr::null_mut(), OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, std::ptr::null_mut()) };
+    if handle == INVALID_HANDLE_VALUE {
+        return Err(TransportError::ConnectionFailed);
+    }
+    let directory = unsafe { std::fs::File::from_raw_handle(handle) };
+    let opened = directory.metadata().map_err(|_| TransportError::ConnectionFailed)?;
+    let named = std::fs::symlink_metadata(canonical_root).map_err(|_| TransportError::ConnectionFailed)?;
+    if !opened.is_dir() || !named.is_dir()
+        || opened.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+        || named.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+        || opened.volume_serial_number() != named.volume_serial_number()
+        || opened.file_index() != named.file_index()
+    {
+        return Err(TransportError::ConnectionFailed);
+    }
+    Ok(directory)
+}
+
+#[cfg(windows)]
+fn open_local_file_confined_from_handle(
+    root_file: &std::fs::File,
+    canonical_root: &std::path::Path,
+    canonical_path: &std::path::Path,
+) -> Result<std::fs::File, TransportError> {
+    use std::os::windows::ffi::OsStrExt;
+    use std::os::windows::fs::MetadataExt;
+    use std::os::windows::io::{AsRawHandle, FromRawHandle};
+    use std::path::Component;
+
+    type Handle = *mut std::ffi::c_void;
+    type NtStatus = i32;
+    #[repr(C)]
+    struct UnicodeString { length: u16, maximum_length: u16, buffer: *mut u16 }
+    #[repr(C)]
+    struct ObjectAttributes {
+        length: u32, root_directory: Handle, object_name: *mut UnicodeString,
+        attributes: u32, security_descriptor: *mut std::ffi::c_void,
+        security_quality_of_service: *mut std::ffi::c_void,
+    }
+    #[repr(C)]
+    union IoStatusValue { status: NtStatus, pointer: *mut std::ffi::c_void }
+    #[repr(C)]
+    struct IoStatusBlock { value: IoStatusValue, information: usize }
+    #[link(name = "ntdll")]
+    unsafe extern "system" {
+        fn NtCreateFile(file_handle: *mut Handle, desired_access: u32,
+            object_attributes: *mut ObjectAttributes, io_status_block: *mut IoStatusBlock,
+            allocation_size: *mut i64, file_attributes: u32, share_access: u32,
+            create_disposition: u32, create_options: u32, ea_buffer: *mut std::ffi::c_void,
+            ea_length: u32) -> NtStatus;
+    }
+    unsafe extern "system" {
+        fn DuplicateHandle(source_process: Handle, source: Handle, target_process: Handle,
+            target: *mut Handle, access: u32, inherit: i32, options: u32) -> i32;
+        fn GetCurrentProcess() -> Handle;
+    }
+    const OBJ_CASE_INSENSITIVE: u32 = 0x40;
+    const OBJ_DONT_REPARSE: u32 = 0x1000;
+    const FILE_OPEN: u32 = 1;
+    const FILE_DIRECTORY_FILE: u32 = 0x1;
+    const FILE_NON_DIRECTORY_FILE: u32 = 0x40;
+    const FILE_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const FILE_SYNCHRONOUS_IO_NONALERT: u32 = 0x20;
+    const FILE_READ_DATA: u32 = 0x1;
+    const FILE_LIST_DIRECTORY: u32 = 0x1;
+    const FILE_READ_ATTRIBUTES: u32 = 0x80;
+    const SYNCHRONIZE: u32 = 0x0010_0000;
+    const SHARE_ALL: u32 = 0x7;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+
+    let relative = canonical_path.strip_prefix(canonical_root).map_err(|_| TransportError::ConnectionFailed)?;
+    let components: Vec<_> = relative.components().map(|component| match component {
+        Component::Normal(value) => Ok(value),
+        _ => Err(TransportError::ConnectionFailed),
+    }).collect::<Result<_, _>>()?;
+    if components.is_empty() { return Err(TransportError::ConnectionFailed); }
+
+    let process = unsafe { GetCurrentProcess() };
+    let mut duplicated: Handle = std::ptr::null_mut();
+    if unsafe { DuplicateHandle(process, root_file.as_raw_handle(), process, &mut duplicated, 0, 0, 0x2) } == 0 {
+        return Err(TransportError::ConnectionFailed);
+    }
+    let mut current = unsafe { std::fs::File::from_raw_handle(duplicated) };
+    for (index, component) in components.iter().enumerate() {
+        let mut wide: Vec<u16> = component.encode_wide().collect();
+        if wide.is_empty() || wide.contains(&0) || wide.len() > u16::MAX as usize / 2 {
+            return Err(TransportError::ConnectionFailed);
+        }
+        let byte_len = (wide.len() * 2) as u16;
+        let mut name = UnicodeString { length: byte_len, maximum_length: byte_len, buffer: wide.as_mut_ptr() };
+        let mut attributes = ObjectAttributes {
+            length: std::mem::size_of::<ObjectAttributes>() as u32,
+            root_directory: current.as_raw_handle(), object_name: &mut name,
+            attributes: OBJ_CASE_INSENSITIVE | OBJ_DONT_REPARSE,
+            security_descriptor: std::ptr::null_mut(), security_quality_of_service: std::ptr::null_mut(),
+        };
+        let is_final = index + 1 == components.len();
+        let access = if is_final { FILE_READ_DATA } else { FILE_LIST_DIRECTORY };
+        let options = FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT
+            | if is_final { FILE_NON_DIRECTORY_FILE } else { FILE_DIRECTORY_FILE };
+        let mut output: Handle = std::ptr::null_mut();
+        let mut io = IoStatusBlock { value: IoStatusValue { status: 0 }, information: 0 };
+        let status = unsafe { NtCreateFile(&mut output, access | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+            &mut attributes, &mut io, std::ptr::null_mut(), 0, SHARE_ALL, FILE_OPEN, options,
+            std::ptr::null_mut(), 0) };
+        if status < 0 || output.is_null() { return Err(TransportError::ConnectionFailed); }
+        let next = unsafe { std::fs::File::from_raw_handle(output) };
+        let metadata = next.metadata().map_err(|_| TransportError::ConnectionFailed)?;
+        if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+            || (!is_final && !metadata.is_dir()) || (is_final && !metadata.is_file()) {
+            return Err(TransportError::ConnectionFailed);
+        }
+        current = next;
+    }
+    Ok(current)
+}
+
+#[cfg(windows)]
+#[cfg(test)]
+fn open_local_file_confined(
+    canonical_root: &std::path::Path,
+    canonical_path: &std::path::Path,
+    _original_path: &std::path::Path,
+) -> Result<std::fs::File, TransportError> {
+    let root = open_local_root_handle_verified(canonical_root)?;
+    open_local_file_confined_from_handle(&root, canonical_root, canonical_path)
+}
+
+#[cfg(not(any(unix, windows)))]
 fn open_local_file_confined(
     _canonical_root: &std::path::Path,
     _canonical_path: &std::path::Path,
