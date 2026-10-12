@@ -434,7 +434,8 @@ where
         let mut current = url;
         let mut visited_redirect_targets = HashSet::new();
 
-        for _ in 0..=MAX_REDIRECTS {
+        // Keep stylesheet redirects under the same per-loader limit as document redirects.
+        for _ in 0..=self.max_redirects {
             if *request_budget == 0 || !matches!(current.scheme(), "http" | "https" | "file") {
                 return None;
             }
@@ -1923,6 +1924,45 @@ mod tests {
             "the file URL must never reach the transport"
         );
         assert!(requests.iter().all(|url| !url.starts_with("file:")));
+    }
+
+    #[test]
+    fn stylesheet_redirects_respect_the_loader_redirect_limit() {
+        use std::sync::Mutex;
+
+        #[derive(Debug)]
+        struct RedirectChainTransport {
+            requests: Mutex<Vec<String>>,
+        }
+
+        impl Transport for RedirectChainTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                self.requests.lock().unwrap().push(request.url.to_string());
+                if request.policy.resource_kind == ResourceKind::Document {
+                    return Ok(Response::new(200)
+                        .with_header("content-type", "text/html")
+                        .with_body(
+                            br#"<link rel="stylesheet" href="/style.css"><body>Safe</body>"#
+                                .to_vec(),
+                        ));
+                }
+                assert_eq!(request.url.path(), "/style.css");
+                Ok(Response::new(302).with_header("location", "/next.css"))
+            }
+        }
+
+        let transport = RedirectChainTransport {
+            requests: Mutex::new(Vec::new()),
+        };
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport)
+            .with_max_redirects(0);
+        let request = Request::new(Url::parse("https://example.org/page").unwrap());
+
+        let page = loader.load(&request, LayoutViewport::new(320, 200)).unwrap();
+        assert_eq!(page.document.text_content(), "Safe");
+        let requests = loader.transport.requests.lock().unwrap();
+        assert_eq!(requests.len(), 2, "zero redirects must still allow the initial request");
+        assert_eq!(requests[1], "https://example.org/style.css");
     }
 
     #[test]
