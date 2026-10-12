@@ -195,14 +195,14 @@ mod tests {
 
     #[test]
     fn preserves_comment_markers_and_escaped_quotes_inside_strings() {
-        let tokens = CssTokenizer::tokenize(r#"content: "a\\"b/*literal*/";"#);
+        let tokens = CssTokenizer::tokenize(r#"content: "a\"b/*literal*/";"#);
         assert_eq!(
             tokens,
             vec![
                 CssToken::Ident("content".into()),
                 CssToken::Colon,
                 CssToken::Whitespace,
-                CssToken::String(r#"a\\"b/*literal*/"#.into()),
+                CssToken::String(r#"a\"b/*literal*/"#.into()),
                 CssToken::Semicolon,
             ]
         );
