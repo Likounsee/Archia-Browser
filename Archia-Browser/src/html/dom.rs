@@ -218,7 +218,10 @@ mod tests {
         let child = Node::text("safe");
         assert!(parent.try_append(child).is_ok());
         assert_eq!(parent.child_count(), 1);
-        assert_eq!(parent.child(0).map(Node::text_content).as_deref(), Some("safe"));
+        assert_eq!(
+            parent.child(0).map(Node::text_content).as_deref(),
+            Some("safe")
+        );
     }
 
     #[test]
