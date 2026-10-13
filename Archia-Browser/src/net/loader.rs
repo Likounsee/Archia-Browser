@@ -29,6 +29,7 @@ pub enum DocumentLoadError {
 
 const MAX_REDIRECTS: usize = 10;
 const MAX_HTML_DOCUMENT_BYTES: usize = 4 * 1024 * 1024;
+const MAX_STYLESHEET_REQUESTS_PER_DOCUMENT: usize = 64;
 const MAX_STYLESHEET_BYTES_PER_DOCUMENT: usize = 2 * 1024 * 1024;
 // Input bytes expand into several retained structures (DOM, styled tree, layout,
 // and display list). These conservative multipliers are estimates, not exact heap
@@ -373,7 +374,7 @@ where
         let mut stylesheet = String::new();
         // Bound both network work and the expanded CSS retained for one
         // document. Imports share these budgets with linked stylesheets.
-        let mut request_budget = 64;
+        let mut request_budget = MAX_STYLESHEET_REQUESTS_PER_DOCUMENT;
         let mut remaining_css_bytes = MAX_STYLESHEET_BYTES_PER_DOCUMENT;
         for href in links {
             if request_budget == 0 || remaining_css_bytes == 0 {
@@ -792,6 +793,13 @@ fn remove_header_case_insensitive(
 }
 
 fn collect_stylesheet_links(node: &Node, links: &mut Vec<String>) {
+    // Stop collecting once the document's stylesheet request budget is full.
+    // Otherwise a small HTML document containing thousands of <link> elements
+    // would allocate a large temporary Vec even though at most 64 requests run.
+    if links.len() >= MAX_STYLESHEET_REQUESTS_PER_DOCUMENT {
+        return;
+    }
+
     if node.tag_name() == Some("link")
         && node.attribute("rel").is_some_and(|rel| {
             rel.split_whitespace()
@@ -808,6 +816,9 @@ fn collect_stylesheet_links(node: &Node, links: &mut Vec<String>) {
     }
 
     for child in node.children() {
+        if links.len() >= MAX_STYLESHEET_REQUESTS_PER_DOCUMENT {
+            break;
+        }
         collect_stylesheet_links(child, links);
     }
 }
@@ -1007,6 +1018,30 @@ fn is_html_response(response: &Response) -> bool {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn stylesheet_link_discovery_stops_at_the_request_budget() {
+        use crate::html::{parse, HtmlTokenizer};
+        use super::{collect_stylesheet_links, MAX_STYLESHEET_REQUESTS_PER_DOCUMENT};
+
+        let mut html = String::new();
+        for index in 0..(MAX_STYLESHEET_REQUESTS_PER_DOCUMENT + 100) {
+            html.push_str(&format!(
+                "<link rel=\"stylesheet\" href=\"/style-{index}.css\">"
+            ));
+        }
+        let document = parse(&HtmlTokenizer::tokenize(&html));
+        let mut links = Vec::new();
+
+        collect_stylesheet_links(&document, &mut links);
+
+        assert_eq!(links.len(), MAX_STYLESHEET_REQUESTS_PER_DOCUMENT);
+        assert_eq!(links.first().map(String::as_str), Some("/style-0.css"));
+        assert_eq!(
+            links.last().map(String::as_str),
+            Some(format!("/style-{}.css", MAX_STYLESHEET_REQUESTS_PER_DOCUMENT - 1).as_str())
+        );
+    }
 
     #[test]
     fn redirect_method_rewriting_follows_status_specific_rules() {
