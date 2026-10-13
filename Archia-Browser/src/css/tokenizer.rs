@@ -75,7 +75,7 @@ impl CssTokenizer {
                     let value = consume_ident(&mut chars);
                     tokens.push(CssToken::Hash(value));
                 }
-                '#' => tokens.push(CssToken::Delim('#'))
+                '#' => tokens.push(CssToken::Delim('#')),
                 '"' | '\'' => {
                     let quote = ch;
                     let mut value = String::new();
@@ -311,11 +311,11 @@ mod tests {
     #[test]
     fn removes_css_string_line_continuations_and_crlf_escape_whitespace() {
         assert_eq!(
-            CssTokenizer::tokenize("\"left\\\\\\r\\nright\""),
+            CssTokenizer::tokenize("\"left\\\r\nright\""),
             vec![CssToken::String("leftright".into())]
         );
         assert_eq!(
-            CssTokenizer::tokenize(r"foo\\000026\r\nbar"),
+            CssTokenizer::tokenize("foo\\000026\r\nbar"),
             vec![CssToken::Ident("foo&bar".into())]
         );
     }
