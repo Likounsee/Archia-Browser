@@ -268,9 +268,8 @@ mod tests {
         }
 
         let pipeline = NetworkPipeline::new(AllowAll);
-        let mut request = Request::new(
-            super::super::Url::parse("http://cdn.example/script.js").unwrap(),
-        );
+        let mut request =
+            Request::new(super::super::Url::parse("http://cdn.example/script.js").unwrap());
         request.policy = RequestPolicy {
             resource_kind: ResourceKind::Script,
             first_party: Some(super::super::Url::parse("https://example.org/page").unwrap()),
