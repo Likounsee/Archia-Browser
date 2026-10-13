@@ -20,7 +20,7 @@ These percentages are engineering estimates of **functional coverage**, not line
 | Foundation / architecture | ~90% | Memory budgets, resource cache, event loop, modular layers and CI |
 | HTML tokenizer/parser | ~55% | Working tree builder with void elements, implied structure, comments and several recovery rules |
 | DOM | ~50% | Node/attribute model, lookup and mutation primitives; standards traversal/namespaces remain |
-| CSS tokenizer/parser | ~60% | Declarations, shorthands and a growing value syntax |
+| CSS tokenizer/parser | ~60% | Declarations, shorthands, growing value syntax and decoded CSS escapes in identifiers/hash tokens |
 | CSS selectors | ~65% | Specificity, attributes, siblings, form-state and structural pseudo-classes |
 | Cascade / computed style | ~55% | Inheritance, !important, CSS-wide keywords and custom properties/var() |
 | Block/inline layout | ~50% | Flow, wrapping, margins, padding, borders, line-height, alignment and positioning foundations |
@@ -37,7 +37,7 @@ These percentages are engineering estimates of **functional coverage**, not line
 | JavaScript | ~0% | Runtime not started |
 | Browser UI | ~5% | Browser/tab APIs exist; full window UI remains |
 | ArchiaOS integration | ~5% | Platform abstraction exists |
-| Tests / CI | — | Last verified green baseline: `f1e1336af5c78f276c36d480069fae76c1b792e0`, run `38432863412` on Ubuntu, Windows and macOS; RustSec and license audits passed on Linux. The CSS escaped-delimiter fix and regression-test refinement (`7d682f76dedfead771115d4ed27c8b3eaf279f2a`), plus documentation updates, need a fresh green run on HEAD; long fuzzing and broader conformance coverage remain unverified |
+| Tests / CI | — | Last verified green baseline: `f1e1336af5c78f276c36d480069fae76c1b792e0`, run `38432863412` on Ubuntu, Windows and macOS; RustSec and license audits passed on Linux. The CSS escaped-delimiter fix (`7d682f76dedfead771115d4ed27c8b3eaf279f2a`), identifier escape decoding (`77ed78e5773bf75d7b737e9c3c3841c68ffcec58`) and documentation updates need a fresh green run on HEAD; long fuzzing and broader conformance coverage remain unverified |
 
 **Overall engine foundation:** roughly **40–45%** as a non-reproducible engineering estimate, not a measured compatibility score. It is not test coverage or standards conformance. TLS is implemented at the transport layer, but that does not mean the whole network stack is production-ready.
 
