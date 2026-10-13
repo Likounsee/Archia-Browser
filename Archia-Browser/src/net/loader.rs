@@ -30,6 +30,11 @@ pub enum DocumentLoadError {
 const MAX_REDIRECTS: usize = 10;
 const MAX_HTML_DOCUMENT_BYTES: usize = 4 * 1024 * 1024;
 const MAX_STYLESHEET_BYTES_PER_DOCUMENT: usize = 2 * 1024 * 1024;
+// Input bytes expand into several retained structures (DOM, styled tree, layout,
+// and display list). These conservative multipliers are estimates, not exact heap
+// measurements; keep them centralized so tests and future profiling can refine them.
+const ESTIMATED_HTML_HEAP_MULTIPLIER: usize = 12;
+const ESTIMATED_STYLESHEET_HEAP_MULTIPLIER: usize = 6;
 
 pub struct DocumentLoader<P, T> {
     pipeline: NetworkPipeline<P>,
@@ -292,10 +297,14 @@ where
 
             // Reserve before UTF-8 decoding (which may allocate a replacement
             // string for invalid input) and before linked-stylesheet discovery
-            // builds a temporary DOM. This is an input-based estimate, not an
-            // exact heap measurement.
+            // builds a temporary DOM. The multiplier estimates the retained DOM,
+            // styled tree, layout, and display-list expansion; it is not an exact
+            // heap measurement.
             let mut reservation = if let Some(budget) = &self.memory_budget {
-                let estimated_html_bytes = html_bytes.len().saturating_mul(8).max(1);
+                let estimated_html_bytes = html_bytes
+                    .len()
+                    .saturating_mul(ESTIMATED_HTML_HEAP_MULTIPLIER)
+                    .max(1);
                 let mut reservation = crate::core::memory::MemoryReservation::try_new(
                     Arc::clone(budget),
                     estimated_html_bytes,
@@ -592,7 +601,11 @@ where
             // Reserve before this resource's temporary charge is dropped.
             if import_depth == 0 {
                 if let Some(reservation) = document_reservation {
-                    if !reservation.try_grow_by(expanded.len().saturating_mul(4)) {
+                    if !reservation.try_grow_by(
+                        expanded
+                            .len()
+                            .saturating_mul(ESTIMATED_STYLESHEET_HEAP_MULTIPLIER),
+                    ) {
                         return None;
                     }
                 }
