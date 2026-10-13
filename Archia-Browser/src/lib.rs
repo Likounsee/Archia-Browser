@@ -913,11 +913,8 @@ mod tests {
             crate::layout::LayoutViewport::new(320, 200),
         );
         page.attach_memory_reservation(std::sync::Arc::new(
-            crate::core::memory::MemoryReservation::try_new(
-                browser.shared_memory_budget(),
-                1500,
-            )
-            .unwrap(),
+            crate::core::memory::MemoryReservation::try_new(browser.shared_memory_budget(), 1500)
+                .unwrap(),
         ));
 
         assert!(!browser.commit_page(&page));
