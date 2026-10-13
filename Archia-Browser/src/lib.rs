@@ -169,6 +169,60 @@ impl Browser {
             .history()
     }
 
+    /// Begin a navigation transaction for the active tab. Frontends that load
+    /// asynchronously should retain this token and commit with the same token.
+    pub fn begin_navigation(
+        &mut self,
+        url: net::Url,
+    ) -> Option<core::tabs::NavigationToken> {
+        self.tabs.active_tab_mut()?.begin_navigation(url)
+    }
+
+    /// Cancel a pending navigation without changing the committed page/history.
+    pub fn cancel_navigation(&mut self, token: &core::tabs::NavigationToken) -> bool {
+        self.tabs.cancel_navigation(token.tab_id(), token)
+    }
+
+    /// Commit a loaded page only if its navigation token is still current.
+    pub fn commit_navigation(
+        &mut self,
+        token: &core::tabs::NavigationToken,
+        page: &crate::document::Page,
+    ) -> Result<(), net::DocumentLoadError> {
+        let Some(tab_page) = page.try_clone_with_budget(Arc::clone(&self.memory)) else {
+            return Err(net::DocumentLoadError::MemoryBudgetExceeded);
+        };
+        self.tabs
+            .commit_navigation(token.tab_id(), token, tab_page, page.title())
+            .map_err(|_| net::DocumentLoadError::NavigationSuperseded)
+    }
+
+    fn load_navigation_token<P, T>(
+        &mut self,
+        token: core::tabs::NavigationToken,
+        loader: &net::DocumentLoader<P, T>,
+        request: &net::Request,
+        viewport: crate::layout::LayoutViewport,
+    ) -> Result<crate::document::Page, net::DocumentLoadError>
+    where
+        P: net::pipeline::RequestPolicyEngine,
+        T: net::Transport,
+    {
+        let page = match loader.load(request, viewport) {
+            Ok(page) => page,
+            Err(error) => {
+                self.cancel_navigation(&token);
+                return Err(error);
+            }
+        };
+        if let Err(error) = self.commit_navigation(&token, &page) {
+            self.cancel_navigation(&token);
+            return Err(error);
+        }
+        Ok(page)
+    }
+
+
     pub fn reload<P, T>(
         &mut self,
         loader: &net::DocumentLoader<P, T>,
@@ -178,33 +232,13 @@ impl Browser {
         P: net::pipeline::RequestPolicyEngine,
         T: net::Transport,
     {
-        let url = self
-            .current_url()
-            .cloned()
-            .ok_or(net::DocumentLoadError::NoCurrentDocument)?;
-        let request = net::Request::new(url);
-        let page = loader.load(&request, viewport)?;
-        let Some(url) = page.url().cloned() else {
-            return Err(net::DocumentLoadError::NoCurrentDocument);
-        };
-
-        // The tab retains its own deep copy, so reserve its memory before
-        // changing navigation state. A failed copy leaves the current page intact.
-        let tab_page = page
-            .try_clone_with_budget(Arc::clone(&self.memory))
-            .ok_or(net::DocumentLoadError::MemoryBudgetExceeded)?;
-        let entry = core::navigation::NavigationEntry::new(url.clone(), page.title());
-        if !self
+        let token = self
             .tabs
             .active_tab_mut()
-            .is_some_and(|tab| tab.history_mut().replace_current(entry))
-        {
-            self.navigate(url, page.title());
-        }
-        if let Some(tab) = self.tabs.active_tab_mut() {
-            tab.set_page(tab_page);
-        }
-        Ok(page)
+            .and_then(core::tabs::Tab::begin_reload)
+            .ok_or(net::DocumentLoadError::NoCurrentDocument)?;
+        let request = net::Request::new(token.requested_url().clone());
+        self.load_navigation_token(token, loader, &request, viewport)
     }
 
     pub fn load_local_file_path(
@@ -238,6 +272,9 @@ impl Browser {
         self.load_request(&loader, &request, viewport)
     }
 
+
+    /// Load and transactionally commit a request. Failure leaves the displayed
+    /// document and history cursor unchanged.
     pub fn load_request<P, T>(
         &mut self,
         loader: &net::DocumentLoader<P, T>,
@@ -248,11 +285,48 @@ impl Browser {
         P: net::pipeline::RequestPolicyEngine,
         T: net::Transport,
     {
-        let page = loader.load(request, viewport)?;
-        if !self.commit_page(&page) {
-            return Err(net::DocumentLoadError::MemoryBudgetExceeded);
-        }
-        Ok(page)
+        let token = self
+            .begin_navigation(request.url.clone())
+            .ok_or(net::DocumentLoadError::NoCurrentDocument)?;
+        self.load_navigation_token(token, loader, request, viewport)
+    }
+
+    /// Load the previous history entry, moving the cursor only after commit.
+    pub fn go_back<P, T>(
+        &mut self,
+        loader: &net::DocumentLoader<P, T>,
+        viewport: crate::layout::LayoutViewport,
+    ) -> Result<crate::document::Page, net::DocumentLoadError>
+    where
+        P: net::pipeline::RequestPolicyEngine,
+        T: net::Transport,
+    {
+        let token = self
+            .tabs
+            .active_tab_mut()
+            .and_then(core::tabs::Tab::begin_back_navigation)
+            .ok_or(net::DocumentLoadError::NoCurrentDocument)?;
+        let request = net::Request::new(token.requested_url().clone());
+        self.load_navigation_token(token, loader, &request, viewport)
+    }
+
+    /// Load the next history entry, preserving the cursor if loading fails.
+    pub fn go_forward<P, T>(
+        &mut self,
+        loader: &net::DocumentLoader<P, T>,
+        viewport: crate::layout::LayoutViewport,
+    ) -> Result<crate::document::Page, net::DocumentLoadError>
+    where
+        P: net::pipeline::RequestPolicyEngine,
+        T: net::Transport,
+    {
+        let token = self
+            .tabs
+            .active_tab_mut()
+            .and_then(core::tabs::Tab::begin_forward_navigation)
+            .ok_or(net::DocumentLoadError::NoCurrentDocument)?;
+        let request = net::Request::new(token.requested_url().clone());
+        self.load_navigation_token(token, loader, &request, viewport)
     }
 
     pub fn navigate(&mut self, url: net::Url, title: Option<String>) {
