@@ -213,7 +213,6 @@ impl Page {
             .saturating_add(layout_owned_bytes(&self.layout))
             .saturating_add(
                 self.display_list
-                    .commands()
                     .capacity()
                     .saturating_mul(std::mem::size_of::<crate::render::PaintCommand>()),
             );
