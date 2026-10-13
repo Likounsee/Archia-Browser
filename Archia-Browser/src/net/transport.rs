@@ -1936,7 +1936,9 @@ fn decode_chunked(
         if relative_end > max_header_size {
             return Err(TransportError::ResponseTooLarge);
         }
-        let line_end = cursor + relative_end;
+        let line_end = cursor
+            .checked_add(relative_end)
+            .ok_or(TransportError::ConnectionFailed)?;
         let line = std::str::from_utf8(&bytes[cursor..line_end])
             .map_err(|_| TransportError::ConnectionFailed)?;
         if line
@@ -1960,7 +1962,9 @@ fn decode_chunked(
         }
         let size =
             usize::from_str_radix(size_text, 16).map_err(|_| TransportError::ConnectionFailed)?;
-        cursor = line_end + 2;
+        cursor = line_end
+            .checked_add(2)
+            .ok_or(TransportError::ConnectionFailed)?;
 
         if size == 0 {
             let trailer_bytes = &bytes[cursor..];
@@ -1974,7 +1978,11 @@ fn decode_chunked(
             if trailer_end > max_header_size {
                 return Err(TransportError::ResponseTooLarge);
             }
-            if trailer_end + 4 != trailer_bytes.len() {
+            if trailer_end
+                .checked_add(4)
+                .ok_or(TransportError::ConnectionFailed)?
+                != trailer_bytes.len()
+            {
                 return Err(TransportError::ConnectionFailed);
             }
 
@@ -2036,10 +2044,13 @@ fn decode_chunked(
                 .get(cursor..end)
                 .ok_or(TransportError::ConnectionFailed)?,
         );
-        if bytes.get(end..end + 2) != Some(b"\r\n") {
+        let terminator_end = end
+            .checked_add(2)
+            .ok_or(TransportError::ConnectionFailed)?;
+        if bytes.get(end..terminator_end) != Some(b"\r\n") {
             return Err(TransportError::ConnectionFailed);
         }
-        cursor = end + 2;
+        cursor = terminator_end;
     }
 }
 
@@ -4274,6 +4285,15 @@ mod limit_tests {
             1024,
         );
         assert_eq!(result, Err(TransportError::ResponseTooLarge));
+    }
+
+    #[test]
+    fn rejects_chunk_size_that_overflows_input_offset() {
+        let response = b"HTTP/1.1 200 OK\\r\\nTransfer-Encoding: chunked\\r\\n\\r\\nFFFFFFFFFFFFFFFF\\r\\n";
+        assert_eq!(
+            parse_http_response(response, usize::MAX, 1024),
+            Err(TransportError::ConnectionFailed)
+        );
     }
 
     #[test]
