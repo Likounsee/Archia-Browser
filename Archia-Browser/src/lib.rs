@@ -188,15 +188,21 @@ impl Browser {
             return Err(net::DocumentLoadError::NoCurrentDocument);
         };
 
-        let entry = core::navigation::NavigationEntry::new(url, page.title());
+        // The tab retains its own deep copy, so reserve its memory before
+        // changing navigation state. A failed copy leaves the current page intact.
+        let tab_page = page
+            .try_clone()
+            .ok_or(net::DocumentLoadError::MemoryBudgetExceeded)?;
+        let entry = core::navigation::NavigationEntry::new(url.clone(), page.title());
         if !self
             .tabs
             .active_tab_mut()
             .is_some_and(|tab| tab.history_mut().replace_current(entry))
         {
-            self.commit_page(&page);
-        } else if let Some(tab) = self.tabs.active_tab_mut() {
-            tab.set_page(page.clone());
+            self.navigate(url, page.title());
+        }
+        if let Some(tab) = self.tabs.active_tab_mut() {
+            tab.set_page(tab_page);
         }
         Ok(page)
     }
@@ -243,7 +249,9 @@ impl Browser {
         T: net::Transport,
     {
         let page = loader.load(request, viewport)?;
-        self.commit_page(&page);
+        if !self.commit_page(&page) {
+            return Err(net::DocumentLoadError::MemoryBudgetExceeded);
+        }
         Ok(page)
     }
 
@@ -276,10 +284,14 @@ impl Browser {
         let Some(url) = page.url().cloned() else {
             return false;
         };
+        // Reserve the duplicate before mutating history or clearing the current page.
+        let Some(tab_page) = page.try_clone() else {
+            return false;
+        };
 
         self.navigate(url, page.title());
         if let Some(tab) = self.tabs.active_tab_mut() {
-            tab.set_page(page.clone());
+            tab.set_page(tab_page);
         }
         true
     }
