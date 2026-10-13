@@ -399,26 +399,25 @@ impl Browser {
 
     pub fn back(&mut self) -> Option<&net::Url> {
         let tab = self.tabs.active_tab_mut()?;
-        let moved = tab.history_mut().back().is_some();
-        if moved {
-            tab.clear_page();
+        // NavigationHistory::back returns the current entry at the beginning
+        // of history, so check the boundary before treating Some as movement.
+        if !tab.history().can_go_back() {
+            return None;
         }
-        moved
-            .then(|| tab.history().current())
-            .flatten()
-            .map(|entry| entry.url())
+        tab.history_mut().back()?;
+        tab.clear_page();
+        tab.history().current().map(|entry| entry.url())
     }
 
     pub fn forward(&mut self) -> Option<&net::Url> {
         let tab = self.tabs.active_tab_mut()?;
-        let moved = tab.history_mut().forward().is_some();
-        if moved {
-            tab.clear_page();
+        // Likewise, forward() returns the current entry when already at the end.
+        if !tab.history().can_go_forward() {
+            return None;
         }
-        moved
-            .then(|| tab.history().current())
-            .flatten()
-            .map(|entry| entry.url())
+        tab.history_mut().forward()?;
+        tab.clear_page();
+        tab.history().current().map(|entry| entry.url())
     }
 
     pub fn set_current_title(&mut self, title: Option<String>) -> bool {
@@ -1128,6 +1127,40 @@ mod tests {
             browser.current_url().map(ToString::to_string),
             Some("https://example.org/two".to_owned())
         );
+    }
+
+    #[test]
+    fn browser_back_at_history_boundary_preserves_current_page() {
+        let mut browser = Browser::new();
+        let page = crate::document::Page::from_html_at(
+            Some(net::Url::parse("https://example.org/").unwrap()),
+            "<body>Still rendered</body>",
+            "",
+            crate::layout::LayoutViewport::new(64, 32),
+        );
+        assert!(browser.commit_page(&page));
+        let original_url = browser.current_url().cloned();
+
+        assert_eq!(browser.back(), None);
+        assert_eq!(browser.current_url(), original_url.as_ref());
+        assert!(browser.current_page().is_some());
+    }
+
+    #[test]
+    fn browser_forward_at_history_boundary_preserves_current_page() {
+        let mut browser = Browser::new();
+        let page = crate::document::Page::from_html_at(
+            Some(net::Url::parse("https://example.org/").unwrap()),
+            "<body>Still rendered</body>",
+            "",
+            crate::layout::LayoutViewport::new(64, 32),
+        );
+        assert!(browser.commit_page(&page));
+        let original_url = browser.current_url().cloned();
+
+        assert_eq!(browser.forward(), None);
+        assert_eq!(browser.current_url(), original_url.as_ref());
+        assert!(browser.current_page().is_some());
     }
 
     #[test]
