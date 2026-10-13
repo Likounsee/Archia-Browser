@@ -6,6 +6,8 @@ pub struct RequestPolicy {
     pub resource_kind: ResourceKind,
     pub referrer: Option<super::Url>,
     pub first_party: Option<super::Url>,
+    /// True only for a browser-initiated top-level document navigation.
+    pub top_level_navigation: bool,
 }
 
 impl Default for RequestPolicy {
@@ -15,6 +17,7 @@ impl Default for RequestPolicy {
             resource_kind: ResourceKind::Other,
             referrer: None,
             first_party: None,
+            top_level_navigation: false,
         }
     }
 }
@@ -68,7 +71,8 @@ impl<P: RequestPolicyEngine> NetworkPipeline<P> {
         // cannot accidentally bypass a loader-specific mixed-content check.
         // Top-level document navigation is intentionally exempt: following an
         // HTTP link is navigation, not mixed content within the current page.
-        let is_mixed_content = request.policy.resource_kind != ResourceKind::Document
+        let is_mixed_content = !(request.policy.resource_kind == ResourceKind::Document
+            && request.policy.top_level_navigation)
             && request
                 .policy
                 .first_party
@@ -245,10 +249,38 @@ mod tests {
         request.policy = RequestPolicy {
             resource_kind: ResourceKind::Document,
             first_party: Some(super::super::Url::parse("https://example.org/page").unwrap()),
+            top_level_navigation: true,
             ..RequestPolicy::default()
         };
 
         assert_eq!(pipeline.check_policy(&request), Ok(()));
+    }
+
+    #[test]
+    fn mixed_content_guard_blocks_http_embedded_documents() {
+        #[derive(Debug, Default)]
+        struct AllowAll;
+
+        impl RequestPolicyEngine for AllowAll {
+            fn decide(&self, _: &Request) -> PolicyDecision {
+                PolicyDecision::Allow
+            }
+        }
+
+        let pipeline = NetworkPipeline::new(AllowAll);
+        let mut request =
+            Request::new(super::super::Url::parse("http://frame.example/").unwrap());
+        request.policy = RequestPolicy {
+            resource_kind: ResourceKind::Document,
+            first_party: Some(super::super::Url::parse("https://example.org/page").unwrap()),
+            top_level_navigation: false,
+            ..RequestPolicy::default()
+        };
+
+        assert_eq!(
+            pipeline.check_policy(&request),
+            Err(TransportError::BlockedByPolicy)
+        );
     }
 
     #[test]

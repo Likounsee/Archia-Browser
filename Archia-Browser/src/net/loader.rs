@@ -111,6 +111,7 @@ where
         );
         let mut current = request.clone();
         current.policy.resource_kind = ResourceKind::Document;
+        current.policy.top_level_navigation = true;
         if current.policy.first_party.is_none() {
             current.policy.first_party = Some(current.url.clone());
         }
@@ -462,6 +463,7 @@ where
                 resource_kind: ResourceKind::Stylesheet,
                 referrer: referrer.clone(),
                 first_party: Some(document_url.clone()),
+                top_level_navigation: false,
             };
             request.headers.insert("accept".into(), "text/css".into());
             if let Some(referrer) = referrer {
