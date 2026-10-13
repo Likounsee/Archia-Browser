@@ -58,3 +58,9 @@ Limite restante : la normalisation du document, les copies de chaînes/attributs
 La fermeture d'une balise réserve désormais la capacité du parent pour tous les enfants détachés avant de modifier le sous-arbre. Si cette réservation échoue, les nœuds sont remis sur la pile d'éléments ouverts dans leur ordre d'origine. Si l'ajout au parent final échoue, le nœud est conservé sur cette pile pour la finalisation plutôt que d'être abandonné.
 
 Cette mesure limite la perte de contenu lors d'une pression mémoire, mais ne transforme pas toutes les allocations de normalisation en opérations faillibles et ne remplace pas l'instrumentation globale du DOM/CSS/layout. P0-MEM-11 reste ouvert.
+
+## Normalisation du DOM — préallocation et repli sûr
+
+La normalisation du document préalloue maintenant ses vecteurs temporaires et ses destinations avant de déplacer les enfants. Si une réservation initiale échoue, elle rend le DOM d'entrée inchangé au lieu de commencer une transformation partielle. Les collectes intermédiaires sont remplacées par des extensions de vecteurs dont la capacité a été pré-réservée, et un test de structure vérifie l'unicité de `html/head/body` ainsi que l'ordre des contenus avant et après un élément `html` explicite.
+
+Limites : Rust ne fournit pas d'injection portable d'échec de l'allocateur global dans les tests ordinaires. Les réservations de `Vec` sont faillibles, mais les créations de `String`, les `BTreeMap` d'attributs et certaines opérations de collection restent susceptibles d'allouer via des API infallibles. La réservation des vecteurs réduit les risques sans garantir que toutes les allocations du processus sont couvertes par le budget partagé. La catégorie reste ouverte tant que ces chemins, CSS, layout, réseau et cache n'ont pas une couverture vérifiée de bout en bout.

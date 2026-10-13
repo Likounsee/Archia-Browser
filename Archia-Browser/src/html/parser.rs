@@ -798,6 +798,26 @@ mod tests {
     }
 
     #[test]
+    fn normalization_preserves_document_order_and_builds_one_html_head_body() {
+        let tokens = HtmlTokenizer::tokenize(
+            "before<html><head><title>T</title></head><main>inside</main></html>after",
+        );
+        let root = parse(&tokens);
+        assert_eq!(root.child_count(), 1);
+        let html = root.child(0).expect("normalized html");
+        assert_eq!(html.tag_name(), Some("html"));
+        assert_eq!(html.child_count(), 2);
+        assert_eq!(html.child(0).and_then(Node::tag_name), Some("head"));
+        assert_eq!(html.child(1).and_then(Node::tag_name), Some("body"));
+        assert_eq!(html.text_content(), "Tbeforeinsideafter");
+        let body = html.child(1).expect("normalized body");
+        assert_eq!(
+            body.children().iter().map(Node::tag_name).collect::<Vec<_>>(),
+            vec![None, Some("main"), None]
+        );
+    }
+
+    #[test]
     fn explicit_html_gets_an_implicit_head() {
         let tokens = HtmlTokenizer::tokenize("<html><body>Hello</body></html>");
         let root = parse(&tokens);

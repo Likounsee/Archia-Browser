@@ -167,3 +167,11 @@ Les chemins auxiliaires du parseur HTML réservent désormais la capacité avant
 ### P0-MEM-11 — préservation des nœuds lors d'un échec de fermeture
 
 Le parseur réserve la capacité nécessaire au rattachement d'un sous-arbre avant de dépiler et recomposer les nœuds. En cas d'échec, il restaure la pile ou conserve le sous-arbre sur celle-ci au lieu d'ignorer le résultat d'un ajout faillible. Les allocations temporaires de normalisation et les conteneurs DOM/CSS/layout restent à auditer.
+
+
+### P0-MEM-11 — normalisation DOM faillible (tranche en cours)
+
+- [PARTIEL] La normalisation réserve la capacité de ses vecteurs temporaires et destinations avant de détacher les enfants, et abandonne la normalisation sans modifier l'arbre si le préflight échoue.
+- [TEST AJOUTÉ] Vérification de la structure normalisée et de la conservation de l'ordre des contenus avant/après un élément `html` explicite.
+- [NON VALIDÉ] Injection d'échec de l'allocateur global : aucune injection portable n'est actuellement disponible dans les tests ordinaires.
+- [OUVERT] Les maps d'attributs `BTreeMap`, les allocations de chaînes, CSS, layout, réseau, cache et display list ne sont pas toutes faillibles ou intégrées au même budget. Cette tranche ne clôt pas P0-MEM-11.
