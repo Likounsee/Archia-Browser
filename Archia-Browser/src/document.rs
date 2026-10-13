@@ -181,11 +181,15 @@ impl Page {
                     .saturating_add(name.len())
                     .saturating_add(value.len());
             }
+            let importance_name_bytes = node
+                .style
+                .iter()
+                .fold(0usize, |total, (name, _)| total.saturating_add(name.len()));
             bytes = bytes.saturating_add(
                 node.style
                     .len()
                     .saturating_mul(std::mem::size_of::<(&str, bool)>())
-                    .saturating_add(node.style.iter().map(|(name, _)| name.len()).sum::<usize>()),
+                    .saturating_add(importance_name_bytes),
             );
             for child in &node.children {
                 bytes = bytes.saturating_add(styled_owned_bytes(child));
