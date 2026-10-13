@@ -1147,6 +1147,26 @@ mod tests {
     }
 
     #[test]
+    fn browser_back_after_real_history_movement_clears_stale_page() {
+        let mut browser = Browser::new();
+        browser.navigate(net::Url::parse("https://example.org/first").unwrap(), None);
+        let page = crate::document::Page::from_html_at(
+            Some(net::Url::parse("https://example.org/second").unwrap()),
+            "<body>Second page</body>",
+            "",
+            crate::layout::LayoutViewport::new(64, 32),
+        );
+        assert!(browser.commit_page(&page));
+        assert!(browser.current_page().is_some());
+
+        assert_eq!(
+            browser.back().map(ToString::to_string),
+            Some("https://example.org/first".to_owned())
+        );
+        assert!(browser.current_page().is_none());
+    }
+
+    #[test]
     fn browser_forward_at_history_boundary_preserves_current_page() {
         let mut browser = Browser::new();
         let page = crate::document::Page::from_html_at(
