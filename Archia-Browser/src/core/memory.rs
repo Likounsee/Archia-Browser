@@ -186,6 +186,13 @@ impl MemoryReservation {
         self.bytes.load(Ordering::Acquire)
     }
 
+    /// Reserve an independent charge for a deep copy of this allocation-backed value.
+    /// The returned reservation is not shared with the original, so either copy can
+    /// be dropped independently without undercounting the other copy.
+    pub fn try_clone_reservation(&self) -> Option<Self> {
+        Self::try_new(Arc::clone(&self.budget), self.bytes())
+    }
+
     /// Extend an existing reservation without temporarily releasing its current
     /// charge. Returns false without changing accounting if the extra budget
     /// cannot be acquired.
