@@ -2105,6 +2105,33 @@ mod tests {
     }
 
     #[test]
+    fn tls_handshake_rejects_a_non_tls_peer_as_a_tls_failure() {
+        use std::net::TcpListener;
+        use std::thread;
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            // A peer that sends plaintext instead of a TLS handshake must not
+            // be mistaken for an HTTP response or accepted as a secure origin.
+            let _ = stream.write_all(b"HTTP/1.1 200 OK\\r\\nContent-Length: 2\\r\\n\\r\\nOK");
+        });
+
+        let url = Url::parse(&format!("https://127.0.0.1:{}/", address.port())).unwrap();
+        let transport = HttpTransport::with_timeouts(
+            Duration::from_secs(2),
+            Duration::from_secs(2),
+        );
+        assert_eq!(
+            transport.send(&Request::new(url)),
+            Err(TransportError::TlsFailed),
+            "plaintext from a TLS endpoint must fail closed during the handshake"
+        );
+        server.join().unwrap();
+    }
+
+    #[test]
     fn creates_tls_server_names_for_dns_and_ip_hosts() {
         assert!(tls_server_name("example.org").is_ok());
         assert!(tls_server_name("127.0.0.1").is_ok());
