@@ -740,6 +740,25 @@ b</textarea></form>"#,
     }
 
     #[test]
+    fn retained_structure_estimate_tracks_dom_and_layout_growth() {
+        let small = Page::from_html(
+            "<body><p>x</p></body>",
+            "",
+            LayoutViewport::new(320, 200),
+        );
+        let large_html = format!(
+            "<body>{}</body>",
+            "<section class=\"card\"><p>content</p></section>".repeat(80)
+        );
+        let large = Page::from_html(&large_html, ".card { padding: 4px; }", LayoutViewport::new(320, 200));
+
+        assert!(
+            large.retained_structure_estimate() > small.retained_structure_estimate(),
+            "the structural memory estimate must reflect additional DOM and layout nodes"
+        );
+    }
+
+    #[test]
     fn empty_or_missing_title_is_none() {
         let missing = Page::from_html("<body>Hello</body>", "", LayoutViewport::new(320, 200));
         let empty = Page::from_html(
