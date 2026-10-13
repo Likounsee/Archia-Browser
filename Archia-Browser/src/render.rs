@@ -89,6 +89,11 @@ impl DisplayList {
         self.commands.len()
     }
 
+    /// Allocated command slots, including unused vector capacity.
+    pub fn capacity(&self) -> usize {
+        self.commands.capacity()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.commands.is_empty()
     }
