@@ -4,6 +4,22 @@ use std::collections::VecDeque;
 /// Bound per-tab navigation metadata so long-running sessions cannot grow history forever.
 pub const MAX_HISTORY_ENTRIES: usize = 4096;
 
+/// Limit untrusted page titles retained by each history entry.
+pub const MAX_HISTORY_TITLE_BYTES: usize = 4096;
+
+fn bounded_title(title: Option<String>) -> Option<String> {
+    title.map(|mut title| {
+        if title.len() > MAX_HISTORY_TITLE_BYTES {
+            let mut boundary = MAX_HISTORY_TITLE_BYTES;
+            while !title.is_char_boundary(boundary) {
+                boundary -= 1;
+            }
+            title.truncate(boundary);
+        }
+        title
+    })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NavigationEntry {
     url: Url,
@@ -12,7 +28,10 @@ pub struct NavigationEntry {
 
 impl NavigationEntry {
     pub fn new(url: Url, title: Option<String>) -> Self {
-        Self { url, title }
+        Self {
+            url,
+            title: bounded_title(title),
+        }
     }
 
     pub fn url(&self) -> &Url {
@@ -24,7 +43,7 @@ impl NavigationEntry {
     }
 
     pub fn set_title(&mut self, title: Option<String>) {
-        self.title = title;
+        self.title = bounded_title(title);
     }
 }
 
@@ -233,6 +252,25 @@ mod tests {
             Some("https://example.org/reloaded".to_owned())
         );
         assert!(history.can_go_forward());
+    }
+
+    #[test]
+    fn page_titles_are_bounded_without_splitting_utf8() {
+        let oversized = format!("{}{}", "a".repeat(MAX_HISTORY_TITLE_BYTES - 2), "éé");
+        let mut history = NavigationHistory::new();
+        history.push(NavigationEntry::new(
+            Url::parse("https://example.org/").unwrap(),
+            Some(oversized),
+        ));
+
+        let title = history.current().and_then(NavigationEntry::title).unwrap();
+        assert!(title.len() <= MAX_HISTORY_TITLE_BYTES);
+        assert!(title.is_char_boundary(title.len()));
+
+        assert!(history.set_current_title(Some("é".repeat(MAX_HISTORY_TITLE_BYTES))));
+        let updated = history.current().and_then(NavigationEntry::title).unwrap();
+        assert!(updated.len() <= MAX_HISTORY_TITLE_BYTES);
+        assert!(updated.is_char_boundary(updated.len()));
     }
 
     #[test]
