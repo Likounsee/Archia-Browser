@@ -22,7 +22,7 @@ HTML tokenization, tree construction, DOM, CSS, layout and rendering are separat
 
 ## Platform
 
-Windows, Linux and ArchiaOS are represented through a platform abstraction. Web-engine code should not call operating-system APIs directly.
+Windows, Linux and ArchiaOS are target platforms represented through a platform abstraction; this does not imply a complete native browser UI on each target. The general rule is that parsing, DOM, CSS, layout and rendering layers must not call operating-system APIs directly. A deliberate low-level exception exists in `net/transport.rs`, where local-file confinement uses platform-specific primitives (Linux `openat2`, Unix handle-relative traversal, and Windows native handle-relative opens). Keep those calls isolated in the transport/platform boundary, fail closed on unsupported targets, and test each supported implementation independently.
 
 ## Validation
 
