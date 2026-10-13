@@ -4287,8 +4287,7 @@ mod limit_tests {
 
     #[test]
     fn rejects_chunk_size_that_overflows_input_offset() {
-        let response =
-            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nFFFFFFFFFFFFFFFF\r\n";
+        let response = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nFFFFFFFFFFFFFFFF\r\n";
         assert_eq!(
             parse_http_response(response, usize::MAX, 1024),
             Err(TransportError::ConnectionFailed)
