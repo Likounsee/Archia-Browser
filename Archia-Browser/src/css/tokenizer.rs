@@ -261,16 +261,12 @@ mod tests {
     }
 
     #[test]
-    fn direct_tokenizer_input_is_bounded_on_utf8_boundaries() {
+    fn direct_tokenizer_rejects_identifier_text_over_the_token_limit() {
         let input = "é".repeat(MAX_CSS_INPUT_BYTES);
         let tokens = CssTokenizer::tokenize(&input);
 
-        assert_eq!(tokens.len(), 1);
-        let CssToken::Ident(value) = &tokens[0] else {
-            panic!("expected one identifier token");
-        };
-        assert!(value.len() <= MAX_CSS_INPUT_BYTES);
-        assert!(value.len() >= MAX_CSS_INPUT_BYTES - 1);
+        // Oversized identifier text must not be retained as a token.
+        assert!(tokens.is_empty());
     }
 
     #[test]
