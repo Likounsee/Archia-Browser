@@ -74,7 +74,12 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
             match token {
                 HtmlToken::StartTag { name, .. } if !VOID_ELEMENTS.contains(&name.as_str()) => {
                     let position = suppressed_stack.len();
-                    if !push_suppressed(&mut suppressed_stack, &mut suppressed_positions, name, position) {
+                    if !push_suppressed(
+                        &mut suppressed_stack,
+                        &mut suppressed_positions,
+                        name,
+                        position,
+                    ) {
                         break;
                     }
                 }
@@ -155,7 +160,12 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // or cloning its attributes; matching end tags recover below.
                 if created_nodes >= MAX_DOM_NODES {
                     if !VOID_ELEMENTS.contains(&name.as_str()) {
-                        if !push_suppressed(&mut suppressed_stack, &mut suppressed_positions, name, 0) {
+                        if !push_suppressed(
+                            &mut suppressed_stack,
+                            &mut suppressed_positions,
+                            name,
+                            0,
+                        ) {
                             break;
                         }
                     }
@@ -184,7 +194,12 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // attacker-controlled attributes. Void elements remain valid children
                 // at the maximum nesting depth.
                 if !VOID_ELEMENTS.contains(&name.as_str()) && stack.len() >= MAX_DOM_DEPTH {
-                    if !push_suppressed(&mut suppressed_stack, &mut suppressed_positions, name, 0) {
+                    if !push_suppressed(
+                        &mut suppressed_stack,
+                        &mut suppressed_positions,
+                        name,
+                        0,
+                    ) {
                         break;
                     }
                     continue;
@@ -422,8 +437,14 @@ mod tests {
         assert!(push_suppressed(&mut stack, &mut positions, "span", 1));
         assert!(push_suppressed(&mut stack, &mut positions, "div", 2));
         assert_eq!(stack, vec!["div", "span", "div"]);
-        assert_eq!(positions.get("div").map(Vec::as_slice), Some([0, 2].as_slice()));
-        assert_eq!(positions.get("span").map(Vec::as_slice), Some([1].as_slice()));
+        assert_eq!(
+            positions.get("div").map(Vec::as_slice),
+            Some([0, 2].as_slice())
+        );
+        assert_eq!(
+            positions.get("span").map(Vec::as_slice),
+            Some([1].as_slice())
+        );
     }
 
     #[test]
