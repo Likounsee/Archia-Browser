@@ -88,11 +88,7 @@ impl HttpTransport {
             return Ok(Box::new(stream));
         }
 
-        let mut roots = RootCertStore::empty();
-        roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-        let config = ClientConfig::builder()
-            .with_root_certificates(roots)
-            .with_no_client_auth();
+        let config = tls_client_config();
         let server_name = server_name.ok_or(TransportError::TlsFailed)?;
         let mut connection = ClientConnection::new(Arc::new(config), server_name)
             .map_err(|_| TransportError::TlsFailed)?;
@@ -217,6 +213,19 @@ impl HttpTransport {
 
 trait ReadWrite: Read + Write {}
 impl<T: Read + Write> ReadWrite for T {}
+
+fn tls_client_config() -> ClientConfig {
+    let mut roots = RootCertStore::empty();
+    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let mut config = ClientConfig::builder()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+
+    // This transport only parses HTTP/1.1. Never negotiate a protocol it
+    // cannot decode, and make the supported application protocol explicit.
+    config.alpn_protocols = vec![b"http/1.1".to_vec()];
+    config
+}
 
 fn tls_server_name(host: &str) -> Result<ServerName<'static>, TransportError> {
     if let Ok(address) = host.parse::<std::net::IpAddr>() {
@@ -2090,11 +2099,20 @@ mod tests {
     }
 
     #[test]
+    fn tls_client_advertises_only_http_11() {
+        let config = tls_client_config();
+        assert_eq!(config.alpn_protocols, vec![b"http/1.1".to_vec()]);
+    }
+
+    #[test]
     fn creates_tls_server_names_for_dns_and_ip_hosts() {
         assert!(tls_server_name("example.org").is_ok());
         assert!(tls_server_name("127.0.0.1").is_ok());
         assert!(tls_server_name("::1").is_ok());
         assert!(tls_server_name("").is_err());
+        assert!(tls_server_name("bad host.example").is_err());
+        assert!(tls_server_name("*.example.org").is_err());
+        assert!(tls_server_name("example.org/path").is_err());
     }
 
     #[test]
