@@ -727,7 +727,11 @@ fn next_css_statement(css: &str, start: usize) -> Option<(&str, usize)> {
             continue;
         }
 
-        if byte == b'/' && next == Some(b'*') {
+        if byte == b'\\' {
+            // An escaped delimiter is data, not a statement boundary or comment opener.
+            // Skipping the escaped byte also handles escaped semicolons in unquoted url().
+            index = (index + 2).min(bytes.len());
+        } else if byte == b'/' && next == Some(b'*') {
             in_comment = true;
             index += 2;
         } else if matches!(byte, b'\'' | b'"') {
@@ -1041,6 +1045,15 @@ mod tests {
             parse_import_reference(statement).as_deref(),
             Some("https://example.org/theme.css?mode=dark;v=2")
         );
+        assert_eq!(&css[next..], " body { color: red; }");
+    }
+
+    #[test]
+    fn css_statement_scanner_keeps_escaped_semicolons_outside_strings() {
+        let css = r"@import url(theme\;v=2.css); body { color: red; }";
+        let (statement, next) = next_css_statement(css, 0).unwrap();
+
+        assert_eq!(statement, r"@import url(theme\;v=2.css);");
         assert_eq!(&css[next..], " body { color: red; }");
     }
 
