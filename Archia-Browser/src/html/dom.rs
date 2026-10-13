@@ -74,7 +74,7 @@ impl Node {
     }
 
     pub fn insert_child(&mut self, index: usize, child: Node) -> Result<(), Node> {
-        if index > self.children.len() {
+        if index > self.children.len() || self.children.try_reserve(1).is_err() {
             return Err(child);
         }
         self.children.insert(index, child);

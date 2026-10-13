@@ -44,3 +44,10 @@ Avec la tranche précédente, cela couvre les buffers temporaires de parsing et 
 Le DOM expose maintenant `Node::try_append`, qui réserve la capacité avant de modifier le vecteur et rend le nœud à l'appelant si la réservation échoue. Le parseur HTML utilise ce chemin pour ajouter les nœuds et réserve aussi explicitement la capacité de sa pile d'éléments ouverts. En cas d'échec, il arrête le traitement des tokens restants plutôt que de poursuivre sur une allocation infallible. L'API historique `append` est conservée pour compatibilité.
 
 Cette tranche ne rend pas toutes les allocations DOM faillibles : la normalisation de structure, les maps d'attributs, les piles de sous-arbres supprimés, le style tree et le layout nécessitent encore un traitement dédié. P0-MEM-11 reste donc ouvert.
+
+
+## Tranche parseur — allocations auxiliaires faillibles
+
+Le suivi des sous-arbres ignorés (limite de profondeur/nœuds) réserve explicitement la capacité de la pile et de l'index `HashMap`/vecteurs avant de les modifier. Si une réservation échoue, le parseur arrête le traitement des tokens restants. La fermeture des balises réserve sa pile temporaire avant de dépiler le moindre nœud : un échec laisse la pile originale intacte. `Node::insert_child` réserve aussi avant l'insertion.
+
+Limite restante : la normalisation du document, les copies de chaînes/attributs et les allocations des arbres CSS/layout ne sont pas toutes contrôlées par un budget global ni entièrement fallibles. Cette tranche renforce la résistance à l'échec d'allocation, mais ne clôt pas P0-MEM-11.

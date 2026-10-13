@@ -74,11 +74,9 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
             match token {
                 HtmlToken::StartTag { name, .. } if !VOID_ELEMENTS.contains(&name.as_str()) => {
                     let position = suppressed_stack.len();
-                    suppressed_stack.push(name.as_str());
-                    suppressed_positions
-                        .entry(name.as_str())
-                        .or_default()
-                        .push(position);
+                    if !push_suppressed(&mut suppressed_stack, &mut suppressed_positions, name, position) {
+                        break;
+                    }
                 }
                 HtmlToken::EndTag(name) if !VOID_ELEMENTS.contains(&name.as_str()) => {
                     // Mirror the parser's matching-end-tag behavior inside the
@@ -157,11 +155,9 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // or cloning its attributes; matching end tags recover below.
                 if created_nodes >= MAX_DOM_NODES {
                     if !VOID_ELEMENTS.contains(&name.as_str()) {
-                        suppressed_stack.push(name.as_str());
-                        suppressed_positions
-                            .entry(name.as_str())
-                            .or_default()
-                            .push(0);
+                        if !push_suppressed(&mut suppressed_stack, &mut suppressed_positions, name, 0) {
+                            break;
+                        }
                     }
                     continue;
                 }
@@ -188,11 +184,9 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // attacker-controlled attributes. Void elements remain valid children
                 // at the maximum nesting depth.
                 if !VOID_ELEMENTS.contains(&name.as_str()) && stack.len() >= MAX_DOM_DEPTH {
-                    suppressed_stack.push(name.as_str());
-                    suppressed_positions
-                        .entry(name.as_str())
-                        .or_default()
-                        .push(0);
+                    if !push_suppressed(&mut suppressed_stack, &mut suppressed_positions, name, 0) {
+                        break;
+                    }
                     continue;
                 }
 
@@ -255,6 +249,29 @@ fn bounded_utf8_prefix(input: &str, max_bytes: usize) -> &str {
     &input[..end]
 }
 
+/// Add a tag to the suppression tracker without infallible collection growth.
+/// Returning false tells the parser to stop consuming input.
+fn push_suppressed<'a>(
+    stack: &mut Vec<&'a str>,
+    positions: &mut HashMap<&'a str, Vec<usize>>,
+    name: &'a str,
+    position: usize,
+) -> bool {
+    if stack.try_reserve(1).is_err() {
+        return false;
+    }
+    if !positions.contains_key(name) && positions.try_reserve(1).is_err() {
+        return false;
+    }
+    let entries = positions.entry(name).or_default();
+    if entries.try_reserve(1).is_err() {
+        return false;
+    }
+    stack.push(name);
+    entries.push(position);
+    true
+}
+
 fn append_node(root: &mut Node, stack: &mut [Node], node: Node) -> bool {
     let result = if let Some(parent) = stack.last_mut() {
         parent.try_append(node)
@@ -301,6 +318,11 @@ fn close_element(root: &mut Node, stack: &mut Vec<Node>, name: &str) {
     };
 
     let mut completed = Vec::new();
+    // Reserve before popping anything: if allocation fails, leave the open
+    // element stack untouched instead of losing nodes during error recovery.
+    if completed.try_reserve(stack.len() - position).is_err() {
+        return;
+    }
     while stack.len() > position {
         if let Some(node) = stack.pop() {
             completed.push(node);
@@ -391,6 +413,18 @@ fn normalize_document_structure(mut root: Node) -> Node {
 mod tests {
     use super::*;
     use crate::html::tokenizer::HtmlTokenizer;
+
+    #[test]
+    fn suppressed_stack_tracker_keeps_stack_and_index_consistent() {
+        let mut stack = Vec::new();
+        let mut positions = HashMap::new();
+        assert!(push_suppressed(&mut stack, &mut positions, "div", 0));
+        assert!(push_suppressed(&mut stack, &mut positions, "span", 1));
+        assert!(push_suppressed(&mut stack, &mut positions, "div", 2));
+        assert_eq!(stack, vec!["div", "span", "div"]);
+        assert_eq!(positions.get("div").map(Vec::as_slice), Some([0, 2].as_slice()));
+        assert_eq!(positions.get("span").map(Vec::as_slice), Some([1].as_slice()));
+    }
 
     #[test]
     fn excessive_nesting_is_discarded_without_corrupting_following_siblings() {

@@ -157,3 +157,8 @@ Les tests unitaires de parsing ne suffisent pas à valider le transport de bout 
 ### P0-MEM-11 — mise à jour renderer et DOM
 
 La tranche la plus récente ajoute `Node::try_append` et l'utilise dans le parseur HTML afin de faire échouer proprement la croissance du stockage des enfants ; la pile des éléments ouverts réserve également avant `push`. L'API infallible historique reste présente, et les maps d'attributs, la normalisation, le style tree et le layout ne sont pas encore entièrement couverts. La précédente tranche renderer a aussi été corrigée selon le formatage Rust attendu par CI.
+
+
+### P0-MEM-11 — parser et mutations DOM
+
+Les chemins auxiliaires du parseur HTML réservent désormais la capacité avant d'agrandir les piles et index utilisés pour ignorer les sous-arbres. La fermeture d'éléments réserve la mémoire temporaire avant de dépiler les nœuds. `Node::insert_child` utilise également une croissance fallible. Les chemins de normalisation, les allocations d'attributs et la comptabilité commune CSS/layout restent à couvrir ; la catégorie n'est pas clôturée.
