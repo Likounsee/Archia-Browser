@@ -354,7 +354,9 @@ impl Browser {
             .map_err(LinkActivationError::from)?;
         // Check the document's actual origin, not only its <base href>: an
         // attacker-controlled base element must not grant file-navigation access.
-        if page.url().is_some_and(|base| base.scheme() != "file") && url.scheme() == "file" {
+        if url.scheme() == "file"
+            && !page.url().is_some_and(|document_url| document_url.scheme() == "file")
+        {
             return Err(LinkActivationError::BlockedLocalFileNavigation);
         }
         let opens_new_tab = link
@@ -1071,6 +1073,25 @@ mod tests {
             browser.activate_link_from_page(&page, &link, None),
             Err(LinkActivationError::BlockedLocalFileNavigation)
         );
+    }
+
+    #[test]
+    fn page_without_url_cannot_use_base_href_to_open_local_file() {
+        let mut browser = Browser::new();
+        let page = crate::document::Page::from_html(
+            r#"<base href="file:///tmp/"><a href="secret.txt">secret</a>"#,
+            "",
+            crate::layout::LayoutViewport::new(320, 200),
+        );
+        let mut link = crate::html::Node::element("a");
+        link.set_attribute("href", "secret.txt");
+
+        assert_eq!(
+            browser.activate_link_from_page(&page, &link, None),
+            Err(LinkActivationError::BlockedLocalFileNavigation)
+        );
+        assert_eq!(browser.tabs().len(), 1);
+        assert_eq!(browser.current_url(), None);
     }
 
     #[test]
