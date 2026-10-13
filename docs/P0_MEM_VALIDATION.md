@@ -23,3 +23,10 @@ La mesure retenue est une estimation conservatrice et non une télémétrie exac
 ## Intégration du chemin de construction (tranche suivante)
 
 Le chargeur de documents transfère maintenant sa réservation déjà active à `Page::try_from_html_at_with_reservation`. La même routine vérifie l'estimation structurelle, agrandit la réservation si nécessaire, refuse la page si le budget ne permet pas cet agrandissement et attache la réservation à la page. Cela évite de dupliquer la logique de réconciliation et permet de garder la réservation existante pendant le décodage HTML et la collecte des feuilles de style. Sans budget partagé configuré, le chemin historique demeure disponible pour compatibilité.
+
+
+## Tranche renderer mémoire — allocations temporaires et display list
+
+La display list réserve désormais sa capacité avec `Vec::try_reserve` avant de modifier ses compteurs ; `try_push` expose le résultat et le chemin historique `push` reste compatible. L'allocation de la liste d'indices enfants et la croissance de la pile de clips sont également fallibles : en cas d'échec, le rendu est tronqué/arrêté plutôt que de demander une allocation infallible supplémentaire.
+
+Cette tranche réduit les chemins de panique OOM dans le rendu, mais ne constitue pas une comptabilité exacte au budget partagé : la liste d'indices, la pile de clips et les autres buffers temporaires ne sont pas tous imputés au `MemoryBudget`. La catégorie P0-MEM-11 reste ouverte jusqu'à l'instrumentation des principaux chemins d'allocation, la couverture de leurs erreurs/cancellations et la validation CI/fuzz du SHA candidat.

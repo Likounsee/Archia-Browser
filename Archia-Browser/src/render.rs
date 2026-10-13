@@ -56,14 +56,20 @@ impl DisplayList {
         Self::default()
     }
 
-    /// Append a paint command unless the per-frame command or text budget is exhausted.
-    ///
-    /// The display list is built from untrusted document content, so bound both
-    /// command metadata and retained text. A truncated list remains safe to rasterize.
+    /// Append a paint command unless the per-frame command, text, or allocation
+    /// budget is exhausted. A rejected command marks the list as truncated.
     pub fn push(&mut self, command: PaintCommand) {
+        let _ = self.try_push(command);
+    }
+
+    /// Fallible variant of `push`. Returns false when the command cannot be retained.
+    ///
+    /// Reserving before updating accounting ensures allocation failure never leaves
+    /// the text-byte counter ahead of the commands actually stored.
+    pub fn try_push(&mut self, command: PaintCommand) -> bool {
         if self.commands.len() >= MAX_DISPLAY_COMMANDS {
             self.truncated = true;
-            return;
+            return false;
         }
         let text_bytes = match &command {
             PaintCommand::DrawText { text, .. } => text.len(),
@@ -71,14 +77,19 @@ impl DisplayList {
         };
         let Some(next_text_bytes) = self.text_bytes.checked_add(text_bytes) else {
             self.truncated = true;
-            return;
+            return false;
         };
         if next_text_bytes > MAX_DISPLAY_TEXT_BYTES {
             self.truncated = true;
-            return;
+            return false;
         }
-        self.text_bytes = next_text_bytes;
+        if self.commands.try_reserve(1).is_err() {
+            self.truncated = true;
+            return false;
+        }
         self.commands.push(command);
+        self.text_bytes = next_text_bytes;
+        true
     }
 
     pub fn commands(&self) -> &[PaintCommand] {
@@ -162,6 +173,12 @@ impl SoftwareRenderer {
                     surface.draw_text_clipped(*x, *y, text, color, clip);
                 }
                 PaintCommand::PushClip { rect } => {
+                    // Clip nesting comes from untrusted markup/CSS. Do not let the
+                    // stack's growth turn a bounded display list into an infallible
+                    // allocation path.
+                    if clip_stack.try_reserve(1).is_err() {
+                        return;
+                    }
                     clip_stack.push(clip);
                     clip = intersect_clip(clip, Some(*rect));
                 }
@@ -207,8 +224,15 @@ fn paint_styled_node(
 
     let opacity = effective_opacity(parent_opacity, node.style.get("opacity"));
 
-    let mut child_indices: Vec<usize> =
-        (0..node.children.len().min(layout.children.len())).collect();
+    let child_count = node.children.len().min(layout.children.len());
+    let mut child_indices: Vec<usize> = Vec::new();
+    if child_indices.try_reserve_exact(child_count).is_err() {
+        // The parent can still be painted, but omitting its descendants is safer
+        // than panicking while rendering attacker-controlled content.
+        list.truncated = true;
+        return;
+    }
+    child_indices.extend(0..child_count);
     child_indices.sort_by_key(|&index| stacking_sort_key(&node.children[index].style));
 
     if !visibility_hidden {
@@ -798,6 +822,21 @@ mod tests {
             list.push(PaintCommand::PopClip);
         }
         assert_eq!(list.len(), MAX_DISPLAY_COMMANDS);
+        assert!(list.is_truncated());
+    }
+
+    #[test]
+    fn rejected_display_list_command_does_not_change_retained_text_accounting() {
+        let mut list = DisplayList::new();
+        let oversized = "x".repeat(MAX_DISPLAY_TEXT_BYTES + 1);
+        assert!(!list.try_push(PaintCommand::DrawText {
+            x: 0,
+            y: 0,
+            text: oversized,
+            color: 0,
+        }));
+        assert!(list.is_empty());
+        assert_eq!(list.text_bytes, 0);
         assert!(list.is_truncated());
     }
 
