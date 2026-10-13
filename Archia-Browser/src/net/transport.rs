@@ -2113,7 +2113,9 @@ mod tests {
         let mut accumulator = 0_u32;
         let mut bits = 0_u8;
         for byte in encoded.bytes().filter(|byte| *byte != b'=') {
-            let value = alphabet.iter().position(|candidate| *candidate == byte)
+            let value = alphabet
+                .iter()
+                .position(|candidate| *candidate == byte)
                 .expect("valid base64 fixture") as u32;
             accumulator = (accumulator << 6) | value;
             bits += 6;
@@ -2148,8 +2150,12 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let server = thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
-            stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
-            stream.set_write_timeout(Some(Duration::from_secs(3))).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            stream
+                .set_write_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
             let mut connection = ServerConnection::new(Arc::new(server_config)).unwrap();
             while connection.is_handshaking() {
                 if connection.complete_io(&mut stream).is_err() {
@@ -2160,19 +2166,24 @@ mod tests {
 
         let mut roots = RootCertStore::empty();
         if trust_test_ca {
-            roots.add(CertificateDer::from(tls_fixture_section("CA_CERT")))
+            roots
+                .add(CertificateDer::from(tls_fixture_section("CA_CERT")))
                 .expect("test CA must be parseable");
         }
         let client_config = ClientConfig::builder()
             .with_root_certificates(roots)
             .with_no_client_auth();
         let result = (|| {
-            let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(2)).ok()?;
-            stream.set_read_timeout(Some(Duration::from_secs(3))).ok()?;
-            stream.set_write_timeout(Some(Duration::from_secs(3))).ok()?;
+            let mut stream =
+                TcpStream::connect_timeout(&address, Duration::from_secs(2)).ok()?;
+            stream
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .ok()?;
+            stream
+                .set_write_timeout(Some(Duration::from_secs(3)))
+                .ok()?;
             let name = ServerName::try_from(client_name.to_owned()).ok()?;
-            let mut connection =
-                ClientConnection::new(Arc::new(client_config), name).ok()?;
+            let mut connection = ClientConnection::new(Arc::new(client_config), name).ok()?;
             while connection.is_handshaking() {
                 connection.complete_io(&mut stream).ok()?;
             }
