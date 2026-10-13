@@ -337,6 +337,13 @@ where
             let mut page =
                 Page::from_html_at(Some(current.url.clone()), &html, &stylesheet, viewport);
             if let Some(reservation) = reservation.take() {
+                let structural_estimate = page.retained_structure_estimate();
+                let already_reserved = reservation.bytes();
+                if structural_estimate > already_reserved
+                    && !reservation.try_grow_by(structural_estimate - already_reserved)
+                {
+                    return Err(DocumentLoadError::MemoryBudgetExceeded);
+                }
                 page.attach_memory_reservation(Arc::new(reservation));
             }
 
