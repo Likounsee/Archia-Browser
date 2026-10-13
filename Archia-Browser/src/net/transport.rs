@@ -4053,7 +4053,7 @@ mod limit_tests {
         );
         let response = HttpTransport::with_timeouts(Duration::from_secs(2), Duration::from_secs(2))
             .send(&request)
-        .expect("valid loopback HTTP response should parse");
+            .expect("valid loopback HTTP response should parse");
         let wire_request = server.join().unwrap();
 
         assert_eq!(response.status, 200);

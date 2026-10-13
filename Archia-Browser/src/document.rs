@@ -120,7 +120,6 @@ impl Page {
         }
     }
 
-
     /// Construct a page under a shared memory budget.
     ///
     /// The input-based estimate is reserved before tokenization, DOM construction,
@@ -981,7 +980,6 @@ b</textarea></form>"#,
         );
     }
 
-
     #[test]
     fn budgeted_page_construction_fails_before_build_when_budget_is_insufficient() {
         let budget = Arc::new(crate::core::memory::MemoryBudget::new(1));
@@ -1029,7 +1027,9 @@ b</textarea></form>"#,
         )
         .expect("page should fit");
         let original_charge = budget.used();
-        let copy = page.try_clone().expect("clone should reserve its own charge");
+        let copy = page
+            .try_clone()
+            .expect("clone should reserve its own charge");
 
         assert!(budget.used() >= original_charge.saturating_mul(2));
         drop(copy);
