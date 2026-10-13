@@ -3920,17 +3920,13 @@ mod tests {
             Err(TransportError::InvalidRequest)
         );
 
-        let long_target = Request::new(
+        assert!(matches!(
             Url::parse(&format!(
                 "http://example.org/{}",
                 "a".repeat(MAX_REQUEST_HEADER_BYTES)
-            ))
-            .unwrap(),
-        );
-        assert_eq!(
-            validate_request(&long_target),
-            Err(TransportError::InvalidRequest)
-        );
+            )),
+            Err(super::super::UrlError::TooLong)
+        ));
     }
 
     #[test]

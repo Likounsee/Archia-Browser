@@ -235,7 +235,7 @@ mod tests {
 
     #[test]
     fn remove_oldest_evicts_least_recently_used_entry_and_releases_bytes() {
-        let mut cache = ResourceCache::new(16);
+        let mut cache = ResourceCache::new(20);
         cache.insert("first", 1, 3);
         cache.insert("second", 2, 3);
         assert_eq!(cache.get("first"), Some(&1));

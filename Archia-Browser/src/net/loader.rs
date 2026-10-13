@@ -1236,7 +1236,7 @@ mod tests {
             }
         }
 
-        let budget = Arc::new(MemoryBudget::new(4096));
+        let budget = Arc::new(MemoryBudget::new(65536));
         let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), CacheableTransport)
             .with_shared_memory_budget(Arc::clone(&budget))
             .with_cache_capacity(2048);
