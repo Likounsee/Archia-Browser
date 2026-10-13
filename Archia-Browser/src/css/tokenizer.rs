@@ -69,10 +69,13 @@ impl CssTokenizer {
                 '}' => tokens.push(CssToken::RightBrace),
                 '(' => tokens.push(CssToken::LeftParen),
                 ')' => tokens.push(CssToken::RightParen),
-                '#' => {
+                '#' if chars.peek().is_some_and(|next| {
+                    is_name_code_point(*next) || *next == '\\' && starts_valid_escape(&chars)
+                }) => {
                     let value = consume_ident(&mut chars);
                     tokens.push(CssToken::Hash(value));
                 }
+                '#' => tokens.push(CssToken::Delim('#'))
                 '"' | '\'' => {
                     let quote = ch;
                     let mut value = String::new();
@@ -81,11 +84,19 @@ impl CssTokenizer {
                             break;
                         }
                         if next == '\\' {
-                            // Keep CSS escapes intact while ensuring an escaped
-                            // quote does not prematurely terminate the string.
-                            value.push(next);
-                            if let Some(escaped) = chars.next() {
-                                value.push(escaped);
+                            match chars.peek().copied() {
+                                Some(newline) if is_css_newline(newline) => {
+                                    chars.next();
+                                    if newline == '\r' && chars.peek() == Some(&'\n') {
+                                        chars.next();
+                                    }
+                                }
+                                Some(_) => {
+                                    if let Some(escaped) = consume_escape(&mut chars) {
+                                        value.push(escaped);
+                                    }
+                                }
+                                None => break,
                             }
                         } else {
                             value.push(next);
@@ -176,8 +187,11 @@ fn consume_escape(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Optio
         while digits.len() < 6 && chars.peek().is_some_and(|next| next.is_ascii_hexdigit()) {
             digits.push(chars.next()?);
         }
-        if chars.peek().is_some_and(|next| next.is_whitespace()) {
+        if let Some(whitespace) = chars.peek().copied().filter(|next| next.is_whitespace()) {
             chars.next();
+            if whitespace == '\r' && chars.peek() == Some(&'\n') {
+                chars.next();
+            }
         }
         let code_point = u32::from_str_radix(&digits, 16).ok()?;
         Some(
@@ -280,17 +294,37 @@ mod tests {
     }
 
     #[test]
-    fn preserves_comment_markers_and_escaped_quotes_inside_strings() {
-        let tokens = CssTokenizer::tokenize(r#"content: "a\"b/*literal*/";"#);
+    fn decodes_escapes_in_strings_without_ending_on_escaped_quotes() {
+        let tokens = CssTokenizer::tokenize(r#"content: "a\"b\26 c/*literal*/";"#);
         assert_eq!(
             tokens,
             vec![
                 CssToken::Ident("content".into()),
                 CssToken::Colon,
                 CssToken::Whitespace,
-                CssToken::String(r#"a\"b/*literal*/"#.into()),
+                CssToken::String("a\"b&c/*literal*/".into()),
                 CssToken::Semicolon,
             ]
+        );
+    }
+
+    #[test]
+    fn removes_css_string_line_continuations_and_crlf_escape_whitespace() {
+        assert_eq!(
+            CssTokenizer::tokenize("\"left\\\\\\r\\nright\""),
+            vec![CssToken::String("leftright".into())]
+        );
+        assert_eq!(
+            CssTokenizer::tokenize(r"foo\\000026\r\nbar"),
+            vec![CssToken::Ident("foo&bar".into())]
+        );
+    }
+
+    #[test]
+    fn lone_hash_is_a_delimiter_not_an_empty_hash_token() {
+        assert_eq!(
+            CssTokenizer::tokenize("#;"),
+            vec![CssToken::Delim('#'), CssToken::Semicolon]
         );
     }
 
