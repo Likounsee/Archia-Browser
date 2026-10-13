@@ -2115,14 +2115,11 @@ mod tests {
             let (mut stream, _) = listener.accept().unwrap();
             // A peer that sends plaintext instead of a TLS handshake must not
             // be mistaken for an HTTP response or accepted as a secure origin.
-            let _ = stream.write_all(b"HTTP/1.1 200 OK\\r\\nContent-Length: 2\\r\\n\\r\\nOK");
+            let _ = stream.write_all(b"plaintext response");
         });
 
         let url = Url::parse(&format!("https://127.0.0.1:{}/", address.port())).unwrap();
-        let transport = HttpTransport::with_timeouts(
-            Duration::from_secs(2),
-            Duration::from_secs(2),
-        );
+        let transport = HttpTransport::with_timeouts(Duration::from_secs(2), Duration::from_secs(2));
         assert_eq!(
             transport.send(&Request::new(url)),
             Err(TransportError::TlsFailed),
