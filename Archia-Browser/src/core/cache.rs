@@ -30,7 +30,7 @@ impl<T> ResourceCache<T> {
         // Even an empty payload occupies memory through its key and entry
         // metadata. Account for the key too, and charge at least one byte,
         // so empty entries cannot bypass the cache capacity.
-        let bytes = bytes.max(key.len()).max(1);
+        let bytes = bytes.saturating_add(key.len()).max(1);
 
         // Reject oversized entries before mutating the cache. In particular,
         // an oversized replacement must not evict the previous valid value.
@@ -181,7 +181,7 @@ mod tests {
         cache.insert("a", 2, 4);
 
         assert_eq!(cache.get("a"), Some(&2));
-        assert_eq!(cache.used(), 4);
+        assert_eq!(cache.used(), 5);
     }
 
     #[test]
@@ -204,7 +204,7 @@ mod tests {
         assert_eq!(cache.get("a"), Some(&1));
         assert_eq!(cache.get("b"), Some(&2));
         assert_eq!(cache.get("oversized"), None);
-        assert_eq!(cache.used(), 8);
+        assert_eq!(cache.used(), 10);
     }
 
     #[test]
@@ -230,7 +230,7 @@ mod tests {
         assert_eq!(cache.remove_oldest(), Some(2));
         assert_eq!(cache.get("second"), None);
         assert_eq!(cache.get("first"), Some(&1));
-        assert_eq!(cache.used(), "first".len());
+        assert_eq!(cache.used(), "first".len() + "first".len());
     }
 
     #[test]
@@ -254,6 +254,6 @@ mod tests {
         cache.insert("b", 2, 6);
         assert_eq!(cache.get("a"), None);
         assert_eq!(cache.get("b"), Some(&2));
-        assert_eq!(cache.used(), 6);
+        assert_eq!(cache.used(), 7);
     }
 }
