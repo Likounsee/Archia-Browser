@@ -10,7 +10,7 @@ Memory accounting is a first-class subsystem. Budgets are explicit, resource res
 
 ## Networking
 
-Network requests pass through policy before transport. The policy layer carries resource kind, referrer and first-party context so native ad/tracker blocking can distinguish first-party from third-party requests. The current HTTP transport is bounded by response/header memory limits and rejects HTTPS until a native TLS layer exists. Local file URLs are handled separately by a bounded LocalFileTransport, with empty/localhost authorities accepted and remote file authorities rejected. Document loading marks top-level requests as Document resources, supports bounded redirects and persists scoped cookies between redirects. Linked stylesheets are fetched as Stylesheet resources with document referrer/first-party context, CSS Accept/Referer headers and bounded redirects; failed stylesheet resources do not fail the document load. Cookie handling validates Domain scope, enforces Secure delivery and supports Max-Age deletion.
+Network requests pass through policy before transport. The policy layer carries resource kind, referrer and first-party context so native ad/tracker blocking can distinguish first-party from third-party requests. The HTTP/1.1 transport uses bounded request/response headers and bodies, and HTTPS is handled by `rustls` with certificate-chain and hostname validation. This is transport support, not a claim of complete browser security: TLS integration coverage, policy behavior across all resource paths, and the wider P0 threat-model exit criteria must still be validated. Local file URLs are handled separately by a bounded LocalFileTransport, with empty/localhost authorities accepted and remote file authorities rejected. Document loading marks top-level requests as Document resources, supports bounded redirects and persists scoped cookies between redirects. Linked stylesheets are fetched as Stylesheet resources with document referrer/first-party context, CSS Accept/Referer headers and bounded redirects; failed stylesheet resources do not fail the document load. Cookie handling validates Domain scope, enforces Secure delivery and supports Max-Age deletion.
 
 ## Navigation
 
@@ -26,4 +26,4 @@ Windows, Linux and ArchiaOS are represented through a platform abstraction. Web-
 
 ## Validation
 
-GitHub Actions is the authoritative validation environment. Local compilation is not used as project validation.
+GitHub Actions is the authoritative validation environment. Local compilation is not used as project validation. The workflow runs formatting, workspace tests, build and Clippy on Ubuntu, Windows and macOS, plus RustSec and license audits on Linux. A successful formatting step alone is not a green CI run; every required step on the exact candidate SHA must pass. See the [Archia Browser CI runs](https://github.com/Likounsee/Archia-Browser/actions).

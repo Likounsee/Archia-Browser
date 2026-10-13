@@ -174,21 +174,21 @@ impl Page {
             // and approximate per-entry metadata for both maps.
             bytes = bytes.saturating_add(node_owned_bytes(&node.node));
             for (name, value) in node.style.iter() {
-                // These maps own Strings, so retained capacity is more useful than
-                // logical length when estimating their backing allocations.
+                // Computed style entries borrow property names and values; account for
+                // string contents and map-entry metadata without claiming ownership.
                 bytes = bytes
-                    .saturating_add(std::mem::size_of::<(String, String)>())
-                    .saturating_add(name.capacity())
-                    .saturating_add(value.capacity());
+                    .saturating_add(std::mem::size_of::<(&str, &str)>())
+                    .saturating_add(name.len())
+                    .saturating_add(value.len());
             }
             bytes = bytes.saturating_add(
                 node.style
                     .len()
-                    .saturating_mul(std::mem::size_of::<(String, bool)>())
+                    .saturating_mul(std::mem::size_of::<(&str, bool)>())
                     .saturating_add(
                         node.style
-                            .iter()
-                            .map(|(name, _)| name.capacity())
+                            .keys()
+                            .map(|name| name.len())
                             .sum::<usize>(),
                     ),
             );

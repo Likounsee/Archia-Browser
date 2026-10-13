@@ -29,7 +29,7 @@ These percentages are engineering estimates of **functional coverage**, not line
 | Software rendering | ~38% | Display list, backgrounds, borders, colors, bitmap text and clipping |
 | Text / fonts / shaping | ~10% | Bootstrap glyph rasterizer only |
 | HTTP / networking | ~55% | HTTP/1.1, redirects, request policy, cookies and bounded caching |
-| HTTPS / TLS | ~5% | Explicitly isolated as a pending native TLS subsystem |
+| HTTPS / TLS | — | Native `rustls` transport with certificate-chain and hostname validation; broader integration coverage remains to be verified |
 | Navigation / history | ~70% | Back/forward, URL resolution, reload, titles and link activation |
 | Tabs / session state | ~55% | Independent tab histories and active page retention |
 | Forms | ~35% | Initial GET/POST URL-encoded submission |
@@ -37,9 +37,9 @@ These percentages are engineering estimates of **functional coverage**, not line
 | JavaScript | ~0% | Runtime not started |
 | Browser UI | ~5% | Browser/tab APIs exist; full window UI remains |
 | ArchiaOS integration | ~5% | Platform abstraction exists |
-| Tests / CI | ~80% | Continuous formatting, tests and builds through GitHub Actions |
+| Tests / CI | — | GitHub Actions checks formatting, workspace tests, build, Clippy and Linux dependency audits; the exact candidate must pass all required steps |
 
-**Overall engine foundation:** roughly **40–45% of a complete browser stack**, with the HTML/CSS/layout foundation substantially further along than the product-level browser.
+**Overall engine foundation:** roughly **40–45%** as a non-reproducible engineering estimate, not a measured compatibility score. It is not test coverage or standards conformance. TLS is implemented at the transport layer, but that does not mean the whole network stack is production-ready.
 
 ## Vision
 
