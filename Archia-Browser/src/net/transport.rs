@@ -2099,7 +2099,8 @@ mod tests {
     }
 
     fn tls_fixture_section(name: &str) -> Vec<u8> {
-        let fixtures = include_str!("../../tests/fixtures/tls-validation.pem").replace("\r\n", "\n");
+        let fixtures =
+            include_str!("../../tests/fixtures/tls-validation.pem").replace("\r\n", "\n");
         let marker = format!("### {name}\n");
         let section = fixtures.split_once(&marker).expect("TLS fixture section").1;
         let pem = section.split("\n### ").next().unwrap_or(section);
