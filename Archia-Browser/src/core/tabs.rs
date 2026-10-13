@@ -160,7 +160,10 @@ impl Tab {
             return Err(page);
         }
 
-        let final_url = page.url().cloned().unwrap_or_else(|| token.requested_url.clone());
+        let final_url = page
+            .url()
+            .cloned()
+            .unwrap_or_else(|| token.requested_url.clone());
         let entry = NavigationEntry::new(final_url, title);
         let history_updated = match token.action {
             NavigationAction::Navigate => {
@@ -454,11 +457,22 @@ mod tests {
         assert!(manager.tab(tab).unwrap().history().is_empty());
 
         assert!(manager
-            .commit_navigation(tab, &second, test_page("https://example.org/fast"), Some("Fast".into()))
+            .commit_navigation(
+                tab,
+                &second,
+                test_page("https://example.org/fast"),
+                Some("Fast".into())
+            )
             .is_ok());
         let committed = manager.tab(tab).unwrap();
-        assert_eq!(committed.page().and_then(Page::url).unwrap().to_string(), "https://example.org/fast");
-        assert_eq!(committed.history().current().unwrap().url().to_string(), "https://example.org/fast");
+        assert_eq!(
+            committed.page().and_then(Page::url).unwrap().to_string(),
+            "https://example.org/fast"
+        );
+        assert_eq!(
+            committed.history().current().unwrap().url().to_string(),
+            "https://example.org/fast"
+        );
         assert_eq!(committed.history().current().unwrap().title(), Some("Fast"));
         assert!(committed.pending_navigation.is_none());
     }
@@ -471,7 +485,12 @@ mod tests {
             .begin_navigation(tab, Url::parse("https://example.org/initial").unwrap())
             .unwrap();
         manager
-            .commit_navigation(tab, &initial, test_page("https://example.org/initial"), None)
+            .commit_navigation(
+                tab,
+                &initial,
+                test_page("https://example.org/initial"),
+                None,
+            )
             .unwrap();
 
         let pending = manager
@@ -480,13 +499,24 @@ mod tests {
         assert!(manager.cancel_navigation(tab, &pending));
         assert!(!manager.cancel_navigation(tab, &pending));
         assert!(manager
-            .commit_navigation(tab, &pending, test_page("https://example.org/cancelled"), None)
+            .commit_navigation(
+                tab,
+                &pending,
+                test_page("https://example.org/cancelled"),
+                None
+            )
             .is_err());
 
         let current = manager.tab(tab).unwrap();
         assert_eq!(current.history().len(), 1);
-        assert_eq!(current.history().current().unwrap().url().to_string(), "https://example.org/initial");
-        assert_eq!(current.page().and_then(Page::url).unwrap().to_string(), "https://example.org/initial");
+        assert_eq!(
+            current.history().current().unwrap().url().to_string(),
+            "https://example.org/initial"
+        );
+        assert_eq!(
+            current.page().and_then(Page::url).unwrap().to_string(),
+            "https://example.org/initial"
+        );
     }
 
     #[test]
@@ -497,10 +527,22 @@ mod tests {
             .begin_navigation(tab, Url::parse("https://example.org/start").unwrap())
             .unwrap();
         manager
-            .commit_navigation(tab, &token, test_page("https://example.org/final"), None)
+            .commit_navigation(
+                tab,
+                &token,
+                test_page("https://example.org/final"),
+                None,
+            )
             .unwrap();
         assert_eq!(
-            manager.tab(tab).unwrap().history().current().unwrap().url().to_string(),
+            manager
+                .tab(tab)
+                .unwrap()
+                .history()
+                .current()
+                .unwrap()
+                .url()
+                .to_string(),
             "https://example.org/final"
         );
     }
@@ -526,11 +568,20 @@ mod tests {
         let first = manager
             .begin_navigation(tab, Url::parse("https://example.org/page").unwrap())
             .unwrap();
-        manager.commit_navigation(tab, &first, test_page("https://example.org/page"), None).unwrap();
+        manager
+            .commit_navigation(tab, &first, test_page("https://example.org/page"), None)
+            .unwrap();
 
         let reload = manager.tab_mut(tab).unwrap().begin_reload().unwrap();
         assert_eq!(reload.action(), NavigationAction::Reload);
-        manager.commit_navigation(tab, &reload, test_page("https://example.org/page"), Some("Reloaded".into())).unwrap();
+        manager
+            .commit_navigation(
+                tab,
+                &reload,
+                test_page("https://example.org/page"),
+                Some("Reloaded".into()),
+            )
+            .unwrap();
 
         let history = manager.tab(tab).unwrap().history();
         assert_eq!(history.len(), 1);
@@ -542,11 +593,19 @@ mod tests {
         let mut manager = TabManager::new();
         let tab = manager.open();
         for url in ["https://example.org/one", "https://example.org/two"] {
-            let token = manager.begin_navigation(tab, Url::parse(url).unwrap()).unwrap();
-            manager.commit_navigation(tab, &token, test_page(url), None).unwrap();
+            let token = manager
+                .begin_navigation(tab, Url::parse(url).unwrap())
+                .unwrap();
+            manager
+                .commit_navigation(tab, &token, test_page(url), None)
+                .unwrap();
         }
 
-        let back = manager.tab_mut(tab).unwrap().begin_back_navigation().unwrap();
+        let back = manager
+            .tab_mut(tab)
+            .unwrap()
+            .begin_back_navigation()
+            .unwrap();
         assert_eq!(back.action(), NavigationAction::Back);
         assert_eq!(back.requested_url().to_string(), "https://example.org/one");
         assert_eq!(manager.tab(tab).unwrap().history().current().unwrap().url().to_string(), "https://example.org/two");
@@ -562,20 +621,34 @@ mod tests {
     }
 
     #[test]
-    fn failed_back_navigation_does_not_move_history_or_replace_page() {
+    fn cancelled_back_navigation_does_not_move_history_or_replace_page() {
         let mut manager = TabManager::new();
         let tab = manager.open();
         for url in ["https://example.org/one", "https://example.org/two"] {
-            let token = manager.begin_navigation(tab, Url::parse(url).unwrap()).unwrap();
-            manager.commit_navigation(tab, &token, test_page(url), None).unwrap();
+            let token = manager
+                .begin_navigation(tab, Url::parse(url).unwrap())
+                .unwrap();
+            manager
+                .commit_navigation(tab, &token, test_page(url), None)
+                .unwrap();
         }
-        let back = manager.tab_mut(tab).unwrap().begin_back_navigation().unwrap();
-        assert!(manager.commit_navigation(tab, &back, test_page("https://example.org/error"), None).is_ok());
-        // A successful error document is still a commit; the history slot is
-        // replaced with the final response URL while the current index moves.
-        let current = manager.tab(tab).unwrap().history().current().unwrap();
-        assert_eq!(current.url().to_string(), "https://example.org/error");
-        assert_eq!(manager.tab(tab).unwrap().history().len(), 2);
+        let back = manager
+            .tab_mut(tab)
+            .unwrap()
+            .begin_back_navigation()
+            .unwrap();
+        assert!(manager.cancel_navigation(tab, &back));
+
+        let current = manager.tab(tab).unwrap();
+        assert_eq!(
+            current.history().current().unwrap().url().to_string(),
+            "https://example.org/two"
+        );
+        assert_eq!(
+            current.page().and_then(Page::url).unwrap().to_string(),
+            "https://example.org/two"
+        );
+        assert_eq!(current.history().len(), 2);
     }
 
     #[test]
