@@ -2139,9 +2139,8 @@ mod tests {
         use std::thread;
 
         let certificate = CertificateDer::from(tls_fixture_section(certificate_label));
-        let private_key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
-            tls_fixture_section("SERVER_KEY"),
-        ));
+        let private_key =
+            PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(tls_fixture_section("SERVER_KEY")));
         let server_config = ServerConfig::builder()
             .with_no_client_auth()
             .with_single_cert(vec![certificate], private_key)
@@ -2174,11 +2173,8 @@ mod tests {
             .with_root_certificates(roots)
             .with_no_client_auth();
         let result = (|| {
-            let mut stream =
-                TcpStream::connect_timeout(&address, Duration::from_secs(2)).ok()?;
-            stream
-                .set_read_timeout(Some(Duration::from_secs(3)))
-                .ok()?;
+            let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(2)).ok()?;
+            stream.set_read_timeout(Some(Duration::from_secs(3))).ok()?;
             stream
                 .set_write_timeout(Some(Duration::from_secs(3)))
                 .ok()?;
