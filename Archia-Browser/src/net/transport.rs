@@ -4051,11 +4051,8 @@ mod limit_tests {
         let request = Request::new(
             Url::parse(&format!("http://127.0.0.1:{}/probe?q=1", address.port())).unwrap(),
         );
-        let response = HttpTransport::with_timeouts(
-            Duration::from_secs(2),
-            Duration::from_secs(2),
-        )
-        .send(&request)
+        let response = HttpTransport::with_timeouts(Duration::from_secs(2), Duration::from_secs(2))
+            .send(&request)
         .expect("valid loopback HTTP response should parse");
         let wire_request = server.join().unwrap();
 
@@ -4098,11 +4095,8 @@ mod limit_tests {
             let request =
                 Request::new(Url::parse(&format!("http://127.0.0.1:{}/", address.port())).unwrap());
             assert_eq!(
-                HttpTransport::with_timeouts(
-                    Duration::from_secs(2),
-                    Duration::from_secs(2),
-                )
-                .send(&request),
+                HttpTransport::with_timeouts(Duration::from_secs(2), Duration::from_secs(2),)
+                    .send(&request),
                 Err(TransportError::ConnectionFailed),
                 "malformed wire response must fail closed: {:?}",
                 String::from_utf8_lossy(malformed)
