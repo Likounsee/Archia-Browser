@@ -1653,7 +1653,12 @@ fn parse_http_response_for_method(
             continue;
         }
 
-        let body_bytes = &bytes[cursor + body_start..];
+        let body_offset = cursor
+            .checked_add(body_start)
+            .ok_or(TransportError::ConnectionFailed)?;
+        let body_bytes = bytes
+            .get(body_offset..)
+            .ok_or(TransportError::ConnectionFailed)?;
         let transfer_encoding = response.header("transfer-encoding");
         let content_length = response.header("content-length");
         if response.status == 204 && (transfer_encoding.is_some() || content_length.is_some()) {
