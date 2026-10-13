@@ -335,18 +335,18 @@ where
             let stylesheet =
                 self.load_linked_stylesheets(&current.url, &html, reservation.as_ref());
 
-            let mut page =
-                Page::from_html_at(Some(current.url.clone()), &html, &stylesheet, viewport);
-            if let Some(reservation) = reservation.take() {
-                let structural_estimate = page.retained_structure_estimate();
-                let already_reserved = reservation.bytes();
-                if structural_estimate > already_reserved
-                    && !reservation.try_grow_by(structural_estimate - already_reserved)
-                {
-                    return Err(DocumentLoadError::MemoryBudgetExceeded);
-                }
-                page.attach_memory_reservation(Arc::new(reservation));
-            }
+            let page = if let Some(reservation) = reservation.take() {
+                Page::try_from_html_at_with_reservation(
+                    Some(current.url.clone()),
+                    &html,
+                    &stylesheet,
+                    viewport,
+                    reservation,
+                )
+                .ok_or(DocumentLoadError::MemoryBudgetExceeded)?
+            } else {
+                Page::from_html_at(Some(current.url.clone()), &html, &stylesheet, viewport)
+            };
 
             return Ok(page);
         }

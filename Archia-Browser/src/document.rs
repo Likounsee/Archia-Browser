@@ -140,7 +140,21 @@ impl Page {
         let css_charge = css.len().checked_mul(CSS_EXPANSION_FACTOR)?;
         let initial_charge = html_charge.checked_add(css_charge)?.max(1);
         let reservation = MemoryReservation::try_new(Arc::clone(&budget), initial_charge)?;
+        Self::try_from_html_at_with_reservation(url, html, css, viewport, reservation)
+    }
 
+    /// Build a page using a reservation already held by the caller.
+    ///
+    /// The caller can keep the reservation alive while decoding input and loading
+    /// linked stylesheets, then transfer it here so the retained page structures
+    /// continue to be charged without a gap or a duplicate reservation.
+    pub(crate) fn try_from_html_at_with_reservation(
+        url: Option<Url>,
+        html: &str,
+        css: &str,
+        viewport: LayoutViewport,
+        reservation: MemoryReservation,
+    ) -> Option<Self> {
         let mut page = Self::from_html_at(url, html, css, viewport);
         let retained = page.retained_structure_estimate();
         if retained > reservation.bytes() {

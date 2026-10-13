@@ -18,3 +18,8 @@ Page::try_from_html_at_with_budget fournit un chemin de construction de page qui
 ## Limites explicites
 
 La mesure retenue est une estimation conservatrice et non une télémétrie exacte de l'allocateur. La construction peut échouer lors de l'ajustement après avoir créé temporairement des structures. Les allocations DOM/CSS/layout/réseau/cache ne sont pas toutes instrumentées individuellement, et les appels historiques à Page::from_html restent non budgétés pour compatibilité. P0-MEM-11 demeure donc partiel jusqu'à ce que les principaux chemins de production utilisent le budget partagé et que les autres critères de la roadmap soient validés par CI.
+
+
+## Intégration du chemin de construction (tranche suivante)
+
+Le chargeur de documents transfère maintenant sa réservation déjà active à `Page::try_from_html_at_with_reservation`. La même routine vérifie l'estimation structurelle, agrandit la réservation si nécessaire, refuse la page si le budget ne permet pas cet agrandissement et attache la réservation à la page. Cela évite de dupliquer la logique de réconciliation et permet de garder la réservation existante pendant le décodage HTML et la collecte des feuilles de style. Sans budget partagé configuré, le chemin historique demeure disponible pour compatibilité.
