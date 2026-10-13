@@ -1,5 +1,7 @@
 # P0-FILE-03 — validation checkpoint (2026-10-12)
 
+> **Historical checkpoint — not the current branch assessment.** This report records the source and evidence available on 2026-10-12 for SHA `03905fbb893d36f76f379c6987ce0f521e66c3c9`. Later commits changed the local-file transport and its confinement strategy. Use `ROADMAP_P0_P3.md` and CI evidence for the exact candidate SHA for current status; do not apply this report's pathname-based finding to later code without re-inspecting that code.
+
 ## Branch and reviewed head
 
 - Working branch: `Archia-Browser` (confirmed present in GitHub).
