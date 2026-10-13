@@ -1,5 +1,8 @@
 use crate::net::Url;
 
+/// Bound per-tab navigation metadata so long-running sessions cannot grow history forever.
+pub const MAX_HISTORY_ENTRIES: usize = 4096;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NavigationEntry {
     url: Url,
@@ -62,6 +65,11 @@ impl NavigationHistory {
         }
 
         self.entries.push(entry);
+        if self.entries.len() > MAX_HISTORY_ENTRIES {
+            // push() always moves to the newest entry, so dropping the oldest
+            // entry keeps the active index valid and preserves back/forward order.
+            self.entries.remove(0);
+        }
         self.current = Some(self.entries.len() - 1);
     }
 
@@ -252,4 +260,44 @@ mod tests {
         assert!(history.is_empty());
         assert_eq!(history.current(), None);
     }
+    #[test]
+    fn history_is_bounded_and_keeps_the_newest_entries() {
+        let mut history = NavigationHistory::new();
+        for index in 0..=MAX_HISTORY_ENTRIES {
+            history.push(entry(&format!("https://example.org/{index}")));
+        }
+
+        assert_eq!(history.len(), MAX_HISTORY_ENTRIES);
+        assert_eq!(
+            history.current().map(|entry| entry.url().to_string()),
+            Some(format!("https://example.org/{MAX_HISTORY_ENTRIES}"))
+        );
+        for _ in 0..MAX_HISTORY_ENTRIES - 1 {
+            assert!(history.back().is_some());
+        }
+        assert_eq!(
+            history.current().map(|entry| entry.url().to_string()),
+            Some("https://example.org/1".to_owned()),
+            "the oldest retained entry should be the first URL after eviction"
+        );
+        assert!(!history.can_go_back());
+    }
+
+    #[test]
+    fn bounded_history_branching_discards_forward_entries_before_eviction() {
+        let mut history = NavigationHistory::new();
+        for index in 0..MAX_HISTORY_ENTRIES {
+            history.push(entry(&format!("https://example.org/{index}")));
+        }
+        history.back();
+        history.push(entry("https://example.org/branch"));
+
+        assert_eq!(history.len(), MAX_HISTORY_ENTRIES);
+        assert_eq!(
+            history.current().map(|entry| entry.url().to_string()),
+            Some("https://example.org/branch".to_owned())
+        );
+        assert!(!history.can_go_forward());
+    }
+
 }
