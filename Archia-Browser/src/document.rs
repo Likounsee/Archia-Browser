@@ -32,7 +32,7 @@ button { padding: 2px 6px; }
 hr { display: block; border-top: 1px; margin-top: 8px; margin-bottom: 8px; }
 "#;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Page {
     url: Option<Url>,
     _memory_reservation: Option<Arc<MemoryReservation>>,
@@ -124,12 +124,28 @@ impl Page {
         self.url.as_ref()
     }
 
-    /// Retain the shared memory reservation for the lifetime of this page.
-    ///
-    /// Cloned pages share the reservation, so tab/history clones do not double-charge
-    /// the same retained document representation.
+    /// Retain the memory reservation for this page's document representation.
     pub(crate) fn attach_memory_reservation(&mut self, reservation: Arc<MemoryReservation>) {
         self._memory_reservation = Some(reservation);
+    }
+
+    /// Deep-copy a page only after reserving a separate charge for its retained
+    /// document, style tree, layout tree, and display list. Returns None when
+    /// the shared budget cannot accommodate another copy.
+    pub fn try_clone(&self) -> Option<Self> {
+        let reservation = match &self._memory_reservation {
+            Some(reservation) => Some(Arc::new(reservation.try_clone_reservation()?)),
+            None => None,
+        };
+
+        Some(Self {
+            url: self.url.clone(),
+            _memory_reservation: reservation,
+            document: self.document.clone(),
+            styled: self.styled.clone(),
+            layout: self.layout.clone(),
+            display_list: self.display_list.clone(),
+        })
     }
 
     pub fn base_url(&self) -> Option<Url> {
@@ -634,6 +650,34 @@ b</textarea></form>"#,
 
         assert_eq!(surface.pixel(19, 19), Some(crate::surface::Color::WHITE));
         assert_eq!(surface.pixel(0, 0), Some(crate::surface::Color::RED));
+    }
+
+    #[test]
+    fn deep_page_copy_gets_an_independent_memory_reservation() {
+        let budget = Arc::new(crate::core::memory::MemoryBudget::new(4096));
+        let mut page = Page::from_html("<body>Hello</body>", "", LayoutViewport::new(20, 20));
+        page.attach_memory_reservation(Arc::new(
+            MemoryReservation::try_new(Arc::clone(&budget), 1024).unwrap(),
+        ));
+
+        let copy = page.try_clone().expect("second page should fit");
+        assert_eq!(budget.used(), 2048);
+        drop(copy);
+        assert_eq!(budget.used(), 1024);
+        drop(page);
+        assert_eq!(budget.used(), 0);
+    }
+
+    #[test]
+    fn deep_page_copy_is_rejected_when_shared_budget_is_full() {
+        let budget = Arc::new(crate::core::memory::MemoryBudget::new(1024));
+        let mut page = Page::from_html("<body>Hello</body>", "", LayoutViewport::new(20, 20));
+        page.attach_memory_reservation(Arc::new(
+            MemoryReservation::try_new(Arc::clone(&budget), 1024).unwrap(),
+        ));
+
+        assert!(page.try_clone().is_none());
+        assert_eq!(budget.used(), 1024, "failed clone must not leak a reservation");
     }
 
     #[test]
