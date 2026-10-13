@@ -5,8 +5,7 @@ concurrency:
   cancel-in-progress: false
 
 on:
-  # Run the full fuzz campaign deliberately at the end of the P0 hardening
-  # phase, or on explicit manual request. Do not launch it on every code push.
+  # Run the long campaign deliberately, when P0 hardening is ready for it.
   workflow_dispatch:
 
 permissions:
@@ -14,45 +13,48 @@ permissions:
 
 jobs:
   url-fuzz:
+    name: Fuzz ${{ matrix.target }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Each target receives about 3 h 25 min 43 s of fuzzing time.
+    # Keep setup overhead inside a job timeout below the hosted-runner limit.
+    timeout-minutes: 225
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - http_response
+          - url_parse_resolve
+          - html_tokenize_parse
+          - css_tokenize
+          - css_stylesheet
+          - css_selector
+          - cookie_parse
     steps:
       - uses: actions/checkout@v4
         with:
           ref: Archia-Browser
+
       - uses: dtolnay/rust-toolchain@stable
+
       - name: Install nightly for cargo-fuzz
         run: rustup toolchain install nightly --profile minimal
+
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz --locked
+
       - name: Build all fuzz targets
         run: cargo +nightly fuzz build
         working-directory: fuzz
-      - name: Fuzz HTTP response framing
-        run: cargo +nightly fuzz run http_response -- -max_total_time=90 -print_final_stats=1
+
+      - name: Fuzz ${{ matrix.target }} for its allocated budget
+        run: cargo +nightly fuzz run "${{ matrix.target }}" -- -max_total_time=12343 -print_final_stats=1
         working-directory: fuzz
-      - name: Fuzz URL parsing and resolution
-        run: cargo +nightly fuzz run url_parse_resolve -- -max_total_time=90 -print_final_stats=1
-        working-directory: fuzz
-      - name: Fuzz HTML tokenization and DOM parsing
-        run: cargo +nightly fuzz run html_tokenize_parse -- -max_total_time=90 -print_final_stats=1
-        working-directory: fuzz
-      - name: Fuzz CSS tokenization
-        run: cargo +nightly fuzz run css_tokenize -- -max_total_time=90 -print_final_stats=1
-        working-directory: fuzz
-      - name: Fuzz CSS stylesheet parsing
-        run: cargo +nightly fuzz run css_stylesheet -- -max_total_time=90 -print_final_stats=1
-        working-directory: fuzz
-      - name: Fuzz CSS selector parsing
-        run: cargo +nightly fuzz run css_selector -- -max_total_time=90 -print_final_stats=1
-        working-directory: fuzz
-      - name: Fuzz cookie parsing and selection
-        run: cargo +nightly fuzz run cookie_parse -- -max_total_time=90 -print_final_stats=1
-        working-directory: fuzz
-      - name: Upload crashing fuzz inputs
-        if: failure()
+
+      - name: Upload fuzz artifacts and crash inputs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: archia-browser-fuzz-artifacts
+          name: archia-browser-fuzz-${{ matrix.target }}
           path: fuzz/artifacts/
           if-no-files-found: ignore
+          retention-days: 14
