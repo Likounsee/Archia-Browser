@@ -671,6 +671,28 @@ mod tests {
     }
 
     #[test]
+    fn shared_budget_accounts_for_http_cache_key_bytes() {
+        use crate::core::memory::MemoryBudget;
+        use std::sync::Arc;
+
+        let budget = Arc::new(MemoryBudget::new(1024));
+        let request = Request::new(super::super::Url::parse("https://example.org/").unwrap());
+        let response = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_body(vec![b'x'; 8]);
+        let expected = super::accounted_response_bytes(&response)
+            .saturating_add(super::cache_key(&request).len());
+        let mut cache = super::HttpCache::with_memory_budget(2048, Arc::clone(&budget));
+
+        cache.store(&request, &response);
+
+        assert_eq!(cache.len(), 1);
+        assert_eq!(budget.used(), expected);
+        cache.clear();
+        assert_eq!(budget.used(), 0);
+    }
+
+    #[test]
     fn replacing_shared_budget_entry_does_not_evict_unrelated_lru_entry() {
         use crate::core::memory::MemoryBudget;
         use std::sync::Arc;
