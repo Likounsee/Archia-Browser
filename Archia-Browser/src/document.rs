@@ -183,9 +183,9 @@ impl Page {
                 node.style
                     .len()
                     .saturating_mul(std::mem::size_of::<(String, bool)>())
-                    .saturating_add(node.style.len().saturating_mul(
+                    .saturating_add(
                         node.style.iter().map(|(name, _)| name.len()).sum::<usize>(),
-                    ))
+                    )
             );
             for child in &node.children {
                 bytes = bytes.saturating_add(styled_owned_bytes(child));
