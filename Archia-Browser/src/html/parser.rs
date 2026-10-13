@@ -121,7 +121,9 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 if retained.is_empty() {
                     continue;
                 }
-                append_node(&mut root, &mut stack, Node::comment(retained));
+                if !append_node(&mut root, &mut stack, Node::comment(retained)) {
+                    break;
+                }
                 retained_text_bytes += retained.len();
                 created_nodes += 1;
             }
@@ -134,7 +136,9 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 if retained.is_empty() {
                     continue;
                 }
-                append_node(&mut root, &mut stack, Node::text(retained));
+                if !append_node(&mut root, &mut stack, Node::text(retained)) {
+                    break;
+                }
                 retained_text_bytes += retained.len();
                 created_nodes += 1;
             }
@@ -214,8 +218,15 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // an end tag; treating <div/> as empty changes the DOM tree.
                 created_nodes += 1;
                 if VOID_ELEMENTS.contains(&name.as_str()) {
-                    append_node(&mut root, &mut stack, node);
+                    if !append_node(&mut root, &mut stack, node) {
+                        break;
+                    }
                 } else {
+                    // Depth is bounded, but Vec capacity growth can still fail.
+                    // Stop consuming untrusted tokens instead of using infallible growth.
+                    if stack.try_reserve(1).is_err() {
+                        break;
+                    }
                     stack.push(node);
                 }
             }
@@ -244,12 +255,13 @@ fn bounded_utf8_prefix(input: &str, max_bytes: usize) -> &str {
     &input[..end]
 }
 
-fn append_node(root: &mut Node, stack: &mut [Node], node: Node) {
-    if let Some(parent) = stack.last_mut() {
-        parent.append(node);
+fn append_node(root: &mut Node, stack: &mut [Node], node: Node) -> bool {
+    let result = if let Some(parent) = stack.last_mut() {
+        parent.try_append(node)
     } else {
-        root.append(node);
-    }
+        root.try_append(node)
+    };
+    result.is_ok()
 }
 
 fn has_open(stack: &[Node], name: &str) -> bool {
@@ -303,7 +315,7 @@ fn close_element(root: &mut Node, stack: &mut Vec<Node>, name: &str) {
     while let Some(node) = completed.pop() {
         matching.append(node);
     }
-    append_node(root, stack, matching);
+    let _ = append_node(root, stack, matching);
 }
 
 fn normalize_document_structure(mut root: Node) -> Node {

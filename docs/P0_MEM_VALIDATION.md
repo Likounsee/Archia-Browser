@@ -37,3 +37,10 @@ Cette tranche réduit les chemins de panique OOM dans le rendu, mais ne constitu
 Le parsing des couleurs `rgb()/rgba()` et des rayons de bordures n'alloue plus de `Vec` temporaires pour trois/quatre composantes : il utilise des itérateurs et des tableaux de taille fixe. Les formes invalides et les listes de rayons trop longues restent rejetées. Un test vérifie les couleurs RGB/RGBA, les nombres de composantes invalides et l'expansion des rayons horizontaux/verticaux.
 
 Avec la tranche précédente, cela couvre les buffers temporaires de parsing et les principaux chemins d'allocation explicites du rendu. Ce n'est toujours pas suffisant pour fermer P0-MEM-11 : les allocations internes DOM/CSS/layout/cache/réseau ne sont pas toutes instrumentées, et les chemins historiques non budgétés existent encore.
+
+
+## Tranche DOM — croissance des enfants faillible
+
+Le DOM expose maintenant `Node::try_append`, qui réserve la capacité avant de modifier le vecteur et rend le nœud à l'appelant si la réservation échoue. Le parseur HTML utilise ce chemin pour ajouter les nœuds et réserve aussi explicitement la capacité de sa pile d'éléments ouverts. En cas d'échec, il arrête le traitement des tokens restants plutôt que de poursuivre sur une allocation infallible. L'API historique `append` est conservée pour compatibilité.
+
+Cette tranche ne rend pas toutes les allocations DOM faillibles : la normalisation de structure, les maps d'attributs, les piles de sous-arbres supprimés, le style tree et le layout nécessitent encore un traitement dédié. P0-MEM-11 reste donc ouvert.

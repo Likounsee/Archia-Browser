@@ -53,6 +53,17 @@ impl Node {
         self.children.push(child);
     }
 
+    /// Append a child without panicking if the child vector cannot grow.
+    ///
+    /// On failure, the caller retains ownership of the child.
+    pub fn try_append(&mut self, child: Node) -> Result<(), Node> {
+        if self.children.try_reserve(1).is_err() {
+            return Err(child);
+        }
+        self.children.push(child);
+        Ok(())
+    }
+
     /// Clone this node's kind and attributes without recursively cloning its
     /// descendants. StyledNode stores descendants in its own parallel tree.
     pub(crate) fn shallow_clone(&self) -> Self {
@@ -199,6 +210,15 @@ mod tests {
         document.append(body);
         assert_eq!(document.children.len(), 1);
         assert_eq!(document.children[0].children()[0].text_content(), "Hello");
+    }
+
+    #[test]
+    fn fallible_append_retains_child_when_append_succeeds() {
+        let mut parent = Node::element("div");
+        let child = Node::text("safe");
+        assert!(parent.try_append(child).is_ok());
+        assert_eq!(parent.child_count(), 1);
+        assert_eq!(parent.child(0).map(Node::text_content).as_deref(), Some("safe"));
     }
 
     #[test]

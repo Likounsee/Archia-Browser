@@ -152,3 +152,8 @@ Les tests unitaires de parsing ne suffisent pas à valider le transport de bout 
 - Le workflow `.github/workflows/ci.yml` exécute fmt, tests workspace, build et Clippy sur Ubuntu, Windows et macOS, puis les audits RustSec et licences sur Linux. Les anciennes exécutions vertes citées dans les tâches prouvent uniquement les SHA qu'elles indiquent, pas le candidat actuel.
 - Le workflow `.github/workflows/fuzz.yml` est configuré pour 7 cibles en matrice, avec un budget de 24 heures-cibles agrégées et conservation des artefacts. Le déclenchement manuel et l'exécution complète sur le candidat courant restent en attente ; aucune garantie de 24 h sans crash n'est revendiquée.
 - P0 demeure ouvert. P1–P3 sont le backlog technique connu, à réviser lors des audits de code et de compatibilité ; ce document ne prétend pas que toute exigence future du Web a déjà été découverte.
+
+
+### P0-MEM-11 — mise à jour renderer et DOM
+
+La tranche la plus récente ajoute `Node::try_append` et l'utilise dans le parseur HTML afin de faire échouer proprement la croissance du stockage des enfants ; la pile des éléments ouverts réserve également avant `push`. L'API infallible historique reste présente, et les maps d'attributs, la normalisation, le style tree et le layout ne sont pas encore entièrement couverts. La précédente tranche renderer a aussi été corrigée selon le formatage Rust attendu par CI.

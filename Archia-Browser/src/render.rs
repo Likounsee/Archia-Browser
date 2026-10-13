@@ -463,8 +463,7 @@ fn parse_border_radii(style: &ComputedStyle, width: u32, height: u32) -> CornerR
     let reference = width.min(height);
     let mut parsed = [0; 4];
     for (index, value) in values.into_iter().enumerate() {
-        let Some(radius) =
-            value.and_then(|token| parse_radius_component(token.trim(), reference))
+        let Some(radius) = value.and_then(|token| parse_radius_component(token.trim(), reference))
         else {
             return CornerRadii::default();
         };
@@ -502,11 +501,7 @@ fn parse_border_radius_shorthand(value: &str, width: u32, height: u32) -> Corner
         Some(None) => return CornerRadii::default(),
         None => (horizontal, horizontal_count),
     };
-    if horizontal_count == 0
-        || vertical_count == 0
-        || horizontal_count > 4
-        || vertical_count > 4
-    {
+    if horizontal_count == 0 || vertical_count == 0 || horizontal_count > 4 || vertical_count > 4 {
         return CornerRadii::default();
     }
     let horizontal = expand_radius_values(&horizontal, horizontal_count);
@@ -812,12 +807,7 @@ fn parse_rgb_function(value: &str) -> Option<u32> {
         return None;
     }
 
-    Some(
-        ((red as u32) << 24)
-            | ((green as u32) << 16)
-            | ((blue as u32) << 8)
-            | alpha as u32,
-    )
+    Some(((red as u32) << 24) | ((green as u32) << 16) | ((blue as u32) << 8) | alpha as u32)
 }
 
 #[cfg(test)]
