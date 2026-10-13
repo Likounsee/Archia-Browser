@@ -24,6 +24,7 @@ pub enum DocumentLoadError {
     NoCurrentDocument,
     InternalStatePoisoned,
     MemoryBudgetExceeded,
+    NavigationSuperseded,
     DocumentTooLarge,
 }
 

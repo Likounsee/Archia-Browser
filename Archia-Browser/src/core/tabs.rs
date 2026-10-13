@@ -614,7 +614,9 @@ mod tests {
                 .to_string(),
             "https://example.org/two"
         );
-        assert!(manager.commit_navigation(tab, &back, test_page("https://example.org/one"), None).is_ok());
+        assert!(manager
+            .commit_navigation(tab, &back, test_page("https://example.org/one"), None)
+            .is_ok());
         assert_eq!(
             manager
                 .tab(tab)

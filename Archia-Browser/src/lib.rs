@@ -869,6 +869,78 @@ mod tests {
     }
 
     #[test]
+    fn transactional_load_and_history_navigation_preserve_page_on_failure() {
+        #[derive(Debug, Default)]
+        struct AllowAll;
+        impl net::pipeline::RequestPolicyEngine for AllowAll {
+            fn decide(&self, _: &net::Request) -> net::pipeline::PolicyDecision {
+                net::pipeline::PolicyDecision::Allow
+            }
+        }
+
+        #[derive(Debug)]
+        struct RoutingTransport;
+        impl net::Transport for RoutingTransport {
+            fn send(&self, request: &net::Request) -> Result<net::Response, net::TransportError> {
+                if request.url.path() == "/fail" {
+                    return Err(net::TransportError::ConnectionFailed);
+                }
+                let body = format!("<title>{}</title><body>loaded</body>", request.url.path());
+                Ok(net::Response::new(200)
+                    .with_header("cache-control", "no-store")
+                    .with_header("content-type", "text/html")
+                    .with_body(body.into_bytes()))
+            }
+        }
+
+        let loader = net::DocumentLoader::new(
+            net::pipeline::NetworkPipeline::new(AllowAll),
+            RoutingTransport,
+        );
+        let viewport = crate::layout::LayoutViewport::new(320, 200);
+        let mut browser = Browser::new();
+        for path in ["/one", "/two"] {
+            let request =
+                net::Request::new(net::Url::parse(&format!("https://example.org{path}")).unwrap());
+            browser.load_request(&loader, &request, viewport).unwrap();
+        }
+
+        assert_eq!(
+            browser.current_url().map(ToString::to_string),
+            Some("https://example.org/two".to_owned())
+        );
+        browser.go_back(&loader, viewport).unwrap();
+        assert_eq!(
+            browser.current_url().map(ToString::to_string),
+            Some("https://example.org/one".to_owned())
+        );
+        assert_eq!(browser.history().len(), 2);
+        assert!(browser.current_page().is_some());
+
+        let before_url = browser.current_url().unwrap().to_string();
+        let before_title = browser
+            .current_page()
+            .and_then(crate::document::Page::title);
+        let failed = net::Request::new(net::Url::parse("https://example.org/fail").unwrap());
+        assert!(matches!(
+            browser.load_request(&loader, &failed, viewport),
+            Err(net::DocumentLoadError::Network(
+                net::TransportError::ConnectionFailed
+            ))
+        ));
+        assert_eq!(
+            browser.current_url().map(ToString::to_string),
+            Some(before_url)
+        );
+        assert_eq!(browser.history().len(), 2);
+        assert_eq!(
+            browser.current_page().and_then(crate::document::Page::title),
+            before_title
+        );
+        assert!(browser.history().can_go_forward());
+    }
+
+    #[test]
     fn browser_navigation_updates_current_url() {
         let mut browser = Browser::new();
         browser.navigate(net::Url::parse("https://example.org/one").unwrap(), None);

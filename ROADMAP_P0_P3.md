@@ -24,7 +24,7 @@ Les tests unitaires de parsing ne suffisent pas à valider le transport de bout 
 | Layout/rendu | Layout maison, liste de commandes de peinture et rasterizer logiciel | [PARTIEL] [NON VALIDÉ] |
 | Texte/Unicode | Rendu glyphique bitmap très limité visible dans `surface.rs`; shaping, bidi, fontes réelles et couverture Unicode complète non établis | [PARTIEL / MANQUANT] |
 | Mémoire | Budget atomique et limites ciblées existent ; il n'est pas prouvé que toutes les allocations critiques y sont comptabilisées | [PARTIEL] |
-| Onglets/historique | Modèles de données et historique en mémoire présents ; ce n'est pas encore une interface navigateur utilisable | [PARTIEL] |
+| Onglets/historique | Historique borné, transactions de navigation par onglet, annulation par jeton, rechargement et navigation arrière/avant commis après chargement | [PARTIEL — INTÉGRATION UI/TRANSPORT ANNULABLE RESTANTE] |
 | Interface/plateformes | `main.rs` lance actuellement un programme qui affiche la version ; UI native complète et intégration multiplateforme non établies | [MANQUANT] |
 | JavaScript/Web APIs | Aucun runtime JavaScript ni couche DOM/Web APIs utilisable identifié | [MANQUANT] |
 | Sécurité du contenu | Type Origin présent, mais Same-Origin/CORS/CSP/mixed content/permissions/sandbox ne forment pas encore une défense complète | [PARTIEL / MANQUANT] |
@@ -182,3 +182,12 @@ Le parseur réserve la capacité nécessaire au rattachement d'un sous-arbre ava
 La tranche de parsing HTML/CSS regroupe maintenant la croissance faillible des vecteurs de tokens CSS, déclarations, blocs, sélecteurs, règles et résultats de correspondance, les plafonds d'entrée/complexité des sélecteurs directs, les tests de régression et la correction des avertissements Clippy découverts par CI. Le parseur HTML et son tokenizer sont aussi remis au niveau Clippy strict pour que cette catégorie soit validable dans la même livraison.
 
 Statut : implémentation intégrée dans le candidat de commit, validation CI en cours. Ne pas considérer P0-MEM-11 comme fermé : les allocations internes des chaînes et maps ainsi que les arbres de style/layout/rendu et le suivi exact au budget partagé restent hors de cette tranche.
+
+
+## Lot navigation — transactions et intégration au chargement (13 octobre 2026)
+
+Le cycle synchrone de chargement de document passe maintenant par un jeton de navigation associé à l'onglet qui l'a lancé. `Browser::load_request` et `Browser::reload` conservent le document affiché et le curseur d'historique tant que le chargement et la réservation mémoire ne sont pas terminés. `Browser::go_back` et `Browser::go_forward` utilisent la même transaction : une erreur de réseau, un document sans URL, une limite mémoire ou un jeton périmé ne doit pas déplacer l'historique ni remplacer la page courante.
+
+Les frontends peuvent également utiliser `begin_navigation`, `cancel_navigation` et `commit_navigation` pour piloter une navigation en plusieurs étapes. Un résultat arrivé après une navigation plus récente ou après fermeture de l'onglet est rejeté avec `NavigationSuperseded`.
+
+**Limites explicites :** le transport reste synchrone et n'expose pas encore de primitive d'annulation réseau ; les anciens appels de navigation purement metadata (`navigate`, `back`, `forward`) restent disponibles pour compatibilité et ne déclenchent pas eux-mêmes de chargement. L'invalidation coordonnée style/layout/paint et les tests d'intégration réseau de bout en bout sont à compléter. Ce lot ne ferme pas P0 et ne vaut pas certification navigateur.
