@@ -373,6 +373,7 @@ fn close_element(root: &mut Node, stack: &mut Vec<Node>, name: &str) {
 }
 
 fn normalize_document_structure(mut root: Node) -> Node {
+    let root_child_count = root.children.len();
     let Some(html_position) = root
         .children
         .iter()
@@ -382,43 +383,72 @@ fn normalize_document_structure(mut root: Node) -> Node {
         let mut head = Node::element("head");
         let mut body = Node::element("body");
 
-        let children = std::mem::take(&mut root.children);
-        for child in children {
+        // Reserve every destination before moving any input children. Draining
+        // keeps the root vector's allocation for the final push.
+        if root.children.try_reserve(1).is_err()
+            || html.children.try_reserve(2).is_err()
+            || head.children.try_reserve(root_child_count).is_err()
+            || body.children.try_reserve(root_child_count).is_err()
+        {
+            return root;
+        }
+
+        for child in root.children.drain(..) {
             if child.tag_name() == Some("head") {
-                head.append(child);
+                head.children.push(child);
             } else {
-                body.append(child);
+                body.children.push(child);
             }
         }
 
-        html.append(head);
-        html.append(body);
-        root.append(html);
+        html.children.push(head);
+        html.children.push(body);
+        root.children.push(html);
         return root;
     };
 
-    // Content outside an explicit <html> element is still part of the
-    // document. Preserve it by placing preceding siblings at the start of
-    // <body> and following siblings at the end, rather than leaving nodes
-    // as invalid document-level siblings.
-    let mut root_children = std::mem::take(&mut root.children).into_iter();
-    let mut preceding = root_children
-        .by_ref()
-        .take(html_position)
-        .collect::<Vec<_>>();
-    let Some(mut html) = root_children.next() else {
-        // The position was found before taking the children; keep parsing
-        // resilient if that invariant is ever changed by future refactors.
+    // Preflight all vector growth before detaching the explicit html subtree.
+    // Siblings around html are moved into body in source order.
+    let html_child_count = root.children[html_position].children.len();
+    let body_position = root.children[html_position]
+        .children
+        .iter()
+        .position(|node| node.tag_name() == Some("body"));
+    let body_child_count = body_position.map_or(0, |position| {
+        root.children[html_position].children[position].children.len()
+    });
+    let Some(body_capacity) = root_child_count
+        .saturating_sub(1)
+        .checked_add(body_child_count)
+        .and_then(|count| count.checked_add(html_child_count))
+    else {
         return root;
     };
-    let following = root_children.collect::<Vec<_>>();
+
+    let mut preceding = Vec::new();
+    let mut following = Vec::new();
+    let mut body_extras = Vec::new();
+    if root.children.try_reserve(1).is_err()
+        || preceding.try_reserve(body_capacity).is_err()
+        || following.try_reserve(root_child_count).is_err()
+        || body_extras.try_reserve(html_child_count).is_err()
+        || root.children[html_position].children.try_reserve(2).is_err()
+    {
+        return root;
+    }
+
+    let mut html = root.children.remove(html_position);
+    for (position, child) in root.children.drain(..).enumerate() {
+        if position < html_position {
+            preceding.push(child);
+        } else {
+            following.push(child);
+        }
+    }
 
     let mut head = None;
     let mut body = None;
-    let mut body_extras = Vec::new();
-    let children = std::mem::take(&mut html.children);
-
-    for child in children {
+    for child in html.children.drain(..) {
         match child.tag_name() {
             Some("head") if head.is_none() => head = Some(child),
             Some("body") if body.is_none() => body = Some(child),
@@ -427,17 +457,14 @@ fn normalize_document_structure(mut root: Node) -> Node {
     }
 
     let mut body = body.unwrap_or_else(|| Node::element("body"));
-    for child in body_extras {
-        body.append(child);
-    }
-
     preceding.append(&mut body.children);
+    preceding.extend(body_extras);
+    preceding.extend(following);
     body.children = preceding;
-    body.children.extend(following);
 
-    html.append(head.unwrap_or_else(|| Node::element("head")));
-    html.append(body);
-    root.append(html);
+    html.children.push(head.unwrap_or_else(|| Node::element("head")));
+    html.children.push(body);
+    root.children.push(html);
     root
 }
 
@@ -812,8 +839,27 @@ mod tests {
         assert_eq!(html.text_content(), "Tbeforeinsideafter");
         let body = html.child(1).expect("normalized body");
         assert_eq!(
-            body.children().iter().map(Node::tag_name).collect::<Vec<_>>(),
+            body.children()
+                .iter()
+                .map(Node::tag_name)
+                .collect::<Vec<_>>(),
             vec![None, Some("main"), None]
+        );
+    }
+
+    #[test]
+    fn normalization_keeps_duplicate_sections_in_body_without_losing_content() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<html><head>first</head><head>second</head><body>body</body><body>extra</body></html>",
+        ));
+        let html = root.child(0).expect("normalized html");
+        assert_eq!(html.child_count(), 2);
+        assert_eq!(html.child(0).and_then(Node::tag_name), Some("head"));
+        assert_eq!(html.child(1).and_then(Node::tag_name), Some("body"));
+        assert_eq!(html.text_content(), "firstbodysecondextra");
+        assert_eq!(
+            html.child(1).expect("normalized body").text_content(),
+            "bodysecondextra"
         );
     }
 
