@@ -208,6 +208,19 @@ mod tests {
     }
 
     #[test]
+    fn key_and_payload_are_both_counted_toward_capacity() {
+        let mut cache = ResourceCache::new(10);
+        cache.insert("keep", 1, 4);
+        // The payload alone fits, but payload + key do not.
+        cache.insert("large", 2, 6);
+
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache.get("keep"), Some(&1));
+        assert_eq!(cache.get("large"), None);
+        assert_eq!(cache.used(), 8);
+    }
+
+    #[test]
     fn oversized_replacement_preserves_previous_entry() {
         let mut cache = ResourceCache::new(10);
         cache.insert("a", 1, 4);
