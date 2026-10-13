@@ -174,17 +174,19 @@ impl Page {
             // and approximate per-entry metadata for both maps.
             bytes = bytes.saturating_add(node_owned_bytes(&node.node));
             for (name, value) in node.style.iter() {
+                // These maps own Strings, so retained capacity is more useful than
+                // logical length when estimating their backing allocations.
                 bytes = bytes
                     .saturating_add(std::mem::size_of::<(String, String)>())
-                    .saturating_add(name.len())
-                    .saturating_add(value.len());
+                    .saturating_add(name.capacity())
+                    .saturating_add(value.capacity());
             }
             bytes = bytes.saturating_add(
                 node.style
                     .len()
                     .saturating_mul(std::mem::size_of::<(String, bool)>())
                     .saturating_add(
-                        node.style.iter().map(|(name, _)| name.len()).sum::<usize>(),
+                        node.style.iter().map(|(name, _)| name.capacity()).sum::<usize>(),
                     )
             );
             for child in &node.children {
@@ -796,6 +798,26 @@ b</textarea></form>"#,
         assert!(
             large.retained_structure_estimate() > small.retained_structure_estimate(),
             "the structural memory estimate must reflect additional DOM and layout nodes"
+        );
+    }
+
+    #[test]
+    fn retained_structure_estimate_accounts_for_display_list_text_storage() {
+        let short = Page::from_html(
+            "<body>x</body>",
+            "",
+            LayoutViewport::new(320, 200),
+        );
+        let long_text = "long retained text ".repeat(256);
+        let long = Page::from_html(
+            &format!("<body>{long_text}</body>"),
+            "",
+            LayoutViewport::new(320, 200),
+        );
+
+        assert!(
+            long.retained_structure_estimate() > short.retained_structure_estimate(),
+            "display-list text buffers must contribute to retained memory estimates"
         );
     }
 
