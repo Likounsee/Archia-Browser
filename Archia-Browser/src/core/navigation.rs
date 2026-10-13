@@ -338,5 +338,4 @@ mod tests {
         );
         assert!(!history.can_go_forward());
     }
-
 }

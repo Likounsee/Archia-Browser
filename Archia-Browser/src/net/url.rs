@@ -1333,7 +1333,9 @@ mod tests {
         );
 
         let oversized_query = format!("?{}", "q".repeat(MAX_URL_BYTES));
-        assert_eq!(base.resolve(&oversized_query).unwrap_err(), UrlError::TooLong);
+        assert_eq!(
+            base.resolve(&oversized_query).unwrap_err(),
+            UrlError::TooLong
+        );
     }
-
 }

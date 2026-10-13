@@ -355,7 +355,9 @@ impl Browser {
         // Check the document's actual origin, not only its <base href>: an
         // attacker-controlled base element must not grant file-navigation access.
         if url.scheme() == "file"
-            && !page.url().is_some_and(|document_url| document_url.scheme() == "file")
+            && !page
+                .url()
+                .is_some_and(|document_url| document_url.scheme() == "file")
         {
             return Err(LinkActivationError::BlockedLocalFileNavigation);
         }
@@ -1308,7 +1310,11 @@ mod tests {
 
         browser.navigate(net::Url::parse("https://example.org/next").unwrap(), None);
         assert!(browser.current_page().is_none());
-        assert_eq!(browser.memory().used(), 0, "clearing the tab must release its page charge");
+        assert_eq!(
+            browser.memory().used(),
+            0,
+            "clearing the tab must release its page charge"
+        );
     }
 
     #[test]
@@ -1328,5 +1334,4 @@ mod tests {
         assert!(browser.current_page().is_none());
         assert_eq!(browser.memory().used(), 0);
     }
-
 }

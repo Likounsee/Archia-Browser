@@ -186,8 +186,11 @@ impl Page {
                     .len()
                     .saturating_mul(std::mem::size_of::<(String, bool)>())
                     .saturating_add(
-                        node.style.iter().map(|(name, _)| name.capacity()).sum::<usize>(),
-                    )
+                        node.style
+                            .iter()
+                            .map(|(name, _)| name.capacity())
+                            .sum::<usize>(),
+                    ),
             );
             for child in &node.children {
                 bytes = bytes.saturating_add(styled_owned_bytes(child));
@@ -235,10 +238,7 @@ impl Page {
         &self,
         budget: Arc<crate::core::memory::MemoryBudget>,
     ) -> Option<Self> {
-        let reservation = MemoryReservation::try_new(
-            budget,
-            self.retained_structure_estimate(),
-        )?;
+        let reservation = MemoryReservation::try_new(budget, self.retained_structure_estimate())?;
         let mut page = Self {
             url: self.url.clone(),
             _memory_reservation: None,
@@ -429,16 +429,14 @@ fn collect_form_entries_with_disabled_fieldset(
         }
     }
 
-    let disabled_fieldset = node.tag_name() == Some("fieldset")
-        && node.has_attribute("disabled");
+    let disabled_fieldset = node.tag_name() == Some("fieldset") && node.has_attribute("disabled");
     let mut first_legend_seen = false;
     for child in node.children() {
         // HTML exempts descendants of a disabled fieldset's first direct legend.
         // Other descendants are disabled, even if they don't carry a disabled
         // attribute themselves.
-        let is_first_legend = disabled_fieldset
-            && child.tag_name() == Some("legend")
-            && !first_legend_seen;
+        let is_first_legend =
+            disabled_fieldset && child.tag_name() == Some("legend") && !first_legend_seen;
         if child.tag_name() == Some("legend") {
             first_legend_seen = true;
         }
@@ -919,11 +917,7 @@ b</textarea></form>"#,
 
     #[test]
     fn retained_structure_estimate_accounts_for_display_list_text_storage() {
-        let short = Page::from_html(
-            "<body>x</body>",
-            "",
-            LayoutViewport::new(320, 200),
-        );
+        let short = Page::from_html("<body>x</body>", "", LayoutViewport::new(320, 200));
         let long_text = "long retained text ".repeat(256);
         let long = Page::from_html(
             &format!("<body>{long_text}</body>"),

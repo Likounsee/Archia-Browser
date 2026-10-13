@@ -1046,8 +1046,8 @@ mod tests {
 
     #[test]
     fn stylesheet_link_discovery_stops_at_the_request_budget() {
-        use crate::html::{parse, HtmlTokenizer};
         use super::{collect_stylesheet_links, MAX_STYLESHEET_REQUESTS_PER_DOCUMENT};
+        use crate::html::{parse, HtmlTokenizer};
 
         let mut html = String::new();
         for index in 0..(MAX_STYLESHEET_REQUESTS_PER_DOCUMENT + 100) {
