@@ -904,6 +904,29 @@ mod tests {
     }
 
     #[test]
+    fn page_commit_rejects_unbudgeted_deep_copy_without_mutating_navigation() {
+        let mut browser = Browser::with_memory_limit(2048);
+        let mut page = crate::document::Page::from_html_at(
+            Some(net::Url::parse("https://example.org/large").unwrap()),
+            "<body>large page</body>",
+            "",
+            crate::layout::LayoutViewport::new(320, 200),
+        );
+        page.attach_memory_reservation(std::sync::Arc::new(
+            crate::core::memory::MemoryReservation::try_new(
+                browser.shared_memory_budget(),
+                1500,
+            )
+            .unwrap(),
+        ));
+
+        assert!(!browser.commit_page(&page));
+        assert!(browser.current_page().is_none());
+        assert!(browser.current_url().is_none());
+        assert_eq!(browser.memory().used(), 1500);
+    }
+
+    #[test]
     fn browser_commits_loaded_page_metadata() {
         let mut browser = Browser::new();
         let page = crate::document::Page::from_html_at(
