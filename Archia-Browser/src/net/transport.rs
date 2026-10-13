@@ -2657,6 +2657,49 @@ mod tests {
     }
 
     #[test]
+    fn rejects_injected_and_case_duplicate_headers_before_opening_a_socket() {
+        use std::io::ErrorKind;
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let address = listener.local_addr().unwrap();
+        let url = Url::parse(&format!("http://127.0.0.1:{}/", address.port())).unwrap();
+
+        let mut injected = Request::new(url.clone());
+        injected
+            .headers
+            .insert("x-test".to_owned(), "safe\r\nX-Injected: yes".to_owned());
+
+        let mut duplicate = Request::new(url.clone());
+        duplicate
+            .headers
+            .insert("x-test".to_owned(), "one".to_owned());
+        duplicate
+            .headers
+            .insert("X-Test".to_owned(), "two".to_owned());
+
+        let mut invalid_name = Request::new(url);
+        invalid_name
+            .headers
+            .insert("bad name".to_owned(), "value".to_owned());
+
+        for request in [injected, duplicate, invalid_name] {
+            assert_eq!(
+                HttpTransport::new().send(&request),
+                Err(TransportError::InvalidRequest)
+            );
+            assert!(
+                matches!(
+                    listener.accept(),
+                    Err(ref error) if error.kind() == ErrorKind::WouldBlock
+                ),
+                "invalid headers must be rejected before a TCP connection is opened"
+            );
+        }
+    }
+
+    #[test]
     fn rejects_non_http_schemes_before_connecting() {
         let transport = HttpTransport::new();
         let request = Request::new(Url::parse("ftp://example.org/file").unwrap());
