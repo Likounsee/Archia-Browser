@@ -1450,11 +1450,17 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
     // Bound the serialized request line and headers before connecting. Requests
     // are caller-constructible, so a valid but enormous URL/header map must not
     // make the transport allocate or write an unbounded HTTP header block.
+    let query_len = request
+        .url
+        .query()
+        .map(|query| query.len().checked_add(1).ok_or(TransportError::InvalidRequest))
+        .transpose()?
+        .unwrap_or(0);
     let target_len = request
         .url
         .path()
         .len()
-        .checked_add(request.url.query().map_or(0, |query| query.len() + 1))
+        .checked_add(query_len)
         .ok_or(TransportError::InvalidRequest)?;
     let mut head_len = request
         .method
@@ -1468,8 +1474,12 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
         .keys()
         .any(|name| name.eq_ignore_ascii_case("host"));
     if !has_host {
+        let host_header_len = host_header(request)
+            .len()
+            .checked_add(8) // "Host: " + CRLF
+            .ok_or(TransportError::InvalidRequest)?;
         head_len = head_len
-            .checked_add(host_header(request).len() + 8) // "Host: " + CRLF
+            .checked_add(host_header_len)
             .ok_or(TransportError::InvalidRequest)?;
     }
     head_len = head_len
@@ -1481,8 +1491,12 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
             .keys()
             .any(|name| name.eq_ignore_ascii_case("content-length"))
     {
+        let content_length_header_len = 16usize
+            .checked_add(request.body.len().to_string().len())
+            .and_then(|length| length.checked_add(2))
+            .ok_or(TransportError::InvalidRequest)?;
         head_len = head_len
-            .checked_add(16 + request.body.len().to_string().len() + 2)
+            .checked_add(content_length_header_len)
             .ok_or(TransportError::InvalidRequest)?;
     }
     for (name, value) in &request.headers {
