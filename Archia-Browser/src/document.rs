@@ -133,19 +133,23 @@ impl Page {
     /// Input-based reservations remain responsible for tokenizer, CSS-rule, and style-map
     /// allocations; this structural count catches unusually allocation-dense DOM/layout trees.
     pub(crate) fn retained_structure_estimate(&self) -> usize {
-        fn node_bytes(node: &Node) -> usize {
-            let mut bytes = std::mem::size_of::<Node>().saturating_add(
-                node.children
-                    .capacity()
-                    .saturating_mul(std::mem::size_of::<Node>()),
-            );
+        // Count heap-owned buffers recursively, but count each tree node's inline
+        // storage only through its containing Vec capacity. Adding size_of::<Node>()
+        // at every recursion level would count child elements twice.
+        fn node_owned_bytes(node: &Node) -> usize {
+            let mut bytes = node
+                .children
+                .capacity()
+                .saturating_mul(std::mem::size_of::<Node>());
             match &node.kind {
                 crate::html::NodeKind::Document => {}
                 crate::html::NodeKind::Element { name, attributes } => {
                     bytes = bytes.saturating_add(name.capacity());
                     for (key, value) in attributes {
-                        bytes = bytes.saturating_add(std::mem::size_of::<(String, String)>());
+                        // BTreeMap/attribute entry metadata is an estimate; allocator
+                        // overhead and fragmentation are deliberately not claimed exact.
                         bytes = bytes
+                            .saturating_add(std::mem::size_of::<(String, String)>())
                             .saturating_add(key.capacity())
                             .saturating_add(value.capacity());
                     }
@@ -155,42 +159,62 @@ impl Page {
                 }
             }
             for child in &node.children {
-                bytes = bytes.saturating_add(node_bytes(child));
+                bytes = bytes.saturating_add(node_owned_bytes(child));
             }
             bytes
         }
-        fn styled_bytes(node: &StyledNode) -> usize {
-            let mut bytes = std::mem::size_of::<StyledNode>().saturating_add(
-                node.children
-                    .capacity()
-                    .saturating_mul(std::mem::size_of::<StyledNode>()),
+
+        fn styled_owned_bytes(node: &StyledNode) -> usize {
+            let mut bytes = node
+                .children
+                .capacity()
+                .saturating_mul(std::mem::size_of::<StyledNode>());
+            // Styled nodes own shallow DOM-node copies plus two BTreeMaps of
+            // computed property values/importance flags. Include string capacities
+            // and approximate per-entry metadata for both maps.
+            bytes = bytes.saturating_add(node_owned_bytes(&node.node));
+            for (name, value) in node.style.iter() {
+                bytes = bytes
+                    .saturating_add(std::mem::size_of::<(String, String)>())
+                    .saturating_add(name.len())
+                    .saturating_add(value.len());
+            }
+            bytes = bytes.saturating_add(
+                node.style
+                    .len()
+                    .saturating_mul(std::mem::size_of::<(String, bool)>())
             );
-            // StyledNode stores a shallow copy of each DOM node, including its strings.
-            bytes = bytes.saturating_add(node_bytes(&node.node));
             for child in &node.children {
-                bytes = bytes.saturating_add(styled_bytes(child));
+                bytes = bytes.saturating_add(styled_owned_bytes(child));
             }
             bytes
         }
-        fn layout_bytes(node: &LayoutNode) -> usize {
-            let mut bytes = std::mem::size_of::<LayoutNode>().saturating_add(
-                node.children
-                    .capacity()
-                    .saturating_mul(std::mem::size_of::<LayoutNode>()),
-            );
+
+        fn layout_owned_bytes(node: &LayoutNode) -> usize {
+            let mut bytes = node
+                .children
+                .capacity()
+                .saturating_mul(std::mem::size_of::<LayoutNode>());
             for child in &node.children {
-                bytes = bytes.saturating_add(layout_bytes(child));
+                bytes = bytes.saturating_add(layout_owned_bytes(child));
             }
             bytes
         }
-        let mut bytes = node_bytes(&self.document)
-            .saturating_add(styled_bytes(&self.styled))
-            .saturating_add(layout_bytes(&self.layout))
+
+        let mut bytes = std::mem::size_of::<Self>()
+            .saturating_add(std::mem::size_of::<Node>())
+            .saturating_add(node_owned_bytes(&self.document))
+            .saturating_add(std::mem::size_of::<StyledNode>())
+            .saturating_add(styled_owned_bytes(&self.styled))
+            .saturating_add(std::mem::size_of::<LayoutNode>())
+            .saturating_add(layout_owned_bytes(&self.layout))
             .saturating_add(
                 self.display_list
-                    .len()
+                    .commands()
+                    .capacity()
                     .saturating_mul(std::mem::size_of::<crate::render::PaintCommand>()),
             );
+
         for command in self.display_list.commands() {
             if let crate::render::PaintCommand::DrawText { text, .. } = command {
                 bytes = bytes.saturating_add(text.capacity());
@@ -770,6 +794,22 @@ b</textarea></form>"#,
         assert!(
             large.retained_structure_estimate() > small.retained_structure_estimate(),
             "the structural memory estimate must reflect additional DOM and layout nodes"
+        );
+    }
+
+    #[test]
+    fn retained_structure_estimate_accounts_for_computed_style_properties() {
+        let html = "<body><div class=\"target\">content</div></body>";
+        let plain = Page::from_html(html, "", LayoutViewport::new(320, 200));
+        let styled = Page::from_html(
+            html,
+            ".target { color: red; background-color: blue; padding: 4px; margin: 2px; border-width: 1px; font-size: 18px; }",
+            LayoutViewport::new(320, 200),
+        );
+
+        assert!(
+            styled.retained_structure_estimate() > plain.retained_structure_estimate(),
+            "computed property maps and their strings must contribute to the retained estimate"
         );
     }
 
