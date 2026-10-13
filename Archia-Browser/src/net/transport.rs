@@ -4022,6 +4022,96 @@ mod limit_tests {
     use crate::net::Url;
 
     #[test]
+    fn http_transport_round_trips_a_response_over_a_real_loopback_socket() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        use std::thread;
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut chunk = [0_u8; 512];
+            while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+                let count = stream.read(&mut chunk).unwrap();
+                assert_ne!(count, 0, "client closed before sending HTTP headers");
+                request.extend_from_slice(&chunk[..count]);
+                assert!(request.len() <= MAX_REQUEST_HEADER_BYTES);
+            }
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\nHello")
+                .unwrap();
+            request
+        });
+
+        let request = Request::new(
+            Url::parse(&format!("http://127.0.0.1:{}/probe?q=1", address.port())).unwrap(),
+        );
+        let response = HttpTransport::with_timeouts(
+            Duration::from_secs(2),
+            Duration::from_secs(2),
+        )
+        .send(&request)
+        .expect("valid loopback HTTP response should parse");
+        let wire_request = server.join().unwrap();
+
+        assert_eq!(response.status, 200);
+        assert_eq!(response.body, b"Hello");
+        assert_eq!(response.content_type.as_deref(), Some("text/plain"));
+        let wire_request = String::from_utf8(wire_request).unwrap();
+        assert!(wire_request.starts_with("GET /probe?q=1 HTTP/1.1\r\n"));
+        assert!(wire_request.contains("Connection: close\r\n"));
+    }
+
+    #[test]
+    fn http_transport_rejects_ambiguous_and_truncated_framing_over_loopback() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        use std::thread;
+
+        let malformed_responses: &[&[u8]] = &[
+            b"HTTP/1.1 200 OK\r\nContent-Length: 1\r\nTransfer-Encoding: chunked\r\n\r\nx",
+            b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nx",
+            b"HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\nxEXTRA",
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nHello\r\n0\r\n",
+            b"HTTP/1.1 200 OK\r\nContent-Length: +1\r\n\r\nx",
+        ];
+
+        for malformed in malformed_responses {
+            let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+            let address = listener.local_addr().unwrap();
+            let response_bytes = malformed.to_vec();
+            let server = thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .unwrap();
+                let mut request = [0_u8; 4096];
+                let _ = stream.read(&mut request).unwrap();
+                stream.write_all(&response_bytes).unwrap();
+            });
+
+            let request =
+                Request::new(Url::parse(&format!("http://127.0.0.1:{}/", address.port())).unwrap());
+            assert_eq!(
+                HttpTransport::with_timeouts(
+                    Duration::from_secs(2),
+                    Duration::from_secs(2),
+                )
+                .send(&request),
+                Err(TransportError::ConnectionFailed),
+                "malformed wire response must fail closed: {:?}",
+                String::from_utf8_lossy(malformed)
+            );
+            server.join().unwrap();
+        }
+    }
+
+    #[test]
     fn tls_handshake_rejects_non_tls_peer_as_tls_failure() {
         use std::io::{Read, Write};
         use std::net::TcpListener;
