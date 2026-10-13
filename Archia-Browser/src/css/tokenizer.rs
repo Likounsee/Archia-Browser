@@ -117,7 +117,9 @@ impl CssTokenizer {
                             value.push(next);
                         }
                     }
-                    if value.len() > MAX_CSS_TOKEN_TEXT_BYTES { return tokens; }
+                    if value.len() > MAX_CSS_TOKEN_TEXT_BYTES {
+                        return tokens;
+                    }
                     push_token!(CssToken::String(value));
                 }
                 c if c.is_ascii_digit()
@@ -132,13 +134,17 @@ impl CssTokenizer {
                             break;
                         }
                     }
-                    if value.len() > MAX_CSS_TOKEN_TEXT_BYTES { return tokens; }
+                    if value.len() > MAX_CSS_TOKEN_TEXT_BYTES {
+                        return tokens;
+                    }
                     push_token!(CssToken::Number(value));
                 }
                 c if is_ident_start(c) => {
                     let mut value = String::from(c);
                     value.push_str(&consume_ident(&mut chars));
-                    if value.len() > MAX_CSS_TOKEN_TEXT_BYTES { return tokens; }
+                    if value.len() > MAX_CSS_TOKEN_TEXT_BYTES {
+                        return tokens;
+                    }
                     push_token!(CssToken::Ident(value));
                 }
                 '\\' if chars.peek().is_some_and(|next| !is_css_newline(*next)) => {
@@ -146,7 +152,9 @@ impl CssTokenizer {
                         let mut value = String::new();
                         value.push(escaped);
                         value.push_str(&consume_ident(&mut chars));
-                        if value.len() > MAX_CSS_TOKEN_TEXT_BYTES { return tokens; }
+                        if value.len() > MAX_CSS_TOKEN_TEXT_BYTES {
+                            return tokens;
+                        }
                         push_token!(CssToken::Ident(value));
                     } else {
                         push_token!(CssToken::Delim('\\'));
