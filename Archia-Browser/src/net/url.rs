@@ -1,5 +1,8 @@
 use std::fmt;
 
+/// Bound URL parsing and reference resolution work before allocating components.
+const MAX_URL_BYTES: usize = 16 * 1024;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Url {
     scheme: String,
@@ -11,6 +14,9 @@ pub struct Url {
 
 impl Url {
     pub fn parse(input: &str) -> Result<Self, UrlError> {
+        if input.len() > MAX_URL_BYTES {
+            return Err(UrlError::TooLong);
+        }
         if contains_unsafe_url_whitespace(input) {
             return Err(UrlError::InvalidCharacter);
         }
@@ -177,6 +183,9 @@ impl Url {
         if reference.is_empty() {
             return Ok(self.clone());
         }
+        if reference.len() > MAX_URL_BYTES {
+            return Err(UrlError::TooLong);
+        }
         if contains_unsafe_url_whitespace(reference) {
             return Err(UrlError::InvalidCharacter);
         }
@@ -217,6 +226,9 @@ impl Url {
             let mut resolved = self.clone();
             resolved.query = query.map(str::to_owned).or_else(|| self.query.clone());
             resolved.fragment = fragment.map(str::to_owned);
+            if resolved.to_string().len() > MAX_URL_BYTES {
+                return Err(UrlError::TooLong);
+            }
             return Ok(resolved);
         }
 
@@ -243,13 +255,17 @@ impl Url {
             return Err(UrlError::InvalidCharacter);
         }
 
-        Ok(Self {
+        let resolved = Self {
             scheme: self.scheme.clone(),
             authority: self.authority.clone(),
             path: resolved_path,
             query: query.map(str::to_owned),
             fragment: fragment.map(str::to_owned),
-        })
+        };
+        if resolved.to_string().len() > MAX_URL_BYTES {
+            return Err(UrlError::TooLong);
+        }
+        Ok(resolved)
     }
 }
 
@@ -634,6 +650,7 @@ pub enum UrlError {
     MissingAuthority,
     UnsupportedReferenceScheme,
     UnsupportedFileAuthority,
+    TooLong,
     InvalidCharacter,
     InvalidAuthority,
 }
@@ -648,6 +665,7 @@ impl fmt::Display for UrlError {
                 "URL reference uses an unsupported non-hierarchical scheme"
             }
             Self::UnsupportedFileAuthority => "file URL uses an unsupported authority",
+            Self::TooLong => "URL exceeds the maximum supported length",
             Self::InvalidCharacter => {
                 "URL contains disallowed whitespace, control characters, or backslashes"
             }
@@ -1302,4 +1320,20 @@ mod tests {
         assert!(!upper.same_document(&different_path));
         assert!(!upper.same_document(&different_query));
     }
+    #[test]
+    fn rejects_urls_and_resolved_references_over_the_size_limit() {
+        let oversized_url = format!("https://example.org/{}", "a".repeat(MAX_URL_BYTES));
+        assert_eq!(Url::parse(&oversized_url).unwrap_err(), UrlError::TooLong);
+
+        let base = Url::parse("https://example.org/path").unwrap();
+        let oversized_reference = "a".repeat(MAX_URL_BYTES + 1);
+        assert_eq!(
+            base.resolve(&oversized_reference).unwrap_err(),
+            UrlError::TooLong
+        );
+
+        let oversized_query = format!("?{}", "q".repeat(MAX_URL_BYTES));
+        assert_eq!(base.resolve(&oversized_query).unwrap_err(), UrlError::TooLong);
+    }
+
 }
