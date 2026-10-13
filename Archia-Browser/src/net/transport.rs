@@ -2119,7 +2119,8 @@ mod tests {
         });
 
         let url = Url::parse(&format!("https://127.0.0.1:{}/", address.port())).unwrap();
-        let transport = HttpTransport::with_timeouts(Duration::from_secs(2), Duration::from_secs(2));
+        let transport =
+            HttpTransport::with_timeouts(Duration::from_secs(2), Duration::from_secs(2));
         assert_eq!(
             transport.send(&Request::new(url)),
             Err(TransportError::TlsFailed),
