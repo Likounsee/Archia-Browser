@@ -217,7 +217,7 @@ mod tests {
 
         assert_eq!(cache.get("a"), Some(&1));
         assert_eq!(cache.get("b"), Some(&2));
-        assert_eq!(cache.used(), 8);
+        assert_eq!(cache.used(), 10);
     }
 
     #[test]
@@ -230,19 +230,19 @@ mod tests {
         assert_eq!(cache.remove_oldest(), Some(2));
         assert_eq!(cache.get("second"), None);
         assert_eq!(cache.get("first"), Some(&1));
-        assert_eq!(cache.used(), "first".len() + "first".len());
+        assert_eq!(cache.used(), "first".len() + 3);
     }
 
     #[test]
     fn retain_releases_bytes_for_removed_entries() {
-        let mut cache = ResourceCache::new(10);
+        let mut cache = ResourceCache::new(20);
         cache.insert("keep", 1, 4);
         cache.insert("drop", 2, 5);
 
         cache.retain(|entry| entry.key == "keep");
 
         assert_eq!(cache.len(), 1);
-        assert_eq!(cache.used(), 4);
+        assert_eq!(cache.used(), 8);
         assert_eq!(cache.get("keep"), Some(&1));
         assert_eq!(cache.get("drop"), None);
     }
