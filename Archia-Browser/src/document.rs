@@ -340,63 +340,86 @@ fn collect_inline_styles(node: &Node, css: &mut String) {
 }
 
 fn collect_form_entries(node: &Node, entries: &mut Vec<(String, String)>) {
-    if let Some(tag) = node.tag_name() {
-        match tag {
-            "input" => {
-                let Some(name) = node.attribute("name").filter(|name| !name.is_empty()) else {
-                    return;
-                };
-                if node.has_attribute("disabled") {
-                    return;
-                }
+    collect_form_entries_with_disabled_fieldset(node, entries, false);
+}
 
-                let input_type = node
-                    .attribute("type")
-                    .unwrap_or("text")
-                    .trim()
-                    .to_ascii_lowercase();
-                if matches!(
-                    input_type.as_str(),
-                    "button" | "reset" | "submit" | "image" | "file"
-                ) {
-                    return;
-                }
-                if matches!(input_type.as_str(), "checkbox" | "radio")
-                    && !node.has_attribute("checked")
-                {
-                    return;
-                }
+fn collect_form_entries_with_disabled_fieldset(
+    node: &Node,
+    entries: &mut Vec<(String, String)>,
+    disabled_by_fieldset: bool,
+) {
+    if !disabled_by_fieldset {
+        if let Some(tag) = node.tag_name() {
+            match tag {
+                "input" => {
+                    let Some(name) = node.attribute("name").filter(|name| !name.is_empty()) else {
+                        return;
+                    };
+                    if node.has_attribute("disabled") {
+                        return;
+                    }
 
-                let value = node
-                    .attribute("value")
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| {
-                        if matches!(input_type.as_str(), "checkbox" | "radio") {
-                            "on".to_owned()
-                        } else {
-                            String::new()
-                        }
-                    });
-                entries.push((name.to_owned(), normalize_form_newlines(&value)));
-            }
-            "textarea" => {
-                if node.has_attribute("disabled") {
-                    return;
+                    let input_type = node
+                        .attribute("type")
+                        .unwrap_or("text")
+                        .trim()
+                        .to_ascii_lowercase();
+                    if matches!(
+                        input_type.as_str(),
+                        "button" | "reset" | "submit" | "image" | "file"
+                    ) {
+                        return;
+                    }
+                    if matches!(input_type.as_str(), "checkbox" | "radio")
+                        && !node.has_attribute("checked")
+                    {
+                        return;
+                    }
+
+                    let value = node
+                        .attribute("value")
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| {
+                            if matches!(input_type.as_str(), "checkbox" | "radio") {
+                                "on".to_owned()
+                            } else {
+                                String::new()
+                            }
+                        });
+                    entries.push((name.to_owned(), normalize_form_newlines(&value)));
                 }
-                if let Some(name) = node.attribute("name").filter(|name| !name.is_empty()) {
-                    entries.push((
-                        name.to_owned(),
-                        normalize_form_newlines(&node.text_content()),
-                    ));
+                "textarea" => {
+                    if node.has_attribute("disabled") {
+                        return;
+                    }
+                    if let Some(name) = node.attribute("name").filter(|name| !name.is_empty()) {
+                        entries.push((
+                            name.to_owned(),
+                            normalize_form_newlines(&node.text_content()),
+                        ));
+                    }
                 }
+                "select" => collect_select_entries(node, entries),
+                _ => {}
             }
-            "select" => collect_select_entries(node, entries),
-            _ => {}
         }
     }
 
+    let disabled_fieldset = node.tag_name() == Some("fieldset")
+        && node.has_attribute("disabled");
+    let mut first_legend_seen = false;
     for child in node.children() {
-        collect_form_entries(child, entries);
+        // HTML exempts descendants of a disabled fieldset's first direct legend.
+        // Other descendants are disabled, even if they don't carry a disabled
+        // attribute themselves.
+        let is_first_legend = disabled_fieldset
+            && child.tag_name() == Some("legend")
+            && !first_legend_seen;
+        if child.tag_name() == Some("legend") {
+            first_legend_seen = true;
+        }
+        let child_disabled = disabled_by_fieldset || (disabled_fieldset && !is_first_legend);
+        collect_form_entries_with_disabled_fieldset(child, entries, child_disabled);
     }
 }
 
@@ -600,6 +623,20 @@ mod tests {
                 }
             )
         }));
+    }
+
+    #[test]
+    fn disabled_fieldset_excludes_controls_except_first_legend() {
+        let page = Page::from_html_at(
+            Some(Url::parse("https://example.org/").unwrap()),
+            r#"<form><fieldset disabled><input name="outside" value="no"><legend><input name="legend" value="yes"></legend><input name="after" value="no"></fieldset></form>"#,
+            "",
+            LayoutViewport::new(320, 200),
+        );
+        let form = page.document.find_first_element("form").unwrap();
+
+        let submission = page.form_submission(form).unwrap();
+        assert_eq!(submission.url.query(), Some("legend=yes"));
     }
 
     #[test]
