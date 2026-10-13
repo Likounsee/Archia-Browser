@@ -430,6 +430,14 @@ struct FormOption {
 }
 
 fn collect_options(node: &Node, options: &mut Vec<FormOption>) {
+    collect_options_with_disabled_ancestor(node, false, options);
+}
+
+fn collect_options_with_disabled_ancestor(
+    node: &Node,
+    disabled_ancestor: bool,
+    options: &mut Vec<FormOption>,
+) {
     for child in node.children() {
         if child.tag_name() == Some("option") {
             options.push(FormOption {
@@ -438,10 +446,15 @@ fn collect_options(node: &Node, options: &mut Vec<FormOption>) {
                     .map(str::to_owned)
                     .unwrap_or_else(|| child.text_content()),
                 selected: child.has_attribute("selected"),
-                disabled: child.has_attribute("disabled"),
+                disabled: disabled_ancestor || child.has_attribute("disabled"),
             });
         } else {
-            collect_options(child, options);
+            // A disabled optgroup disables all of its option descendants.
+            // Propagate this only through optgroups, not arbitrary disabled
+            // containers, so unrelated markup cannot suppress form controls.
+            let child_disabled = disabled_ancestor
+                || (child.tag_name() == Some("optgroup") && child.has_attribute("disabled"));
+            collect_options_with_disabled_ancestor(child, child_disabled, options);
         }
     }
 }
@@ -582,6 +595,20 @@ mod tests {
                 }
             )
         }));
+    }
+
+    #[test]
+    fn select_ignores_options_inside_disabled_optgroups() {
+        let page = Page::from_html_at(
+            Some(Url::parse("https://example.org/").unwrap()),
+            r#"<form><select name="color"><optgroup disabled><option selected value="red">Red</option></optgroup><option value="blue">Blue</option></select></form>"#,
+            "",
+            LayoutViewport::new(320, 200),
+        );
+        let form = page.document.find_first_element("form").unwrap();
+
+        let submission = page.form_submission(form).unwrap();
+        assert_eq!(submission.url.query(), Some("color=blue"));
     }
 
     #[test]
