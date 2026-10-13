@@ -934,7 +934,9 @@ mod tests {
         );
         assert_eq!(browser.history().len(), 2);
         assert_eq!(
-            browser.current_page().and_then(crate::document::Page::title),
+            browser
+                .current_page()
+                .and_then(crate::document::Page::title),
             before_title
         );
         assert!(browser.history().can_go_forward());
