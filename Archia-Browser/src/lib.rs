@@ -171,10 +171,7 @@ impl Browser {
 
     /// Begin a navigation transaction for the active tab. Frontends that load
     /// asynchronously should retain this token and commit with the same token.
-    pub fn begin_navigation(
-        &mut self,
-        url: net::Url,
-    ) -> Option<core::tabs::NavigationToken> {
+    pub fn begin_navigation(&mut self, url: net::Url) -> Option<core::tabs::NavigationToken> {
         self.tabs.active_tab_mut()?.begin_navigation(url)
     }
 
@@ -221,7 +218,6 @@ impl Browser {
         }
         Ok(page)
     }
-
 
     pub fn reload<P, T>(
         &mut self,
@@ -271,7 +267,6 @@ impl Browser {
         .with_shared_memory_budget(Arc::clone(&self.memory));
         self.load_request(&loader, &request, viewport)
     }
-
 
     /// Load and transactionally commit a request. Failure leaves the displayed
     /// document and history cursor unchanged.
