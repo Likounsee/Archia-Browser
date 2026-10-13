@@ -2629,8 +2629,8 @@ mod tests {
 
     #[test]
     fn rejects_mismatched_mixed_case_host_before_opening_a_socket() {
-        use std::net::TcpListener;
         use std::io::ErrorKind;
+        use std::net::TcpListener;
 
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         listener.set_nonblocking(true).unwrap();
@@ -2648,10 +2648,12 @@ mod tests {
             Err(TransportError::InvalidRequest)
         );
         assert!(
-            matches!(listener.accept(), Err(ref error) if error.kind() == ErrorKind::WouldBlock),
+            matches!(
+                listener.accept(),
+                Err(ref error) if error.kind() == ErrorKind::WouldBlock
+            ),
             "an invalid Host header must be rejected before a TCP connection is opened"
         );
-
     }
 
     #[test]
