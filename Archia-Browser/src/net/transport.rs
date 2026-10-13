@@ -2628,6 +2628,36 @@ mod tests {
     }
 
     #[test]
+    fn rejects_mismatched_mixed_case_host_before_opening_a_socket() {
+        use std::net::{TcpListener, TcpStream};
+        use std::io::ErrorKind;
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let address = listener.local_addr().unwrap();
+        let url = Url::parse(&format!("http://127.0.0.1:{}/", address.port())).unwrap();
+        let mut request = Request::new(url);
+        // Public headers can bypass builder normalization, so validation must
+        // compare Host case-insensitively before the transport connects.
+        request
+            .headers
+            .insert("hOsT".to_owned(), "attacker.example".to_owned());
+
+        assert_eq!(
+            HttpTransport::new().send(&request),
+            Err(TransportError::InvalidRequest)
+        );
+        assert!(
+            matches!(listener.accept(), Err(ref error) if error.kind() == ErrorKind::WouldBlock),
+            "an invalid Host header must be rejected before a TCP connection is opened"
+        );
+
+        // Keep the type referenced explicitly to make it clear this test checks
+        // that no accepted socket exists, rather than merely checking an error.
+        let _: Option<TcpStream> = None;
+    }
+
+    #[test]
     fn rejects_non_http_schemes_before_connecting() {
         let transport = HttpTransport::new();
         let request = Request::new(Url::parse("ftp://example.org/file").unwrap());
