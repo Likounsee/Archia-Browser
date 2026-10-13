@@ -257,6 +257,35 @@ mod tests {
     }
 
     #[test]
+    fn top_level_navigation_flag_cannot_exempt_non_document_resources() {
+        #[derive(Debug, Default)]
+        struct AllowAll;
+
+        impl RequestPolicyEngine for AllowAll {
+            fn decide(&self, _: &Request) -> PolicyDecision {
+                PolicyDecision::Allow
+            }
+        }
+
+        let pipeline = NetworkPipeline::new(AllowAll);
+        let mut request = Request::new(
+            super::super::Url::parse("http://cdn.example/script.js").unwrap(),
+        );
+        request.policy = RequestPolicy {
+            resource_kind: ResourceKind::Script,
+            first_party: Some(super::super::Url::parse("https://example.org/page").unwrap()),
+            top_level_navigation: true,
+            ..RequestPolicy::default()
+        };
+
+        assert_eq!(
+            pipeline.check_policy(&request),
+            Err(TransportError::BlockedByPolicy),
+            "the navigation exemption must never permit cleartext active subresources"
+        );
+    }
+
+    #[test]
     fn mixed_content_guard_blocks_http_embedded_documents() {
         #[derive(Debug, Default)]
         struct AllowAll;
