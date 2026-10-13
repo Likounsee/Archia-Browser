@@ -47,7 +47,10 @@ impl HtmlTokenizer {
                     .map_or(input.len(), |offset| cursor + offset);
                 let text = &input[cursor..end];
                 if !text.is_empty() {
-                    if !try_push_token(&mut tokens, HtmlToken::Text(decode_character_references(text))) {
+                    if !try_push_token(
+                        &mut tokens,
+                        HtmlToken::Text(decode_character_references(text)),
+                    ) {
                         return tokens;
                     }
                 }
@@ -58,14 +61,20 @@ impl HtmlTokenizer {
             if input[cursor..].starts_with("<!--") {
                 if let Some(offset) = input[cursor + 4..].find("-->") {
                     let end = cursor + 4 + offset;
-                    if !try_push_token(&mut tokens, HtmlToken::Comment(input[cursor + 4..end].to_owned())) {
+                    if !try_push_token(
+                        &mut tokens,
+                        HtmlToken::Comment(input[cursor + 4..end].to_owned()),
+                    ) {
                         return tokens;
                     }
                     cursor = end + 3;
                     continue;
                 }
 
-                if !try_push_token(&mut tokens, HtmlToken::Comment(input[cursor + 4..].to_owned())) {
+                if !try_push_token(
+                    &mut tokens,
+                    HtmlToken::Comment(input[cursor + 4..].to_owned()),
+                ) {
                     return tokens;
                 }
                 break;
@@ -87,7 +96,10 @@ impl HtmlTokenizer {
                 .get(..8)
                 .is_some_and(|prefix| prefix.eq_ignore_ascii_case("!doctype"))
             {
-                if !try_push_token(&mut tokens, HtmlToken::Doctype(inside[8..].trim().to_owned())) {
+                if !try_push_token(
+                    &mut tokens,
+                    HtmlToken::Doctype(inside[8..].trim().to_owned()),
+                ) {
                     return tokens;
                 }
             } else if let Some(name) = inside.strip_prefix('/') {
@@ -115,7 +127,10 @@ impl HtmlTokenizer {
                 if is_raw_text && !self_closing {
                     if let Some((text_end, close_end)) = find_raw_text_end(input, end + 1, &name) {
                         if text_end > end + 1 && tokens.len() < MAX_HTML_TOKENS {
-                            if !try_push_token(&mut tokens, HtmlToken::Text(input[end + 1..text_end].to_owned())) {
+                            if !try_push_token(
+                                &mut tokens,
+                                HtmlToken::Text(input[end + 1..text_end].to_owned()),
+                            ) {
                                 return tokens;
                             }
                         }
@@ -128,7 +143,10 @@ impl HtmlTokenizer {
                     // as markup can create a parser differential on malformed
                     // or attacker-controlled documents.
                     if end + 1 < input.len() && tokens.len() < MAX_HTML_TOKENS {
-                        if !try_push_token(&mut tokens, HtmlToken::Text(input[end + 1..].to_owned())) {
+                        if !try_push_token(
+                            &mut tokens,
+                            HtmlToken::Text(input[end + 1..].to_owned()),
+                        ) {
                             return tokens;
                         }
                     }
@@ -140,7 +158,6 @@ impl HtmlTokenizer {
         tokens
     }
 }
-
 
 /// Retain a token only when its storage can grow without an infallible Vec
 /// allocation. Token payload construction may itself allocate; input and
