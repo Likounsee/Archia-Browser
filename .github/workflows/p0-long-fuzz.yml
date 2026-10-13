@@ -48,10 +48,11 @@ jobs:
       - name: Fuzz target for 3.5 hours
         run: cargo +nightly fuzz run "${{ matrix.target }}" -- -max_total_time=12600 -timeout=10 -rss_limit_mb=4096 -print_final_stats=1
         working-directory: fuzz
-      - name: Upload crashing fuzz inputs
-        if: failure()
+      - name: Preserve fuzz artifacts and crash inputs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: archia-browser-p0-fuzz-${{ matrix.target }}
-          path: fuzz/artifacts/${{ matrix.target }}/
+          path: fuzz/artifacts/
           if-no-files-found: ignore
+          retention-days: 14
