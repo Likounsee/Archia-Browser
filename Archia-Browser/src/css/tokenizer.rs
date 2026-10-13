@@ -16,6 +16,7 @@ pub enum CssToken {
 
 const MAX_CSS_INPUT_BYTES: usize = 1024 * 1024;
 const MAX_CSS_TOKENS: usize = 100_000;
+const MAX_CSS_TOKEN_TEXT_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Default)]
 pub struct CssTokenizer;
@@ -36,6 +37,13 @@ impl CssTokenizer {
         };
         let mut tokens = Vec::new();
         let mut chars = input.chars().peekable();
+        macro_rules! push_token {
+            ($token:expr) => {{
+                if !try_push_css_token(&mut tokens, $token) {
+                    return tokens;
+                }
+            }};
+        }
 
         while tokens.len() < MAX_CSS_TOKENS {
             let Some(ch) = chars.next() else {
@@ -60,24 +68,25 @@ impl CssTokenizer {
             match ch {
                 c if c.is_whitespace() => {
                     if !matches!(tokens.last(), Some(CssToken::Whitespace)) {
-                        tokens.push(CssToken::Whitespace);
+                        push_token!(CssToken::Whitespace);
                     }
                 }
-                ':' => tokens.push(CssToken::Colon),
-                ';' => tokens.push(CssToken::Semicolon),
-                '{' => tokens.push(CssToken::LeftBrace),
-                '}' => tokens.push(CssToken::RightBrace),
-                '(' => tokens.push(CssToken::LeftParen),
-                ')' => tokens.push(CssToken::RightParen),
+                ':' => push_token!(CssToken::Colon),
+                ';' => push_token!(CssToken::Semicolon),
+                '{' => push_token!(CssToken::LeftBrace),
+                '}' => push_token!(CssToken::RightBrace),
+                '(' => push_token!(CssToken::LeftParen),
+                ')' => push_token!(CssToken::RightParen),
                 '#' => {
                     let starts_hash = chars.peek().copied().is_some_and(|next| {
                         is_name_code_point(next) || next == '\\' && starts_valid_escape(&chars)
                     });
                     if starts_hash {
                         let value = consume_ident(&mut chars);
-                        tokens.push(CssToken::Hash(value));
+                        if value.len() > MAX_CSS_TOKEN_TEXT_BYTES { return tokens; }
+                        push_token!(CssToken::Hash(value));
                     } else {
-                        tokens.push(CssToken::Delim('#'));
+                        push_token!(CssToken::Delim('#'));
                     }
                 }
                 '"' | '\'' => {
@@ -106,7 +115,8 @@ impl CssTokenizer {
                             value.push(next);
                         }
                     }
-                    tokens.push(CssToken::String(value));
+                    if value.len() > MAX_CSS_TOKEN_TEXT_BYTES { return tokens; }
+                    push_token!(CssToken::String(value));
                 }
                 c if c.is_ascii_digit()
                     || c == '.' && chars.peek().is_some_and(|n| n.is_ascii_digit()) =>
@@ -120,29 +130,42 @@ impl CssTokenizer {
                             break;
                         }
                     }
-                    tokens.push(CssToken::Number(value));
+                    if value.len() > MAX_CSS_TOKEN_TEXT_BYTES { return tokens; }
+                    push_token!(CssToken::Number(value));
                 }
                 c if is_ident_start(c) => {
                     let mut value = String::from(c);
                     value.push_str(&consume_ident(&mut chars));
-                    tokens.push(CssToken::Ident(value));
+                    if value.len() > MAX_CSS_TOKEN_TEXT_BYTES { return tokens; }
+                    push_token!(CssToken::Ident(value));
                 }
                 '\\' if chars.peek().is_some_and(|next| !is_css_newline(*next)) => {
                     if let Some(escaped) = consume_escape(&mut chars) {
                         let mut value = String::new();
                         value.push(escaped);
                         value.push_str(&consume_ident(&mut chars));
-                        tokens.push(CssToken::Ident(value));
+                        if value.len() > MAX_CSS_TOKEN_TEXT_BYTES { return tokens; }
+                        push_token!(CssToken::Ident(value));
                     } else {
-                        tokens.push(CssToken::Delim('\\'));
+                        push_token!(CssToken::Delim('\\'));
                     }
                 }
-                c => tokens.push(CssToken::Delim(c)),
+                c => push_token!(CssToken::Delim(c)),
             }
         }
 
         tokens
     }
+}
+
+/// Append only after the token vector has obtained capacity; on failure the caller
+/// can retain the already-tokenized prefix.
+fn try_push_css_token(tokens: &mut Vec<CssToken>, token: CssToken) -> bool {
+    if tokens.len() >= MAX_CSS_TOKENS || tokens.try_reserve(1).is_err() {
+        return false;
+    }
+    tokens.push(token);
+    true
 }
 
 fn is_ident_start(c: char) -> bool {

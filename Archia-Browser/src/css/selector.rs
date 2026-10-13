@@ -1,5 +1,7 @@
 use crate::html::{Node, NodeKind};
 
+const MAX_SELECTOR_INPUT_BYTES: usize = 4 * 1024;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Specificity {
     pub ids: u32,
@@ -80,7 +82,13 @@ pub struct Selector {
 
 impl Selector {
     pub fn parse(input: &str) -> Option<Self> {
-        let chars: Vec<char> = input.trim().chars().collect();
+        let input = input.trim();
+        if input.len() > MAX_SELECTOR_INPUT_BYTES {
+            return None;
+        }
+        let mut chars = Vec::new();
+        chars.try_reserve(input.chars().count()).ok()?;
+        chars.extend(input.chars());
         if chars.is_empty() {
             return None;
         }
@@ -156,6 +164,7 @@ impl Selector {
             }
 
             let simple = parse_simple(&chars[start..i])?;
+            parts.try_reserve(1).ok()?;
             parts.push((pending.take(), simple));
             had_space = false;
         }
@@ -926,6 +935,12 @@ mod tests {
             attributes.insert("lang".into(), "en-US".into());
         }
         node
+    }
+
+    #[test]
+    fn rejects_oversized_direct_selector_inputs_before_allocating_parts() {
+        let input = "a".repeat(MAX_SELECTOR_INPUT_BYTES + 1);
+        assert!(Selector::parse(&input).is_none());
     }
 
     #[test]

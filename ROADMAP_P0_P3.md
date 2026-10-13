@@ -175,3 +175,10 @@ Le parseur réserve la capacité nécessaire au rattachement d'un sous-arbre ava
 - [TEST AJOUTÉ] Vérification de la structure normalisée et de la conservation de l'ordre des contenus avant/après un élément `html` explicite.
 - [NON VALIDÉ] Injection d'échec de l'allocateur global : aucune injection portable n'est actuellement disponible dans les tests ordinaires.
 - [OUVERT] Les maps d'attributs `BTreeMap`, les allocations de chaînes, CSS, layout, réseau, cache et display list ne sont pas toutes faillibles ou intégrées au même budget. Cette tranche ne clôt pas P0-MEM-11.
+
+
+## Mise à jour — catégorie parsing HTML/CSS (P0-MEM-11)
+
+La tranche de parsing HTML/CSS regroupe maintenant la croissance faillible des vecteurs de tokens CSS, déclarations, blocs, sélecteurs, règles et résultats de correspondance, les plafonds d'entrée/complexité des sélecteurs directs, les tests de régression et la correction des avertissements Clippy découverts par CI. Le parseur HTML et son tokenizer sont aussi remis au niveau Clippy strict pour que cette catégorie soit validable dans la même livraison.
+
+Statut : implémentation intégrée dans le candidat de commit, validation CI en cours. Ne pas considérer P0-MEM-11 comme fermé : les allocations internes des chaînes et maps ainsi que les arbres de style/layout/rendu et le suivi exact au budget partagé restent hors de cette tranche.

@@ -66,3 +66,12 @@ La normalisation DOM préalloue ses destinations et buffers temporaires avant de
 Le tokenizer HTML réserve désormais la capacité avant chaque ajout à son vecteur de tokens. Si la croissance du vecteur échoue, il rend les tokens déjà produits au lieu de paniquer ou de continuer à consommer l'entrée. Les plafonds existants sur l'entrée, le nombre de tokens, les attributs, les noms et les valeurs restent actifs. Un test de régression vérifie aussi que les sections head/body répétées ne perdent pas leur contenu lors de la normalisation.
 
 Limites : les allocations internes des chaînes, du BTreeMap d'attributs, du décodage des références, des arbres CSS/layout et d'autres buffers ne sont pas toutes faillibles ni imputées exactement au budget partagé. Rust ne fournit pas d'injection portable d'échec de l'allocateur global dans les tests ordinaires. P0-MEM-11 demeure ouvert ; cette tranche couvre la croissance de deux vecteurs HTML critiques, pas l'intégralité des allocations du navigateur.
+
+
+## Tranche parser CSS — limites de complexité et croissance faillible
+
+Le tokenizer CSS réserve maintenant la capacité avant chaque ajout de token et renvoie le préfixe déjà tokenisé si la réservation échoue. Les charges textuelles des tokens, le nombre de tokens, la taille d'entrée et le nombre de déclarations sont plafonnés. Le parseur de déclarations réserve les entrées avant insertion et s'arrête proprement lorsque les limites sont atteintes.
+
+Le parsing des feuilles de style contrôle également la croissance des vecteurs de blocs, sélecteurs, règles et résultats de correspondance. L'entrée publique de parsing de sélecteurs est bornée avant la création du tableau de caractères et la croissance du vecteur principal est pré-réservée. Les tests couvrent la limite des sélecteurs directs et les plafonds existants de tokens, règles et sélecteurs.
+
+La CI précédente a confirmé 720 tests et la compilation réussis sur les trois systèmes, mais a échoué sur Clippy à cause de conditions imbriquées et d'une signature `&mut Vec` non nécessaire dans le parseur HTML. Ces avertissements sont corrigés dans le même lot. Cette tranche ne prétend pas rendre toutes les allocations de chaînes, maps et calcul de styles faillibles : elle couvre les principaux vecteurs de tokenisation/parsing et garde P0-MEM-11 ouvert jusqu'à la couverture complète des structures calculées et du budget partagé.

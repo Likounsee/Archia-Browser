@@ -46,13 +46,13 @@ impl HtmlTokenizer {
                     .find('<')
                     .map_or(input.len(), |offset| cursor + offset);
                 let text = &input[cursor..end];
-                if !text.is_empty() {
-                    if !try_push_token(
+                if !text.is_empty()
+                    && !try_push_token(
                         &mut tokens,
                         HtmlToken::Text(decode_character_references(text)),
-                    ) {
-                        return tokens;
-                    }
+                    )
+                {
+                    return tokens;
                 }
                 cursor = end;
                 continue;
@@ -106,10 +106,10 @@ impl HtmlTokenizer {
                 // Keep closing-tag work bounded too; otherwise oversized names
                 // bypass the start-tag cap and are retained as large tokens.
                 let name = name.trim();
-                if name.len() <= MAX_HTML_TAG_NAME_BYTES {
-                    if !try_push_token(&mut tokens, HtmlToken::EndTag(name.to_ascii_lowercase())) {
-                        return tokens;
-                    }
+                if name.len() <= MAX_HTML_TAG_NAME_BYTES
+                    && !try_push_token(&mut tokens, HtmlToken::EndTag(name.to_ascii_lowercase()))
+                {
+                    return tokens;
                 }
             } else if let Some((name, attributes, self_closing)) = parse_start_tag(inside) {
                 let is_raw_text = matches!(name.as_str(), "script" | "style");
@@ -126,13 +126,14 @@ impl HtmlTokenizer {
 
                 if is_raw_text && !self_closing {
                     if let Some((text_end, close_end)) = find_raw_text_end(input, end + 1, &name) {
-                        if text_end > end + 1 && tokens.len() < MAX_HTML_TOKENS {
-                            if !try_push_token(
+                        if text_end > end + 1
+                            && tokens.len() < MAX_HTML_TOKENS
+                            && !try_push_token(
                                 &mut tokens,
                                 HtmlToken::Text(input[end + 1..text_end].to_owned()),
-                            ) {
-                                return tokens;
-                            }
+                            )
+                        {
+                            return tokens;
                         }
                         cursor = close_end;
                         continue;
@@ -142,13 +143,14 @@ impl HtmlTokenizer {
                     // the closing tag is missing. Re-tokenizing the remainder
                     // as markup can create a parser differential on malformed
                     // or attacker-controlled documents.
-                    if end + 1 < input.len() && tokens.len() < MAX_HTML_TOKENS {
-                        if !try_push_token(
+                    if end + 1 < input.len()
+                        && tokens.len() < MAX_HTML_TOKENS
+                        && !try_push_token(
                             &mut tokens,
                             HtmlToken::Text(input[end + 1..].to_owned()),
-                        ) {
-                            return tokens;
-                        }
+                        )
+                    {
+                        return tokens;
                     }
                     break;
                 }

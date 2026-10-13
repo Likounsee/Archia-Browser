@@ -47,21 +47,32 @@ impl StyleSheet {
                 continue;
             }
 
-            let selectors = split_selector_list(
+            let selector_texts = split_selector_list(
                 &selector_text,
                 MAX_SELECTORS_PER_RULE.min(MAX_TOTAL_SELECTORS - total_selectors),
-            )
-            .into_iter()
-            .filter(|selector| selector.len() <= MAX_SELECTOR_BYTES)
-            .filter_map(|selector| Selector::parse(&selector))
-            .filter(|selector| selector.parts.len() <= MAX_SELECTOR_PARTS)
-            .collect::<Vec<_>>();
+            );
+            let mut selectors = Vec::new();
+            for selector_text in selector_texts {
+                if selector_text.len() > MAX_SELECTOR_BYTES {
+                    continue;
+                }
+                let Some(selector) = Selector::parse(&selector_text) else {
+                    continue;
+                };
+                if selector.parts.len() > MAX_SELECTOR_PARTS || selectors.try_reserve(1).is_err() {
+                    continue;
+                }
+                selectors.push(selector);
+            }
             if selectors.is_empty() {
                 continue;
             }
             total_selectors += selectors.len();
 
             let declarations = parse_declarations(&CssTokenizer::tokenize(&declaration_text));
+            if rules.try_reserve(1).is_err() {
+                break;
+            }
             rules.push(StyleRule {
                 selectors,
                 declarations,
@@ -93,6 +104,9 @@ impl StyleSheet {
                 }
             });
             if let Some(specificity) = matching.map(Selector::specificity).max() {
+                if matches.try_reserve(1).is_err() {
+                    return matches;
+                }
                 matches.push((rule, specificity));
             }
         }
@@ -114,6 +128,9 @@ impl StyleSheet {
                 }
             });
             if let Some(specificity) = matching.map(Selector::specificity).max() {
+                if matches.try_reserve(1).is_err() {
+                    return matches;
+                }
                 matches.push((rule, specificity));
             }
         }
@@ -246,6 +263,9 @@ impl StyleSheet {
 /// Scan only top-level qualified rules. Unlike splitting on braces, this respects
 /// comments, quoted strings, escaped characters and nested delimiters.
 fn parse_rule_blocks(input: &str, max_blocks: usize) -> Vec<(String, String)> {
+    if max_blocks == 0 {
+        return Vec::new();
+    }
     let mut blocks = Vec::new();
     let mut prelude = String::new();
     let mut body = String::new();
@@ -317,6 +337,9 @@ fn parse_rule_blocks(input: &str, max_blocks: usize) -> Vec<(String, String)> {
                 if brace_depth == 0 {
                     let selector = prelude.trim().to_owned();
                     if !selector.is_empty() {
+                        if blocks.try_reserve(1).is_err() {
+                            return blocks;
+                        }
                         blocks.push((selector, std::mem::take(&mut body)));
                         if blocks.len() >= max_blocks {
                             return blocks;
@@ -380,6 +403,9 @@ fn split_selector_list(input: &str, max_selectors: usize) -> Vec<String> {
             ',' if paren_depth == 0 && bracket_depth == 0 => {
                 let selector = current.trim();
                 if !selector.is_empty() {
+                    if selectors.try_reserve(1).is_err() {
+                        return selectors;
+                    }
                     selectors.push(selector.to_owned());
                     if selectors.len() >= max_selectors {
                         return selectors;
@@ -394,6 +420,9 @@ fn split_selector_list(input: &str, max_selectors: usize) -> Vec<String> {
     }
     let selector = current.trim();
     if !selector.is_empty() && selectors.len() < max_selectors {
+        if selectors.try_reserve(1).is_err() {
+            return selectors;
+        }
         selectors.push(selector.to_owned());
     }
     selectors

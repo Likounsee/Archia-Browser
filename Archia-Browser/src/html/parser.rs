@@ -159,15 +159,15 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // Once saturated, discard each new subtree without allocating a Node
                 // or cloning its attributes; matching end tags recover below.
                 if created_nodes >= MAX_DOM_NODES {
-                    if !VOID_ELEMENTS.contains(&name.as_str()) {
-                        if !push_suppressed(
+                    if !VOID_ELEMENTS.contains(&name.as_str())
+                        && !push_suppressed(
                             &mut suppressed_stack,
                             &mut suppressed_positions,
                             name,
                             0,
-                        ) {
-                            break;
-                        }
+                        )
+                    {
+                        break;
                     }
                     continue;
                 }
@@ -291,7 +291,7 @@ fn append_node(root: &mut Node, stack: &mut [Node], node: Node) -> bool {
     result.is_ok()
 }
 
-fn append_node_owned(root: &mut Node, stack: &mut Vec<Node>, node: Node) -> Result<(), Node> {
+fn append_node_owned(root: &mut Node, stack: &mut [Node], node: Node) -> Result<(), Node> {
     if let Some(parent) = stack.last_mut() {
         parent.try_append(node)
     } else {

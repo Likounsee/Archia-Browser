@@ -1,11 +1,14 @@
 use super::style::Property;
 use super::tokenizer::CssToken;
 
+const MAX_CSS_DECLARATIONS: usize = 4_096;
+const MAX_CSS_DECLARATION_VALUE_BYTES: usize = 64 * 1024;
+
 pub fn parse_declarations(tokens: &[CssToken]) -> Vec<Property> {
     let mut properties = Vec::new();
     let mut index = 0;
 
-    while index < tokens.len() {
+    while index < tokens.len() && properties.len() < MAX_CSS_DECLARATIONS {
         while matches!(
             tokens.get(index),
             Some(CssToken::Whitespace | CssToken::Semicolon)
@@ -50,6 +53,9 @@ pub fn parse_declarations(tokens: &[CssToken]) -> Vec<Property> {
             index += 1;
         }
 
+        if value.len() > MAX_CSS_DECLARATION_VALUE_BYTES || properties.try_reserve(1).is_err() {
+            return properties;
+        }
         properties.push(Property {
             name,
             value: value.trim().to_owned(),
