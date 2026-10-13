@@ -162,3 +162,8 @@ La tranche la plus récente ajoute `Node::try_append` et l'utilise dans le parse
 ### P0-MEM-11 — parser et mutations DOM
 
 Les chemins auxiliaires du parseur HTML réservent désormais la capacité avant d'agrandir les piles et index utilisés pour ignorer les sous-arbres. La fermeture d'éléments réserve la mémoire temporaire avant de dépiler les nœuds. `Node::insert_child` utilise également une croissance fallible. Les chemins de normalisation, les allocations d'attributs et la comptabilité commune CSS/layout restent à couvrir ; la catégorie n'est pas clôturée.
+
+
+### P0-MEM-11 — préservation des nœuds lors d'un échec de fermeture
+
+Le parseur réserve la capacité nécessaire au rattachement d'un sous-arbre avant de dépiler et recomposer les nœuds. En cas d'échec, il restaure la pile ou conserve le sous-arbre sur celle-ci au lieu d'ignorer le résultat d'un ajout faillible. Les allocations temporaires de normalisation et les conteneurs DOM/CSS/layout restent à auditer.

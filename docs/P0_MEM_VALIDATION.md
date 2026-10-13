@@ -51,3 +51,10 @@ Cette tranche ne rend pas toutes les allocations DOM faillibles : la normalisati
 Le suivi des sous-arbres ignorés (limite de profondeur/nœuds) réserve explicitement la capacité de la pile et de l'index `HashMap`/vecteurs avant de les modifier. Si une réservation échoue, le parseur arrête le traitement des tokens restants. La fermeture des balises réserve sa pile temporaire avant de dépiler le moindre nœud : un échec laisse la pile originale intacte. `Node::insert_child` réserve aussi avant l'insertion.
 
 Limite restante : la normalisation du document, les copies de chaînes/attributs et les allocations des arbres CSS/layout ne sont pas toutes contrôlées par un budget global ni entièrement fallibles. Cette tranche renforce la résistance à l'échec d'allocation, mais ne clôt pas P0-MEM-11.
+
+
+## Tranche de récupération — fermeture de balises sans perte silencieuse
+
+La fermeture d'une balise réserve désormais la capacité du parent pour tous les enfants détachés avant de modifier le sous-arbre. Si cette réservation échoue, les nœuds sont remis sur la pile d'éléments ouverts dans leur ordre d'origine. Si l'ajout au parent final échoue, le nœud est conservé sur cette pile pour la finalisation plutôt que d'être abandonné.
+
+Cette mesure limite la perte de contenu lors d'une pression mémoire, mais ne transforme pas toutes les allocations de normalisation en opérations faillibles et ne remplace pas l'instrumentation globale du DOM/CSS/layout. P0-MEM-11 reste ouvert.

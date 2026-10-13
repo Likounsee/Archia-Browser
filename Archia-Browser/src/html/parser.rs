@@ -296,6 +296,14 @@ fn append_node(root: &mut Node, stack: &mut [Node], node: Node) -> bool {
     result.is_ok()
 }
 
+fn append_node_owned(root: &mut Node, stack: &mut Vec<Node>, node: Node) -> Result<(), Node> {
+    if let Some(parent) = stack.last_mut() {
+        parent.try_append(node)
+    } else {
+        root.try_append(node)
+    }
+}
+
 fn has_open(stack: &[Node], name: &str) -> bool {
     stack.iter().any(|node| node.tag_name() == Some(name))
 }
@@ -349,10 +357,24 @@ fn close_element(root: &mut Node, stack: &mut Vec<Node>, name: &str) {
         // input must never turn an internal invariant violation into a panic.
         return;
     };
-    while let Some(node) = completed.pop() {
-        matching.append(node);
+
+    // Reserve all child slots before changing the detached subtree. If this
+    // fails, restore the original open-element stack in its original order.
+    if matching.children.try_reserve(completed.len()).is_err() {
+        stack.push(matching);
+        stack.extend(completed.into_iter().rev());
+        return;
     }
-    let _ = append_node(root, stack, matching);
+    while let Some(node) = completed.pop() {
+        // The capacity was reserved above, so this path cannot need to grow.
+        matching.children.push(node);
+    }
+
+    if let Err(node) = append_node_owned(root, stack, matching) {
+        // Keep the node alive and available for finalization if the destination
+        // parent cannot grow. The parser's stack retains its previous capacity.
+        stack.push(node);
+    }
 }
 
 fn normalize_document_structure(mut root: Node) -> Node {
