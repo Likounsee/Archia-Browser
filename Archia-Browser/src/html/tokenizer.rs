@@ -47,7 +47,9 @@ impl HtmlTokenizer {
                     .map_or(input.len(), |offset| cursor + offset);
                 let text = &input[cursor..end];
                 if !text.is_empty() {
-                    tokens.push(HtmlToken::Text(decode_character_references(text)));
+                    if !try_push_token(&mut tokens, HtmlToken::Text(decode_character_references(text))) {
+                        return tokens;
+                    }
                 }
                 cursor = end;
                 continue;
@@ -56,17 +58,23 @@ impl HtmlTokenizer {
             if input[cursor..].starts_with("<!--") {
                 if let Some(offset) = input[cursor + 4..].find("-->") {
                     let end = cursor + 4 + offset;
-                    tokens.push(HtmlToken::Comment(input[cursor + 4..end].to_owned()));
+                    if !try_push_token(&mut tokens, HtmlToken::Comment(input[cursor + 4..end].to_owned())) {
+                        return tokens;
+                    }
                     cursor = end + 3;
                     continue;
                 }
 
-                tokens.push(HtmlToken::Comment(input[cursor + 4..].to_owned()));
+                if !try_push_token(&mut tokens, HtmlToken::Comment(input[cursor + 4..].to_owned())) {
+                    return tokens;
+                }
                 break;
             }
 
             let Some(offset) = find_tag_end(&input[cursor..]) else {
-                tokens.push(HtmlToken::Text(input[cursor..].to_owned()));
+                if !try_push_token(&mut tokens, HtmlToken::Text(input[cursor..].to_owned())) {
+                    return tokens;
+                }
                 break;
             };
             let end = cursor + offset;
@@ -79,26 +87,37 @@ impl HtmlTokenizer {
                 .get(..8)
                 .is_some_and(|prefix| prefix.eq_ignore_ascii_case("!doctype"))
             {
-                tokens.push(HtmlToken::Doctype(inside[8..].trim().to_owned()));
+                if !try_push_token(&mut tokens, HtmlToken::Doctype(inside[8..].trim().to_owned())) {
+                    return tokens;
+                }
             } else if let Some(name) = inside.strip_prefix('/') {
                 // Keep closing-tag work bounded too; otherwise oversized names
                 // bypass the start-tag cap and are retained as large tokens.
                 let name = name.trim();
                 if name.len() <= MAX_HTML_TAG_NAME_BYTES {
-                    tokens.push(HtmlToken::EndTag(name.to_ascii_lowercase()));
+                    if !try_push_token(&mut tokens, HtmlToken::EndTag(name.to_ascii_lowercase())) {
+                        return tokens;
+                    }
                 }
             } else if let Some((name, attributes, self_closing)) = parse_start_tag(inside) {
                 let is_raw_text = matches!(name.as_str(), "script" | "style");
-                tokens.push(HtmlToken::StartTag {
-                    name: name.clone(),
-                    attributes,
-                    self_closing,
-                });
+                if !try_push_token(
+                    &mut tokens,
+                    HtmlToken::StartTag {
+                        name: name.clone(),
+                        attributes,
+                        self_closing,
+                    },
+                ) {
+                    return tokens;
+                }
 
                 if is_raw_text && !self_closing {
                     if let Some((text_end, close_end)) = find_raw_text_end(input, end + 1, &name) {
                         if text_end > end + 1 && tokens.len() < MAX_HTML_TOKENS {
-                            tokens.push(HtmlToken::Text(input[end + 1..text_end].to_owned()));
+                            if !try_push_token(&mut tokens, HtmlToken::Text(input[end + 1..text_end].to_owned())) {
+                                return tokens;
+                            }
                         }
                         cursor = close_end;
                         continue;
@@ -109,7 +128,9 @@ impl HtmlTokenizer {
                     // as markup can create a parser differential on malformed
                     // or attacker-controlled documents.
                     if end + 1 < input.len() && tokens.len() < MAX_HTML_TOKENS {
-                        tokens.push(HtmlToken::Text(input[end + 1..].to_owned()));
+                        if !try_push_token(&mut tokens, HtmlToken::Text(input[end + 1..].to_owned())) {
+                            return tokens;
+                        }
                     }
                     break;
                 }
@@ -118,6 +139,18 @@ impl HtmlTokenizer {
         }
         tokens
     }
+}
+
+
+/// Retain a token only when its storage can grow without an infallible Vec
+/// allocation. Token payload construction may itself allocate; input and
+/// per-token limits remain the independent bounds for those payloads.
+fn try_push_token(tokens: &mut Vec<HtmlToken>, token: HtmlToken) -> bool {
+    if tokens.len() >= MAX_HTML_TOKENS || tokens.try_reserve(1).is_err() {
+        return false;
+    }
+    tokens.push(token);
+    true
 }
 
 fn find_tag_end(input: &str) -> Option<usize> {

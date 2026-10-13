@@ -415,7 +415,9 @@ fn normalize_document_structure(mut root: Node) -> Node {
         .iter()
         .position(|node| node.tag_name() == Some("body"));
     let body_child_count = body_position.map_or(0, |position| {
-        root.children[html_position].children[position].children.len()
+        root.children[html_position].children[position]
+            .children
+            .len()
     });
     let Some(body_capacity) = root_child_count
         .saturating_sub(1)
@@ -432,7 +434,10 @@ fn normalize_document_structure(mut root: Node) -> Node {
         || preceding.try_reserve(body_capacity).is_err()
         || following.try_reserve(root_child_count).is_err()
         || body_extras.try_reserve(html_child_count).is_err()
-        || root.children[html_position].children.try_reserve(2).is_err()
+        || root.children[html_position]
+            .children
+            .try_reserve(2)
+            .is_err()
     {
         return root;
     }
@@ -462,7 +467,8 @@ fn normalize_document_structure(mut root: Node) -> Node {
     preceding.extend(following);
     body.children = preceding;
 
-    html.children.push(head.unwrap_or_else(|| Node::element("head")));
+    html.children
+        .push(head.unwrap_or_else(|| Node::element("head")));
     html.children.push(body);
     root.children.push(html);
     root
