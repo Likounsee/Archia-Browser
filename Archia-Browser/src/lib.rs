@@ -191,7 +191,7 @@ impl Browser {
         // The tab retains its own deep copy, so reserve its memory before
         // changing navigation state. A failed copy leaves the current page intact.
         let tab_page = page
-            .try_clone()
+            .try_clone_with_budget(Arc::clone(&self.memory))
             .ok_or(net::DocumentLoadError::MemoryBudgetExceeded)?;
         let entry = core::navigation::NavigationEntry::new(url.clone(), page.title());
         if !self
@@ -285,7 +285,7 @@ impl Browser {
             return false;
         };
         // Reserve the duplicate before mutating history or clearing the current page.
-        let Some(tab_page) = page.try_clone() else {
+        let Some(tab_page) = page.try_clone_with_budget(Arc::clone(&self.memory)) else {
             return false;
         };
 
