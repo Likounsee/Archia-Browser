@@ -1290,4 +1290,43 @@ mod tests {
         assert_eq!(browser.current_url(), None);
         assert_eq!(browser.tabs().len(), 1);
     }
+    #[test]
+    fn committing_unbudgeted_page_charges_and_releases_browser_memory() {
+        let mut browser = Browser::with_memory_limit(1024 * 1024);
+        let page = crate::document::Page::from_html_at(
+            Some(net::Url::parse("https://example.org/unbudgeted").unwrap()),
+            "<html><body><h1>Unbudgeted source</h1><p>Retained copy</p></body></html>",
+            "",
+            crate::layout::LayoutViewport::new(64, 32),
+        );
+
+        assert_eq!(browser.memory().used(), 0);
+        assert!(browser.commit_page(&page));
+        let charged = browser.memory().used();
+        assert!(charged > 0, "committed page copy must be budgeted");
+        assert!(browser.current_page().is_some());
+
+        browser.navigate(net::Url::parse("https://example.org/next").unwrap(), None);
+        assert!(browser.current_page().is_none());
+        assert_eq!(browser.memory().used(), 0, "clearing the tab must release its page charge");
+    }
+
+    #[test]
+    fn failed_unbudgeted_page_commit_leaves_navigation_unchanged() {
+        let mut browser = Browser::with_memory_limit(0);
+        let original_url = net::Url::parse("https://example.org/original").unwrap();
+        browser.navigate(original_url.clone(), None);
+        let page = crate::document::Page::from_html_at(
+            Some(net::Url::parse("https://example.org/new").unwrap()),
+            "<html><body><h1>Too large</h1></body></html>",
+            "",
+            crate::layout::LayoutViewport::new(64, 32),
+        );
+
+        assert!(!browser.commit_page(&page));
+        assert_eq!(browser.current_url(), Some(&original_url));
+        assert!(browser.current_page().is_none());
+        assert_eq!(browser.memory().used(), 0);
+    }
+
 }
