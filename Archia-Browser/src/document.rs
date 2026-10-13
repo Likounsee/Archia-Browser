@@ -508,6 +508,12 @@ fn append_query(url: &Url, encoded: &str) -> Result<Url, crate::net::UrlError> {
         target.push('?');
     }
     target.push_str(encoded);
+    // A GET form updates the query component, not the fragment. Preserve the
+    // fragment in the resulting navigation URL while keeping it after the query.
+    if let Some(fragment) = url.fragment() {
+        target.push('#');
+        target.push_str(fragment);
+    }
     Url::parse(&target)
 }
 
@@ -576,6 +582,23 @@ mod tests {
                 }
             )
         }));
+    }
+
+    #[test]
+    fn get_form_submission_preserves_existing_query_and_fragment() {
+        let page = Page::from_html_at(
+            Some(Url::parse("https://example.org/search").unwrap()),
+            r#"<form action="/find?existing=1#results" method="get"><input name="q" value="rust"></form>"#,
+            "",
+            LayoutViewport::new(320, 200),
+        );
+        let form = page.document.find_first_element("form").unwrap();
+
+        let submission = page.form_submission(form).unwrap();
+        assert_eq!(
+            submission.url.to_string(),
+            "https://example.org/find?existing=1&q=rust#results"
+        );
     }
 
     #[test]
