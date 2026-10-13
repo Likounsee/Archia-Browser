@@ -227,6 +227,30 @@ impl Page {
         bytes.max(1)
     }
 
+    /// Deep-copy a page while charging the retained copy to a specific budget.
+    ///
+    /// Unlike `try_clone`, this also accounts for pages created without a loader
+    /// reservation and for pages originating from a different browser budget.
+    pub(crate) fn try_clone_with_budget(
+        &self,
+        budget: Arc<crate::core::memory::MemoryBudget>,
+    ) -> Option<Self> {
+        let reservation = MemoryReservation::try_new(
+            budget,
+            self.retained_structure_estimate(),
+        )?;
+        let mut page = Self {
+            url: self.url.clone(),
+            _memory_reservation: None,
+            document: self.document.clone(),
+            styled: self.styled.clone(),
+            layout: self.layout.clone(),
+            display_list: self.display_list.clone(),
+        };
+        page.attach_memory_reservation(Arc::new(reservation));
+        Some(page)
+    }
+
     /// Deep-copy a page only after reserving a separate charge for its retained
     /// document, style tree, layout tree, and display list. Returns None when
     /// the shared budget cannot accommodate another copy.
