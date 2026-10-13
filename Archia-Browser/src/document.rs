@@ -410,7 +410,12 @@ fn collect_select_entries(node: &Node, entries: &mut Vec<(String, String)>) {
     let multiple = node.has_attribute("multiple");
     let mut options = Vec::new();
     collect_options(node, &mut options);
-    let selected = options.iter().filter(|option| option.selected).count();
+    // Disabled options are not successful controls and must not prevent
+    // the browser from choosing the first enabled option in a single-select.
+    let selected = options
+        .iter()
+        .filter(|option| option.selected && !option.disabled)
+        .count();
     for option in options {
         if option.disabled || (!option.selected && (selected > 0 || multiple)) {
             continue;
