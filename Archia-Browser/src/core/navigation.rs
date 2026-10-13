@@ -284,7 +284,7 @@ mod tests {
     }
 
     #[test]
-    fn bounded_history_branching_discards_forward_entries_before_eviction() {
+    fn bounded_history_branching_discards_forward_entries_and_stays_bounded() {
         let mut history = NavigationHistory::new();
         for index in 0..MAX_HISTORY_ENTRIES {
             history.push(entry(&format!("https://example.org/{index}")));
