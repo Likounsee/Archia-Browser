@@ -83,7 +83,9 @@ impl CssTokenizer {
                     });
                     if starts_hash {
                         let value = consume_ident(&mut chars);
-                        if value.len() > MAX_CSS_TOKEN_TEXT_BYTES { return tokens; }
+                        if value.len() > MAX_CSS_TOKEN_TEXT_BYTES {
+                            return tokens;
+                        }
                         push_token!(CssToken::Hash(value));
                     } else {
                         push_token!(CssToken::Delim('#'));
