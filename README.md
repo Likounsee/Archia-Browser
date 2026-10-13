@@ -6,10 +6,10 @@
 - 💾 **OpenFS:** https://github.com/Likounsee/OpenFS
 
 ![Status](https://img.shields.io/badge/status-active%20development-orange)
-![Platforms](https://img.shields.io/badge/platforms-ArchiaOS%20%7C%20Windows%20%7C%20Linux-blue)
+![Target platforms](https://img.shields.io/badge/targets-ArchiaOS%20%7C%20Windows%20%7C%20Linux-blue)
 ![Engine](https://img.shields.io/badge/engine-homegrown%20%7C%20no%20Chromium%2FGecko%2FWebKit-green)
 
-Archia Browser is a lightweight browser stack built from scratch. The engine does not embed Chromium/Blink, Gecko, WebKit or Servo.
+Archia Browser is a lightweight browser-engine project built from scratch. The engine does not embed Chromium/Blink, Gecko, WebKit or Servo. ArchiaOS, Windows and Linux are target platforms, not a claim that a complete end-user browser UI or production-ready release is available on each platform.
 
 ## Current progress
 
@@ -29,7 +29,7 @@ These percentages are engineering estimates of **functional coverage**, not line
 | Software rendering | ~38% | Display list, backgrounds, borders, colors, bitmap text and clipping |
 | Text / fonts / shaping | ~10% | Bootstrap glyph rasterizer only |
 | HTTP / networking | ~55% | HTTP/1.1, redirects, request policy, cookies and bounded caching |
-| HTTPS / TLS | — | Native `rustls` transport with certificate-chain and hostname validation; broader integration coverage remains to be verified |
+| HTTPS / TLS | ~45% | Native `rustls` transport with certificate-chain and hostname validation; broader end-to-end integration and security coverage remain incomplete |
 | Navigation / history | ~70% | Back/forward, URL resolution, reload, titles and link activation |
 | Tabs / session state | ~55% | Independent tab histories and active page retention |
 | Forms | ~35% | Initial GET/POST URL-encoded submission |
@@ -37,7 +37,7 @@ These percentages are engineering estimates of **functional coverage**, not line
 | JavaScript | ~0% | Runtime not started |
 | Browser UI | ~5% | Browser/tab APIs exist; full window UI remains |
 | ArchiaOS integration | ~5% | Platform abstraction exists |
-| Tests / CI | — | GitHub Actions checks formatting, workspace tests, build, Clippy and Linux dependency audits; the exact candidate must pass all required steps |
+| Tests / CI | — | Latest candidate `f1e1336af5c78f276c36d480069fae76c1b792e0` passed standard CI run `38432863412` on Ubuntu, Windows and macOS; RustSec and license audits passed on Linux. Long fuzzing and broader conformance coverage remain unverified |
 
 **Overall engine foundation:** roughly **40–45%** as a non-reproducible engineering estimate, not a measured compatibility score. It is not test coverage or standards conformance. TLS is implemented at the transport layer, but that does not mean the whole network stack is production-ready.
 
@@ -190,7 +190,7 @@ The implementation structure may evolve as the engine grows, but renderer and pl
 
 ### Phase 5 — Web platform / networking
 - [x] URL, policy, HTTP/1.1, redirects, cookies and cache foundations.
-- [ ] Native HTTPS/TLS.
+- [x] Native HTTPS/TLS via `rustls` (transport implementation exists; end-to-end integration/security coverage is still incomplete).
 - [ ] More complete HTTP caching semantics.
 - [ ] Complete cookie attributes and SameSite behavior.
 - [ ] Persistent storage and resource lifecycle improvements.
