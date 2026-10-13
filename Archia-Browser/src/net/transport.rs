@@ -2098,6 +2098,111 @@ mod tests {
         }
     }
 
+    fn tls_fixture_section(name: &str) -> Vec<u8> {
+        let fixtures = include_str!("../../tests/fixtures/tls-validation.pem");
+        let marker = format!("### {name}\n");
+        let section = fixtures.split_once(&marker).expect("TLS fixture section").1;
+        let pem = section.split("\n### ").next().unwrap_or(section);
+        let encoded: String = pem
+            .lines()
+            .filter(|line| !line.starts_with("-----"))
+            .flat_map(str::chars)
+            .collect();
+        let alphabet = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut output = Vec::new();
+        let mut accumulator = 0_u32;
+        let mut bits = 0_u8;
+        for byte in encoded.bytes().filter(|byte| *byte != b'=') {
+            let value = alphabet.iter().position(|candidate| *candidate == byte)
+                .expect("valid base64 fixture") as u32;
+            accumulator = (accumulator << 6) | value;
+            bits += 6;
+            if bits >= 8 {
+                bits -= 8;
+                output.push((accumulator >> bits) as u8);
+                accumulator &= (1_u32 << bits).wrapping_sub(1);
+            }
+        }
+        output
+    }
+
+    fn tls_fixture_handshake(
+        certificate_label: &str,
+        client_name: &str,
+        trust_test_ca: bool,
+    ) -> bool {
+        use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+        use rustls::{ServerConfig, ServerConnection};
+        use std::net::TcpListener;
+        use std::thread;
+
+        let certificate = CertificateDer::from(tls_fixture_section(certificate_label));
+        let private_key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+            tls_fixture_section("SERVER_KEY"),
+        ));
+        let server_config = ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(vec![certificate], private_key)
+            .expect("test certificate and key must form a server identity");
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+            stream.set_write_timeout(Some(Duration::from_secs(3))).unwrap();
+            let mut connection = ServerConnection::new(Arc::new(server_config)).unwrap();
+            while connection.is_handshaking() {
+                if connection.complete_io(&mut stream).is_err() {
+                    break;
+                }
+            }
+        });
+
+        let mut roots = RootCertStore::empty();
+        if trust_test_ca {
+            roots.add(CertificateDer::from(tls_fixture_section("CA_CERT")))
+                .expect("test CA must be parseable");
+        }
+        let client_config = ClientConfig::builder()
+            .with_root_certificates(roots)
+            .with_no_client_auth();
+        let result = (|| {
+            let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(2)).ok()?;
+            stream.set_read_timeout(Some(Duration::from_secs(3))).ok()?;
+            stream.set_write_timeout(Some(Duration::from_secs(3))).ok()?;
+            let name = ServerName::try_from(client_name.to_owned()).ok()?;
+            let mut connection =
+                ClientConnection::new(Arc::new(client_config), name).ok()?;
+            while connection.is_handshaking() {
+                connection.complete_io(&mut stream).ok()?;
+            }
+            Some(())
+        })()
+        .is_some();
+        let _ = server.join();
+        result
+    }
+
+    #[test]
+    fn tls_handshake_validates_trust_chain_expiry_and_hostname() {
+        assert!(
+            tls_fixture_handshake("VALID_CERT", "localhost", true),
+            "a currently valid certificate for the requested host, signed by a trusted CA, must succeed"
+        );
+        assert!(
+            !tls_fixture_handshake("EXPIRED_CERT", "localhost", true),
+            "an expired certificate must be rejected even when its issuer is trusted"
+        );
+        assert!(
+            !tls_fixture_handshake("WRONG_HOST_CERT", "localhost", true),
+            "a trusted certificate for a different hostname must be rejected"
+        );
+        assert!(
+            !tls_fixture_handshake("VALID_CERT", "localhost", false),
+            "a valid certificate from an untrusted CA must be rejected"
+        );
+    }
+
     #[test]
     fn tls_client_advertises_only_http_11() {
         let config = tls_client_config();
