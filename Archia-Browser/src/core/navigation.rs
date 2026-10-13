@@ -1,4 +1,5 @@
 use crate::net::Url;
+use std::collections::VecDeque;
 
 /// Bound per-tab navigation metadata so long-running sessions cannot grow history forever.
 pub const MAX_HISTORY_ENTRIES: usize = 4096;
@@ -29,7 +30,7 @@ impl NavigationEntry {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct NavigationHistory {
-    entries: Vec<NavigationEntry>,
+    entries: VecDeque<NavigationEntry>,
     current: Option<usize>,
 }
 
@@ -64,11 +65,11 @@ impl NavigationHistory {
             self.entries.truncate(current + 1);
         }
 
-        self.entries.push(entry);
+        self.entries.push_back(entry);
         if self.entries.len() > MAX_HISTORY_ENTRIES {
             // push() always moves to the newest entry, so dropping the oldest
             // entry keeps the active index valid and preserves back/forward order.
-            self.entries.remove(0);
+            self.entries.pop_front();
         }
         self.current = Some(self.entries.len() - 1);
     }
