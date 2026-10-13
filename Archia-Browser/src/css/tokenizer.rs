@@ -112,6 +112,16 @@ impl CssTokenizer {
                     value.push_str(&consume_ident(&mut chars));
                     tokens.push(CssToken::Ident(value));
                 }
+                '\\' if starts_valid_escape(&chars) => {
+                    if let Some(escaped) = consume_escape(&mut chars) {
+                        let mut value = String::new();
+                        value.push(escaped);
+                        value.push_str(&consume_ident(&mut chars));
+                        tokens.push(CssToken::Ident(value));
+                    } else {
+                        tokens.push(CssToken::Delim('\\'));
+                    }
+                }
                 c => tokens.push(CssToken::Delim(c)),
             }
         }
@@ -127,14 +137,54 @@ fn is_ident_start(c: char) -> bool {
 fn consume_ident(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String {
     let mut value = String::new();
     while let Some(next) = chars.peek().copied() {
-        if next == '_' || next == '-' || next.is_ascii_alphanumeric() || !next.is_ascii() {
+        if is_name_code_point(next) {
             value.push(next);
             chars.next();
+        } else if next == '\\' && starts_valid_escape(chars) {
+            chars.next();
+            if let Some(escaped) = consume_escape(chars) {
+                value.push(escaped);
+            }
         } else {
             break;
         }
     }
     value
+}
+
+fn is_name_code_point(c: char) -> bool {
+    c == '_' || c == '-' || c.is_ascii_alphanumeric() || !c.is_ascii()
+}
+
+fn is_css_newline(c: char) -> bool {
+    matches!(c, '\n' | '\r' | '\u{000C}')
+}
+
+fn starts_valid_escape(chars: &std::iter::Peekable<std::str::Chars<'_>>) -> bool {
+    let mut lookahead = chars.clone();
+    lookahead.next() == Some('\\')
+        && lookahead.peek().is_some_and(|next| !is_css_newline(*next))
+}
+
+/// Consume a CSS escape, decoding up to six hexadecimal digits and optional whitespace.
+fn consume_escape(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Option<char> {
+    let first = chars.next()?;
+    if is_css_newline(first) {
+        return None;
+    }
+    if first.is_ascii_hexdigit() {
+        let mut digits = String::from(first);
+        while digits.len() < 6 && chars.peek().is_some_and(|next| next.is_ascii_hexdigit()) {
+            digits.push(chars.next()?);
+        }
+        if chars.peek().is_some_and(|next| next.is_whitespace()) {
+            chars.next();
+        }
+        let code_point = u32::from_str_radix(&digits, 16).ok()?;
+        Some(char::from_u32(code_point).filter(|ch| *ch != '\0').unwrap_or('\u{FFFD}'))
+    } else {
+        Some(first)
+    }
 }
 
 #[cfg(test)]
@@ -189,6 +239,27 @@ mod tests {
                 CssToken::Whitespace,
                 CssToken::Ident("red".into()),
                 CssToken::Semicolon,
+            ]
+        );
+    }
+
+    #[test]
+    fn decodes_css_escapes_in_identifiers_and_hashes() {
+        assert_eq!(CssTokenizer::tokenize(r"\63 olor"), vec![CssToken::Ident("color".into())]);
+        assert_eq!(CssTokenizer::tokenize(r"foo\;bar"), vec![CssToken::Ident("foo;bar".into())]);
+        assert_eq!(CssTokenizer::tokenize(r"#\31 23"), vec![CssToken::Hash("123".into())]);
+        assert_eq!(CssTokenizer::tokenize(r"\110000 "), vec![CssToken::Ident("\u{FFFD}".into())]);
+    }
+
+    #[test]
+    fn invalid_newline_escape_does_not_consume_the_newline() {
+        assert_eq!(
+            CssTokenizer::tokenize("foo\\\nbar"),
+            vec![
+                CssToken::Ident("foo".into()),
+                CssToken::Delim('\\'),
+                CssToken::Whitespace,
+                CssToken::Ident("bar".into()),
             ]
         );
     }
