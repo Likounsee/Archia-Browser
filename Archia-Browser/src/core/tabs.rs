@@ -527,12 +527,7 @@ mod tests {
             .begin_navigation(tab, Url::parse("https://example.org/start").unwrap())
             .unwrap();
         manager
-            .commit_navigation(
-                tab,
-                &token,
-                test_page("https://example.org/final"),
-                None,
-            )
+            .commit_navigation(tab, &token, test_page("https://example.org/final"), None)
             .unwrap();
         assert_eq!(
             manager
@@ -608,15 +603,54 @@ mod tests {
             .unwrap();
         assert_eq!(back.action(), NavigationAction::Back);
         assert_eq!(back.requested_url().to_string(), "https://example.org/one");
-        assert_eq!(manager.tab(tab).unwrap().history().current().unwrap().url().to_string(), "https://example.org/two");
+        assert_eq!(
+            manager
+                .tab(tab)
+                .unwrap()
+                .history()
+                .current()
+                .unwrap()
+                .url()
+                .to_string(),
+            "https://example.org/two"
+        );
         assert!(manager.commit_navigation(tab, &back, test_page("https://example.org/one"), None).is_ok());
-        assert_eq!(manager.tab(tab).unwrap().history().current().unwrap().url().to_string(), "https://example.org/one");
+        assert_eq!(
+            manager
+                .tab(tab)
+                .unwrap()
+                .history()
+                .current()
+                .unwrap()
+                .url()
+                .to_string(),
+            "https://example.org/one"
+        );
 
-        let forward = manager.tab_mut(tab).unwrap().begin_forward_navigation().unwrap();
+        let forward = manager
+            .tab_mut(tab)
+            .unwrap()
+            .begin_forward_navigation()
+            .unwrap();
         assert_eq!(forward.action(), NavigationAction::Forward);
-        assert_eq!(forward.requested_url().to_string(), "https://example.org/two");
-        assert!(manager.commit_navigation(tab, &forward, test_page("https://example.org/two"), None).is_ok());
-        assert_eq!(manager.tab(tab).unwrap().history().current().unwrap().url().to_string(), "https://example.org/two");
+        assert_eq!(
+            forward.requested_url().to_string(),
+            "https://example.org/two"
+        );
+        assert!(manager
+            .commit_navigation(tab, &forward, test_page("https://example.org/two"), None)
+            .is_ok());
+        assert_eq!(
+            manager
+                .tab(tab)
+                .unwrap()
+                .history()
+                .current()
+                .unwrap()
+                .url()
+                .to_string(),
+            "https://example.org/two"
+        );
         assert_eq!(manager.tab(tab).unwrap().history().len(), 2);
     }
 
