@@ -352,9 +352,7 @@ impl Browser {
         // A document created without a URL has no trustworthy origin. If its
         // <base> element points at file://, reject the attempt before resolution
         // can turn the missing document URL into a generic parse error.
-        if page.url().is_none()
-            && page.base_url().is_some_and(|base| base.scheme() == "file")
-        {
+        if page.url().is_none() && page.base_url().is_some_and(|base| base.scheme() == "file") {
             return Err(LinkActivationError::BlockedLocalFileNavigation);
         }
         let url = page
