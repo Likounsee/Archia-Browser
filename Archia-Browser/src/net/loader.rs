@@ -729,7 +729,7 @@ fn next_css_statement(css: &str, start: usize) -> Option<(&str, usize)> {
 
         if byte == b'\\' {
             // An escaped delimiter is data, not a statement boundary or comment opener.
-            // Skipping the escaped byte also handles escaped semicolons in unquoted url().
+            // Skipping the escaped byte keeps escaped statement delimiters in unquoted tokens intact.
             index = (index + 2).min(bytes.len());
         } else if byte == b'/' && next == Some(b'*') {
             in_comment = true;
@@ -1050,10 +1050,10 @@ mod tests {
 
     #[test]
     fn css_statement_scanner_keeps_escaped_semicolons_outside_strings() {
-        let css = r"@import url(theme\;v=2.css); body { color: red; }";
+        let css = r"@import foo\;bar.css; body { color: red; }";
         let (statement, next) = next_css_statement(css, 0).unwrap();
 
-        assert_eq!(statement, r"@import url(theme\;v=2.css);");
+        assert_eq!(statement, r"@import foo\;bar.css;");
         assert_eq!(&css[next..], " body { color: red; }");
     }
 
