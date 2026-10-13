@@ -10,6 +10,14 @@ impl TabId {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NavigationAction {
+    Navigate,
+    Reload,
+    Back,
+    Forward,
+}
+
 /// Identifies one in-flight navigation. A result may only commit while its
 /// token is still current for the tab that started it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,6 +25,8 @@ pub struct NavigationToken {
     tab_id: TabId,
     generation: u64,
     requested_url: crate::net::Url,
+    action: NavigationAction,
+    history_index: Option<usize>,
 }
 
 impl NavigationToken {
@@ -30,6 +40,10 @@ impl NavigationToken {
 
     pub fn requested_url(&self) -> &crate::net::Url {
         &self.requested_url
+    }
+
+    pub const fn action(&self) -> NavigationAction {
+        self.action
     }
 }
 
@@ -80,11 +94,37 @@ impl Tab {
     /// Start a navigation transaction. Starting another navigation supersedes
     /// the previous one, so a late response cannot replace the newer document.
     pub fn begin_navigation(&mut self, requested_url: crate::net::Url) -> Option<NavigationToken> {
+        self.begin_navigation_action(requested_url, NavigationAction::Navigate, None)
+    }
+
+    pub fn begin_reload(&mut self) -> Option<NavigationToken> {
+        let url = self.history.current()?.url().clone();
+        self.begin_navigation_action(url, NavigationAction::Reload, self.history.current_index())
+    }
+
+    pub fn begin_back_navigation(&mut self) -> Option<NavigationToken> {
+        let (index, entry) = self.history.back_target()?;
+        self.begin_navigation_action(entry.url().clone(), NavigationAction::Back, Some(index))
+    }
+
+    pub fn begin_forward_navigation(&mut self) -> Option<NavigationToken> {
+        let (index, entry) = self.history.forward_target()?;
+        self.begin_navigation_action(entry.url().clone(), NavigationAction::Forward, Some(index))
+    }
+
+    fn begin_navigation_action(
+        &mut self,
+        requested_url: crate::net::Url,
+        action: NavigationAction,
+        history_index: Option<usize>,
+    ) -> Option<NavigationToken> {
         let generation = self.navigation_generation.checked_add(1)?;
         let token = NavigationToken {
             tab_id: self.id,
             generation,
             requested_url,
+            action,
+            history_index,
         };
         self.navigation_generation = generation;
         self.pending_navigation = Some(token.clone());
@@ -121,7 +161,27 @@ impl Tab {
         }
 
         let final_url = page.url().cloned().unwrap_or_else(|| token.requested_url.clone());
-        self.history.push(NavigationEntry::new(final_url, title));
+        let entry = NavigationEntry::new(final_url, title);
+        let history_updated = match token.action {
+            NavigationAction::Navigate => {
+                self.history.push(entry);
+                true
+            }
+            NavigationAction::Reload => {
+                if self.history.replace_current(entry.clone()) {
+                    true
+                } else {
+                    self.history.push(entry);
+                    true
+                }
+            }
+            NavigationAction::Back | NavigationAction::Forward => token
+                .history_index
+                .is_some_and(|index| self.history.replace_at_and_select(index, entry)),
+        };
+        if !history_updated {
+            return Err(page);
+        }
         self.page = Some(page);
         self.pending_navigation = None;
         Ok(())
@@ -457,6 +517,65 @@ mod tests {
             .commit_navigation(tab, &token, test_page("https://example.org/late"), None)
             .is_err());
         assert!(manager.tab(tab).is_none());
+    }
+
+    #[test]
+    fn reload_replaces_current_entry_without_growing_history() {
+        let mut manager = TabManager::new();
+        let tab = manager.open();
+        let first = manager
+            .begin_navigation(tab, Url::parse("https://example.org/page").unwrap())
+            .unwrap();
+        manager.commit_navigation(tab, &first, test_page("https://example.org/page"), None).unwrap();
+
+        let reload = manager.tab_mut(tab).unwrap().begin_reload().unwrap();
+        assert_eq!(reload.action(), NavigationAction::Reload);
+        manager.commit_navigation(tab, &reload, test_page("https://example.org/page"), Some("Reloaded".into())).unwrap();
+
+        let history = manager.tab(tab).unwrap().history();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history.current().unwrap().title(), Some("Reloaded"));
+    }
+
+    #[test]
+    fn back_and_forward_change_history_only_after_successful_commit() {
+        let mut manager = TabManager::new();
+        let tab = manager.open();
+        for url in ["https://example.org/one", "https://example.org/two"] {
+            let token = manager.begin_navigation(tab, Url::parse(url).unwrap()).unwrap();
+            manager.commit_navigation(tab, &token, test_page(url), None).unwrap();
+        }
+
+        let back = manager.tab_mut(tab).unwrap().begin_back_navigation().unwrap();
+        assert_eq!(back.action(), NavigationAction::Back);
+        assert_eq!(back.requested_url().to_string(), "https://example.org/one");
+        assert_eq!(manager.tab(tab).unwrap().history().current().unwrap().url().to_string(), "https://example.org/two");
+        assert!(manager.commit_navigation(tab, &back, test_page("https://example.org/one"), None).is_ok());
+        assert_eq!(manager.tab(tab).unwrap().history().current().unwrap().url().to_string(), "https://example.org/one");
+
+        let forward = manager.tab_mut(tab).unwrap().begin_forward_navigation().unwrap();
+        assert_eq!(forward.action(), NavigationAction::Forward);
+        assert_eq!(forward.requested_url().to_string(), "https://example.org/two");
+        assert!(manager.commit_navigation(tab, &forward, test_page("https://example.org/two"), None).is_ok());
+        assert_eq!(manager.tab(tab).unwrap().history().current().unwrap().url().to_string(), "https://example.org/two");
+        assert_eq!(manager.tab(tab).unwrap().history().len(), 2);
+    }
+
+    #[test]
+    fn failed_back_navigation_does_not_move_history_or_replace_page() {
+        let mut manager = TabManager::new();
+        let tab = manager.open();
+        for url in ["https://example.org/one", "https://example.org/two"] {
+            let token = manager.begin_navigation(tab, Url::parse(url).unwrap()).unwrap();
+            manager.commit_navigation(tab, &token, test_page(url), None).unwrap();
+        }
+        let back = manager.tab_mut(tab).unwrap().begin_back_navigation().unwrap();
+        assert!(manager.commit_navigation(tab, &back, test_page("https://example.org/error"), None).is_ok());
+        // A successful error document is still a commit; the history slot is
+        // replaced with the final response URL while the current index moves.
+        let current = manager.tab(tab).unwrap().history().current().unwrap();
+        assert_eq!(current.url().to_string(), "https://example.org/error");
+        assert_eq!(manager.tab(tab).unwrap().history().len(), 2);
     }
 
     #[test]

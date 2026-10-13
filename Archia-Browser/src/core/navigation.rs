@@ -70,6 +70,31 @@ impl NavigationHistory {
         self.current.and_then(|index| self.entries.get(index))
     }
 
+    pub fn current_index(&self) -> Option<usize> {
+        self.current
+    }
+
+    pub fn back_target(&self) -> Option<(usize, &NavigationEntry)> {
+        let target = self.current?.checked_sub(1)?;
+        self.entries.get(target).map(|entry| (target, entry))
+    }
+
+    pub fn forward_target(&self) -> Option<(usize, &NavigationEntry)> {
+        let target = self.current?.checked_add(1)?;
+        self.entries.get(target).map(|entry| (target, entry))
+    }
+
+    /// Atomically select and update an existing history slot after a successful
+    /// back/forward load. Returns false without mutation for an invalid index.
+    pub fn replace_at_and_select(&mut self, index: usize, entry: NavigationEntry) -> bool {
+        let Some(current) = self.entries.get_mut(index) else {
+            return false;
+        };
+        *current = entry;
+        self.current = Some(index);
+        true
+    }
+
     pub fn can_go_back(&self) -> bool {
         self.current.is_some_and(|index| index > 0)
     }
