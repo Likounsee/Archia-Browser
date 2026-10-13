@@ -194,12 +194,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // attacker-controlled attributes. Void elements remain valid children
                 // at the maximum nesting depth.
                 if !VOID_ELEMENTS.contains(&name.as_str()) && stack.len() >= MAX_DOM_DEPTH {
-                    if !push_suppressed(
-                        &mut suppressed_stack,
-                        &mut suppressed_positions,
-                        name,
-                        0,
-                    ) {
+                    if !push_suppressed(&mut suppressed_stack, &mut suppressed_positions, name, 0) {
                         break;
                     }
                     continue;
