@@ -71,8 +71,7 @@ impl CssTokenizer {
                 ')' => tokens.push(CssToken::RightParen),
                 '#' => {
                     let starts_hash = chars.peek().copied().is_some_and(|next| {
-                        is_name_code_point(next)
-                            || next == '\\' && starts_valid_escape(&chars)
+                        is_name_code_point(next) || next == '\\' && starts_valid_escape(&chars)
                     });
                     if starts_hash {
                         let value = consume_ident(&mut chars);
