@@ -677,7 +677,11 @@ b</textarea></form>"#,
         ));
 
         assert!(page.try_clone().is_none());
-        assert_eq!(budget.used(), 1024, "failed clone must not leak a reservation");
+        assert_eq!(
+            budget.used(),
+            1024,
+            "failed clone must not leak a reservation"
+        );
     }
 
     #[test]
