@@ -172,6 +172,18 @@ impl HttpTransport {
             match stream.read(&mut buffer) {
                 Ok(0) => break,
                 Ok(count) => {
+                    // Check the projected total before growing the response buffer.
+                    // Checking only after extend_from_slice can temporarily allocate
+                    // beyond the configured cap by one complete read chunk.
+                    let Some(projected_len) = bytes.len().checked_add(count) else {
+                        return Err(TransportError::ResponseTooLarge);
+                    };
+                    if projected_len > self.max_response_size {
+                        return Err(TransportError::ResponseTooLarge);
+                    }
+                    if bytes.try_reserve_exact(count).is_err() {
+                        return Err(TransportError::ResponseTooLarge);
+                    }
                     bytes.extend_from_slice(&buffer[..count]);
                     if header_end.is_none() {
                         header_end = bytes
@@ -4297,6 +4309,57 @@ mod limit_tests {
                 String::from_utf8_lossy(wire)
             );
         }
+    }
+
+    #[test]
+    fn response_reader_rejects_projected_size_before_appending_read_chunk() {
+        use std::io;
+
+        struct CountingStream {
+            bytes: Vec<u8>,
+            offset: usize,
+            reads: usize,
+        }
+
+        impl Read for CountingStream {
+            fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+                self.reads += 1;
+                if self.offset == self.bytes.len() {
+                    return Ok(0);
+                }
+                let count = output.len().min(self.bytes.len() - self.offset);
+                output[..count].copy_from_slice(&self.bytes[self.offset..self.offset + count]);
+                self.offset += count;
+                Ok(count)
+            }
+        }
+
+        impl Write for CountingStream {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                Ok(bytes.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let mut wire = b"HTTP/1.1 200 OK\\r\\nContent-Length: 100\\r\\n\\r\\n".to_vec();
+        wire.extend(std::iter::repeat_n(b'x', 100));
+        let mut stream = CountingStream {
+            bytes: wire,
+            offset: 0,
+            reads: 0,
+        };
+        let transport = HttpTransport::new().with_limits(64, 1024);
+
+        assert_eq!(
+            transport.read_response(&mut stream, super::super::HttpMethod::Get),
+            Err(TransportError::ResponseTooLarge)
+        );
+        // The transport rejects the first chunk whose projected length exceeds
+        // the cap; it must not keep reading the rest of the peer's response.
+        assert_eq!(stream.reads, 1);
     }
 
     #[test]
