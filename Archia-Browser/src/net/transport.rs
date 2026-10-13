@@ -1453,7 +1453,12 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
     let query_len = request
         .url
         .query()
-        .map(|query| query.len().checked_add(1).ok_or(TransportError::InvalidRequest))
+        .map(|query| {
+            query
+                .len()
+                .checked_add(1)
+                .ok_or(TransportError::InvalidRequest)
+        })
         .transpose()?
         .unwrap_or(0);
     let target_len = request
