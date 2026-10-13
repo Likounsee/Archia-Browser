@@ -112,7 +112,7 @@ impl CssTokenizer {
                     value.push_str(&consume_ident(&mut chars));
                     tokens.push(CssToken::Ident(value));
                 }
-                '\\' if starts_valid_escape(&chars) => {
+                '\\' if chars.peek().is_some_and(|next| !is_css_newline(*next)) => {
                     if let Some(escaped) = consume_escape(&mut chars) {
                         let mut value = String::new();
                         value.push(escaped);
