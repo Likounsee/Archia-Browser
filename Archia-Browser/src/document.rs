@@ -1,4 +1,4 @@
-use crate::core::memory::MemoryReservation;
+use crate::core::memory::{MemoryBudget, MemoryReservation};
 use crate::css::StyleSheet;
 use crate::html::{parse, HtmlTokenizer, Node};
 use crate::layout::{LayoutEngine, LayoutNode, LayoutViewport};
@@ -118,6 +118,41 @@ impl Page {
             layout,
             display_list,
         }
+    }
+
+
+    /// Construct a page under a shared memory budget.
+    ///
+    /// The input-based estimate is reserved before tokenization, DOM construction,
+    /// style calculation, layout, and display-list creation. After construction the
+    /// reservation is reconciled with the retained-structure estimate. The estimate
+    /// is deliberately conservative but remains an estimate, not allocator telemetry.
+    pub fn try_from_html_at_with_budget(
+        url: Option<Url>,
+        html: &str,
+        css: &str,
+        viewport: LayoutViewport,
+        budget: Arc<MemoryBudget>,
+    ) -> Option<Self> {
+        const HTML_EXPANSION_FACTOR: usize = 12;
+        const CSS_EXPANSION_FACTOR: usize = 6;
+
+        let html_charge = html.len().checked_mul(HTML_EXPANSION_FACTOR)?;
+        let css_charge = css.len().checked_mul(CSS_EXPANSION_FACTOR)?;
+        let initial_charge = html_charge.checked_add(css_charge)?.max(1);
+        let reservation = MemoryReservation::try_new(Arc::clone(&budget), initial_charge)?;
+
+        let mut page = Self::from_html_at(url, html, css, viewport);
+        let retained = page.retained_structure_estimate();
+        if retained > reservation.bytes() {
+            if !reservation.try_grow_by(retained - reservation.bytes()) {
+                return None;
+            }
+        } else {
+            reservation.shrink_to(retained);
+        }
+        page.attach_memory_reservation(Arc::new(reservation));
+        Some(page)
     }
 
     pub fn url(&self) -> Option<&Url> {
@@ -944,6 +979,63 @@ b</textarea></form>"#,
             styled.retained_structure_estimate() > plain.retained_structure_estimate(),
             "computed property maps and their strings must contribute to the retained estimate"
         );
+    }
+
+
+    #[test]
+    fn budgeted_page_construction_fails_before_build_when_budget_is_insufficient() {
+        let budget = Arc::new(crate::core::memory::MemoryBudget::new(1));
+        let page = Page::try_from_html_at_with_budget(
+            None,
+            "<body><p>bounded</p></body>",
+            "",
+            LayoutViewport::new(320, 200),
+            Arc::clone(&budget),
+        );
+
+        assert!(page.is_none());
+        assert_eq!(budget.used(), 0, "failed preflight must not leak budget");
+    }
+
+    #[test]
+    fn budgeted_page_construction_releases_memory_after_repeated_lifecycles() {
+        let budget = Arc::new(crate::core::memory::MemoryBudget::new(16 * 1024 * 1024));
+
+        for _ in 0..1_000 {
+            let page = Page::try_from_html_at_with_budget(
+                None,
+                "<body><p>bounded lifecycle</p></body>",
+                "p { color: red; margin: 2px; }",
+                LayoutViewport::new(320, 200),
+                Arc::clone(&budget),
+            )
+            .expect("small page should fit in the shared budget");
+            assert!(budget.used() > 0, "retained page must be charged");
+            assert!(budget.used() <= budget.limit());
+            drop(page);
+            assert_eq!(budget.used(), 0, "page drop must release its reservation");
+        }
+    }
+
+    #[test]
+    fn budgeted_page_clone_keeps_original_and_copy_charges_independent() {
+        let budget = Arc::new(crate::core::memory::MemoryBudget::new(2 * 1024 * 1024));
+        let page = Page::try_from_html_at_with_budget(
+            None,
+            "<body><p>independent</p></body>",
+            "",
+            LayoutViewport::new(320, 200),
+            Arc::clone(&budget),
+        )
+        .expect("page should fit");
+        let original_charge = budget.used();
+        let copy = page.try_clone().expect("clone should reserve its own charge");
+
+        assert!(budget.used() >= original_charge.saturating_mul(2));
+        drop(copy);
+        assert_eq!(budget.used(), original_charge);
+        drop(page);
+        assert_eq!(budget.used(), 0);
     }
 
     #[test]
