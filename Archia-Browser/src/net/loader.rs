@@ -696,6 +696,9 @@ fn next_css_statement(css: &str, start: usize) -> Option<(&str, usize)> {
     let mut quote = None;
     let mut in_comment = false;
     let mut block_depth = 0_usize;
+    // Parentheses occur in functional CSS tokens such as url(...). A semicolon
+    // inside one of those tokens is data, not a statement terminator.
+    let mut paren_depth = 0_usize;
 
     while index < bytes.len() {
         let byte = bytes[index];
@@ -730,13 +733,19 @@ fn next_css_statement(css: &str, start: usize) -> Option<(&str, usize)> {
         } else if matches!(byte, b'\'' | b'"') {
             quote = Some(byte);
             index += 1;
+        } else if byte == b'(' {
+            paren_depth = paren_depth.saturating_add(1);
+            index += 1;
+        } else if byte == b')' {
+            paren_depth = paren_depth.saturating_sub(1);
+            index += 1;
         } else if byte == b'{' {
             block_depth = block_depth.saturating_add(1);
             index += 1;
         } else if byte == b'}' {
             block_depth = block_depth.saturating_sub(1);
             index += 1;
-        } else if byte == b';' && block_depth == 0 {
+        } else if byte == b';' && block_depth == 0 && paren_depth == 0 {
             let end = index + 1;
             return Some((&css[start..end], end));
         } else {
@@ -1018,6 +1027,22 @@ fn is_html_response(response: &Response) -> bool {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn css_statement_scanner_keeps_semicolons_inside_url_functions() {
+        let css = "@import url(https://example.org/theme.css?mode=dark;v=2); body { color: red; }";
+        let (statement, next) = next_css_statement(css, 0).unwrap();
+
+        assert_eq!(
+            statement,
+            "@import url(https://example.org/theme.css?mode=dark;v=2);"
+        );
+        assert_eq!(
+            parse_import_reference(statement).as_deref(),
+            Some("https://example.org/theme.css?mode=dark;v=2")
+        );
+        assert_eq!(&css[next..], " body { color: red; }");
+    }
 
     #[test]
     fn stylesheet_link_discovery_stops_at_the_request_budget() {
