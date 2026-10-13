@@ -148,7 +148,8 @@ impl HttpCache {
         // so an extreme size estimate cannot overflow and undercharge the cache.
         // The normalized URL key is retained alongside the response. Long URLs
         // can exceed the fixed per-entry overhead, so account for their bytes too.
-        let bytes = accounted_response_bytes(response);
+        let payload_bytes = accounted_response_bytes(response);
+        let bytes = payload_bytes.saturating_add(key.len());
 
         // Cache entries participate in the browser-wide budget when one is supplied.
         // The reservation follows the entry and is released on eviction or cache drop.
@@ -226,7 +227,7 @@ impl HttpCache {
                 expires_at,
                 _reservations: reservation,
             },
-            bytes,
+            payload_bytes,
         );
     }
 
