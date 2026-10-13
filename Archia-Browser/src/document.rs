@@ -130,8 +130,8 @@ impl Page {
     }
 
     /// Conservative lower bound for the heap retained by the document's structural trees.
-    /// Input-based reservations remain responsible for tokenizer, CSS-rule, and style-map
-    /// allocations; this structural count catches unusually allocation-dense DOM/layout trees.
+    /// Estimates retained DOM, computed-style, layout, and display-list storage.
+    /// This is a conservative accounting estimate, not an allocator-exact measurement.
     pub(crate) fn retained_structure_estimate(&self) -> usize {
         // Count heap-owned buffers recursively, but count each tree node's inline
         // storage only through its containing Vec capacity. Adding size_of::<Node>()
@@ -170,7 +170,7 @@ impl Page {
                 .capacity()
                 .saturating_mul(std::mem::size_of::<StyledNode>());
             // Styled nodes own shallow DOM-node copies plus two BTreeMaps of
-            // computed property values/importance flags. Include string capacities
+            // computed property values/importance flags. Include string lengths
             // and approximate per-entry metadata for both maps.
             bytes = bytes.saturating_add(node_owned_bytes(&node.node));
             for (name, value) in node.style.iter() {
@@ -183,6 +183,9 @@ impl Page {
                 node.style
                     .len()
                     .saturating_mul(std::mem::size_of::<(String, bool)>())
+                    .saturating_add(node.style.len().saturating_mul(
+                        node.style.iter().map(|(name, _)| name.len()).sum::<usize>(),
+                    ))
             );
             for child in &node.children {
                 bytes = bytes.saturating_add(styled_owned_bytes(child));
