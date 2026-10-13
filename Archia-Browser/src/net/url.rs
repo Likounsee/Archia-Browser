@@ -172,6 +172,11 @@ impl Url {
     /// redirects and document links while keeping the URL type independent
     /// from the network layer.
     pub fn resolve(&self, reference: &str) -> Result<Self, UrlError> {
+        // An empty reference identifies the current URL in its entirety,
+        // including both query and fragment (RFC 3986 section 5.2).
+        if reference.is_empty() {
+            return Ok(self.clone());
+        }
         if contains_unsafe_url_whitespace(reference) {
             return Err(UrlError::InvalidCharacter);
         }
@@ -749,6 +754,18 @@ mod tests {
                 "URL and security origin comparisons diverged for {left} and {right}"
             );
         }
+    }
+
+    #[test]
+    fn resolving_empty_reference_preserves_query_and_fragment() {
+        let base = Url::parse("https://example.org/path?search=rust#section-2").unwrap();
+        let resolved = base.resolve("").unwrap();
+
+        assert_eq!(resolved, base);
+        assert_eq!(
+            resolved.to_string(),
+            "https://example.org/path?search=rust#section-2"
+        );
     }
 
     #[test]
