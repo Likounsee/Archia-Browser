@@ -404,8 +404,11 @@ impl Browser {
         if !tab.history().can_go_back() {
             return None;
         }
-        tab.history_mut().back()?;
-        tab.clear_page();
+        let previous_url = tab.history().current()?.url().clone();
+        let destination = tab.history_mut().back()?.url().clone();
+        if !previous_url.same_document(&destination) {
+            tab.clear_page();
+        }
         tab.history().current().map(|entry| entry.url())
     }
 
@@ -415,8 +418,11 @@ impl Browser {
         if !tab.history().can_go_forward() {
             return None;
         }
-        tab.history_mut().forward()?;
-        tab.clear_page();
+        let previous_url = tab.history().current()?.url().clone();
+        let destination = tab.history_mut().forward()?.url().clone();
+        if !previous_url.same_document(&destination) {
+            tab.clear_page();
+        }
         tab.history().current().map(|entry| entry.url())
     }
 
@@ -1143,6 +1149,47 @@ mod tests {
 
         assert_eq!(browser.back(), None);
         assert_eq!(browser.current_url(), original_url.as_ref());
+        assert!(browser.current_page().is_some());
+    }
+
+    #[test]
+    fn browser_back_between_fragments_preserves_loaded_page() {
+        let mut browser = Browser::new();
+        let page = crate::document::Page::from_html_at(
+            Some(net::Url::parse("https://example.org/docs/index.html").unwrap()),
+            "<body>Same document</body>",
+            "",
+            crate::layout::LayoutViewport::new(64, 32),
+        );
+        assert!(browser.commit_page(&page));
+        browser.navigate_reference("#features", None).unwrap();
+
+        assert!(browser.current_page().is_some());
+        assert_eq!(
+            browser.back().map(ToString::to_string),
+            Some("https://example.org/docs/index.html".to_owned())
+        );
+        assert!(browser.current_page().is_some());
+    }
+
+    #[test]
+    fn browser_forward_between_fragments_preserves_loaded_page() {
+        let mut browser = Browser::new();
+        let page = crate::document::Page::from_html_at(
+            Some(net::Url::parse("https://example.org/docs/index.html").unwrap()),
+            "<body>Same document</body>",
+            "",
+            crate::layout::LayoutViewport::new(64, 32),
+        );
+        assert!(browser.commit_page(&page));
+        browser.navigate_reference("#features", None).unwrap();
+        browser.back();
+
+        assert!(browser.current_page().is_some());
+        assert_eq!(
+            browser.forward().map(ToString::to_string),
+            Some("https://example.org/docs/index.html#features".to_owned())
+        );
         assert!(browser.current_page().is_some());
     }
 
