@@ -134,15 +134,20 @@ impl Page {
     /// allocations; this structural count catches unusually allocation-dense DOM/layout trees.
     pub(crate) fn retained_structure_estimate(&self) -> usize {
         fn node_bytes(node: &Node) -> usize {
-            let mut bytes = std::mem::size_of::<Node>()
-                .saturating_add(node.children.capacity().saturating_mul(std::mem::size_of::<Node>()));
+            let mut bytes = std::mem::size_of::<Node>().saturating_add(
+                node.children
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<Node>()),
+            );
             match &node.kind {
                 crate::html::NodeKind::Document => {}
                 crate::html::NodeKind::Element { name, attributes } => {
                     bytes = bytes.saturating_add(name.capacity());
                     for (key, value) in attributes {
                         bytes = bytes.saturating_add(std::mem::size_of::<(String, String)>());
-                        bytes = bytes.saturating_add(key.capacity()).saturating_add(value.capacity());
+                        bytes = bytes
+                            .saturating_add(key.capacity())
+                            .saturating_add(value.capacity());
                     }
                 }
                 crate::html::NodeKind::Text(value) | crate::html::NodeKind::Comment(value) => {
@@ -155,8 +160,11 @@ impl Page {
             bytes
         }
         fn styled_bytes(node: &StyledNode) -> usize {
-            let mut bytes = std::mem::size_of::<StyledNode>()
-                .saturating_add(node.children.capacity().saturating_mul(std::mem::size_of::<StyledNode>()));
+            let mut bytes = std::mem::size_of::<StyledNode>().saturating_add(
+                node.children
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<StyledNode>()),
+            );
             // StyledNode stores a shallow copy of each DOM node, including its strings.
             bytes = bytes.saturating_add(node_bytes(&node.node));
             for child in &node.children {
@@ -165,8 +173,11 @@ impl Page {
             bytes
         }
         fn layout_bytes(node: &LayoutNode) -> usize {
-            let mut bytes = std::mem::size_of::<LayoutNode>()
-                .saturating_add(node.children.capacity().saturating_mul(std::mem::size_of::<LayoutNode>()));
+            let mut bytes = std::mem::size_of::<LayoutNode>().saturating_add(
+                node.children
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<LayoutNode>()),
+            );
             for child in &node.children {
                 bytes = bytes.saturating_add(layout_bytes(child));
             }
@@ -175,7 +186,11 @@ impl Page {
         let mut bytes = node_bytes(&self.document)
             .saturating_add(styled_bytes(&self.styled))
             .saturating_add(layout_bytes(&self.layout))
-            .saturating_add(self.display_list.len().saturating_mul(std::mem::size_of::<crate::render::PaintCommand>()));
+            .saturating_add(
+                self.display_list
+                    .len()
+                    .saturating_mul(std::mem::size_of::<crate::render::PaintCommand>()),
+            );
         for command in self.display_list.commands() {
             if let crate::render::PaintCommand::DrawText { text, .. } = command {
                 bytes = bytes.saturating_add(text.capacity());
