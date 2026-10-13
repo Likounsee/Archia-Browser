@@ -461,29 +461,31 @@ fn parse_border_radii(style: &ComputedStyle, width: u32, height: u32) -> CornerR
         return CornerRadii::default();
     }
     let reference = width.min(height);
-    let Some(values) = values
-        .into_iter()
-        .map(|value| value.and_then(|token| parse_radius_component(token.trim(), reference)))
-        .collect::<Option<Vec<_>>>()
-    else {
-        return CornerRadii::default();
-    };
+    let mut parsed = [0; 4];
+    for (index, value) in values.into_iter().enumerate() {
+        let Some(radius) =
+            value.and_then(|token| parse_radius_component(token.trim(), reference))
+        else {
+            return CornerRadii::default();
+        };
+        parsed[index] = radius;
+    }
     CornerRadii {
         top_left: CornerRadius {
-            x: values[0],
-            y: values[0],
+            x: parsed[0],
+            y: parsed[0],
         },
         top_right: CornerRadius {
-            x: values[1],
-            y: values[1],
+            x: parsed[1],
+            y: parsed[1],
         },
         bottom_right: CornerRadius {
-            x: values[2],
-            y: values[2],
+            x: parsed[2],
+            y: parsed[2],
         },
         bottom_left: CornerRadius {
-            x: values[3],
-            y: values[3],
+            x: parsed[3],
+            y: parsed[3],
         },
     }
 }
@@ -492,19 +494,23 @@ fn parse_border_radius_shorthand(value: &str, width: u32, height: u32) -> Corner
     let mut parts = value.split('/');
     let horizontal = parse_radius_values(parts.next().unwrap_or(""), width);
     let vertical = parts.next().map(|part| parse_radius_values(part, height));
-    let Some(horizontal) = horizontal else {
+    let Some((horizontal, horizontal_count)) = horizontal else {
         return CornerRadii::default();
     };
-    let vertical = match vertical {
+    let (vertical, vertical_count) = match vertical {
         Some(Some(values)) => values,
         Some(None) => return CornerRadii::default(),
-        None => horizontal.clone(),
+        None => (horizontal, horizontal_count),
     };
-    if horizontal.len() > 4 || vertical.len() > 4 || horizontal.is_empty() || vertical.is_empty() {
+    if horizontal_count == 0
+        || vertical_count == 0
+        || horizontal_count > 4
+        || vertical_count > 4
+    {
         return CornerRadii::default();
     }
-    let horizontal = expand_radius_values(&horizontal);
-    let vertical = expand_radius_values(&vertical);
+    let horizontal = expand_radius_values(&horizontal, horizontal_count);
+    let vertical = expand_radius_values(&vertical, vertical_count);
     scale_corner_radii(
         CornerRadii {
             top_left: CornerRadius {
@@ -529,20 +535,26 @@ fn parse_border_radius_shorthand(value: &str, width: u32, height: u32) -> Corner
     )
 }
 
-fn parse_radius_values(value: &str, reference: u32) -> Option<Vec<u32>> {
-    value
-        .split_whitespace()
-        .map(|token| parse_radius_component(token, reference))
-        .collect()
+fn parse_radius_values(value: &str, reference: u32) -> Option<([u32; 4], usize)> {
+    let mut values = [0; 4];
+    let mut count = 0;
+    for token in value.split_whitespace() {
+        if count == values.len() {
+            return Some((values, count + 1));
+        }
+        values[count] = parse_radius_component(token, reference)?;
+        count += 1;
+    }
+    Some((values, count))
 }
 
-fn expand_radius_values(values: &[u32]) -> Vec<u32> {
-    match values {
-        [a] => vec![*a, *a, *a, *a],
-        [a, b] => vec![*a, *b, *a, *b],
-        [a, b, c] => vec![*a, *b, *c, *b],
-        [a, b, c, d] => vec![*a, *b, *c, *d],
-        _ => Vec::new(),
+fn expand_radius_values(values: &[u32; 4], count: usize) -> [u32; 4] {
+    match count {
+        1 => [values[0]; 4],
+        2 => [values[0], values[1], values[0], values[1]],
+        3 => [values[0], values[1], values[2], values[1]],
+        4 => *values,
+        _ => [0; 4],
     }
 }
 fn parse_radius_component(token: &str, reference: u32) -> Option<u32> {
@@ -783,17 +795,12 @@ fn parse_rgb_function(value: &str) -> Option<u32> {
     let is_rgba = value.starts_with("rgba(");
     let prefix_len = if is_rgba { 5 } else { 4 };
     let inner = value.strip_suffix(')')?.get(prefix_len..)?;
-    let components = inner.split(',').map(str::trim).collect::<Vec<_>>();
-    if components.len() != if is_rgba { 4 } else { 3 } {
-        return None;
-    }
-
-    let channels = components[..3]
-        .iter()
-        .map(|component| component.parse::<u8>().ok())
-        .collect::<Option<Vec<_>>>()?;
+    let mut components = inner.split(',').map(str::trim);
+    let red = components.next()?.parse::<u8>().ok()?;
+    let green = components.next()?.parse::<u8>().ok()?;
+    let blue = components.next()?.parse::<u8>().ok()?;
     let alpha = if is_rgba {
-        let value = components[3].parse::<f32>().ok()?;
+        let value = components.next()?.parse::<f32>().ok()?;
         if !(0.0..=1.0).contains(&value) {
             return None;
         }
@@ -801,11 +808,14 @@ fn parse_rgb_function(value: &str) -> Option<u32> {
     } else {
         255
     };
+    if components.next().is_some() {
+        return None;
+    }
 
     Some(
-        ((channels[0] as u32) << 24)
-            | ((channels[1] as u32) << 16)
-            | ((channels[2] as u32) << 8)
+        ((red as u32) << 24)
+            | ((green as u32) << 16)
+            | ((blue as u32) << 8)
             | alpha as u32,
     )
 }
@@ -1220,6 +1230,22 @@ mod tests {
                 Some(PaintCommand::PopClip)
             ));
         }
+    }
+
+    #[test]
+    fn color_and_radius_parsing_do_not_require_temporary_vectors() {
+        assert_eq!(parse_rgb_function("rgb(1, 2, 3)"), Some(0x010203ff));
+        assert_eq!(parse_rgb_function("rgba(1, 2, 3, 0.5)"), Some(0x01020380));
+        assert_eq!(parse_rgb_function("rgb(1, 2, 3, 4)"), None);
+        assert_eq!(parse_rgb_function("rgba(1, 2, 3)"), None);
+
+        let mut style = ComputedStyle::default();
+        style.set("border-radius", "1px 2px 3px / 4px 5px");
+        let radii = parse_border_radii(&style, 100, 80);
+        assert_eq!(radii.top_left, CornerRadius { x: 1, y: 4 });
+        assert_eq!(radii.top_right, CornerRadius { x: 2, y: 5 });
+        assert_eq!(radii.bottom_right, CornerRadius { x: 3, y: 4 });
+        assert_eq!(radii.bottom_left, CornerRadius { x: 2, y: 5 });
     }
 
     #[test]

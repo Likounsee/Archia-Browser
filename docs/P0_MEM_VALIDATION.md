@@ -30,3 +30,10 @@ Le chargeur de documents transfère maintenant sa réservation déjà active à 
 La display list réserve désormais sa capacité avec `Vec::try_reserve` avant de modifier ses compteurs ; `try_push` expose le résultat et le chemin historique `push` reste compatible. L'allocation de la liste d'indices enfants et la croissance de la pile de clips sont également fallibles : en cas d'échec, le rendu est tronqué/arrêté plutôt que de demander une allocation infallible supplémentaire.
 
 Cette tranche réduit les chemins de panique OOM dans le rendu, mais ne constitue pas une comptabilité exacte au budget partagé : la liste d'indices, la pile de clips et les autres buffers temporaires ne sont pas tous imputés au `MemoryBudget`. La catégorie P0-MEM-11 reste ouverte jusqu'à l'instrumentation des principaux chemins d'allocation, la couverture de leurs erreurs/cancellations et la validation CI/fuzz du SHA candidat.
+
+
+## Tranche renderer — suppression de buffers temporaires évitables
+
+Le parsing des couleurs `rgb()/rgba()` et des rayons de bordures n'alloue plus de `Vec` temporaires pour trois/quatre composantes : il utilise des itérateurs et des tableaux de taille fixe. Les formes invalides et les listes de rayons trop longues restent rejetées. Un test vérifie les couleurs RGB/RGBA, les nombres de composantes invalides et l'expansion des rayons horizontaux/verticaux.
+
+Avec la tranche précédente, cela couvre les buffers temporaires de parsing et les principaux chemins d'allocation explicites du rendu. Ce n'est toujours pas suffisant pour fermer P0-MEM-11 : les allocations internes DOM/CSS/layout/cache/réseau ne sont pas toutes instrumentées, et les chemins historiques non budgétés existent encore.
