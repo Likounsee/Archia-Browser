@@ -69,14 +69,18 @@ impl CssTokenizer {
                 '}' => tokens.push(CssToken::RightBrace),
                 '(' => tokens.push(CssToken::LeftParen),
                 ')' => tokens.push(CssToken::RightParen),
-                '#' if chars.peek().is_some_and(|next| {
-                    is_name_code_point(*next) || *next == '\\' && starts_valid_escape(&chars)
-                }) =>
-                {
-                    let value = consume_ident(&mut chars);
-                    tokens.push(CssToken::Hash(value));
+                '#' => {
+                    let starts_hash = chars.peek().copied().is_some_and(|next| {
+                        is_name_code_point(next)
+                            || next == '\\' && starts_valid_escape(&chars)
+                    });
+                    if starts_hash {
+                        let value = consume_ident(&mut chars);
+                        tokens.push(CssToken::Hash(value));
+                    } else {
+                        tokens.push(CssToken::Delim('#'));
+                    }
                 }
-                '#' => tokens.push(CssToken::Delim('#')),
                 '"' | '\'' => {
                     let quote = ch;
                     let mut value = String::new();
