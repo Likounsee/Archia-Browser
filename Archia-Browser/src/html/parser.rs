@@ -542,10 +542,16 @@ mod tests {
         ));
 
         let title = root.find_first_element("title").expect("title is retained");
-        let script = root.find_first_element("script").expect("script is retained");
+        let script = root
+            .find_first_element("script")
+            .expect("script is retained");
         let style = root.find_first_element("style").expect("style is retained");
-        let textarea = root.find_first_element("textarea").expect("textarea is retained");
-        let paragraph = root.find_first_element("p").expect("following paragraph is retained");
+        let textarea = root
+            .find_first_element("textarea")
+            .expect("textarea is retained");
+        let paragraph = root
+            .find_first_element("p")
+            .expect("following paragraph is retained");
 
         assert_eq!(title.text_content(), "Page & title");
         assert_eq!(script.text_content(), "const x = 1;");
