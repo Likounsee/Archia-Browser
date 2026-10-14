@@ -144,8 +144,8 @@ impl HttpCache {
         };
 
         // Response data can be constructed by callers as well as received
-        // from the bounded network transport. Saturate accounting arithmetic
-        // so an extreme size estimate cannot overflow and undercharge the cache.
+        // from the bounded network transport. Check the combined payload and
+        // key estimate so an extreme size cannot overflow accounting arithmetic.
         // The normalized URL key is retained alongside the response. Long URLs
         // can exceed the fixed per-entry overhead, so account for their bytes too.
         let payload_bytes = accounted_response_bytes(response);
