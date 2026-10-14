@@ -203,7 +203,11 @@ impl HttpCache {
                     // until the incremental reservation succeeds or no entry remains.
                     if self.entries.remove_oldest().is_none() {
                         if let Some(previous) = previous {
-                            let previous_bytes = accounted_response_bytes(&previous.response);
+                            // ResourceCache's capacity accounting must include the retained key,
+                            // just like the shared MemoryBudget reservation above. Omitting it
+                            // here undercounts the restored entry after a failed replacement.
+                            let previous_bytes =
+                                accounted_response_bytes(&previous.response).saturating_add(key.len());
                             self.entries.insert(key.clone(), previous, previous_bytes);
                         }
                         return;
@@ -948,6 +952,11 @@ mod tests {
             "failed replacement must retain the old cached representation"
         );
         assert_eq!(cache.len(), 1);
+        assert_eq!(
+            cache.used_bytes(),
+            accounted_response_bytes(&original).saturating_add(cache_key(&request).len()),
+            "restoring the old entry must preserve cache-capacity accounting for its URL key"
+        );
     }
 
     #[test]
