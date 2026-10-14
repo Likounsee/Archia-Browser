@@ -50,9 +50,12 @@ impl HttpCache {
     pub fn get(&mut self, request: &Request) -> Option<Response> {
         let key = cache_key(request);
         if request_forces_cache_bypass(request) {
-            // We cannot revalidate yet, so don't leave an older response
-            // available for a later request after an explicit bypass.
-            self.entries.remove(&key);
+            // Invalidate only when this request has the same public cache
+            // identity. A credentialed request must not evict an unrelated
+            // uncredentialed representation that happens to share its URL.
+            if request_can_invalidate_cache_entry(request) {
+                self.entries.remove(&key);
+            }
             return None;
         }
         if !request_can_use_cache(request) {
@@ -111,7 +114,9 @@ impl HttpCache {
         if !request_can_store(request) {
             // Explicit cache-bypass directives invalidate the old entry, but
             // a credentialed request must not evict an unrelated public copy.
-            if request_forces_cache_bypass(request) {
+            if request_forces_cache_bypass(request)
+                && request_can_invalidate_cache_entry(request)
+            {
                 self.entries.remove(&key);
             }
             return;
@@ -358,6 +363,23 @@ pub(crate) fn request_only_if_cached(request: &Request) -> bool {
                         trim_http_ows(name).eq_ignore_ascii_case("only-if-cached")
                     })
         })
+}
+
+/// Whether a request may invalidate an uncredentialed cache entry for its URL.
+///
+/// Cache-Control bypass directives are deliberately not considered here: they
+/// are the reason for invalidation. Identity-changing or representation-specific
+/// headers are considered, so private/conditional/range requests cannot evict a
+/// public full-response entry merely because the URL matches.
+fn request_can_invalidate_cache_entry(request: &Request) -> bool {
+    matches!(request.method, HttpMethod::Get)
+        && matches!(request.url.scheme(), "http" | "https")
+        && !request.url.authority().contains('@')
+        && !has_request_header(request, "authorization")
+        && !has_request_header(request, "cookie")
+        && !has_request_header(request, "range")
+        && !has_request_header(request, "if-range")
+        && !request_has_conditional_headers(request)
 }
 
 fn request_can_use_cache(request: &Request) -> bool {
@@ -1563,6 +1585,45 @@ mod tests {
 
         let request = request.with_header("cache-control", "max-age=30");
         assert_eq!(cache.get(&request).unwrap().body, b"cached");
+    }
+
+    #[test]
+    fn credentialed_bypass_requests_do_not_evict_public_cache_entries() {
+        let mut cache = HttpCache::default();
+        let request = make_request("https://example.org/resource");
+        let public_response = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_body(b"public representation".to_vec());
+        cache.store(&request, &public_response);
+        assert_eq!(cache.len(), 1);
+
+        let cookie_bypass = request
+            .clone()
+            .with_header("Cookie", "session=secret")
+            .with_header("Cache-Control", "no-cache");
+        assert!(cache.get(&cookie_bypass).is_none());
+        assert_eq!(
+            cache.len(),
+            1,
+            "a credentialed cache bypass must not evict a public entry"
+        );
+
+        let authorization_bypass = request
+            .clone()
+            .with_header("Authorization", "Bearer secret")
+            .with_header("Cache-Control", "no-store");
+        cache.store(
+            &authorization_bypass,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_body(b"private representation".to_vec()),
+        );
+        assert_eq!(
+            cache.get(&request).unwrap().body,
+            b"public representation",
+            "storing a credentialed bypass response must preserve public cached data"
+        );
+        assert_eq!(cache.len(), 1);
     }
 
     #[test]
