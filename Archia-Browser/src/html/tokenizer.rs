@@ -775,8 +775,11 @@ fn decode_character_references_with_context(input: &str, in_attribute: bool) -> 
         }
 
         let Some(end_relative) = input[start + 1..].find(';') else {
-            output.push_str(&input[start..]);
-            return output.replace('\0', "\u{FFFD}");
+            // A bare ampersand is literal, but later references in the same
+            // text or attribute value must still be decoded.
+            output.push('&');
+            cursor = start + 1;
+            continue;
         };
         // An ampersand before the semicolon starts a separate candidate
         // reference; do not swallow a valid reference that follows an unknown one.
