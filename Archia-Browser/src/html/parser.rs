@@ -324,6 +324,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                         "tr" | "td" | "th" | "thead" | "tbody" | "tfoot" => Some("table"),
                         "li" => Some("list"),
                         "dt" | "dd" => Some("description-list"),
+                        "option" | "optgroup" => Some("select"),
                         _ => None,
                     };
                     if let Some(boundary_kind) = scope_boundary {
@@ -335,6 +336,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                                 "table" => node.tag_name() == Some("table"),
                                 "list" => matches!(node.tag_name(), Some("ol" | "ul")),
                                 "description-list" => node.tag_name() == Some("dl"),
+                                "select" => node.tag_name() == Some("select"),
                                 _ => false,
                             });
                         // End tags must not cross the nearest matching scope boundary.
@@ -1018,6 +1020,19 @@ mod tests {
             second_section.children[0].children[0].text_content(),
             "four"
         );
+    }
+
+    #[test]
+    fn nested_select_end_tags_do_not_close_outer_options() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<select><option>outer<select></option>tail</select><option>second</option></select>",
+        ));
+        let select = root.find_first_element("select").expect("outer select retained");
+        assert_eq!(select.children[0].tag_name(), Some("option"));
+        assert_eq!(select.children[0].text_content(), "outertail");
+        assert_eq!(select.children[1].tag_name(), Some("select"));
+        assert_eq!(select.children[2].tag_name(), Some("option"));
+        assert_eq!(select.children[2].text_content(), "second");
     }
 
     #[test]
