@@ -113,6 +113,8 @@ impl HtmlTokenizer {
                 }
             } else if let Some((name, attributes, self_closing)) = parse_start_tag(inside) {
                 let is_raw_text = matches!(name.as_str(), "script" | "style");
+                let is_rcdata = matches!(name.as_str(), "title" | "textarea");
+                let is_plaintext = name == "plaintext";
                 if !try_push_token(
                     &mut tokens,
                     HtmlToken::StartTag {
@@ -124,25 +126,7 @@ impl HtmlTokenizer {
                     return tokens;
                 }
 
-                if is_raw_text && !self_closing {
-                    if let Some((text_end, close_end)) = find_raw_text_end(input, end + 1, &name) {
-                        if text_end > end + 1
-                            && tokens.len() < MAX_HTML_TOKENS
-                            && !try_push_token(
-                                &mut tokens,
-                                HtmlToken::Text(input[end + 1..text_end].replace('\0', "\u{FFFD}")),
-                            )
-                        {
-                            return tokens;
-                        }
-                        cursor = close_end;
-                        continue;
-                    }
-
-                    // Script/style contents remain raw text through EOF when
-                    // the closing tag is missing. Re-tokenizing the remainder
-                    // as markup can create a parser differential on malformed
-                    // or attacker-controlled documents.
+                if is_plaintext && !self_closing {
                     if end + 1 < input.len()
                         && tokens.len() < MAX_HTML_TOKENS
                         && !try_push_token(
@@ -151,6 +135,40 @@ impl HtmlTokenizer {
                         )
                     {
                         return tokens;
+                    }
+                    break;
+                }
+
+                if (is_raw_text || is_rcdata) && !self_closing {
+                    if let Some((text_end, close_end)) = find_raw_text_end(input, end + 1, &name) {
+                        if text_end > end + 1 && tokens.len() < MAX_HTML_TOKENS {
+                            let text = &input[end + 1..text_end];
+                            let decoded = if is_rcdata {
+                                decode_character_references(text)
+                            } else {
+                                text.replace('\0', "\u{FFFD}")
+                            };
+                            if !try_push_token(&mut tokens, HtmlToken::Text(decoded)) {
+                                return tokens;
+                            }
+                        }
+                        cursor = close_end;
+                        continue;
+                    }
+
+                    // Raw-text and RCDATA elements consume the remainder when
+                    // their end tag is missing; inner markup must not be parsed
+                    // as document elements.
+                    if end + 1 < input.len() && tokens.len() < MAX_HTML_TOKENS {
+                        let text = &input[end + 1..];
+                        let decoded = if is_rcdata {
+                            decode_character_references(text)
+                        } else {
+                            text.replace('\0', "\u{FFFD}")
+                        };
+                        if !try_push_token(&mut tokens, HtmlToken::Text(decoded)) {
+                            return tokens;
+                        }
                     }
                     break;
                 }
@@ -335,6 +353,23 @@ mod tests {
         let input = format!("{repeated_tags}x<script>payload</script>");
         let tokens = HtmlTokenizer::tokenize(&input);
         assert_eq!(tokens.len(), MAX_HTML_TOKENS);
+    }
+
+    #[test]
+    fn title_and_textarea_use_rcdata_without_parsing_inner_markup() {
+        let tokens = HtmlTokenizer::tokenize(
+            "<title>A &amp; <b>title</title><textarea>x &lt; <b>y</textarea>",
+        );
+        assert!(matches!(&tokens[1], HtmlToken::Text(text) if text == "A & <b>title"));
+        assert!(matches!(&tokens[3], HtmlToken::Text(text) if text == "x < <b>y"));
+        assert_eq!(tokens.len(), 4);
+    }
+
+    #[test]
+    fn plaintext_consumes_markup_through_eof() {
+        let tokens = HtmlTokenizer::tokenize("<plaintext>hello <b>world</b>");
+        assert!(matches!(&tokens[1], HtmlToken::Text(text) if text == "hello <b>world</b>"));
+        assert_eq!(tokens.len(), 2);
     }
 
     #[test]
