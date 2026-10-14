@@ -1045,7 +1045,9 @@ mod tests {
 
     #[test]
     fn non_closing_start_tags_do_not_close_paragraphs_in_body() {
-        for tag in ["caption", "col", "colgroup", "center", "dir", "listing", "summary"] {
+        for tag in [
+            "caption", "col", "colgroup", "center", "dir", "listing", "summary",
+        ] {
             let markup = format!("<div><p>before<{tag}>after</p></div>");
             let root = parse(&HtmlTokenizer::tokenize(&markup));
             let paragraph = root.find_first_element("p").expect("paragraph retained");
