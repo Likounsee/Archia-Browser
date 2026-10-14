@@ -1559,6 +1559,7 @@ mod tests {
         for directive in [
             "max-age=invalid",
             "max-age=+1",
+            "max-age=+0",
             "max-age=１２",
             "min-fresh=+1",
             "max-age",
