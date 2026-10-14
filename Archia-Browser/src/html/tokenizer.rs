@@ -765,8 +765,8 @@ fn decode_character_references_with_context(input: &str, in_attribute: bool) -> 
         if let Some((name, character)) = legacy_match {
             let end = start + 1 + name.len();
             let next = input[end..].chars().next();
-            let blocked_in_attribute = in_attribute
-                && next.is_some_and(|ch| ch.is_ascii_alphanumeric() || ch == '=');
+            let blocked_in_attribute =
+                in_attribute && next.is_some_and(|ch| ch.is_ascii_alphanumeric() || ch == '=');
             if !blocked_in_attribute && next != Some(';') {
                 output.push(*character);
                 cursor = end;
