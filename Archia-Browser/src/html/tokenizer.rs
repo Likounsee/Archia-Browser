@@ -416,8 +416,10 @@ mod tests {
             "<title>A &amp; <b>title</title><textarea>x &lt; <b>y</textarea>",
         );
         assert!(matches!(&tokens[1], HtmlToken::Text(text) if text == "A & <b>title"));
-        assert!(matches!(&tokens[3], HtmlToken::Text(text) if text == "x < <b>y"));
-        assert_eq!(tokens.len(), 4);
+        assert!(matches!(&tokens[4], HtmlToken::Text(text) if text == "x < <b>y"));
+        assert!(matches!(&tokens[2], HtmlToken::EndTag(name) if name == "title"));
+        assert!(matches!(&tokens[5], HtmlToken::EndTag(name) if name == "textarea"));
+        assert_eq!(tokens.len(), 6);
     }
 
     #[test]
