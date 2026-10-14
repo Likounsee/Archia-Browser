@@ -2180,6 +2180,10 @@ fn decode_chunked(
                             | "expect"
                             | "authentication-info"
                             | "proxy-authentication-info"
+                            | "proxy-authorization"
+                            | "cookie"
+                            | "host"
+                            | "te"
                     )
                 {
                     return Err(TransportError::ConnectionFailed);
@@ -2565,6 +2569,10 @@ mod tests {
             "Expect: 100-continue",
             "Authentication-Info: nextnonce=abc",
             "Proxy-Authentication-Info: nextnonce=abc",
+            "Proxy-Authorization: Basic dGVzdA==",
+            "Cookie: sid=secret",
+            "Host: attacker.example",
+            "TE: trailers",
         ] {
             let response = format!(
                 "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n{trailer}\r\n\r\n"
