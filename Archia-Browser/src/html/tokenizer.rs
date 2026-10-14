@@ -721,6 +721,14 @@ fn decode_character_references(input: &str) -> String {
             output.push_str(&input[start..]);
             return output.replace('\0', "\u{FFFD}");
         };
+        // An ampersand before the semicolon starts a separate candidate
+        // reference; do not swallow a valid reference that follows an unknown one.
+        if let Some(next_ampersand) = input[start + 1..start + 1 + end_relative].find('&') {
+            let next_start = start + 1 + next_ampersand;
+            output.push('&');
+            cursor = next_start;
+            continue;
+        }
         let end = start + 1 + end_relative;
         let reference = &input[start + 1..end];
 
@@ -836,6 +844,14 @@ mod character_reference_tests {
     fn replaces_literal_nulls_inside_raw_text() {
         let tokens = HtmlTokenizer::tokenize("<script>a\0b</script>");
         assert!(matches!(&tokens[1], HtmlToken::Text(text) if text == "a\u{FFFD}b"));
+    }
+
+    #[test]
+    fn decodes_valid_references_after_unknown_references() {
+        assert_eq!(
+            decode_character_references("&unknown&copy; &bad&amp;"),
+            "&unknown© &bad&"
+        );
     }
 
     #[test]
