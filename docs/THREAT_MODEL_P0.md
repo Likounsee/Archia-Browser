@@ -77,3 +77,8 @@ These are code-presence observations, not a claim that all cases are complete:
 - [ ] Candidate SHA is recorded with green CI and dependency audit.
 - [ ] Final long-fuzz run is complete; crashes are triaged and minimized.
 - [ ] No untrusted script/runtime/Web API is enabled before the P0 exit gate.
+
+
+## DOM lookup API note (2026-10-14)
+
+Attribute/class/name lookup helpers and combined tag filters improve DOM traversal ergonomics but are not security boundaries. They must not be used to authorize navigation, resource access or privileged operations. Collection queries allocate result vectors; large-document and allocation-failure cases remain covered by the parser/DOM input bounds and ongoing memory-accounting work, not by the lookup API itself.
