@@ -102,3 +102,85 @@ fn redirect_target_is_rechecked_by_policy_before_transport() {
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0], "https://example.org/start");
 }
+
+
+struct RequestRecordingTransport {
+    responses: Mutex<Vec<Response>>,
+    requests: Arc<Mutex<Vec<Request>>>,
+}
+
+impl Transport for RequestRecordingTransport {
+    fn send(&self, request: &Request) -> Result<Response, TransportError> {
+        self.requests
+            .lock()
+            .expect("request log mutex poisoned")
+            .push(request.clone());
+        let mut responses = self
+            .responses
+            .lock()
+            .expect("response queue mutex poisoned");
+        if responses.is_empty() {
+            return Err(TransportError::ConnectionFailed);
+        }
+        Ok(responses.remove(0))
+    }
+}
+
+fn html_response() -> Response {
+    Response::new(200)
+        .with_header("content-type", "text/html; charset=utf-8")
+        .with_body(b"<!doctype html><html><body>ok</body></html>".to_vec())
+}
+
+#[test]
+fn cross_origin_redirect_does_not_forward_credentials_or_custom_headers() {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let transport = RequestRecordingTransport {
+        responses: Mutex::new(vec![
+            Response::new(302).with_header("location", "https://other.example/private"),
+            html_response(),
+        ]),
+        requests: Arc::clone(&requests),
+    };
+    let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
+    let mut request = Request::new(Url::parse("https://example.org/start").unwrap());
+    request.headers.insert("authorization".into(), "Bearer secret".into());
+    request.headers.insert("x-api-key".into(), "secret-key".into());
+    request.headers.insert("accept-language".into(), "fr-FR".into());
+
+    loader
+        .load(&request, LayoutViewport::new(320, 200))
+        .expect("redirected HTML document should load");
+
+    let requests = requests.lock().expect("request log mutex poisoned");
+    assert_eq!(requests.len(), 2);
+    let redirected = &requests[1].headers;
+    assert!(!redirected.contains_key("authorization"));
+    assert!(!redirected.contains_key("x-api-key"));
+    assert_eq!(redirected.get("accept-language").map(String::as_str), Some("fr-FR"));
+}
+
+#[test]
+fn proxy_authorization_is_removed_even_on_same_origin_redirects() {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let transport = RequestRecordingTransport {
+        responses: Mutex::new(vec![
+            Response::new(302).with_header("location", "/next"),
+            html_response(),
+        ]),
+        requests: Arc::clone(&requests),
+    };
+    let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
+    let mut request = Request::new(Url::parse("https://example.org/start").unwrap());
+    request
+        .headers
+        .insert("proxy-authorization".into(), "Basic secret".into());
+
+    loader
+        .load(&request, LayoutViewport::new(320, 200))
+        .expect("redirected HTML document should load");
+
+    let requests = requests.lock().expect("request log mutex poisoned");
+    assert_eq!(requests.len(), 2);
+    assert!(!requests[1].headers.contains_key("proxy-authorization"));
+}
