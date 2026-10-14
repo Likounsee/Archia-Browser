@@ -37,7 +37,7 @@ These percentages are engineering estimates of **functional coverage**, not line
 | JavaScript | ~0% | Runtime not started |
 | Browser UI | ~5% | Browser/tab APIs exist; full window UI remains |
 | ArchiaOS integration | ~5% | Platform abstraction exists |
-| Tests / CI | — | Latest verified green commit: `cd5a323e5d338f032b1d4b4f590339cdc0fd7b27`, run `38439360131` on Ubuntu, Windows and macOS; formatting, workspace tests, build and Clippy passed, and Linux RustSec/license audits passed. The 24-hour fuzz campaign, unsupported platforms and broader standards-conformance coverage remain unverified. |
+| Tests / CI | — | Latest verified green commit: `cd5a323e5d338f032b1d4b4f590339cdc0fd7b27`, run `38439360131` on Ubuntu, Windows and macOS; formatting, workspace tests, build and Clippy passed, and Linux RustSec/license audits passed. The latest previously verified green SHA is historical evidence only; CI for the current documentation/DOM candidate is running. The 24-hour fuzz campaign, unsupported platforms and broader standards-conformance coverage remain unverified. |
 
 **Overall engine foundation:** roughly **40–45%** as a non-reproducible engineering estimate, not a measured compatibility score. It is not test coverage or standards conformance. TLS is implemented at the transport layer, but that does not mean the whole network stack is production-ready.
 
