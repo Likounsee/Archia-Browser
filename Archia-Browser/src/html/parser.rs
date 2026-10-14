@@ -144,7 +144,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 let foster_table = stack.iter().rposition(|node| node.tag_name() == Some("table"));
                 let is_html_whitespace = retained
                     .bytes()
-                    .all(|byte| matches!(byte, b'\\t' | b'\\n' | b'\\x0C' | b'\\r' | b' '));
+                    .all(|byte| matches!(byte, b'\t' | b'\n' | b'\x0C' | b'\r' | b' '));
                 let foster_parent = (!is_html_whitespace)
                     .then_some(foster_table)
                     .flatten()
@@ -1009,7 +1009,7 @@ mod tests {
         let table = body.find_first_element("table").expect("table retained");
 
         assert_eq!(body.children.len(), 1);
-        assert_eq!(table.children[0].text_content(), " \\n");
+        assert_eq!(table.children[0].text_content(), " \n");
         assert_eq!(table.children[1].tag_name(), Some("tbody"));
         assert_eq!(table.text_content(), " \\ncell");
     }
