@@ -1563,6 +1563,7 @@ mod tests {
             "max-age=１２",
             "max-age=18446744073709551616",
             "min-fresh=+1",
+            "min-fresh=18446744073709551616",
             "max-age",
             "max-age=30, max-age=60",
             "min-fresh=invalid",
