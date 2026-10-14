@@ -2630,10 +2630,7 @@ mod tests {
         assert!(cache.get(&get).is_some());
 
         let post = Request::new(url).with_method(HttpMethod::Post);
-        cache.store(
-            &post,
-            &Response::new(302).with_header("location", "/login"),
-        );
+        cache.store(&post, &Response::new(302).with_header("location", "/login"));
 
         assert!(
             cache.get(&get).is_none(),
