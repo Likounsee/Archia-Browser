@@ -34,11 +34,11 @@ fn parse_cookie_max_age(value: &str) -> Option<i64> {
     // malformed attributes. A positive overflow must fail the checked expiry
     // calculation rather than accidentally becoming a session cookie; a
     // negative overflow is an immediate-expiry signal.
-    Some(value.parse::<i64>().unwrap_or(if negative {
-        i64::MIN
-    } else {
-        i64::MAX
-    }))
+    Some(
+        value
+            .parse::<i64>()
+            .unwrap_or(if negative { i64::MIN } else { i64::MAX }),
+    )
 }
 
 fn trim_cookie_ows(value: &str) -> &str {
@@ -1147,6 +1147,33 @@ mod tests {
         assert!(
             jar.is_empty(),
             "overflowing positive Max-Age values must not become session cookies"
+        );
+    }
+
+    #[test]
+    fn overflowing_positive_max_age_does_not_replace_existing_cookie() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&url, "sid=trusted; Max-Age=3600");
+        jar.store(&url, "sid=overflow; Max-Age=9223372036854775808");
+
+        assert_eq!(
+            jar.header_for(&url).as_deref(),
+            Some("sid=trusted"),
+            "an impossible expiry must not erase or replace a valid cookie"
+        );
+    }
+
+    #[test]
+    fn overflowing_negative_max_age_deletes_existing_cookie() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+        jar.store(&url, "sid=trusted; Max-Age=3600");
+        jar.store(&url, "sid=deleted; Max-Age=-9223372036854775809");
+
+        assert!(
+            jar.is_empty(),
+            "a syntactically valid negative overflow still means immediate expiry"
         );
     }
 

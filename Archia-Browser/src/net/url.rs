@@ -820,6 +820,20 @@ mod tests {
     }
 
     #[test]
+    fn resolving_unicode_query_and_fragment_only_references_encodes_utf8() {
+        let base = Url::parse("https://example.org/dir/page?old=1#old").unwrap();
+
+        assert_eq!(
+            base.resolve("?q=été").unwrap().to_string(),
+            "https://example.org/dir/page?q=%C3%A9t%C3%A9"
+        );
+        assert_eq!(
+            base.resolve("#été").unwrap().to_string(),
+            "https://example.org/dir/page?old=1#%C3%A9t%C3%A9"
+        );
+    }
+
+    #[test]
     fn resolving_empty_reference_preserves_query_and_fragment() {
         let base = Url::parse("https://example.org/path?search=rust#section-2").unwrap();
         let resolved = base.resolve("").unwrap();
