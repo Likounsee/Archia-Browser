@@ -374,7 +374,9 @@ fn request_can_invalidate_cache_entry(request: &Request) -> bool {
         && matches!(request.url.scheme(), "http" | "https")
         && !request.url.authority().contains('@')
         && !has_request_header(request, "authorization")
+        && !has_request_header(request, "proxy-authorization")
         && !has_request_header(request, "cookie")
+        && !has_request_header(request, "connection")
         && !has_request_header(request, "range")
         && !has_request_header(request, "if-range")
         && !request_has_conditional_headers(request)
@@ -391,6 +393,9 @@ fn request_can_use_cache(request: &Request) -> bool {
         // cache entry for the same host/path before transport validation runs.
         && !request.url.authority().contains('@')
         && !has_request_header(request, "authorization")
+        // Proxy credentials are also identity-sensitive, even though this
+        // cache key intentionally does not include any credential headers.
+        && !has_request_header(request, "proxy-authorization")
         && !has_request_header(request, "cookie")
         // Range responses have different representation semantics and this
         // cache does not implement partial-response merging or If-Range.
@@ -416,6 +421,7 @@ fn request_can_store(request: &Request) -> bool {
         && !has_request_header(request, "connection")
         && !request.url.authority().contains('@')
         && !has_request_header(request, "authorization")
+        && !has_request_header(request, "proxy-authorization")
         && !has_request_header(request, "cookie")
         // Range responses have different representation semantics and this
         // cache does not implement partial-response merging or If-Range.
@@ -810,6 +816,39 @@ mod tests {
         cache.store(&request, &response);
         assert_eq!(cache.len(), 0);
         assert!(!super::request_can_use_cache(&request));
+    }
+
+    #[test]
+    fn proxy_credentials_and_connection_bypass_cache_without_evicting_public_entry() {
+        let url = super::super::Url::parse("https://example.org/resource").unwrap();
+        let public_request = super::Request::new(url.clone());
+        let public_response = super::Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_body(b"public copy".to_vec());
+        let mut cache = super::HttpCache::default();
+        cache.store(&public_request, &public_response);
+        assert_eq!(cache.len(), 1);
+
+        for header in ["proxy-authorization", "connection"] {
+            let mut private_request = super::Request::new(url.clone())
+                .with_header("cache-control", "no-cache");
+            private_request.headers.insert(
+                header.to_owned(),
+                if header == "connection" {
+                    "close".to_owned()
+                } else {
+                    "Basic secret".to_owned()
+                },
+            );
+            assert!(cache.get(&private_request).is_none());
+            assert_eq!(
+                cache.len(),
+                1,
+                "{header} must not evict a public entry through cache bypass"
+            );
+            cache.store(&private_request, &public_response);
+            assert_eq!(cache.len(), 1, "{header} request must not be stored");
+        }
     }
 
     #[test]
