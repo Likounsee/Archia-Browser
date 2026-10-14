@@ -481,13 +481,19 @@ mod tests {
         root.append(first);
         root.append(second);
 
-        assert_eq!(root.find_first_by_name("email").and_then(Node::tag_name), Some("input"));
+        assert_eq!(
+            root.find_first_by_name("email").and_then(Node::tag_name),
+            Some("input")
+        );
         assert_eq!(
             root.find_first_by_attribute("data-state")
                 .and_then(|node| node.attribute("data-state")),
             Some("")
         );
-        assert_eq!(root.find_first_by_class("required").and_then(Node::tag_name), Some("input"));
+        assert_eq!(
+            root.find_first_by_class("required").and_then(Node::tag_name),
+            Some("input")
+        );
         assert_eq!(root.find_first_by_attribute_value("name", "missing"), None);
         assert_eq!(root.find_first_by_class("field required extra"), None);
     }
