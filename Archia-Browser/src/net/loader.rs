@@ -245,6 +245,9 @@ where
                     .url
                     .resolve(location)
                     .map_err(|_| DocumentLoadError::InvalidRedirect)?;
+                if !is_supported_redirect_scheme(url.scheme()) {
+                    return Err(DocumentLoadError::InvalidRedirect);
+                }
                 // Per HTTP redirect semantics, a Location without a fragment
                 // inherits the fragment from the original URL. An explicit
                 // fragment in Location always takes precedence.
@@ -624,6 +627,9 @@ where
                     .header("location")
                     .filter(|value| !value.trim().is_empty())?;
                 let next = current.resolve(location).ok()?;
+                if !is_supported_redirect_scheme(next.scheme()) {
+                    return None;
+                }
                 // Keep stylesheet redirects within the document's local-file
                 // or network trust domain, in both directions.
                 if (current.scheme() == "file") != (next.scheme() == "file") {
@@ -1088,6 +1094,10 @@ fn redirect_loop_key(url: &super::Url) -> String {
         Some((without_fragment, _)) => without_fragment.to_owned(),
         None => serialized,
     }
+}
+
+fn is_supported_redirect_scheme(scheme: &str) -> bool {
+    matches!(scheme, "http" | "https" | "file")
 }
 
 fn is_redirect(status: u16) -> bool {
