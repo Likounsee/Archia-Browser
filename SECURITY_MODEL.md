@@ -70,3 +70,8 @@ These controls are implemented in source but still require ongoing regression te
 - [ ] Verify every control listed above still exists and is covered by a test.
 - [ ] Record owners/decisions for accepted residual risks.
 - [ ] Revisit this document before adding JavaScript, Web APIs, downloads, extensions, or persistent profiles.
+
+
+## DOM lookup API clarification (2026-10-14)
+
+The DOM now offers convenience lookups by attribute, exact attribute value, class token, `name`, first match and combined tag filters. These APIs are data-query helpers only: they do not enforce origin checks, request policy, access control or trust boundaries. Callers handling untrusted content must continue to apply the relevant security policy independently. Collection variants allocate result vectors, so DOM node/input limits and the broader memory-accounting work remain relevant.
