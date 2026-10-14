@@ -320,17 +320,31 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                         name.as_str(),
                         "tr" | "td" | "th" | "thead" | "tbody" | "tfoot"
                     );
-                    if table_scoped_end_tag {
+                    let scope_boundary = match name.as_str() {
+                        "tr" | "td" | "th" | "thead" | "tbody" | "tfoot" => Some("table"),
+                        "li" => stack
+                            .iter()
+                            .rposition(|node| matches!(node.tag_name(), Some("ol" | "ul")))
+                            .map(|_| "list"),
+                        "dt" | "dd" => stack
+                            .iter()
+                            .rposition(|node| node.tag_name() == Some("dl"))
+                            .map(|_| "description-list"),
+                        _ => None,
+                    };
+                    if let Some(boundary_kind) = scope_boundary {
                         let matching_position = stack
                             .iter()
                             .rposition(|node| node.tag_name() == Some(name.as_str()));
-                        let table_position = stack
-                            .iter()
-                            .rposition(|node| node.tag_name() == Some("table"));
-                        // An end tag inside a nested table cannot close a row,
-                        // cell, or section belonging to an outer table.
+                        let boundary_position = stack.iter().rposition(|node| match boundary_kind {
+                            "table" => node.tag_name() == Some("table"),
+                            "list" => matches!(node.tag_name(), Some("ol" | "ul")),
+                            "description-list" => node.tag_name() == Some("dl"),
+                            _ => false,
+                        });
+                        // End tags must not cross the nearest matching scope boundary.
                         if matching_position.is_some_and(|matching| {
-                            table_position.is_none_or(|table| matching >= table)
+                            boundary_position.is_none_or(|boundary| matching >= boundary)
                         }) {
                             close_element(&mut root, &mut stack, name);
                         }
@@ -1006,6 +1020,19 @@ mod tests {
             second_section.children[0].children[0].text_content(),
             "four"
         );
+    }
+
+    #[test]
+    fn nested_list_end_tags_do_not_close_outer_list_items() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<ul><li>outer<ul></ul></li><li>second</li></ul>",
+        ));
+        let list = root.find_first_element("ul").expect("outer list retained");
+        assert_eq!(list.children.len(), 2);
+        assert_eq!(list.children[0].tag_name(), Some("li"));
+        assert_eq!(list.children[0].text_content(), "outer");
+        assert_eq!(list.children[1].tag_name(), Some("li"));
+        assert_eq!(list.children[1].text_content(), "second");
     }
 
     #[test]
