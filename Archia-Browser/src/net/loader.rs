@@ -345,7 +345,12 @@ where
             // reservation is released, so the decoded CSS is never unaccounted for
             // during the hand-off into the document's accumulated stylesheet.
             let stylesheet =
-                self.load_linked_stylesheets(&current.url, &html, reservation.as_ref());
+                self.load_linked_stylesheets_cancellable(
+                    &current.url,
+                    &html,
+                    reservation.as_ref(),
+                    cancellation,
+                );
             cancellation.check().map_err(DocumentLoadError::Network)?;
 
             let page = if let Some(reservation) = reservation.take() {
@@ -373,6 +378,21 @@ where
         html: &str,
         document_reservation: Option<&crate::core::memory::MemoryReservation>,
     ) -> String {
+        self.load_linked_stylesheets_cancellable(
+            document_url,
+            html,
+            document_reservation,
+            &CancellationToken::new(),
+        )
+    }
+
+    fn load_linked_stylesheets_cancellable(
+        &self,
+        document_url: &super::Url,
+        html: &str,
+        document_reservation: Option<&crate::core::memory::MemoryReservation>,
+        cancellation: &CancellationToken,
+    ) -> String {
         let document = parse(&HtmlTokenizer::tokenize(html));
         let mut links = Vec::new();
         collect_stylesheet_links(&document, &mut links);
@@ -390,7 +410,7 @@ where
         let mut request_budget = MAX_STYLESHEET_REQUESTS_PER_DOCUMENT;
         let mut remaining_css_bytes = MAX_STYLESHEET_BYTES_PER_DOCUMENT;
         for href in links {
-            if request_budget == 0 || remaining_css_bytes == 0 {
+            if cancellation.is_cancelled() || request_budget == 0 || remaining_css_bytes == 0 {
                 break;
             }
             let Ok(url) = base_url.resolve(&href) else {
@@ -402,6 +422,7 @@ where
                 &mut request_budget,
                 &mut remaining_css_bytes,
                 document_reservation,
+                cancellation,
             ) else {
                 continue;
             };
@@ -422,6 +443,7 @@ where
         request_budget: &mut usize,
         remaining_css_bytes: &mut usize,
         document_reservation: Option<&crate::core::memory::MemoryReservation>,
+        cancellation: &CancellationToken,
     ) -> Option<String> {
         // Keep each decoded resource's temporary charge alive through recursive
         // @import expansion. The top-level result is charged to the document
@@ -435,6 +457,7 @@ where
             remaining_css_bytes,
             document_reservation,
             &mut temporary_reservations,
+            cancellation,
         )
     }
 
@@ -448,9 +471,14 @@ where
         remaining_css_bytes: &mut usize,
         document_reservation: Option<&crate::core::memory::MemoryReservation>,
         temporary_reservations: &mut Vec<crate::core::memory::MemoryReservation>,
+        cancellation: &CancellationToken,
     ) -> Option<String> {
         const MAX_IMPORT_DEPTH: usize = 8;
-        if import_depth > MAX_IMPORT_DEPTH || *request_budget == 0 || *remaining_css_bytes == 0 {
+        if cancellation.is_cancelled()
+            || import_depth > MAX_IMPORT_DEPTH
+            || *request_budget == 0
+            || *remaining_css_bytes == 0
+        {
             return None;
         }
 
@@ -470,7 +498,10 @@ where
 
         // Keep stylesheet redirects under the same per-loader limit as document redirects.
         for _ in 0..=self.max_redirects {
-            if *request_budget == 0 || !matches!(current.scheme(), "http" | "https" | "file") {
+            if cancellation.is_cancelled()
+                || *request_budget == 0
+                || !matches!(current.scheme(), "http" | "https" | "file")
+            {
                 return None;
             }
             if !visited_redirect_targets.insert(redirect_loop_key(&current)) {
@@ -522,7 +553,11 @@ where
             let response = if let Some(response) = cached_response {
                 response
             } else {
-                let response = match self.pipeline.execute(&self.transport, &request) {
+                let response = match self.pipeline.execute_cancellable(
+                    &self.transport,
+                    &request,
+                    cancellation,
+                ) {
                     Ok(response) => response,
                     Err(_) => return None,
                 };
@@ -616,6 +651,7 @@ where
                 remaining_css_bytes,
                 document_reservation,
                 temporary_reservations,
+                cancellation,
             );
             // Only top-level linked stylesheets charge the document reservation;
             // nested imports are included in that top-level expanded result.
@@ -648,10 +684,14 @@ where
         remaining_css_bytes: &mut usize,
         document_reservation: Option<&crate::core::memory::MemoryReservation>,
         temporary_reservations: &mut Vec<crate::core::memory::MemoryReservation>,
+        cancellation: &CancellationToken,
     ) -> String {
         let mut output = String::with_capacity(css.len().min(*remaining_css_bytes));
         let mut statement_start = 0;
         while statement_start < css.len() {
+            if cancellation.is_cancelled() || *remaining_css_bytes == 0 {
+                break;
+            }
             let Some((statement, next_statement_start)) = next_css_statement(css, statement_start)
             else {
                 break;
@@ -675,6 +715,7 @@ where
                     remaining_css_bytes,
                     document_reservation,
                     temporary_reservations,
+                    cancellation,
                 ) {
                     output.push_str(&imported);
                     if *remaining_css_bytes > 0 {
