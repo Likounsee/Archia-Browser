@@ -828,7 +828,7 @@ mod character_reference_tests {
     fn replaces_overflowing_numeric_references() {
         assert_eq!(
             decode_character_references("&#999999999999999999999; &#xFFFFFFFFFFFFFFFF"),
-            "\u{FFFD}; \u{FFFD}"
+            "\u{FFFD} \u{FFFD}"
         );
     }
 
