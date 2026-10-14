@@ -708,11 +708,12 @@ fn decode_character_references(input: &str) -> String {
                 if end > number_start {
                     let has_semicolon = input[end..].starts_with(';');
                     let digits = &input[number_start..end];
-                    if let Ok(codepoint) = u32::from_str_radix(digits, radix) {
-                        output.push(decode_numeric_character_reference(codepoint));
-                        cursor = end + usize::from(has_semicolon);
-                        continue;
-                    }
+                    let decoded = u32::from_str_radix(digits, radix)
+                        .map(decode_numeric_character_reference)
+                        .unwrap_or('\u{FFFD}');
+                    output.push(decoded);
+                    cursor = end + usize::from(has_semicolon);
+                    continue;
                 }
             }
         }
@@ -820,6 +821,14 @@ mod character_reference_tests {
         assert_eq!(
             decode_character_references("&#65 &#x1f600! &#0"),
             "A 😀! \u{FFFD}"
+        );
+    }
+
+    #[test]
+    fn replaces_overflowing_numeric_references() {
+        assert_eq!(
+            decode_character_references("&#999999999999999999999; &#xFFFFFFFFFFFFFFFF"),
+            "\u{FFFD}; \u{FFFD}"
         );
     }
 
