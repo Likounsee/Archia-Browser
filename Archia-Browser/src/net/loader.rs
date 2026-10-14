@@ -180,7 +180,7 @@ where
             // and fetch a fresh representation when network access is allowed.
             let cached_response = match cached_response {
                 Some(response)
-                    if (200..300).contains(&response.status) && is_html_response(&response) =>
+                    if (200..300).contains(&response.status) && is_html_response(&response, current.url.scheme() == "file") =>
                 {
                     Some(response)
                 }
@@ -214,7 +214,7 @@ where
                 // can poison a later request for the same URL (for example, CSS served
                 // to a navigation).
                 if (200..300).contains(&response.status)
-                    && is_html_response(&response)
+                    && is_html_response(&response, current.url.scheme() == "file")
                     && response.body.len() <= MAX_HTML_DOCUMENT_BYTES
                 {
                     self.cache
@@ -317,7 +317,7 @@ where
                 return Err(DocumentLoadError::HttpStatus(response.status));
             }
 
-            if !is_html_response(&response) {
+            if !is_html_response(&response, current.url.scheme() == "file") {
                 return Err(DocumentLoadError::UnsupportedContentType);
             }
 
@@ -1172,9 +1172,12 @@ fn should_switch_to_get(method: HttpMethod, status: u16) -> bool {
     }
 }
 
-fn is_html_response(response: &Response) -> bool {
+fn is_html_response(response: &Response, allow_missing_content_type: bool) -> bool {
     let Some(content_type) = response.content_type.as_deref() else {
-        return true;
+        // Network documents must declare their representation explicitly.
+        // Treating an arbitrary octet stream as HTML enables content-type
+        // confusion and can turn attacker-controlled downloads into markup.
+        return allow_missing_content_type;
     };
 
     let media_type = content_type
@@ -1627,15 +1630,22 @@ mod tests {
         let html = Response::new(200).with_header("content-type", "TEXT/HTML; charset=UTF-8");
         let xhtml = Response::new(200).with_header("content-type", "Application/XHTML+XML");
 
-        assert!(is_html_response(&html));
-        assert!(is_html_response(&xhtml));
+        assert!(is_html_response(&html, false));
+        assert!(is_html_response(&xhtml, false));
+    }
+
+    #[test]
+    fn missing_content_type_is_rejected_for_network_documents_only() {
+        let response = Response::new(200).with_body(b"<script>alert(1)</script>".to_vec());
+        assert!(!is_html_response(&response, false));
+        assert!(is_html_response(&response, true));
     }
 
     #[test]
     fn non_html_content_type_is_not_accepted_as_document() {
         let response = Response::new(200).with_header("content-type", "IMAGE/PNG");
 
-        assert!(!is_html_response(&response));
+        assert!(!is_html_response(&response, false));
     }
 
     #[test]
