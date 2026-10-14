@@ -102,6 +102,13 @@ impl HtmlTokenizer {
                 ) {
                     return tokens;
                 }
+            } else if inside.starts_with('!') || inside.starts_with('?') {
+                // In HTML syntax, unknown declarations, CDATA sections outside
+                // foreign content, and processing-instruction-like markup are
+                // bogus comments rather than element start tags.
+                if !try_push_token(&mut tokens, HtmlToken::Comment(inside[1..].to_owned())) {
+                    return tokens;
+                }
             } else if let Some(name) = inside.strip_prefix('/') {
                 // Keep closing-tag work bounded too; otherwise oversized names
                 // bypass the start-tag cap and are retained as large tokens.
@@ -321,6 +328,24 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unknown_declarations_and_processing_instructions_become_comments() {
+        let tokens = HtmlTokenizer::tokenize(
+            "<!DOCTYPE html><!unknown value><?xml version='1.0'?><div>ok</div>",
+        );
+        assert!(matches!(&tokens[0], HtmlToken::Doctype(_)));
+        assert!(matches!(&tokens[1], HtmlToken::Comment(value) if value == "unknown value"));
+        assert!(matches!(&tokens[2], HtmlToken::Comment(value) if value == "?xml version='1.0'"));
+        assert!(matches!(&tokens[3], HtmlToken::StartTag { name, .. } if name == "div"));
+    }
+
+    #[test]
+    fn cdata_syntax_outside_foreign_content_is_not_an_element() {
+        let tokens = HtmlTokenizer::tokenize("<![CDATA[not HTML CDATA]]><p>text</p>");
+        assert!(matches!(&tokens[0], HtmlToken::Comment(value) if value == "[CDATA[not HTML CDATA]]"));
+        assert!(matches!(&tokens[1], HtmlToken::StartTag { name, .. } if name == "p"));
+    }
 
     #[test]
     fn malformed_unicode_tag_does_not_panic() {
