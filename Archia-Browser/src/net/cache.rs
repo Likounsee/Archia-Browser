@@ -755,12 +755,14 @@ fn has_pragma_no_cache(request: &Request) -> bool {
             // the cache rather than accidentally treating a hidden directive
             // as permission to reuse a stored response.
             cache_control_is_malformed(value)
-                || cache_control_directives(value).into_iter().any(|directive| {
-                    let name = directive
-                        .split_once('=')
-                        .map_or(directive, |(name, _)| name);
-                    trim_http_ows(name).eq_ignore_ascii_case("no-cache")
-                })
+                || cache_control_directives(value)
+                    .into_iter()
+                    .any(|directive| {
+                        let name = directive
+                            .split_once('=')
+                            .map_or(directive, |(name, _)| name);
+                        trim_http_ows(name).eq_ignore_ascii_case("no-cache")
+                    })
         })
 }
 
@@ -776,19 +778,25 @@ mod tests {
 
     #[test]
     fn malformed_pragma_quoted_value_fails_closed_for_cache_reuse() {
-        let mut request = super::Request::new(
-            super::super::Url::parse("https://example.org/resource").unwrap(),
+        let mut request =
+            super::Request::new(super::super::Url::parse("https://example.org/resource").unwrap());
+        request.headers.insert(
+            "Pragma".into(),
+            r#"extension="unterminated,no-cache"#.into(),
         );
-        request.headers.insert("Pragma".into(), r#"extension="unterminated,no-cache"#.into());
         assert!(
             super::has_pragma_no_cache(&request),
             "malformed Pragma must not permit cache reuse"
         );
 
-        request.headers.insert("Pragma".into(), "extension=value, No-Cache".into());
+        request
+            .headers
+            .insert("Pragma".into(), "extension=value, No-Cache".into());
         assert!(super::has_pragma_no_cache(&request));
 
-        request.headers.insert("Pragma".into(), "extension=value".into());
+        request
+            .headers
+            .insert("Pragma".into(), "extension=value".into());
         assert!(!super::has_pragma_no_cache(&request));
     }
 
@@ -2259,7 +2267,8 @@ mod tests {
                 "{name} must not poison the unconditional cached representation"
             );
         }
-    } 
+    }
+
     #[test]
     fn malformed_response_pragma_fails_closed_for_cache_storage() {
         let request = make_request("https://example.org/malformed-pragma-response");
@@ -2276,5 +2285,4 @@ mod tests {
         );
         assert!(cache.is_empty());
     }
-
 }
