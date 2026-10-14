@@ -316,10 +316,6 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // Avoid expensive comparisons against every open element when a
                 // direct-token caller supplies an unbounded closing-tag name.
                 if name.len() <= MAX_DOM_TAG_NAME_BYTES {
-                    let table_scoped_end_tag = matches!(
-                        name.as_str(),
-                        "tr" | "td" | "th" | "thead" | "tbody" | "tfoot"
-                    );
                     let scope_boundary = match name.as_str() {
                         "tr" | "td" | "th" | "thead" | "tbody" | "tfoot" => Some("table"),
                         "li" => Some("list"),
@@ -330,12 +326,13 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                         let matching_position = stack
                             .iter()
                             .rposition(|node| node.tag_name() == Some(name.as_str()));
-                        let boundary_position = stack.iter().rposition(|node| match boundary_kind {
-                            "table" => node.tag_name() == Some("table"),
-                            "list" => matches!(node.tag_name(), Some("ol" | "ul")),
-                            "description-list" => node.tag_name() == Some("dl"),
-                            _ => false,
-                        });
+                        let boundary_position =
+                            stack.iter().rposition(|node| match boundary_kind {
+                                "table" => node.tag_name() == Some("table"),
+                                "list" => matches!(node.tag_name(), Some("ol" | "ul")),
+                                "description-list" => node.tag_name() == Some("dl"),
+                                _ => false,
+                            });
                         // End tags must not cross the nearest matching scope boundary.
                         // List and description-list end tags outside their scope are ignored.
                         let requires_boundary = boundary_kind != "table";
