@@ -210,6 +210,14 @@ impl Node {
             .find(|node| node.is_element() && node.attribute("id") == Some(id))
     }
 
+    /// Collect descendant elements that have the named attribute, regardless
+    /// of its value. Attribute names are ASCII case-insensitive.
+    pub fn find_by_attribute(&self, name: &str) -> Vec<&Node> {
+        self.descendants()
+            .filter(|node| node.is_element() && node.has_attribute(name))
+            .collect()
+    }
+
     /// Collect descendant elements whose named attribute has the exact value.
     /// Attribute names are ASCII case-insensitive; values remain case-sensitive.
     pub fn find_by_attribute_value(&self, name: &str, value: &str) -> Vec<&Node> {
@@ -419,6 +427,23 @@ mod tests {
 
         let names: Vec<_> = root.descendants().filter_map(Node::tag_name).collect();
         assert_eq!(names, ["first", "nested", "last"]);
+    }
+
+    #[test]
+    fn attribute_presence_queries_include_empty_values_and_ignore_case() {
+        let mut root = Node::document();
+        let mut first = Node::element("input");
+        first.set_attribute("DISABLED", "");
+        let mut second = Node::element("button");
+        second.set_attribute("disabled", "disabled");
+        root.append(first);
+        root.append(Node::element("button"));
+        root.append(second);
+
+        let matches = root.find_by_attribute("Disabled");
+        assert_eq!(matches.len(), 2);
+        assert_eq!(matches[0].tag_name(), Some("input"));
+        assert_eq!(matches[1].tag_name(), Some("button"));
     }
 
     #[test]
