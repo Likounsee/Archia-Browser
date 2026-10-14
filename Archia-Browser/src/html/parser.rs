@@ -19,10 +19,8 @@ const BLOCK_CLOSES_P: &[&str] = &[
     "article",
     "aside",
     "blockquote",
-    "center",
     "dd",
     "details",
-    "dir",
     "div",
     "dl",
     "dt",
@@ -41,7 +39,6 @@ const BLOCK_CLOSES_P: &[&str] = &[
     "hgroup",
     "hr",
     "li",
-    "listing",
     "main",
     "menu",
     "nav",
@@ -50,7 +47,6 @@ const BLOCK_CLOSES_P: &[&str] = &[
     "pre",
     "search",
     "section",
-    "summary",
     "table",
     "ul",
 ];
@@ -1048,8 +1044,8 @@ mod tests {
     }
 
     #[test]
-    fn table_column_and_caption_tags_do_not_close_paragraphs_in_body() {
-        for tag in ["caption", "col", "colgroup"] {
+    fn non_closing_start_tags_do_not_close_paragraphs_in_body() {
+        for tag in ["caption", "col", "colgroup", "center", "dir", "listing", "summary"] {
             let markup = format!("<div><p>before<{tag}>after</p></div>");
             let root = parse(&HtmlTokenizer::tokenize(&markup));
             let paragraph = root.find_first_element("p").expect("paragraph retained");
