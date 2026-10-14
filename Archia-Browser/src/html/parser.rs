@@ -232,9 +232,9 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                         _ => None,
                     };
                     let crossed_list_boundary = *implied_end == "li"
-                        && stack[position + 1..].iter().any(|node| {
-                            matches!(node.tag_name(), Some("ul" | "ol" | "menu"))
-                        });
+                        && stack[position + 1..]
+                            .iter()
+                            .any(|node| matches!(node.tag_name(), Some("ul" | "ol" | "menu")));
                     if crossed_list_boundary
                         || scope_boundary.is_some_and(|boundary| {
                             stack
@@ -1031,11 +1031,7 @@ mod tests {
         assert_eq!(list.children[1].text_content(), "twonested");
         assert_eq!(list.children[2].text_content(), "three");
         assert_eq!(
-            list.children[1]
-                .find_first_element("ul")
-                .unwrap()
-                .children[0]
-                .text_content(),
+            list.children[1].find_first_element("ul").unwrap().children[0].text_content(),
             "nested"
         );
     }
