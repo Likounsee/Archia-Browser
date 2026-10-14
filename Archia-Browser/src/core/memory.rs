@@ -510,7 +510,8 @@ mod tests {
 
         let acquired = workers
             .into_iter()
-            .filter(|worker| worker.join().expect("slot worker must not panic"))
+            .map(|worker| worker.join().expect("slot worker must not panic"))
+            .filter(|acquired| *acquired)
             .count();
 
         assert_eq!(acquired, 4, "only four concurrent slots may be granted");
