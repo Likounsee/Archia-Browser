@@ -29,7 +29,16 @@ fn parse_cookie_max_age(value: &str) -> Option<i64> {
     {
         return None;
     }
-    value.parse::<i64>().ok()
+
+    // Keep syntactically valid but unrepresentably large values distinct from
+    // malformed attributes. A positive overflow must fail the checked expiry
+    // calculation rather than accidentally becoming a session cookie; a
+    // negative overflow is an immediate-expiry signal.
+    Some(value.parse::<i64>().unwrap_or(if negative {
+        i64::MIN
+    } else {
+        i64::MAX
+    }))
 }
 
 fn trim_cookie_ows(value: &str) -> &str {
@@ -1132,8 +1141,13 @@ mod tests {
         let mut jar = CookieJar::new();
 
         jar.store(&url, "sid=too-far; Max-Age=9223372036854775807");
+        jar.store(&url, "sid=overflow; Max-Age=9223372036854775808");
+        jar.store(&url, "sid=huge; Max-Age=18446744073709551616");
 
-        assert!(jar.is_empty());
+        assert!(
+            jar.is_empty(),
+            "overflowing positive Max-Age values must not become session cookies"
+        );
     }
 
     #[test]
