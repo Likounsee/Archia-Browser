@@ -75,3 +75,8 @@ Le tokenizer CSS réserve maintenant la capacité avant chaque ajout de token et
 Le parsing des feuilles de style contrôle également la croissance des vecteurs de blocs, sélecteurs, règles et résultats de correspondance. L'entrée publique de parsing de sélecteurs est bornée avant la création du tableau de caractères et la croissance du vecteur principal est pré-réservée. Les tests couvrent la limite des sélecteurs directs et les plafonds existants de tokens, règles et sélecteurs.
 
 La CI précédente a confirmé 720 tests et la compilation réussis sur les trois systèmes, mais a échoué sur Clippy à cause de conditions imbriquées et d'une signature `&mut Vec` non nécessaire dans le parseur HTML. Ces avertissements sont corrigés dans le même lot. Cette tranche ne prétend pas rendre toutes les allocations de chaînes, maps et calcul de styles faillibles : elle couvre les principaux vecteurs de tokenisation/parsing et garde P0-MEM-11 ouvert jusqu'à la couverture complète des structures calculées et du budget partagé.
+
+
+## Tranche DOM — API de recherche (14 octobre 2026)
+
+Les recherches DOM couvrent maintenant les attributs, valeurs exactes, classes, `name`, premier résultat et combinaisons tag+attribut/tag+classe. Les variantes qui renvoient une collection allouent un vecteur de résultats ; elles héritent des plafonds d'entrée/nœuds du document mais ne constituent pas, à elles seules, une allocation sous budget global partagé. Cette surface devra rester prise en compte dans l'audit mémoire P0-MEM-11. La validation CI du HEAD doit être vérifiée séparément avant de considérer la tranche comme validée.
