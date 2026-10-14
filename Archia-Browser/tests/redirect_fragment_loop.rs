@@ -193,7 +193,6 @@ fn proxy_authorization_is_removed_even_on_same_origin_redirects() {
     assert!(!requests[1].headers.contains_key("proxy-authorization"));
 }
 
-
 #[test]
 fn post_redirect_to_same_origin_302_becomes_bodyless_get() {
     let requests = Arc::new(Mutex::new(Vec::new()));
