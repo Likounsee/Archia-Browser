@@ -283,12 +283,19 @@ fn push_suppressed<'a>(
 }
 
 fn append_node(root: &mut Node, stack: &mut [Node], node: Node) -> bool {
-    let result = if let Some(parent) = stack.last_mut() {
-        parent.try_append(node)
-    } else {
-        root.try_append(node)
-    };
-    result.is_ok()
+    let parent = stack.last_mut().unwrap_or(root);
+    if let super::dom::NodeKind::Text(text) = &node.kind {
+        if let Some(last) = parent.children.last_mut() {
+            if let super::dom::NodeKind::Text(last_text) = &mut last.kind {
+                if last_text.try_reserve(text.len()).is_err() {
+                    return false;
+                }
+                last_text.push_str(text);
+                return true;
+            }
+        }
+    }
+    parent.try_append(node).is_ok()
 }
 
 fn append_node_owned(root: &mut Node, stack: &mut [Node], node: Node) -> Result<(), Node> {
@@ -652,6 +659,23 @@ mod tests {
         );
         assert!(text.is_char_boundary(text.len()));
         assert_eq!(root.text_content().len(), text.len());
+    }
+
+    #[test]
+    fn adjacent_text_tokens_are_merged_without_crossing_comments() {
+        let tokens = vec![
+            HtmlToken::Text("one".to_owned()),
+            HtmlToken::Text("two".to_owned()),
+            HtmlToken::Comment("separator".to_owned()),
+            HtmlToken::Text("three".to_owned()),
+            HtmlToken::Text("four".to_owned()),
+        ];
+        let root = parse(&tokens);
+        let body = root.find_first_element("body").expect("body is normalized");
+        assert_eq!(body.children.len(), 3);
+        assert_eq!(body.children[0].text_content(), "onetwo");
+        assert!(matches!(body.children[1].kind, super::super::dom::NodeKind::Comment(_)));
+        assert_eq!(body.children[2].text_content(), "threefour");
     }
 
     #[test]
