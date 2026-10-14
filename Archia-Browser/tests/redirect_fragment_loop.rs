@@ -146,7 +146,9 @@ fn cross_origin_redirect_does_not_forward_credentials_or_custom_headers() {
     request
         .headers
         .insert("authorization".into(), "Bearer secret".into());
-    request.headers.insert("x-api-key".into(), "secret-key".into());
+    request
+        .headers
+        .insert("x-api-key".into(), "secret-key".into());
     request
         .headers
         .insert("accept-language".into(), "fr-FR".into());
