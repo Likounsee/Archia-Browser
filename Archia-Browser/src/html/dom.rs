@@ -491,7 +491,8 @@ mod tests {
             Some("")
         );
         assert_eq!(
-            root.find_first_by_class("required").and_then(Node::tag_name),
+            root.find_first_by_class("required")
+                .and_then(Node::tag_name),
             Some("input")
         );
         assert_eq!(root.find_first_by_attribute_value("name", "missing"), None);
