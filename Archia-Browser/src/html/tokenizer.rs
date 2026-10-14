@@ -109,8 +109,14 @@ impl HtmlTokenizer {
             } else if inside.starts_with('!') || inside.starts_with('?') {
                 // In HTML syntax, unknown declarations, CDATA sections outside
                 // foreign content, and processing-instruction-like markup are
-                // bogus comments rather than element start tags.
-                if !try_push_token(&mut tokens, HtmlToken::Comment(inside[1..].to_owned())) {
+                // bogus comments rather than element start tags. A leading '?'
+                // is part of the comment data in HTML's bogus-comment state.
+                let comment = if inside.starts_with('?') {
+                    inside.to_owned()
+                } else {
+                    inside[1..].to_owned()
+                };
+                if !try_push_token(&mut tokens, HtmlToken::Comment(comment)) {
                     return tokens;
                 }
             } else if let Some(name) = inside.strip_prefix('/') {
@@ -347,7 +353,7 @@ mod tests {
         );
         assert!(matches!(&tokens[0], HtmlToken::Doctype(_)));
         assert!(matches!(&tokens[1], HtmlToken::Comment(value) if value == "unknown value"));
-        assert!(matches!(&tokens[2], HtmlToken::Comment(value) if value == "?xml version='1.0'"));
+        assert!(matches!(&tokens[2], HtmlToken::Comment(value) if value == "?xml version='1.0'?"));
         assert!(matches!(&tokens[3], HtmlToken::StartTag { name, .. } if name == "div"));
     }
 
