@@ -837,6 +837,10 @@ mod character_reference_tests {
         ));
         assert!(matches!(
             tokens.get(2),
+            Some(HtmlToken::EndTag(name)) if name == "script"
+        ));
+        assert!(matches!(
+            tokens.get(3),
             Some(HtmlToken::StartTag { name, .. }) if name == "p"
         ));
     }
