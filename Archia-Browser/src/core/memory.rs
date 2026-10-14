@@ -496,8 +496,7 @@ mod tests {
                 let budget = Arc::clone(&budget);
                 let barrier = Arc::clone(&barrier);
                 std::thread::spawn(move || {
-                    let slot =
-                        MemoryBudget::try_reserve_resource_slot_guard(Arc::clone(&budget), 4);
+                    let slot = MemoryBudget::try_reserve_resource_slot_guard(Arc::clone(&budget), 4);
                     barrier.wait();
                     let acquired = slot.is_some();
                     drop(slot);
