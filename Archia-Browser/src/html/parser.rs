@@ -674,7 +674,10 @@ mod tests {
         let body = root.find_first_element("body").expect("body is normalized");
         assert_eq!(body.children.len(), 3);
         assert_eq!(body.children[0].text_content(), "onetwo");
-        assert!(matches!(body.children[1].kind, super::super::dom::NodeKind::Comment(_)));
+        assert!(matches!(
+            body.children[1].kind,
+            super::super::dom::NodeKind::Comment(_)
+        ));
         assert_eq!(body.children[2].text_content(), "threefour");
     }
 
