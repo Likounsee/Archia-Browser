@@ -30,7 +30,12 @@ impl<T> ResourceCache<T> {
         // Even an empty payload occupies memory through its key and entry
         // metadata. Account for the key too, and charge at least one byte,
         // so empty entries cannot bypass the cache capacity.
-        let bytes = bytes.saturating_add(key.len()).max(1);
+        let Some(bytes) = bytes.checked_add(key.len()) else {
+            // An overflowed estimate cannot be represented or safely compared
+            // with the configured capacity. Reject it before mutating the cache.
+            return;
+        };
+        let bytes = bytes.max(1);
 
         // Reject oversized entries before mutating the cache. In particular,
         // an oversized replacement must not evict the previous valid value.
@@ -205,6 +210,22 @@ mod tests {
         assert_eq!(cache.get("b"), Some(&2));
         assert_eq!(cache.get("oversized"), None);
         assert_eq!(cache.used(), 10);
+    }
+
+    #[test]
+    fn payload_size_addition_overflow_is_rejected_without_eviction() {
+        let mut cache = ResourceCache::new(usize::MAX);
+        cache.insert("keep", 1, 8);
+
+        // Adding even a short key to this estimate would overflow usize. The
+        // entry must be rejected rather than saturating to usize::MAX and
+        // displacing valid entries or corrupting the used-byte counter.
+        cache.insert("overflow", 2, usize::MAX);
+
+        assert_eq!(cache.get("keep"), Some(&1));
+        assert_eq!(cache.get("overflow"), None);
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache.used(), "keep".len() + 8);
     }
 
     #[test]
