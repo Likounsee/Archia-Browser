@@ -273,7 +273,8 @@ impl Node {
         }
         self.descendants()
             .filter(|node| {
-                node.tag_name().is_some_and(|tag| tag.eq_ignore_ascii_case(tag_name))
+                node.tag_name()
+                    .is_some_and(|tag| tag.eq_ignore_ascii_case(tag_name))
                     && node.attribute("class").is_some_and(|classes| {
                         classes
                             .split(is_html_whitespace)
