@@ -1264,11 +1264,29 @@ fn open_local_file_confined(
 }
 
 fn file_url_path(url_path: &str) -> Result<std::path::PathBuf, TransportError> {
+    // Keep filesystem path structure stable across URL decoding. The URL parser
+    // rejects these forms too, but this boundary must remain safe when called
+    // directly or when a future caller bypasses URL canonicalization.
+    if url_path.as_bytes().windows(3).any(|escape| {
+        escape[0] == b'%'
+            && matches!(
+                [escape[1].to_ascii_lowercase(), escape[2].to_ascii_lowercase()],
+                [b'2', b'f'] | [b'5', b'c']
+            )
+    }) {
+        return Err(TransportError::InvalidRequest);
+    }
+
     let decoded = percent_decode(url_path)?;
     if decoded.as_bytes().contains(&0) {
         return Err(TransportError::InvalidUrl(
             super::UrlError::InvalidCharacter,
         ));
+    }
+    if decoded.contains('\\')
+        || decoded.split('/').any(|component| matches!(component, "." | ".."))
+    {
+        return Err(TransportError::InvalidRequest);
     }
     #[cfg(windows)]
     let path = {
@@ -3489,6 +3507,24 @@ mod tests {
             file_url_path("/tmp/absolute.txt").unwrap(),
             std::path::PathBuf::from("/tmp/absolute.txt")
         );
+    }
+
+    #[test]
+    fn local_file_transport_rejects_ambiguous_decoded_path_structure() {
+        for path in [
+            "/tmp/../etc/passwd",
+            "/tmp/./secret.txt",
+            "/tmp/%2e%2e/etc/passwd",
+            "/tmp/%2E/secret.txt",
+            "/tmp/private%2fsecret.txt",
+            "/tmp/private%5Csecret.txt",
+            "/tmp/private\\\\secret.txt",
+        ] {
+            assert!(
+                file_url_path(path).is_err(),
+                "ambiguous or traversing local path must be rejected: {path}"
+            );
+        }
     }
 
     #[test]
