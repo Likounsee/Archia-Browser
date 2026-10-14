@@ -1030,8 +1030,12 @@ mod tests {
         let root = parse(&HtmlTokenizer::tokenize(
             "<ruby>outer<rt>reading<ruby>inner<rt>nested</rt></ruby>tail</rt></ruby>",
         ));
-        let ruby = root.find_first_element("ruby").expect("outer ruby retained");
-        let annotation = ruby.find_first_element("rt").expect("outer annotation retained");
+        let ruby = root
+            .find_first_element("ruby")
+            .expect("outer ruby retained");
+        let annotation = ruby
+            .find_first_element("rt")
+            .expect("outer annotation retained");
         assert_eq!(annotation.text_content(), "readinginnernestedtail");
         assert!(annotation.find_first_element("ruby").is_some());
     }
