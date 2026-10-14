@@ -487,8 +487,19 @@ fn response_has_valid_content_length(response: &Response) -> bool {
         .is_ok_and(|length| length == response.body.len())
 }
 
+fn response_has_ambiguous_singleton_header(response: &Response, wanted: &str) -> bool {
+    response
+        .headers
+        .keys()
+        .filter(|name| name.eq_ignore_ascii_case(wanted))
+        .take(2)
+        .count()
+        > 1
+}
+
 fn response_can_store(response: &Response) -> bool {
     response.status == 200
+        && !response_has_ambiguous_singleton_header(response, "content-type")
         && response_has_valid_content_length(response)
         && response.set_cookie_headers().is_empty()
         && !response_has_header(response, "set-cookie")
@@ -877,6 +888,27 @@ mod tests {
             cache.store(&private_request, &public_response);
             assert_eq!(cache.len(), 1, "{header} request must not be stored");
         }
+    }
+
+    #[test]
+    fn cache_rejects_ambiguous_content_type_metadata() {
+        let request =
+            super::Request::new(super::super::Url::parse("https://example.org/resource").unwrap());
+        let mut response = super::Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_header("content-type", "text/html")
+            .with_body(b"<p>safe</p>".to_vec());
+        response
+            .headers
+            .insert("Content-Type".into(), "application/json".into());
+
+        let mut cache = super::HttpCache::default();
+        cache.store(&request, &response);
+        assert_eq!(
+            cache.len(),
+            0,
+            "ambiguous representation metadata must not enter the shared cache"
+        );
     }
 
     #[test]

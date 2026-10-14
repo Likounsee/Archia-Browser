@@ -1079,6 +1079,9 @@ fn parse_import_reference_without_comments(statement: &str) -> Option<String> {
 }
 
 fn is_css_response(response: &Response) -> bool {
+    if has_ambiguous_content_type(response) {
+        return false;
+    }
     let Some(content_type) = response.content_type.as_deref() else {
         return false;
     };
@@ -1177,18 +1180,21 @@ fn should_switch_to_get(method: HttpMethod, status: u16) -> bool {
     }
 }
 
-fn is_html_response(response: &Response, allow_missing_content_type: bool) -> bool {
-    // Response headers are public and may be populated by a custom transport.
-    // Reject duplicate case-insensitive Content-Type spellings instead of
-    // trusting whichever value happened to populate the convenience field.
-    if response
+fn has_ambiguous_content_type(response: &Response) -> bool {
+    response
         .headers
         .keys()
         .filter(|name| name.eq_ignore_ascii_case("content-type"))
         .take(2)
         .count()
         > 1
-    {
+}
+
+fn is_html_response(response: &Response, allow_missing_content_type: bool) -> bool {
+    // Response headers are public and may be populated by a custom transport.
+    // Reject duplicate case-insensitive Content-Type spellings instead of
+    // trusting whichever value happened to populate the convenience field.
+    if has_ambiguous_content_type(response) {
         return false;
     }
 
@@ -1663,6 +1669,10 @@ mod tests {
         assert!(
             !is_html_response(&response, false),
             "ambiguous MIME metadata must not be interpreted as HTML"
+        );
+        assert!(
+            !is_css_response(&response),
+            "ambiguous MIME metadata must not be interpreted as CSS"
         );
     }
 
