@@ -570,7 +570,9 @@ mod tests {
             .find_first_element("body")
             .expect("normalization always creates a body");
 
-        assert_eq!(body.child_count(), MAX_DOM_NODES);
+        // Adjacent text tokens coalesce into one DOM Text node, but each
+        // retained token still counts against the parser's node budget.
+        assert_eq!(body.child_count(), 1);
         assert_eq!(body.text_content().len(), MAX_DOM_NODES);
     }
 
