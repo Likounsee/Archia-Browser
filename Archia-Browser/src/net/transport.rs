@@ -2136,6 +2136,16 @@ fn decode_chunked(
                             | "content-encoding"
                             | "content-type"
                             | "content-range"
+                            | "content-language"
+                            | "content-location"
+                            | "content-disposition"
+                            | "content-md5"
+                            | "digest"
+                            | "last-modified"
+                            | "set-cookie"
+                            | "www-authenticate"
+                            | "proxy-authenticate"
+                            | "strict-transport-security"
                             | "max-forwards"
                             | "te"
                             | "expires"
@@ -2479,6 +2489,16 @@ mod tests {
             "Content-Type: text/html",
             "Content-Encoding: gzip",
             "Content-Range: bytes 0-4/5",
+            "Content-Language: en",
+            "Content-Location: /other",
+            "Content-Disposition: attachment",
+            "Content-MD5: d41d8cd98f00b204e9800998ecf8427e",
+            "Digest: sha-256=abc",
+            "Last-Modified: Wed, 21 Oct 2015 07:28:00 GMT",
+            "Set-Cookie: sid=secret",
+            "WWW-Authenticate: Basic realm=private",
+            "Proxy-Authenticate: Basic",
+            "Strict-Transport-Security: max-age=31536000",
             "Cache-Control: no-store",
             "Location: https://attacker.example/",
             "Authorization: Basic dGVzdA==",

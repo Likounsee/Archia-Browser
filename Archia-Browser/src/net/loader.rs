@@ -245,7 +245,7 @@ where
                     .url
                     .resolve(location)
                     .map_err(|_| DocumentLoadError::InvalidRedirect)?;
-                if !is_supported_redirect_scheme(url.scheme()) {
+                if !is_supported_redirect_target(&url) {
                     return Err(DocumentLoadError::InvalidRedirect);
                 }
                 // Per HTTP redirect semantics, a Location without a fragment
@@ -503,6 +503,7 @@ where
             || import_depth > MAX_IMPORT_DEPTH
             || *request_budget == 0
             || *remaining_css_bytes == 0
+            || !is_supported_redirect_target(&url)
         {
             return None;
         }
@@ -626,7 +627,7 @@ where
                     .header("location")
                     .filter(|value| !value.trim().is_empty())?;
                 let next = current.resolve(location).ok()?;
-                if !is_supported_redirect_scheme(next.scheme()) {
+                if !is_supported_redirect_target(&next) {
                     return None;
                 }
                 // Keep stylesheet redirects within the document's local-file
@@ -1118,6 +1119,13 @@ fn is_supported_redirect_scheme(scheme: &str) -> bool {
     matches!(scheme, "http" | "https" | "file")
 }
 
+fn is_supported_redirect_target(url: &super::Url) -> bool {
+    // User-info is not part of the HTTP Host identity and is rejected by the
+    // transport. Reject it at the redirect boundary instead of following a
+    // URL whose apparent authority can mislead logs, policy checks, or users.
+    is_supported_redirect_scheme(url.scheme()) && !url.authority().contains('@')
+}
+
 fn is_redirect(status: u16) -> bool {
     matches!(status, 301 | 302 | 303 | 307 | 308)
 }
@@ -1236,6 +1244,29 @@ mod tests {
                 !super::is_supported_redirect_scheme(scheme),
                 "unsupported redirect scheme {scheme} must be rejected before another request"
             );
+        }
+    }
+
+    #[test]
+    fn redirect_targets_reject_userinfo_for_documents_and_stylesheets() {
+        for raw in [
+            "https://user:secret@example.org/private",
+            "http://name@example.org/",
+        ] {
+            let url = super::super::Url::parse(raw).unwrap();
+            assert!(
+                !super::is_supported_redirect_target(&url),
+                "redirect targets containing user-info must be rejected: {raw}"
+            );
+        }
+
+        for raw in [
+            "https://example.org/private",
+            "http://example.org/",
+            "file:///tmp/index.html",
+        ] {
+            let url = super::super::Url::parse(raw).unwrap();
+            assert!(super::is_supported_redirect_target(&url));
         }
     }
 
