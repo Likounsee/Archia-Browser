@@ -572,6 +572,21 @@ where
                 let mut cache = self.cache.lock().ok()?;
                 cache.get(&request)
             };
+            // Documents and stylesheets share a URL-keyed cache. A document
+            // response must not masquerade as CSS just because it is fresh;
+            // discard mismatched representations and fetch the requested type.
+            let cached_response = match cached_response {
+                Some(response)
+                    if (200..300).contains(&response.status) && is_css_response(&response) =>
+                {
+                    Some(response)
+                }
+                Some(_) => {
+                    self.cache.lock().ok()?.invalidate(&request);
+                    None
+                }
+                None => None,
+            };
             let response_was_cached = cached_response.is_some();
             let response = if let Some(response) = cached_response {
                 response
