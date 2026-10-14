@@ -208,3 +208,10 @@ Les frontends peuvent également utiliser `begin_navigation`, `cancel_navigation
 - Chaque cible sauvegarde stdout/stderr dans `fuzz/artifacts/<target>-run.log`, puis téléverse les logs et les éventuels inputs de crash. Les résultats de campagne doivent être consultés avant de conclure à l'absence de crash.
 - `core::memory` ajoute `concurrent_resource_slot_guards_never_exceed_the_shared_limit` : 16 threads tentent d'acquérir simultanément des slots avec une limite de 4 ; le test vérifie que 4 acquisitions seulement réussissent, que les gardes RAII libèrent tous les slots et que la comptabilité des octets reste indépendante.
 - Validation du nouveau test : CI du commit `673acb3cfa687e6e8313a146623ce94fa50c73a0` en attente au moment de cette mise à jour. La campagne longue est aussi en attente/en cours sur un SHA antérieur à ce test ; elle ne prouvera pas le comportement du nouveau test ni du HEAD final.
+
+
+## Mise à jour — API de recherche DOM (14 octobre 2026)
+
+La couche DOM expose maintenant des recherches par attribut présent, valeur d'attribut exacte, classe, attribut `name`, ainsi que leurs variantes premier résultat. Des recherches combinées tag+attribut et tag+classe complètent les filtres de collection. Elles parcourent les descendants dans l'ordre du document ; les noms d'attributs sont insensibles à la casse, tandis que les valeurs et jetons de classe sont comparés exactement. Le découpage des classes utilise les espaces blancs HTML.
+
+**État :** code et tests de régression ajoutés. Une exécution CI précédente a échoué sur `cargo fmt --check` uniquement ; le formatage a été corrigé ensuite, mais le HEAD de documentation doit encore obtenir une CI verte avant validation. Cette tranche améliore l'ergonomie du DOM, sans fermer les tâches de conformité HTML/DOM, namespaces, sélecteurs standards ou P0.
