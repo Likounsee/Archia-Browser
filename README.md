@@ -18,8 +18,8 @@ These percentages are engineering estimates of **functional coverage**, not line
 | Subsystem | Progress | Current state |
 |---|---:|---|
 | Foundation / architecture | ~90% | Memory budgets, resource cache, event loop, modular layers and CI |
-| HTML tokenizer/parser | ~55% | Working tree builder with void elements, implied structure, comments and several recovery rules |
-| DOM | ~50% | Node/attribute model, lookup and mutation primitives; standards traversal/namespaces remain |
+| HTML tokenizer/parser | ~58% | Working tree builder with void elements, implied structure, text-node coalescing, null replacement and expanded implied-end-tag recovery; full HTML5 tree construction remains incomplete |
+| DOM | ~53% | Node/attribute model, iterative preorder descendant traversal, id/class lookup and mutation primitives; namespaces and a complete standards DOM remain |
 | CSS tokenizer/parser | ~60% | Declarations, shorthands, growing value syntax and decoded CSS escapes in identifiers/hash tokens |
 | CSS selectors | ~65% | Specificity, attributes, siblings, form-state and structural pseudo-classes |
 | Cascade / computed style | ~55% | Inheritance, !important, CSS-wide keywords and custom properties/var() |
@@ -89,9 +89,9 @@ The implementation structure may evolve as the engine grows, but renderer and pl
 - Void elements.
 - Implicit html/head/body structure.
 - Paragraph and list auto-closing rules.
-- Comment preservation.
+- Comment preservation and adjacent text-node coalescing.\n- Literal U+0000 replacement with U+FFFD in normal, attribute and raw-text input.
 - Attribute preservation and case-insensitive lookup/removal.
-- Recursive element lookup.
+- Iterative preorder descendant traversal and subtree element lookup (including id/class queries).
 - Child insertion, removal, replacement and indexed access.
 - Anchor href extraction.
 - HTML `hidden` handling in layout.
