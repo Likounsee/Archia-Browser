@@ -593,6 +593,9 @@ fn request_cache_age_directive(request: &Request, wanted: &str) -> Result<Option
             } else {
                 value
             };
+            if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+                return Err(());
+            }
             parsed = Some(value.parse::<u64>().map_err(|_| ())?);
         }
     }
@@ -1547,6 +1550,9 @@ mod tests {
     fn malformed_or_duplicate_request_freshness_directives_never_use_cache() {
         for directive in [
             "max-age=invalid",
+            "max-age=+1",
+            "max-age=１２",
+            "min-fresh=+1",
             "max-age",
             "max-age=30, max-age=60",
             "min-fresh=invalid",
