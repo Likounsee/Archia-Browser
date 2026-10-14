@@ -19,10 +19,7 @@ const BLOCK_CLOSES_P: &[&str] = &[
     "article",
     "aside",
     "blockquote",
-    "caption",
     "center",
-    "col",
-    "colgroup",
     "dd",
     "details",
     "dir",
@@ -1047,6 +1044,20 @@ mod tests {
             assert_eq!(div.children[0].text_content(), "paragraph", "tag: {tag}");
             assert_eq!(div.children[1].tag_name(), Some(tag), "tag: {tag}");
             assert_eq!(div.children[1].text_content(), "item", "tag: {tag}");
+        }
+    }
+
+    #[test]
+    fn table_column_and_caption_tags_do_not_close_paragraphs_in_body() {
+        for tag in ["caption", "col", "colgroup"] {
+            let markup = format!("<div><p>before<{tag}>after</p></div>");
+            let root = parse(&HtmlTokenizer::tokenize(&markup));
+            let paragraph = root
+                .find_first_element("p")
+                .expect("paragraph retained");
+
+            assert_eq!(paragraph.text_content(), "beforeafter", "tag: {tag}");
+            assert!(paragraph.find_first_element(tag).is_some(), "tag: {tag}");
         }
     }
 
