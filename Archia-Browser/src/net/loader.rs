@@ -1345,10 +1345,8 @@ mod tests {
 
     #[test]
     fn redirect_loop_key_canonicalizes_trailing_dot_and_default_port() {
-        let dotted = super::super::Url::parse("https://EXAMPLE.org.:443/path?q=1#first")
-            .unwrap();
-        let canonical = super::super::Url::parse("https://example.org/path?q=1#second")
-            .unwrap();
+        let dotted = super::super::Url::parse("https://EXAMPLE.org.:443/path?q=1#first").unwrap();
+        let canonical = super::super::Url::parse("https://example.org/path?q=1#second").unwrap();
 
         assert_eq!(
             super::redirect_loop_key(&dotted),
@@ -1356,8 +1354,7 @@ mod tests {
             "equivalent HTTP URLs must not evade redirect-loop detection"
         );
 
-        let different_query =
-            super::super::Url::parse("https://example.org/path?q=2").unwrap();
+        let different_query = super::super::Url::parse("https://example.org/path?q=2").unwrap();
         assert_ne!(
             super::redirect_loop_key(&canonical),
             super::redirect_loop_key(&different_query),
