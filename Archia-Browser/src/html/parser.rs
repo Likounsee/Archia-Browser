@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use super::{dom::Node, tokenizer::HtmlToken};
 
 const VOID_ELEMENTS: &[&str] = &[
-    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source",
-    "track", "wbr",
+    "area", "base", "basefont", "bgsound", "br", "col", "embed", "frame", "hr", "img", "input",
+    "keygen", "link", "meta", "param", "source", "track", "wbr",
 ];
 
 const MAX_DOM_DEPTH: usize = 256;
@@ -747,6 +747,20 @@ mod tests {
         assert_eq!(body.children[0].text_content(), "inside");
         assert_eq!(body.children[1].tag_name(), Some("p"));
         assert_eq!(body.children[1].text_content(), "text");
+    }
+
+    #[test]
+    fn obsolete_void_elements_do_not_capture_following_text() {
+        for tag in ["basefont", "bgsound", "frame", "keygen"] {
+            let markup = format!("<div><{tag}>after</div>");
+            let tokens = HtmlTokenizer::tokenize(&markup);
+            let root = parse(&tokens);
+            let body = &root.children[0].children[1];
+            let div = &body.children[0];
+
+            assert_eq!(div.children[0].tag_name(), Some(tag));
+            assert_eq!(div.children[1].text_content(), "after");
+        }
     }
 
     #[test]
