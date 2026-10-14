@@ -322,14 +322,8 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                     );
                     let scope_boundary = match name.as_str() {
                         "tr" | "td" | "th" | "thead" | "tbody" | "tfoot" => Some("table"),
-                        "li" => stack
-                            .iter()
-                            .rposition(|node| matches!(node.tag_name(), Some("ol" | "ul")))
-                            .map(|_| "list"),
-                        "dt" | "dd" => stack
-                            .iter()
-                            .rposition(|node| node.tag_name() == Some("dl"))
-                            .map(|_| "description-list"),
+                        "li" => Some("list"),
+                        "dt" | "dd" => Some("description-list"),
                         _ => None,
                     };
                     if let Some(boundary_kind) = scope_boundary {
@@ -343,8 +337,11 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                             _ => false,
                         });
                         // End tags must not cross the nearest matching scope boundary.
+                        // List and description-list end tags outside their scope are ignored.
+                        let requires_boundary = boundary_kind != "table";
                         if matching_position.is_some_and(|matching| {
                             boundary_position.is_none_or(|boundary| matching >= boundary)
+                                && (!requires_boundary || boundary_position.is_some())
                         }) {
                             close_element(&mut root, &mut stack, name);
                         }
@@ -1020,6 +1017,14 @@ mod tests {
             second_section.children[0].children[0].text_content(),
             "four"
         );
+    }
+
+    #[test]
+    fn list_item_end_tag_outside_list_scope_is_ignored() {
+        let root = parse(&HtmlTokenizer::tokenize("<li>one</li><p>two</p>"));
+        let item = root.find_first_element("li").expect("item retained");
+        assert_eq!(item.text_content(), "onetwo");
+        assert!(item.find_first_element("p").is_some());
     }
 
     #[test]
