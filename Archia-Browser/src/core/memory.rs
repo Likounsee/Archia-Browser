@@ -496,10 +496,8 @@ mod tests {
                 let budget = Arc::clone(&budget);
                 let barrier = Arc::clone(&barrier);
                 std::thread::spawn(move || {
-                    let slot = MemoryBudget::try_reserve_resource_slot_guard(
-                        Arc::clone(&budget),
-                        4,
-                    );
+                    let slot =
+                        MemoryBudget::try_reserve_resource_slot_guard(Arc::clone(&budget), 4);
                     barrier.wait();
                     let acquired = slot.is_some();
                     drop(slot);
@@ -515,7 +513,15 @@ mod tests {
             .count();
 
         assert_eq!(acquired, 4, "only four concurrent slots may be granted");
-        assert_eq!(budget.live_resources(), 0, "all RAII slots must be released");
-        assert_eq!(budget.used(), 0, "slot accounting must not affect byte accounting");
+        assert_eq!(
+            budget.live_resources(),
+            0,
+            "all RAII slots must be released"
+        );
+        assert_eq!(
+            budget.used(),
+            0,
+            "slot accounting must not affect byte accounting"
+        );
     }
 }
