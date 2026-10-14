@@ -1174,6 +1174,20 @@ fn should_switch_to_get(method: HttpMethod, status: u16) -> bool {
 }
 
 fn is_html_response(response: &Response, allow_missing_content_type: bool) -> bool {
+    // Response headers are public and may be populated by a custom transport.
+    // Reject duplicate case-insensitive Content-Type spellings instead of
+    // trusting whichever value happened to populate the convenience field.
+    if response
+        .headers
+        .keys()
+        .filter(|name| name.eq_ignore_ascii_case("content-type"))
+        .take(2)
+        .count()
+        > 1
+    {
+        return false;
+    }
+
     let Some(content_type) = response.content_type.as_deref() else {
         // Network documents must declare their representation explicitly.
         // Treating an arbitrary octet stream as HTML enables content-type
@@ -1633,6 +1647,19 @@ mod tests {
 
         assert!(is_html_response(&html, false));
         assert!(is_html_response(&xhtml, false));
+    }
+
+    #[test]
+    fn conflicting_content_type_header_spellings_are_rejected() {
+        let mut response = Response::new(200).with_header("content-type", "text/html");
+        response
+            .headers
+            .insert("Content-Type".into(), "application/json".into());
+
+        assert!(
+            !is_html_response(&response, false),
+            "ambiguous MIME metadata must not be interpreted as HTML"
+        );
     }
 
     #[test]
