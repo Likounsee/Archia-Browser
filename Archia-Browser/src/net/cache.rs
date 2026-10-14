@@ -2663,4 +2663,37 @@ mod tests {
         assert!(cache.get(&target).is_none());
         assert_eq!(cache.get(&other).unwrap().body, b"a=2");
     }
+    #[test]
+    fn unsafe_response_does_not_invalidate_untrusted_related_locations() {
+        let related_url = super::super::Url::parse("https://example.org/related").unwrap();
+        let related = Request::new(related_url);
+        for location in [
+            "https://user@example.org/related",
+            "file:///tmp/related",
+            "https://other.example/related",
+            "http://[invalid",
+        ] {
+            let mut cache = HttpCache::default();
+            cache.store(
+                &related,
+                &Response::new(200)
+                    .with_header("cache-control", "max-age=3600")
+                    .with_body(b"still cached".to_vec()),
+            );
+            let mutation = Request::new(
+                super::super::Url::parse("https://example.org/update").unwrap(),
+            )
+            .with_method(HttpMethod::Post);
+            cache.store(
+                &mutation,
+                &Response::new(204).with_header("location", location),
+            );
+            assert_eq!(
+                cache.get(&related).unwrap().body,
+                b"still cached",
+                "untrusted related Location must not evict a cached representation: {location}"
+            );
+        }
+    }
+
 }
