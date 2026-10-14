@@ -1032,9 +1032,9 @@ mod tests {
             .expect("outer select retained");
         assert_eq!(select.children[0].tag_name(), Some("option"));
         assert_eq!(select.children[0].text_content(), "outertail");
-        assert_eq!(select.children[1].tag_name(), Some("select"));
-        assert_eq!(select.children[2].tag_name(), Some("option"));
-        assert_eq!(select.children[2].text_content(), "second");
+        assert!(select.children[0].find_first_element("select").is_some());
+        assert_eq!(select.children[1].tag_name(), Some("option"));
+        assert_eq!(select.children[1].text_content(), "second");
     }
 
     #[test]
