@@ -1052,9 +1052,7 @@ mod tests {
         for tag in ["caption", "col", "colgroup"] {
             let markup = format!("<div><p>before<{tag}>after</p></div>");
             let root = parse(&HtmlTokenizer::tokenize(&markup));
-            let paragraph = root
-                .find_first_element("p")
-                .expect("paragraph retained");
+            let paragraph = root.find_first_element("p").expect("paragraph retained");
 
             assert_eq!(paragraph.text_content(), "beforeafter", "tag: {tag}");
             assert!(paragraph.find_first_element(tag).is_some(), "tag: {tag}");
