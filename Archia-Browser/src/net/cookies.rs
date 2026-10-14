@@ -1521,6 +1521,16 @@ mod tests {
     }
 
     #[test]
+    fn ip_addresses_never_match_dns_suffix_cookie_domains() {
+        assert!(cookie_domain_matches("127.0.0.1", "127.0.0.1"));
+        assert!(!cookie_domain_matches("127.0.0.1", "0.0.1"));
+        assert!(!cookie_domain_matches("192.168.1.10", "168.1.10"));
+        assert!(!cookie_domain_matches("::1", "1"));
+        assert!(cookie_domain_matches("shop.example.com", "example.com"));
+        assert!(!cookie_domain_matches("notexample.com", "example.com"));
+    }
+
+    #[test]
     fn same_site_none_requires_secure_attribute() {
         let url = Url::parse("https://example.org/").unwrap();
         let mut jar = CookieJar::new();

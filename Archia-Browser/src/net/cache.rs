@@ -907,7 +907,9 @@ mod tests {
             .with_header("cache-control", "max-age=60")
             .with_header("content-length", "4")
             .with_body(b"data".to_vec());
-        duplicate.headers.insert("Content-Length".into(), "4".into());
+        duplicate
+            .headers
+            .insert("Content-Length".into(), "4".into());
         assert!(!super::response_can_store(&duplicate));
     }
 
