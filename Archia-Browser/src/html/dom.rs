@@ -184,7 +184,10 @@ impl Node {
     /// therefore ASCII case-insensitive for callers using HTML tag names.
     pub fn find_first_element(&self, tag_name: &str) -> Option<&Node> {
         let tag_name = tag_name.to_ascii_lowercase();
-        if self.tag_name().is_some_and(|name| name.eq_ignore_ascii_case(&tag_name)) {
+        if self
+            .tag_name()
+            .is_some_and(|name| name.eq_ignore_ascii_case(&tag_name))
+        {
             return Some(self);
         }
         self.descendants()
@@ -207,7 +210,9 @@ impl Node {
             .filter(|node| {
                 node.is_element()
                     && node.attribute("class").is_some_and(|classes| {
-                        classes.split_ascii_whitespace().any(|name| name == class_name)
+                        classes
+                            .split_ascii_whitespace()
+                            .any(|name| name == class_name)
                     })
             })
             .collect()
@@ -361,7 +366,10 @@ mod tests {
         root.append(first);
         root.append(second);
 
-        assert_eq!(root.find_by_id("target").and_then(Node::tag_name), Some("div"));
+        assert_eq!(
+            root.find_by_id("target").and_then(Node::tag_name),
+            Some("div")
+        );
         assert_eq!(root.find_by_id("missing"), None);
         assert_eq!(root.find_by_class("card").len(), 1);
         assert!(root.find_by_class("ar").is_empty());
@@ -372,7 +380,10 @@ mod tests {
     fn tag_lookup_is_ascii_case_insensitive() {
         let mut root = Node::document();
         root.append(Node::element("section"));
-        assert_eq!(root.find_first_element("SECTION").and_then(Node::tag_name), Some("section"));
+        assert_eq!(
+            root.find_first_element("SECTION").and_then(Node::tag_name),
+            Some("section")
+        );
     }
 
     #[test]
