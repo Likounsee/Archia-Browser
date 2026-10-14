@@ -1,5 +1,9 @@
 use std::collections::BTreeMap;
 
+fn is_html_whitespace(character: char) -> bool {
+    matches!(character, '\\t' | '\\n' | '\\u{000C}' | '\\r' | ' ')
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NodeKind {
     Document,
@@ -198,7 +202,7 @@ impl Node {
     /// Collect descendant elements with the requested class token.
     /// Whitespace-separated class names are handled without substring matches.
     pub fn find_by_class(&self, class_name: &str) -> Vec<&Node> {
-        if class_name.is_empty() || class_name.chars().any(char::is_whitespace) {
+        if class_name.is_empty() || class_name.chars().any(is_html_whitespace) {
             return Vec::new();
         }
         self.descendants()
@@ -206,7 +210,7 @@ impl Node {
                 node.is_element()
                     && node.attribute("class").is_some_and(|classes| {
                         classes
-                            .split_ascii_whitespace()
+                            .split(is_html_whitespace)
                             .any(|name| name == class_name)
                     })
             })
@@ -382,6 +386,18 @@ mod tests {
 
         let names: Vec<_> = root.descendants().filter_map(Node::tag_name).collect();
         assert_eq!(names, ["first", "nested", "last"]);
+    }
+
+    #[test]
+    fn class_queries_use_html_whitespace_not_unicode_whitespace() {
+        let mut root = Node::document();
+        let mut element = Node::element("div");
+        element.set_attribute("class", "wide\\u{2003}screen");
+        root.append(element);
+
+        assert_eq!(root.find_by_class("wide\\u{2003}screen").len(), 1);
+        assert!(root.find_by_class("wide").is_empty());
+        assert!(root.find_by_class("screen").is_empty());
     }
 
     #[test]
