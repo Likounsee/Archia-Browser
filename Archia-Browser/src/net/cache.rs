@@ -110,6 +110,29 @@ impl HttpCache {
         // Expired entries should not consume the budget or force live entries
         // out of the cache when a new response arrives.
         self.entries.retain(|entry| now < entry.value.expires_at);
+
+        // RFC 9111 requires a cache to invalidate the target URI after a
+        // successful response to an unsafe method. The cache is keyed by
+        // method, so removing cache_key(request) here would only target the
+        // POST/PUT/etc. key and leave the cached GET representation stale.
+        // Invalidate the GET representation for 2xx/3xx responses; errors do
+        // not prove that the resource was changed. CONNECT has tunnel semantics
+        // and is deliberately excluded from resource invalidation.
+        if matches!(
+            request.method,
+            HttpMethod::Post | HttpMethod::Put | HttpMethod::Delete | HttpMethod::Patch
+        ) {
+            if (200..400).contains(&response.status)
+                && matches!(request.url.scheme(), "http" | "https")
+                && !request.url.authority().contains('@')
+            {
+                let mut target = request.clone();
+                target.method = HttpMethod::Get;
+                self.entries.remove(&cache_key(&target));
+            }
+            return;
+        }
+
         let key = cache_key(request);
         if !request_can_store(request) {
             // Explicit cache-bypass directives invalidate the old entry, but
@@ -2485,5 +2508,84 @@ mod tests {
             "malformed Pragma must not allow a response to be stored for reuse"
         );
         assert!(cache.is_empty());
+    } 
+    #[test]
+    fn successful_unsafe_methods_invalidate_cached_get_representation() {
+        for method in [
+            HttpMethod::Post,
+            HttpMethod::Put,
+            HttpMethod::Patch,
+            HttpMethod::Delete,
+        ] {
+            let url = Url::parse("https://example.org/resource?item=1").unwrap();
+            let get = Request::new(url.clone());
+            let mut cache = HttpCache::default();
+            cache.store(
+                &get,
+                &Response::new(200)
+                    .with_header("cache-control", "max-age=3600")
+                    .with_body(b"old representation".to_vec()),
+            );
+            assert!(cache.get(&get).is_some());
+
+            let unsafe_request = Request::new(url).with_method(method);
+            cache.store(
+                &unsafe_request,
+                &Response::new(204).with_header("cache-control", "no-store"),
+            );
+
+            assert!(
+                cache.get(&get).is_none(),
+                "{method:?} success must invalidate the cached GET representation"
+            );
+        }
     }
+
+    #[test]
+    fn unsuccessful_unsafe_response_preserves_cached_get_representation() {
+        let url = Url::parse("https://example.org/resource").unwrap();
+        let get = Request::new(url.clone());
+        let mut cache = HttpCache::default();
+        cache.store(
+            &get,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=3600")
+                .with_body(b"still valid".to_vec()),
+        );
+
+        let post = Request::new(url).with_method(HttpMethod::Post);
+        cache.store(&post, &Response::new(500));
+
+        assert_eq!(
+            cache.get(&get).unwrap().body,
+            b"still valid",
+            "a 5xx response must not invalidate the cached representation"
+        );
+    }
+
+    #[test]
+    fn unsafe_method_invalidation_is_scoped_to_exact_target_uri() {
+        let target_url = Url::parse("https://example.org/resource?a=1").unwrap();
+        let other_url = Url::parse("https://example.org/resource?a=2").unwrap();
+        let target = Request::new(target_url.clone());
+        let other = Request::new(other_url.clone());
+        let mut cache = HttpCache::default();
+        for request in [&target, &other] {
+            cache.store(
+                request,
+                &Response::new(200)
+                    .with_header("cache-control", "max-age=3600")
+                    .with_body(request.url.query().unwrap().as_bytes().to_vec()),
+            );
+        }
+
+        cache.store(
+            &Request::new(target_url).with_method(HttpMethod::Put),
+            &Response::new(200),
+        );
+
+        assert!(cache.get(&target).is_none());
+        assert_eq!(cache.get(&other).unwrap().body, b"a=2");
+    }
+
 }
