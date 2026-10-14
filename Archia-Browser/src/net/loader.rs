@@ -173,6 +173,26 @@ where
                     .map_err(|_| DocumentLoadError::InternalStatePoisoned)?;
                 cache.get(&current)
             };
+            // The document and stylesheet loaders share one URL-keyed cache.
+            // A valid CSS entry can therefore be found during a top-level
+            // navigation (and vice versa). Never treat a cache hit as suitable
+            // until its representation matches this consumer; evict mismatches
+            // and fetch a fresh representation when network access is allowed.
+            let cached_response = match cached_response {
+                Some(response)
+                    if (200..300).contains(&response.status) && is_html_response(&response) =>
+                {
+                    Some(response)
+                }
+                Some(_) => {
+                    self.cache
+                        .lock()
+                        .map_err(|_| DocumentLoadError::InternalStatePoisoned)?
+                        .invalidate(&current);
+                    None
+                }
+                None => None,
+            };
             let response = if let Some(response) = cached_response {
                 response
             } else if request_only_if_cached(&current) {
