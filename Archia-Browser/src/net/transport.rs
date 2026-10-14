@@ -173,7 +173,8 @@ impl HttpTransport {
         stream
             .write_all(head.as_bytes())
             .and_then(|_| stream.write_all(&request.body))
-            .map_err(map_transport_io_error)?
+            .map_err(map_transport_io_error)?;
+        Ok(())
     }
 
     fn read_response(
