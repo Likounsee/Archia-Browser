@@ -221,14 +221,18 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                     // Table structure elements are scoped to their nearest table.
                     // A nested table must not implicitly close the outer table's
                     // row, cell, or section just because the names match.
-                    if matches!(
-                        implied_end,
-                        "tr" | "td" | "th" | "thead" | "tbody" | "tfoot"
-                    ) && stack
-                        .iter()
-                        .rposition(|node| node.tag_name() == Some("table"))
-                        .is_some_and(|table_position| position < table_position)
-                    {
+                    let scope_boundary = match implied_end {
+                        "tr" | "td" | "th" | "thead" | "tbody" | "tfoot" => Some("table"),
+                        "dt" | "dd" => Some("dl"),
+                        "option" | "optgroup" => Some("select"),
+                        _ => None,
+                    };
+                    if scope_boundary.is_some_and(|boundary| {
+                        stack
+                            .iter()
+                            .rposition(|node| node.tag_name() == Some(boundary))
+                            .is_some_and(|boundary_position| position < boundary_position)
+                    }) {
                         continue;
                     }
                     close_element(&mut root, &mut stack, implied_end);
@@ -1022,6 +1026,17 @@ mod tests {
         let item = root.find_first_element("li").expect("item retained");
         assert_eq!(item.text_content(), "onetwo");
         assert!(item.find_first_element("p").is_some());
+    }
+
+    #[test]
+    fn nested_description_lists_keep_outer_terms_open() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<dl><dt>outer<dl><dt>inner</dt></dl>tail</dt></dl>",
+        ));
+        let lists = root.find_first_element("dl").expect("outer list retained");
+        let outer_term = lists.find_first_element("dt").expect("outer term retained");
+        assert_eq!(outer_term.text_content(), "outerinnertail");
+        assert!(outer_term.find_first_element("dl").is_some());
     }
 
     #[test]
