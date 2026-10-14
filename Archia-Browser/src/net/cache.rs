@@ -383,6 +383,10 @@ fn request_can_invalidate_cache_entry(request: &Request) -> bool {
 fn request_can_use_cache(request: &Request) -> bool {
     matches!(request.method, HttpMethod::Get)
         && matches!(request.url.scheme(), "http" | "https")
+        // Connection is hop-by-hop and can nominate additional fields. Until
+        // request normalization strips them, do not let a cache hit bypass
+        // transport-level validation or vary the request outside the cache key.
+        && !has_request_header(request, "connection")
         // User-info is not sent by this transport and must not alias a public
         // cache entry for the same host/path before transport validation runs.
         && !request.url.authority().contains('@')
@@ -409,6 +413,7 @@ fn request_can_use_cache(request: &Request) -> bool {
 fn request_can_store(request: &Request) -> bool {
     matches!(request.method, HttpMethod::Get)
         && matches!(request.url.scheme(), "http" | "https")
+        && !has_request_header(request, "connection")
         && !request.url.authority().contains('@')
         && !has_request_header(request, "authorization")
         && !has_request_header(request, "cookie")
@@ -788,6 +793,22 @@ mod tests {
         assert_eq!(super::checked_entry_bytes(0, 0), Some(0));
         assert_eq!(super::checked_entry_bytes(usize::MAX, 1), None);
         assert_eq!(super::checked_entry_bytes(usize::MAX - 3, 4), None);
+    }
+
+    #[test]
+    fn connection_requests_bypass_cache_lookup_and_storage() {
+        let mut request = super::Request::new(
+            super::super::Url::parse("https://example.org/resource").unwrap(),
+        );
+        request.headers.insert("connection".into(), "x-private".into());
+        let response = super::Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_body(b"public copy".to_vec());
+        let mut cache = super::HttpCache::default();
+
+        cache.store(&request, &response);
+        assert_eq!(cache.len(), 0);
+        assert!(!super::request_can_use_cache(&request));
     }
 
     #[test]

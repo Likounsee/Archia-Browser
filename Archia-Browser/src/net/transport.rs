@@ -1504,6 +1504,28 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
         }
     }
 
+    // Connection-nominated fields are hop-by-hop. Since this transport
+    // does not forward a proxy hop, accepting both fields would serialize a
+    // header that Connection explicitly says must be removed.
+    if let Some(connection) = request
+        .headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case("connection"))
+        .map(|(_, value)| value.as_str())
+    {
+        for token in connection.split(',') {
+            let token = trim_http_ows(token);
+            if token.is_empty() || !token.bytes().all(is_http_token_byte) {
+                return Err(TransportError::InvalidRequest);
+            }
+            if request.headers.keys().any(|name| {
+                !name.eq_ignore_ascii_case("connection") && name.eq_ignore_ascii_case(token)
+            }) {
+                return Err(TransportError::InvalidRequest);
+            }
+        }
+    }
+
     // Request.headers is public, so callers can bypass with_header()'s
     // lowercase normalization. Framing checks must therefore be
     // case-insensitive just like HTTP field names, or mixed-case fields can
@@ -3918,6 +3940,26 @@ mod tests {
         let head = String::from_utf8(stream.written).unwrap();
         assert_eq!(head.matches("Connection: close").count(), 1);
         assert!(!head.to_ascii_lowercase().contains("connection: keep-alive"));
+    }
+
+    #[test]
+    fn rejects_connection_nominated_request_headers_and_malformed_tokens() {
+        let url = Url::parse("http://example.org/").unwrap();
+        for request in [
+            Request::new(url.clone())
+                .with_header("connection", "x-internal")
+                .with_header("x-internal", "secret"),
+            Request::new(url.clone()).with_header("connection", "close,,keep-alive"),
+            Request::new(url.clone()).with_header("connection", "bad token"),
+        ] {
+            assert_eq!(
+                validate_request(&request),
+                Err(TransportError::InvalidRequest)
+            );
+        }
+
+        let valid = Request::new(url).with_header("connection", "close");
+        assert_eq!(validate_request(&valid), Ok(()));
     }
 
     #[test]
