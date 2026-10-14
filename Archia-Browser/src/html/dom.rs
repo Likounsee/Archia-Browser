@@ -180,19 +180,12 @@ impl Node {
     }
 
     /// Find the first descendant element with the requested tag name.
-    /// HTML element names are stored lowercase by the parser; lookup is
-    /// therefore ASCII case-insensitive for callers using HTML tag names.
+    /// The node itself is excluded. HTML element names are stored lowercase
+    /// by the parser, so lookup is ASCII case-insensitive.
     pub fn find_first_element(&self, tag_name: &str) -> Option<&Node> {
-        let tag_name = tag_name.to_ascii_lowercase();
-        if self
-            .tag_name()
-            .is_some_and(|name| name.eq_ignore_ascii_case(&tag_name))
-        {
-            return Some(self);
-        }
         self.descendants().find(|node| {
             node.tag_name()
-                .is_some_and(|name| name.eq_ignore_ascii_case(&tag_name))
+                .is_some_and(|name| name.eq_ignore_ascii_case(tag_name))
         })
     }
 
@@ -357,6 +350,19 @@ mod tests {
             Some("title")
         );
         assert!(document.find_first_element("missing").is_none());
+    }
+
+    #[test]
+    fn find_first_element_excludes_the_receiver() {
+        let mut root = Node::element("section");
+        root.append(Node::element("section"));
+
+        assert_eq!(
+            root.find_first_element("section")
+                .and_then(Node::tag_name),
+            Some("section")
+        );
+        assert!(root.find_first_element("missing").is_none());
     }
 
     #[test]
