@@ -535,6 +535,14 @@ fn cache_control_directives(value: &str) -> Vec<&str> {
     directives
 }
 
+/// Parse RFC delta-seconds strictly: one or more ASCII decimal digits.
+fn parse_delta_seconds(value: &str) -> Option<u64> {
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    value.parse::<u64>().ok()
+}
+
 fn response_max_age(response: &Response) -> Option<u64> {
     let mut max_age = None;
     for (_, value) in response
@@ -561,7 +569,7 @@ fn response_max_age(response: &Response) -> Option<u64> {
             } else {
                 value
             };
-            max_age = Some(value.parse::<u64>().ok()?);
+            max_age = Some(parse_delta_seconds(value)?);
         }
     }
     max_age
@@ -596,7 +604,7 @@ fn request_cache_age_directive(request: &Request, wanted: &str) -> Result<Option
             if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
                 return Err(());
             }
-            parsed = Some(value.parse::<u64>().map_err(|_| ())?);
+            parsed = Some(parse_delta_seconds(value).ok_or(())?);
         }
     }
     Ok(parsed)
@@ -620,7 +628,7 @@ fn response_age(response: &Response) -> Option<u64> {
             if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
                 return None;
             }
-            value.parse::<u64>().ok()?
+            parse_delta_seconds(value)?
         }
         None => 0,
     };
@@ -661,7 +669,7 @@ fn has_cache_max_age_zero(header: Option<&str>) -> bool {
                     return false;
                 };
                 trim_http_ows(name).eq_ignore_ascii_case("max-age")
-                    && trim_http_ows(value).trim_matches('"').parse::<u64>().ok() == Some(0)
+                    && parse_delta_seconds(trim_http_ows(value).trim_matches('"')) == Some(0)
             })
     })
 }
@@ -1774,6 +1782,8 @@ mod tests {
             ],
             vec![("cache-control", "max-age=")],
             vec![("cache-control", "max-age=-1")],
+            vec![("cache-control", "max-age=+1")],
+            vec![("cache-control", "max-age=１２")],
         ] {
             let mut cache = HttpCache::default();
             let mut response = Response::new(200);
