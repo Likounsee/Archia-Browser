@@ -53,8 +53,9 @@ impl Url {
             return Err(UrlError::InvalidCharacter);
         }
         let (without_fragment, fragment) = rest
+            .as_str()
             .split_once('#')
-            .map_or((rest, None), |(before, after)| {
+            .map_or((rest.as_str(), None), |(before, after)| {
                 (before, Some(after.to_owned()))
             });
         let (path, query) = without_fragment
