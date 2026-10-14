@@ -173,10 +173,7 @@ impl HtmlTokenizer {
                         // bytes, but tree construction still needs its token to
                         // pop the corresponding open element from the DOM stack.
                         if tokens.len() < MAX_HTML_TOKENS
-                            && !try_push_token(
-                                &mut tokens,
-                                HtmlToken::EndTag(name.clone()),
-                            )
+                            && !try_push_token(&mut tokens, HtmlToken::EndTag(name.clone()))
                         {
                             return tokens;
                         }
