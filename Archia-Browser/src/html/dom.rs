@@ -210,6 +210,12 @@ impl Node {
             .find(|node| node.is_element() && node.attribute("id") == Some(id))
     }
 
+    /// Collect descendant form-related elements whose `name` attribute
+    /// exactly matches the requested value. The name value is case-sensitive.
+    pub fn find_by_name(&self, name: &str) -> Vec<&Node> {
+        self.find_by_attribute_value("name", name)
+    }
+
     /// Collect descendant elements that have the named attribute, regardless
     /// of its value. Attribute names are ASCII case-insensitive.
     pub fn find_by_attribute(&self, name: &str) -> Vec<&Node> {
@@ -427,6 +433,26 @@ mod tests {
 
         let names: Vec<_> = root.descendants().filter_map(Node::tag_name).collect();
         assert_eq!(names, ["first", "nested", "last"]);
+    }
+
+    #[test]
+    fn name_queries_match_exact_values_in_document_order() {
+        let mut root = Node::document();
+        let mut first = Node::element("input");
+        first.set_attribute("name", "email");
+        let mut second = Node::element("button");
+        second.set_attribute("name", "email-address");
+        let mut third = Node::element("textarea");
+        third.set_attribute("NAME", "email");
+        root.append(first);
+        root.append(second);
+        root.append(third);
+
+        let matches = root.find_by_name("email");
+        assert_eq!(matches.len(), 2);
+        assert_eq!(matches[0].tag_name(), Some("input"));
+        assert_eq!(matches[1].tag_name(), Some("textarea"));
+        assert!(root.find_by_name("EMAIL").is_empty());
     }
 
     #[test]
