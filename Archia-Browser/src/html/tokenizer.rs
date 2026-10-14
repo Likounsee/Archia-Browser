@@ -693,7 +693,7 @@ mod character_reference_tests {
     fn replaces_literal_nulls_in_text_and_attribute_values() {
         let tokens = HtmlTokenizer::tokenize("<p>a\0b</p><input value='x\0y'>");
         assert!(matches!(&tokens[1], HtmlToken::Text(text) if text == "a\u{FFFD}b"));
-        let HtmlToken::StartTag { attributes, .. } = &tokens[4] else {
+        let HtmlToken::StartTag { attributes, .. } = &tokens[3] else {
             panic!("expected input start tag");
         };
         assert_eq!(attributes.get("value").map(String::as_str), Some("x\u{FFFD}y"));
