@@ -484,4 +484,37 @@ mod tests {
         assert!(budget.try_reserve(324));
         assert!(!budget.try_reserve(1));
     }
+
+    #[test]
+    fn concurrent_resource_slot_guards_never_exceed_the_shared_limit() {
+        use std::sync::Barrier;
+
+        let budget = Arc::new(MemoryBudget::new(0));
+        let barrier = Arc::new(Barrier::new(16));
+        let workers: Vec<_> = (0..16)
+            .map(|_| {
+                let budget = Arc::clone(&budget);
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    let slot = MemoryBudget::try_reserve_resource_slot_guard(
+                        Arc::clone(&budget),
+                        4,
+                    );
+                    barrier.wait();
+                    let acquired = slot.is_some();
+                    drop(slot);
+                    acquired
+                })
+            })
+            .collect();
+
+        let acquired = workers
+            .into_iter()
+            .filter(|worker| worker.join().expect("slot worker must not panic"))
+            .count();
+
+        assert_eq!(acquired, 4, "only four concurrent slots may be granted");
+        assert_eq!(budget.live_resources(), 0, "all RAII slots must be released");
+        assert_eq!(budget.used(), 0, "slot accounting must not affect byte accounting");
+    }
 }
