@@ -126,7 +126,7 @@ impl HtmlTokenizer {
                     return tokens;
                 }
 
-                if is_plaintext && !self_closing {
+                if is_plaintext {
                     if end + 1 < input.len()
                         && tokens.len() < MAX_HTML_TOKENS
                         && !try_push_token(
@@ -139,7 +139,7 @@ impl HtmlTokenizer {
                     break;
                 }
 
-                if (is_raw_text || is_rcdata) && !self_closing {
+                if is_raw_text || is_rcdata {
                     if let Some((text_end, close_end)) = find_raw_text_end(input, end + 1, &name) {
                         if text_end > end + 1 && tokens.len() < MAX_HTML_TOKENS {
                             let text = &input[end + 1..text_end];
