@@ -194,6 +194,9 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                         .last()
                         .is_some_and(|node| node.tag_name() == Some("table"))
                 {
+                    if created_nodes >= MAX_DOM_NODES - 1 {
+                        continue;
+                    }
                     if stack.try_reserve(1).is_err() {
                         break;
                     }
