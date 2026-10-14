@@ -225,19 +225,23 @@ impl Node {
         self.children.iter().filter(|child| child.is_element())
     }
 
+    /// Collect descendant text in document order without recursive calls.
+    ///
+    /// Iterative traversal keeps this accessor safe for deeply nested trees
+    /// created by DOM mutation APIs, not only trees produced by the bounded parser.
     pub fn text_content(&self) -> String {
         let mut output = String::new();
-        self.append_text_content(&mut output);
-        output
-    }
+        let mut stack = Vec::new();
+        stack.extend(self.children.iter().rev());
 
-    fn append_text_content(&self, output: &mut String) {
-        if let NodeKind::Text(text) = &self.kind {
-            output.push_str(text);
+        while let Some(node) = stack.pop() {
+            if let NodeKind::Text(text) = &node.kind {
+                output.push_str(text);
+            }
+            stack.extend(node.children.iter().rev());
         }
-        for child in &self.children {
-            child.append_text_content(output);
-        }
+
+        output
     }
 }
 
@@ -259,6 +263,19 @@ impl<'a> Iterator for Descendants<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn text_content_preserves_document_order_through_nested_nodes() {
+        let mut root = Node::element("div");
+        let mut first = Node::element("span");
+        first.append(Node::text("one"));
+        let mut nested = Node::element("em");
+        nested.append(Node::text("two"));
+        first.append(nested);
+        root.append(first);
+        root.append(Node::text("three"));
+        assert_eq!(root.text_content(), "onetwothree");
+    }
 
     #[test]
     fn document_can_own_children() {
