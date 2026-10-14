@@ -316,7 +316,25 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // Avoid expensive comparisons against every open element when a
                 // direct-token caller supplies an unbounded closing-tag name.
                 if name.len() <= MAX_DOM_TAG_NAME_BYTES {
-                    close_element(&mut root, &mut stack, name);
+                    let table_scoped_end_tag =
+                        matches!(name.as_str(), "tr" | "td" | "th" | "thead" | "tbody" | "tfoot");
+                    if table_scoped_end_tag {
+                        let matching_position = stack
+                            .iter()
+                            .rposition(|node| node.tag_name() == Some(name.as_str()));
+                        let table_position = stack
+                            .iter()
+                            .rposition(|node| node.tag_name() == Some("table"));
+                        // An end tag inside a nested table cannot close a row,
+                        // cell, or section belonging to an outer table.
+                        if matching_position.zip(table_position).is_some_and(
+                            |(matching, table)| matching >= table,
+                        ) {
+                            close_element(&mut root, &mut stack, name);
+                        }
+                    } else {
+                        close_element(&mut root, &mut stack, name);
+                    }
                 }
             }
         }
@@ -986,6 +1004,20 @@ mod tests {
             second_section.children[0].children[0].text_content(),
             "four"
         );
+    }
+
+    #[test]
+    fn inner_table_end_tags_do_not_close_outer_cells() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<table><tr><td>outer<table></table></td><td>second</td></tr></table>",
+        ));
+        let table = root.find_first_element("table").expect("outer table retained");
+        let row = table.find_first_element("tr").expect("outer row retained");
+        assert_eq!(row.children.len(), 2);
+        assert_eq!(row.children[0].tag_name(), Some("td"));
+        assert_eq!(row.children[0].text_content(), "outer");
+        assert_eq!(row.children[1].tag_name(), Some("td"));
+        assert_eq!(row.children[1].text_content(), "second");
     }
 
     #[test]
