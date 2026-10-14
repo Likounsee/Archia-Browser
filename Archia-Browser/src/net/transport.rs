@@ -1270,7 +1270,10 @@ fn file_url_path(url_path: &str) -> Result<std::path::PathBuf, TransportError> {
     if url_path.as_bytes().windows(3).any(|escape| {
         escape[0] == b'%'
             && matches!(
-                [escape[1].to_ascii_lowercase(), escape[2].to_ascii_lowercase()],
+                [
+                    escape[1].to_ascii_lowercase(),
+                    escape[2].to_ascii_lowercase()
+                ],
                 [b'2', b'f'] | [b'5', b'c']
             )
     }) {
@@ -1284,7 +1287,9 @@ fn file_url_path(url_path: &str) -> Result<std::path::PathBuf, TransportError> {
         ));
     }
     if decoded.contains('\\')
-        || decoded.split('/').any(|component| matches!(component, "." | ".."))
+        || decoded
+            .split('/')
+            .any(|component| matches!(component, "." | ".."))
     {
         return Err(TransportError::InvalidRequest);
     }
