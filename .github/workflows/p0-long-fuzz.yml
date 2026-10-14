@@ -36,7 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: Archia-Browser
+          ref: ${{ github.sha }}
       - uses: dtolnay/rust-toolchain@stable
       - name: Install nightly for cargo-fuzz
         run: rustup toolchain install nightly --profile minimal
