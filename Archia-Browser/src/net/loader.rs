@@ -299,8 +299,7 @@ where
                 if should_switch_to_get(current.method, response.status) {
                     next.method = HttpMethod::Get;
                     next.body.clear();
-                    remove_header_case_insensitive(&mut next.headers, "content-length");
-                    remove_header_case_insensitive(&mut next.headers, "content-type");
+                    remove_entity_headers(&mut next.headers);
                 }
                 if let Some(cookie) = self
                     .cookies
@@ -897,6 +896,25 @@ fn retain_safe_cross_origin_headers(headers: &mut std::collections::BTreeMap<Str
         .iter()
         .any(|safe| name.eq_ignore_ascii_case(safe))
     });
+}
+
+fn remove_entity_headers(headers: &mut std::collections::BTreeMap<String, String>) {
+    // A redirect that rewrites POST (or another method under 303) to GET
+    // must not leave metadata describing the discarded request entity. This
+    // matters on same-origin redirects too, where general header filtering is
+    // intentionally not applied.
+    for name in [
+        "content-length",
+        "content-type",
+        "content-encoding",
+        "content-language",
+        "content-location",
+        "digest",
+        "expect",
+        "trailer",
+    ] {
+        remove_header_case_insensitive(headers, name);
+    }
 }
 
 fn remove_header_case_insensitive(
@@ -3292,6 +3310,42 @@ mod tests {
             .headers
             .iter()
             .any(|(name, value)| name.eq_ignore_ascii_case("accept") && value == "text/html"));
+    }
+
+    #[test]
+    fn rewriting_redirect_to_get_removes_all_entity_headers_case_insensitively() {
+        let mut headers = std::collections::BTreeMap::from([
+            ("Content-Length".to_owned(), "12".to_owned()),
+            ("CONTENT-TYPE".to_owned(), "application/json".to_owned()),
+            ("content-encoding".to_owned(), "gzip".to_owned()),
+            ("Content-Language".to_owned(), "fr".to_owned()),
+            ("content-location".to_owned(), "/payload".to_owned()),
+            ("Digest".to_owned(), "sha-256=abc".to_owned()),
+            ("Expect".to_owned(), "100-continue".to_owned()),
+            ("Trailer".to_owned(), "Digest".to_owned()),
+            ("Accept".to_owned(), "text/html".to_owned()),
+            ("Authorization".to_owned(), "Bearer secret".to_owned()),
+        ]);
+
+        remove_entity_headers(&mut headers);
+
+        for name in [
+            "content-length",
+            "content-type",
+            "content-encoding",
+            "content-language",
+            "content-location",
+            "digest",
+            "expect",
+            "trailer",
+        ] {
+            assert!(
+                !has_header_case_insensitive(&headers, name),
+                "{name} must be removed when the request entity is discarded"
+            );
+        }
+        assert!(has_header_case_insensitive(&headers, "accept"));
+        assert!(has_header_case_insensitive(&headers, "authorization"));
     }
 
     #[test]
