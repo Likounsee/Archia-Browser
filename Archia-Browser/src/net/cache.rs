@@ -1854,21 +1854,51 @@ mod tests {
                 .with_body(b"older response".to_vec()),
         );
 
-        for response in [
-            Response::new(200)
-                .with_header("expires", "not an HTTP date")
-                .with_body(b"malformed expiry".to_vec()),
-            Response::new(200)
-                .with_header("expires", "Wed, 21 Oct 2037 07:28:00 GMT")
-                .with_header("Expires", "Wed, 21 Oct 2037 07:28:00 GMT")
-                .with_body(b"ambiguous expiry".to_vec()),
-        ] {
+        let malformed = Response::new(200)
+            .with_header("expires", "not an HTTP date")
+            .with_body(b"malformed expiry".to_vec());
+        // Response::with_header normalizes names into a BTreeMap, so construct
+        // the mixed-case duplicate explicitly to exercise the conservative
+        // validation path for responses assembled by non-transport callers.
+        let mut duplicate = Response::new(200)
+            .with_header("expires", "Wed, 21 Oct 2037 07:28:00 GMT")
+            .with_body(b"ambiguous expiry".to_vec());
+        duplicate.headers.insert(
+            "Expires".to_owned(),
+            "Wed, 21 Oct 2037 07:28:00 GMT".to_owned(),
+        );
+
+        for response in [malformed, duplicate] {
             cache.store(&request, &response);
             assert!(
                 cache.get(&request).is_none(),
                 "invalid or duplicate Expires values must invalidate an older representation"
             );
         }
+    }
+
+    #[test]
+    fn duplicate_date_headers_do_not_create_ambiguous_expires_freshness() {
+        let request = make_request("https://example.org/expires-date-duplicate");
+        let now = std::time::SystemTime::now();
+        let mut response = Response::new(200)
+            .with_header("date", httpdate::fmt_http_date(now))
+            .with_header(
+                "expires",
+                httpdate::fmt_http_date(now + Duration::from_secs(120)),
+            )
+            .with_body(b"ambiguous date".to_vec());
+        response
+            .headers
+            .insert("Date".to_owned(), httpdate::fmt_http_date(now));
+
+        let mut cache = HttpCache::default();
+        cache.store(&request, &response);
+
+        assert!(
+            cache.get(&request).is_none(),
+            "case-insensitive duplicate Date headers must not create a reusable cache entry"
+        );
     }
 
     #[test]
