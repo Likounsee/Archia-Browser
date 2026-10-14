@@ -192,3 +192,11 @@ Le cycle synchrone de chargement de document passe maintenant par un jeton de na
 Les frontends peuvent également utiliser `begin_navigation`, `cancel_navigation` et `commit_navigation` pour piloter une navigation en plusieurs étapes. Un résultat arrivé après une navigation plus récente ou après fermeture de l'onglet est rejeté avec `NavigationSuperseded`.
 
 **Limites explicites :** le transport reste synchrone et n'expose pas encore de primitive d'annulation réseau ; les anciens appels de navigation purement metadata (`navigate`, `back`, `forward`) restent disponibles pour compatibilité et ne déclenchent pas eux-mêmes de chargement. L'invalidation coordonnée style/layout/paint et les tests d'intégration réseau de bout en bout sont à compléter. Ce lot ne ferme pas P0 et ne vaut pas certification navigateur.
+
+
+### P0 — campagne de fuzzing reproductible et slots mémoire concurrents
+
+- Le workflow `.github/workflows/p0-long-fuzz.yml` épingle maintenant le checkout à `${{ github.sha }}` : les résultats d'une campagne correspondent au commit déclencheur plutôt qu'à une branche susceptible d'avancer pendant l'exécution.
+- Chaque cible sauvegarde stdout/stderr dans `fuzz/artifacts/<target>-run.log`, puis téléverse les logs et les éventuels inputs de crash. Les résultats de campagne doivent être consultés avant de conclure à l'absence de crash.
+- `core::memory` ajoute `concurrent_resource_slot_guards_never_exceed_the_shared_limit` : 16 threads tentent d'acquérir simultanément des slots avec une limite de 4 ; le test vérifie que 4 acquisitions seulement réussissent, que les gardes RAII libèrent tous les slots et que la comptabilité des octets reste indépendante.
+- Validation du nouveau test : CI du commit `673acb3cfa687e6e8313a146623ce94fa50c73a0` en attente au moment de cette mise à jour. La campagne longue est aussi en attente/en cours sur un SHA antérieur à ce test ; elle ne prouvera pas le comportement du nouveau test ni du HEAD final.
