@@ -686,6 +686,37 @@ fn decode_character_references(input: &str) -> String {
         let start = cursor + relative;
         output.push_str(&input[cursor..start]);
 
+        // Numeric character references may omit their trailing semicolon in HTML.
+        // Consume only valid digits so following text remains untouched.
+        let reference_start = start + 1;
+        if input[reference_start..].starts_with('#') {
+            let digits_start = reference_start + 1;
+            let (radix, number_start) = if input[digits_start..].starts_with('x')
+                || input[digits_start..].starts_with('X')
+            {
+                (16, digits_start + 1)
+            } else {
+                (10, digits_start)
+            };
+            let digits_end = input[number_start..]
+                .char_indices()
+                .take_while(|(_, ch)| ch.is_digit(radix))
+                .map(|(offset, ch)| offset + ch.len_utf8())
+                .last()
+                .map(|length| number_start + length);
+            if let Some(end) = digits_end {
+                if end > number_start {
+                    let has_semicolon = input[end..].starts_with(';');
+                    let digits = &input[number_start..end];
+                    if let Ok(codepoint) = u32::from_str_radix(digits, radix) {
+                        output.push(decode_numeric_character_reference(codepoint));
+                        cursor = end + usize::from(has_semicolon);
+                        continue;
+                    }
+                }
+            }
+        }
+
         let Some(end_relative) = input[start + 1..].find(';') else {
             output.push_str(&input[start..]);
             return output.replace('\0', "\u{FFFD}");
@@ -772,6 +803,14 @@ mod character_reference_tests {
         assert_eq!(
             decode_character_references("&#0; &#xD800; &#x110000;"),
             "\u{FFFD} \u{FFFD} \u{FFFD}"
+        );
+    }
+
+    #[test]
+    fn decodes_numeric_references_without_semicolons() {
+        assert_eq!(
+            decode_character_references("&#65 &#x1f600! &#0"),
+            "A 😀! \u{FFFD}"
         );
     }
 
