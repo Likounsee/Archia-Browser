@@ -173,7 +173,7 @@ impl HttpTransport {
         stream
             .write_all(head.as_bytes())
             .and_then(|_| stream.write_all(&request.body))
-            .map_err(|_| TransportError::ConnectionFailed)
+            .map_err(map_transport_io_error)?
     }
 
     fn read_response(
@@ -228,10 +228,7 @@ impl HttpTransport {
                         return Err(TransportError::ResponseTooLarge);
                     }
                 }
-                Err(error) if error.kind() == std::io::ErrorKind::TimedOut => {
-                    return Err(TransportError::Timeout)
-                }
-                Err(_) => return Err(TransportError::ConnectionFailed),
+                Err(error) => return Err(map_transport_io_error(error)),
             }
         }
 
@@ -256,6 +253,14 @@ fn tls_client_config() -> ClientConfig {
     // cannot decode, and make the supported application protocol explicit.
     config.alpn_protocols = vec![b"http/1.1".to_vec()];
     config
+}
+
+fn map_transport_io_error(error: std::io::Error) -> TransportError {
+    if is_timeout_error(error.kind()) {
+        TransportError::Timeout
+    } else {
+        TransportError::ConnectionFailed
+    }
 }
 
 fn is_timeout_error(kind: std::io::ErrorKind) -> bool {
@@ -4557,6 +4562,24 @@ mod limit_tests {
         // The transport rejects the first chunk whose projected length exceeds
         // the cap; it must not keep reading the rest of the peer's response.
         assert_eq!(stream.reads, 1);
+    }
+
+    #[test]
+    fn socket_io_timeouts_are_consistent_for_reads_and_writes() {
+        assert_eq!(
+            map_transport_io_error(std::io::Error::from(std::io::ErrorKind::TimedOut)),
+            TransportError::Timeout
+        );
+        assert_eq!(
+            map_transport_io_error(std::io::Error::from(std::io::ErrorKind::WouldBlock)),
+            TransportError::Timeout
+        );
+        assert_eq!(
+            map_transport_io_error(std::io::Error::from(
+                std::io::ErrorKind::ConnectionReset
+            )),
+            TransportError::ConnectionFailed
+        );
     }
 
     #[test]
