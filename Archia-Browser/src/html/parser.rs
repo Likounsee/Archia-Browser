@@ -186,6 +186,21 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                     close_element(&mut root, &mut stack, "p");
                 }
 
+                // A row directly inside a table starts an implicit tbody in
+                // the HTML tree builder. Keep this scoped to the table being
+                // the current insertion parent; foster parenting is separate.
+                if name == "tr"
+                    && stack
+                        .last()
+                        .is_some_and(|node| node.tag_name() == Some("table"))
+                {
+                    if stack.try_reserve(1).is_err() {
+                        break;
+                    }
+                    stack.push(Node::element("tbody"));
+                    created_nodes += 1;
+                }
+
                 if name == "li" && has_open_list_item_in_current_list(&stack) {
                     close_element(&mut root, &mut stack, "li");
                 }
@@ -841,10 +856,32 @@ mod tests {
         assert_eq!(first_section.children[0].children.len(), 2);
         assert_eq!(first_section.children[0].children[0].text_content(), "one");
         assert_eq!(first_section.children[0].children[1].text_content(), "two");
-        assert_eq!(first_section.children[1].children[0].text_content(), "three");
+        assert_eq!(
+            first_section.children[1].children[0].text_content(),
+            "three"
+        );
         let second_section = &table.children[1];
         assert_eq!(second_section.tag_name(), Some("tbody"));
-        assert_eq!(second_section.children[0].children[0].text_content(), "four");
+        assert_eq!(
+            second_section.children[0].children[0].text_content(),
+            "four"
+        );
+    }
+
+    #[test]
+    fn table_rows_without_explicit_section_receive_implicit_tbody() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<table><tr><td>one<td>two<tr><td>three</table>",
+        ));
+        let table = root.find_first_element("table").expect("table retained");
+        assert_eq!(table.children.len(), 1);
+        let tbody = &table.children[0];
+        assert_eq!(tbody.tag_name(), Some("tbody"));
+        assert_eq!(tbody.children.len(), 2);
+        assert_eq!(tbody.children[0].children.len(), 2);
+        assert_eq!(tbody.children[0].children[0].text_content(), "one");
+        assert_eq!(tbody.children[0].children[1].text_content(), "two");
+        assert_eq!(tbody.children[1].children[0].text_content(), "three");
     }
 
     #[test]
