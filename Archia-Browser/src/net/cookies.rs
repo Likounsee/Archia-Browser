@@ -19,13 +19,11 @@ fn cookie_storage_bytes(cookie: &Cookie) -> usize {
 }
 
 /// Parse the cookie Max-Age grammar without accepting Rust's optional leading `+`.
-/// Zero remains accepted for compatibility with the widely used deletion form.
+/// Zero, including negative zero and zero-padded negative values, remains a deletion signal.
 fn parse_cookie_max_age(value: &str) -> Option<i64> {
     let negative = value.starts_with('-');
     let digits = value.strip_prefix('-').unwrap_or(value);
-    if digits.is_empty()
-        || !digits.bytes().all(|byte| byte.is_ascii_digit())
-    {
+    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
         return None;
     }
 
