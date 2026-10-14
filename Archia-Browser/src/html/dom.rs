@@ -171,14 +171,48 @@ impl Node {
         }
     }
 
-    pub fn find_first_element(&self, tag_name: &str) -> Option<&Node> {
-        if self.tag_name() == Some(tag_name) {
-            return Some(self);
+    /// Iterate over all descendants in document order (pre-order), without
+    /// recursive calls. The node itself is intentionally excluded.
+    pub fn descendants(&self) -> Descendants<'_> {
+        Descendants {
+            stack: self.children.iter().rev().collect(),
         }
+    }
 
-        self.children
-            .iter()
-            .find_map(|child| child.find_first_element(tag_name))
+    /// Find the first descendant element with the requested tag name.
+    /// HTML element names are stored lowercase by the parser; lookup is
+    /// therefore ASCII case-insensitive for callers using HTML tag names.
+    pub fn find_first_element(&self, tag_name: &str) -> Option<&Node> {
+        let tag_name = tag_name.to_ascii_lowercase();
+        self.descendants()
+            .find(|node| node.tag_name().is_some_and(|name| name.eq_ignore_ascii_case(&tag_name)))
+    }
+
+    /// Find the first descendant element whose `id` exactly matches `id`.
+    pub fn find_by_id(&self, id: &str) -> Option<&Node> {
+        self.descendants()
+            .find(|node| node.is_element() && node.attribute("id") == Some(id))
+    }
+
+    /// Collect descendant elements with the requested class token.
+    /// Whitespace-separated class names are handled without substring matches.
+    pub fn find_by_class(&self, class_name: &str) -> Vec<&Node> {
+        if class_name.is_empty() || class_name.chars().any(char::is_whitespace) {
+            return Vec::new();
+        }
+        self.descendants()
+            .filter(|node| {
+                node.is_element()
+                    && node.attribute("class").is_some_and(|classes| {
+                        classes.split_ascii_whitespace().any(|name| name == class_name)
+                    })
+            })
+            .collect()
+    }
+
+    /// Return direct child elements, excluding text and comment nodes.
+    pub fn element_children(&self) -> impl Iterator<Item = &Node> {
+        self.children.iter().filter(|child| child.is_element())
     }
 
     pub fn text_content(&self) -> String {
@@ -194,6 +228,21 @@ impl Node {
         for child in &self.children {
             child.append_text_content(output);
         }
+    }
+}
+
+/// Explicit-stack preorder traversal over a DOM subtree.
+pub struct Descendants<'a> {
+    stack: Vec<&'a Node>,
+}
+
+impl<'a> Iterator for Descendants<'a> {
+    type Item = &'a Node;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let node = self.stack.pop()?;
+        self.stack.extend(node.children.iter().rev());
+        Some(node)
     }
 }
 
@@ -282,6 +331,45 @@ mod tests {
             Some("title")
         );
         assert!(document.find_first_element("missing").is_none());
+    }
+
+    #[test]
+    fn descendant_traversal_is_preorder_and_excludes_self() {
+        let mut root = Node::element("root");
+        let mut first = Node::element("first");
+        first.append(Node::element("nested"));
+        root.append(first);
+        root.append(Node::text("text"));
+        root.append(Node::element("last"));
+
+        let names: Vec<_> = root.descendants().filter_map(Node::tag_name).collect();
+        assert_eq!(names, ["first", "nested", "last"]);
+    }
+
+    #[test]
+    fn id_and_class_queries_match_tokens_not_substrings() {
+        let mut root = Node::document();
+        let mut first = Node::element("div");
+        first.set_attribute("id", "target");
+        first.set_attribute("class", "card selected");
+        let mut second = Node::element("span");
+        second.set_attribute("id", "target-extra");
+        second.set_attribute("class", "cardinal");
+        root.append(first);
+        root.append(second);
+
+        assert_eq!(root.find_by_id("target").and_then(Node::tag_name), Some("div"));
+        assert_eq!(root.find_by_id("missing"), None);
+        assert_eq!(root.find_by_class("card").len(), 1);
+        assert!(root.find_by_class("ar").is_empty());
+        assert!(root.find_by_class("two words").is_empty());
+    }
+
+    #[test]
+    fn tag_lookup_is_ascii_case_insensitive() {
+        let mut root = Node::document();
+        root.append(Node::element("section"));
+        assert_eq!(root.find_first_element("SECTION").and_then(Node::tag_name), Some("section"));
     }
 
     #[test]
