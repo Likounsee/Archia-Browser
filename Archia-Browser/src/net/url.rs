@@ -48,8 +48,8 @@ impl Url {
         {
             return Err(UrlError::UnsupportedFileAuthority);
         }
-        let rest = &remainder[authority_end..];
-        if !has_valid_percent_encoding(rest) {
+        let rest = percent_encode_non_ascii(&remainder[authority_end..]);
+        if !has_valid_percent_encoding(&rest) {
             return Err(UrlError::InvalidCharacter);
         }
         let (without_fragment, fragment) = rest
@@ -77,13 +77,17 @@ impl Url {
         {
             return Err(UrlError::InvalidCharacter);
         }
-        Ok(Self {
+        let parsed = Self {
             scheme: normalized_scheme,
             authority: normalize_authority_host(&normalize_ipv6_authority(authority)),
             path: normalized_path,
             query,
             fragment,
-        })
+        };
+        if parsed.to_string().len() > MAX_URL_BYTES {
+            return Err(UrlError::TooLong);
+        }
+        Ok(parsed)
     }
 
     pub fn scheme(&self) -> &str {
@@ -204,6 +208,11 @@ impl Url {
         if !has_valid_percent_encoding(reference) {
             return Err(UrlError::InvalidCharacter);
         }
+        // HTTP request-targets must use ASCII URI bytes. Encode raw UTF-8
+        // bytes before path/query/fragment parsing so policy and transport see
+        // one canonical representation rather than raw non-ASCII bytes.
+        let encoded_reference = percent_encode_non_ascii(reference);
+        let reference = encoded_reference.as_str();
 
         let (reference, fragment) = reference
             .split_once('#')
@@ -536,6 +545,25 @@ fn contains_encoded_path_separator(path: &str) -> bool {
     })
 }
 
+fn percent_encode_non_ascii(value: &str) -> String {
+    if value.is_ascii() {
+        return value.to_owned();
+    }
+
+    let mut encoded = String::with_capacity(value.len());
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    for byte in value.bytes() {
+        if byte.is_ascii() {
+            encoded.push(char::from(byte));
+        } else {
+            encoded.push('%');
+            encoded.push(char::from(HEX[(byte >> 4) as usize]));
+            encoded.push(char::from(HEX[(byte & 0x0f) as usize]));
+        }
+    }
+    encoded
+}
+
 fn contains_unsafe_url_whitespace(value: &str) -> bool {
     // Backslashes are interpreted as path separators by several URL consumers
     // (notably browsers and Windows-oriented code), but as ordinary bytes by
@@ -772,6 +800,22 @@ mod tests {
                 "URL and security origin comparisons diverged for {left} and {right}"
             );
         }
+    }
+
+    #[test]
+    fn raw_non_ascii_url_components_are_percent_encoded() {
+        let parsed = Url::parse("https://example.org/café?q=été#été").unwrap();
+        assert_eq!(
+            parsed.to_string(),
+            "https://example.org/caf%C3%A9?q=%C3%A9t%C3%A9#%C3%A9t%C3%A9"
+        );
+
+        let base = Url::parse("https://example.org/dir/index.html").unwrap();
+        let resolved = base.resolve("café?q=été#été").unwrap();
+        assert_eq!(
+            resolved.to_string(),
+            "https://example.org/dir/caf%C3%A9?q=%C3%A9t%C3%A9#%C3%A9t%C3%A9"
+        );
     }
 
     #[test]
