@@ -2178,10 +2178,7 @@ fn decode_chunked(
                             | "expect"
                             | "authentication-info"
                             | "proxy-authentication-info"
-                            | "proxy-authorization"
                             | "cookie"
-                            | "host"
-                            | "te"
                     )
                 {
                     return Err(TransportError::ConnectionFailed);

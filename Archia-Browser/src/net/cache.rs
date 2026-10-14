@@ -489,6 +489,20 @@ fn response_can_store(response: &Response) -> bool {
         // A 200 response carrying Content-Range is still a partial representation;
         // caching it under the full-resource key could serve truncated content later.
         && !response_has_header(response, "content-range")
+        // Transfer framing and proxy/upgrade metadata describe one connection,
+        // not a reusable representation. The body has already been decoded, so
+        // retaining these fields in a cache entry would make its metadata lie.
+        && ![
+            "transfer-encoding",
+            "trailer",
+            "te",
+            "upgrade",
+            "proxy-connection",
+            "proxy-authenticate",
+            "proxy-authorization",
+        ]
+        .iter()
+        .any(|name| response_has_header(response, name))
         && !response_has_header(response, "vary")
 }
 
@@ -774,6 +788,36 @@ mod tests {
         assert_eq!(super::checked_entry_bytes(0, 0), Some(0));
         assert_eq!(super::checked_entry_bytes(usize::MAX, 1), None);
         assert_eq!(super::checked_entry_bytes(usize::MAX - 3, 4), None);
+    }
+
+    #[test]
+    fn cache_rejects_connection_specific_response_metadata() {
+        let request = super::Request::new(
+            super::super::Url::parse("https://example.org/resource").unwrap(),
+        );
+
+        for name in [
+            "Transfer-Encoding",
+            "Trailer",
+            "TE",
+            "Upgrade",
+            "Proxy-Connection",
+            "Proxy-Authenticate",
+            "Proxy-Authorization",
+        ] {
+            let response = super::Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_header(name, "connection-specific")
+                .with_body(b"decoded body".to_vec());
+            assert!(
+                !super::response_can_store(&response),
+                "connection-specific header {name} must not enter the reusable cache"
+            );
+
+            let mut cache = super::HttpCache::default();
+            cache.store(&request, &response);
+            assert_eq!(cache.len(), 0, "{name} response must not be cached");
+        }
     }
 
     #[test]
