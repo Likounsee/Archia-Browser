@@ -1199,6 +1199,19 @@ mod tests {
     }
 
     #[test]
+    fn redirect_targets_are_limited_to_supported_document_schemes() {
+        for scheme in ["http", "https", "file"] {
+            assert!(super::is_supported_redirect_scheme(scheme));
+        }
+        for scheme in ["javascript", "data", "ftp", "about", "blob"] {
+            assert!(
+                !super::is_supported_redirect_scheme(scheme),
+                "unsupported redirect scheme {scheme} must be rejected before another request"
+            );
+        }
+    }
+
+    #[test]
     fn redirect_method_rewriting_follows_status_specific_rules() {
         for status in [301, 302] {
             assert!(should_switch_to_get(HttpMethod::Post, status));

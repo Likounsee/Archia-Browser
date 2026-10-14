@@ -4575,9 +4575,7 @@ mod limit_tests {
             TransportError::Timeout
         );
         assert_eq!(
-            map_transport_io_error(std::io::Error::from(
-                std::io::ErrorKind::ConnectionReset
-            )),
+            map_transport_io_error(std::io::Error::from(std::io::ErrorKind::ConnectionReset)),
             TransportError::ConnectionFailed
         );
     }
