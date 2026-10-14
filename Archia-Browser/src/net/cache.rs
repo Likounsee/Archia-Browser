@@ -797,10 +797,11 @@ mod tests {
 
     #[test]
     fn connection_requests_bypass_cache_lookup_and_storage() {
-        let mut request = super::Request::new(
-            super::super::Url::parse("https://example.org/resource").unwrap(),
-        );
-        request.headers.insert("connection".into(), "x-private".into());
+        let mut request =
+            super::Request::new(super::super::Url::parse("https://example.org/resource").unwrap());
+        request
+            .headers
+            .insert("connection".into(), "x-private".into());
         let response = super::Response::new(200)
             .with_header("cache-control", "max-age=60")
             .with_body(b"public copy".to_vec());
@@ -813,9 +814,8 @@ mod tests {
 
     #[test]
     fn cache_rejects_connection_specific_response_metadata() {
-        let request = super::Request::new(
-            super::super::Url::parse("https://example.org/resource").unwrap(),
-        );
+        let request =
+            super::Request::new(super::super::Url::parse("https://example.org/resource").unwrap());
 
         for name in [
             "Transfer-Encoding",

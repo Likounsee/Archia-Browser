@@ -379,9 +379,7 @@ mod tests {
         }
 
         let pipeline = NetworkPipeline::new(AllowAll);
-        let mut unscoped = Request::new(
-            super::super::Url::parse("file:///etc/passwd").unwrap(),
-        );
+        let mut unscoped = Request::new(super::super::Url::parse("file:///etc/passwd").unwrap());
         unscoped.policy = RequestPolicy {
             resource_kind: ResourceKind::Script,
             ..RequestPolicy::default()
@@ -391,9 +389,8 @@ mod tests {
             Err(TransportError::BlockedByPolicy)
         );
 
-        let mut navigation = Request::new(
-            super::super::Url::parse("file:///tmp/index.html").unwrap(),
-        );
+        let mut navigation =
+            Request::new(super::super::Url::parse("file:///tmp/index.html").unwrap());
         navigation.policy = RequestPolicy {
             resource_kind: ResourceKind::Document,
             top_level_navigation: true,
