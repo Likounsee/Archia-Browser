@@ -371,6 +371,7 @@ where
         Err(DocumentLoadError::RedirectLimitExceeded)
     }
 
+    #[cfg(test)]
     fn load_linked_stylesheets(
         &self,
         document_url: &super::Url,
@@ -1682,7 +1683,6 @@ mod tests {
         );
     }
 
-    #[derive(Debug, Default)]
     #[test]
     fn cancelled_stylesheet_load_does_not_fetch_nested_imports() {
         use std::sync::atomic::{AtomicUsize, Ordering};
