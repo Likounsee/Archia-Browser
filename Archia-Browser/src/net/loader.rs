@@ -1020,6 +1020,28 @@ fn is_css_response(response: &Response) -> bool {
 }
 
 fn redirect_loop_key(url: &super::Url) -> String {
+    // HTTP(S) redirects must use the same host identity as cookies and the
+    // HTTP cache. Otherwise a server could alternate between an absolute DNS
+    // name (example.org.) and its ordinary spelling to evade loop detection.
+    if matches!(url.scheme(), "http" | "https") {
+        let host = url
+            .host()
+            .strip_suffix('.')
+            .unwrap_or(url.host())
+            .to_ascii_lowercase();
+        let authority = if host.contains(':') {
+            format!("[{host}]:{}", url.effective_port())
+        } else {
+            format!("{host}:{}", url.effective_port())
+        };
+        let mut key = format!("{}://{}{}", url.scheme(), authority, url.path());
+        if let Some(query) = url.query() {
+            key.push('?');
+            key.push_str(query);
+        }
+        return key;
+    }
+
     let serialized = url.to_string();
     match serialized.split_once('#') {
         Some((without_fragment, _)) => without_fragment.to_owned(),
@@ -1319,6 +1341,28 @@ mod tests {
             "the cached response must keep its own reservation after the page is dropped"
         );
         assert!(budget.used() < retained_bytes);
+    }
+
+    #[test]
+    fn redirect_loop_key_canonicalizes_trailing_dot_and_default_port() {
+        let dotted = super::super::Url::parse("https://EXAMPLE.org.:443/path?q=1#first")
+            .unwrap();
+        let canonical = super::super::Url::parse("https://example.org/path?q=1#second")
+            .unwrap();
+
+        assert_eq!(
+            super::redirect_loop_key(&dotted),
+            super::redirect_loop_key(&canonical),
+            "equivalent HTTP URLs must not evade redirect-loop detection"
+        );
+
+        let different_query =
+            super::super::Url::parse("https://example.org/path?q=2").unwrap();
+        assert_ne!(
+            super::redirect_loop_key(&canonical),
+            super::redirect_loop_key(&different_query),
+            "the query remains part of redirect identity"
+        );
     }
 
     #[test]
