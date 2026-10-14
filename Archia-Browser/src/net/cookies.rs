@@ -26,6 +26,13 @@ fn cookie_url_supported(url: &Url) -> bool {
     matches!(url.scheme(), "http" | "https")
 }
 
+/// DNS absolute names with one trailing dot identify the same host as the
+/// corresponding name without it. Canonicalize request hosts consistently
+/// before storing or matching cookie scope.
+fn canonical_cookie_host(host: &str) -> String {
+    host.strip_suffix('.').unwrap_or(host).to_ascii_lowercase()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SameSite {
     Unspecified,
@@ -92,7 +99,7 @@ impl CookieJar {
         let mut cookie = Cookie {
             name: name.to_owned(),
             value: value.to_owned(),
-            domain: url.host().to_ascii_lowercase(),
+            domain: canonical_cookie_host(url.host()),
             path: default_cookie_path(url.path()),
             secure: false,
             http_only: false,
@@ -117,7 +124,7 @@ impl CookieJar {
                             .strip_prefix('.')
                             .unwrap_or(raw_domain)
                             .to_ascii_lowercase();
-                        let host = url.host().to_ascii_lowercase();
+                        let host = canonical_cookie_host(url.host());
                         // A trailing dot makes the Domain attribute invalid.
                         // Also require a host boundary so "example.com" cannot
                         // set Domain=com and leak cookies to unrelated hosts.
@@ -377,7 +384,7 @@ impl CookieJar {
         let safe_navigation = top_level_navigation
             && matches!(method, super::HttpMethod::Get | super::HttpMethod::Head);
         let now = SystemTime::now();
-        let host = url.host().to_ascii_lowercase();
+        let host = canonical_cookie_host(url.host());
         let path = url.path();
         let secure = url.is_secure();
         let mut matching = self
@@ -427,7 +434,7 @@ impl CookieJar {
             return None;
         }
         let now = SystemTime::now();
-        let host = url.host().to_ascii_lowercase();
+        let host = canonical_cookie_host(url.host());
         let path = url.path();
         let secure = url.is_secure();
         let mut matching = self
@@ -482,7 +489,7 @@ impl CookieJar {
             return None;
         }
         let now = SystemTime::now();
-        let host = url.host().to_ascii_lowercase();
+        let host = canonical_cookie_host(url.host());
         let path = url.path();
         let secure = url.is_secure();
         let mut matching = self
@@ -644,6 +651,20 @@ mod tests {
         assert!(header.len() <= MAX_COOKIE_HEADER_BYTES);
         assert!(header.starts_with("cookie"));
         assert!(header.contains("; "));
+    }
+
+    #[test]
+    fn trailing_dot_host_matches_the_same_host_without_a_trailing_dot() {
+        let dotted = Url::parse("https://example.org./account").unwrap();
+        let canonical = Url::parse("https://example.org/account").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&dotted, "sid=secure; Path=/; Secure");
+        assert_eq!(jar.header_for(&canonical).as_deref(), Some("sid=secure"));
+
+        let mut reverse = CookieJar::new();
+        reverse.store(&canonical, "sid=canonical; Path=/; Secure");
+        assert_eq!(reverse.header_for(&dotted).as_deref(), Some("sid=canonical"));
     }
 
     #[test]
