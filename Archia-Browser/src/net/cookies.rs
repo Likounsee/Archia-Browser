@@ -174,7 +174,10 @@ impl CookieJar {
                     }
                 }
                 "max-age" => {
-                    if let Some(seconds) = pieces.next().and_then(|value| parse_cookie_max_age(trim_cookie_ows(value))) {
+                    if let Some(seconds) = pieces
+                        .next()
+                        .and_then(|value| parse_cookie_max_age(trim_cookie_ows(value)))
+                    {
                         max_age = Some(seconds);
                     }
                 }
