@@ -327,9 +327,9 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                             .rposition(|node| node.tag_name() == Some("table"));
                         // An end tag inside a nested table cannot close a row,
                         // cell, or section belonging to an outer table.
-                        if matching_position.zip(table_position).is_some_and(
-                            |(matching, table)| matching >= table,
-                        ) {
+                        if matching_position.is_some_and(|matching| {
+                            table_position.is_none_or(|table| matching >= table)
+                        }) {
                             close_element(&mut root, &mut stack, name);
                         }
                     } else {
@@ -1004,6 +1004,16 @@ mod tests {
             second_section.children[0].children[0].text_content(),
             "four"
         );
+    }
+
+    #[test]
+    fn table_section_end_tags_without_an_open_table_still_close_matching_nodes() {
+        let root = parse(&HtmlTokenizer::tokenize("<tbody><div>inside</div></tbody><p>after</p>"));
+        let body = root.find_first_element("body").expect("body retained");
+        assert_eq!(body.children[0].tag_name(), Some("tbody"));
+        assert_eq!(body.children[0].children[0].tag_name(), Some("div"));
+        assert_eq!(body.children[1].tag_name(), Some("p"));
+        assert_eq!(body.children[1].text_content(), "after");
     }
 
     #[test]
