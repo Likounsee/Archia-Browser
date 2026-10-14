@@ -97,7 +97,7 @@ impl HtmlTokenizer {
                 .is_some_and(|prefix| prefix.eq_ignore_ascii_case("!doctype"))
                 && matches!(
                     inside.as_bytes().get(8),
-                    None | Some(b' ' | b'\\t' | b'\\n' | b'\\r' | b'\\x0c')
+                    None | Some(b' ' | b'\t' | b'\n' | b'\r' | b'\x0c')
                 )
             {
                 if !try_push_token(
