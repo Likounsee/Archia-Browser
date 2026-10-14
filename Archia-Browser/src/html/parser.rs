@@ -536,6 +536,28 @@ mod tests {
     use crate::html::tokenizer::HtmlTokenizer;
 
     #[test]
+    fn raw_text_and_rcdata_closing_tags_restore_document_nesting() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<title>Page &amp; title</title><script>const x = 1;</script><style>p{}</style><textarea>value</textarea><p>visible</p>",
+        ));
+
+        let title = root.find_first_element("title").expect("title is retained");
+        let script = root.find_first_element("script").expect("script is retained");
+        let style = root.find_first_element("style").expect("style is retained");
+        let textarea = root.find_first_element("textarea").expect("textarea is retained");
+        let paragraph = root.find_first_element("p").expect("following paragraph is retained");
+
+        assert_eq!(title.text_content(), "Page & title");
+        assert_eq!(script.text_content(), "const x = 1;");
+        assert_eq!(style.text_content(), "p{}");
+        assert_eq!(textarea.text_content(), "value");
+        assert_eq!(paragraph.text_content(), "visible");
+        assert_eq!(script.child_count(), 1);
+        assert_eq!(style.child_count(), 1);
+        assert_eq!(textarea.child_count(), 1);
+    }
+
+    #[test]
     fn suppressed_stack_tracker_keeps_stack_and_index_consistent() {
         let mut stack = Vec::new();
         let mut positions = HashMap::new();
