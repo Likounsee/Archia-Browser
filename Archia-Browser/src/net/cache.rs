@@ -126,7 +126,7 @@ impl HttpCache {
             return;
         }
 
-        let Some(max_age) = response_max_age(response) else {
+        let Some(max_age) = response_freshness_lifetime(response) else {
             self.entries.remove(&key);
             return;
         };
@@ -541,6 +541,54 @@ fn parse_delta_seconds(value: &str) -> Option<u64> {
         return None;
     }
     value.parse::<u64>().ok()
+}
+
+/// Determine the response freshness lifetime. Prefer Cache-Control max-age;
+/// only fall back to Expires when no max-age directive was supplied. An invalid
+/// or duplicate max-age must not be rescued by a more permissive fallback.
+fn response_freshness_lifetime(response: &Response) -> Option<u64> {
+    let has_max_age = response
+        .headers
+        .iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("cache-control"))
+        .flat_map(|(_, value)| cache_control_directives(value))
+        .any(|directive| {
+            directive
+                .split_once('=')
+                .map_or(directive, |(name, _)| name)
+                .trim_matches(|character| character == ' ' || character == '\t')
+                .eq_ignore_ascii_case("max-age")
+        });
+
+    if has_max_age {
+        return response_max_age(response);
+    }
+
+    let mut expires_headers = response
+        .headers
+        .iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("expires"));
+    let expires_value = expires_headers.next()?.1;
+    if expires_headers.next().is_some() {
+        return None;
+    }
+    let expires = httpdate::parse_http_date(trim_http_ows(expires_value)).ok()?;
+
+    let mut date_headers = response
+        .headers
+        .iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("date"));
+    let date = match date_headers.next() {
+        Some((_, value)) => {
+            if date_headers.next().is_some() {
+                return None;
+            }
+            httpdate::parse_http_date(trim_http_ows(value)).ok()?
+        }
+        None => std::time::SystemTime::now(),
+    };
+
+    expires.duration_since(date).ok().map(|duration| duration.as_secs())
 }
 
 fn response_max_age(response: &Response) -> Option<u64> {
@@ -1769,6 +1817,54 @@ mod tests {
             response.headers.insert(name.to_owned(), value.to_owned());
             cache.store(&request, &response);
             assert_eq!(cache.len(), 0, "{name}: {value}");
+        }
+    }
+
+    #[test]
+    fn expires_header_provides_freshness_when_max_age_is_absent() {
+        let request = make_request("https://example.org/expires");
+        let date = std::time::SystemTime::now();
+        let expires = date + Duration::from_secs(120);
+        let response = Response::new(200)
+            .with_header("date", httpdate::fmt_http_date(date))
+            .with_header("expires", httpdate::fmt_http_date(expires))
+            .with_body(b"expires cached".to_vec());
+        let mut cache = HttpCache::default();
+
+        cache.store(&request, &response);
+
+        assert_eq!(
+            cache.get(&request).unwrap().body,
+            b"expires cached",
+            "a valid Expires lifetime should be usable without Cache-Control max-age"
+        );
+    }
+
+    #[test]
+    fn invalid_or_ambiguous_expires_never_reuses_an_old_response() {
+        let request = make_request("https://example.org/expires-invalid");
+        let mut cache = HttpCache::default();
+        cache.store(
+            &request,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_body(b"older response".to_vec()),
+        );
+
+        for response in [
+            Response::new(200)
+                .with_header("expires", "not an HTTP date")
+                .with_body(b"malformed expiry".to_vec()),
+            Response::new(200)
+                .with_header("expires", "Wed, 21 Oct 2037 07:28:00 GMT")
+                .with_header("Expires", "Wed, 21 Oct 2037 07:28:00 GMT")
+                .with_body(b"ambiguous expiry".to_vec()),
+        ] {
+            cache.store(&request, &response);
+            assert!(
+                cache.get(&request).is_none(),
+                "invalid or duplicate Expires values must invalidate an older representation"
+            );
         }
     }
 

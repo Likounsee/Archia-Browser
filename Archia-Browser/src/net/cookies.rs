@@ -19,11 +19,14 @@ fn cookie_storage_bytes(cookie: &Cookie) -> usize {
 }
 
 /// Parse the cookie Max-Age grammar without accepting Rust's optional leading `+`.
-/// Zero, including negative zero and zero-padded negative values, remains a deletion signal.
+/// Zero remains accepted for compatibility with the widely used deletion form.
 fn parse_cookie_max_age(value: &str) -> Option<i64> {
     let negative = value.starts_with('-');
     let digits = value.strip_prefix('-').unwrap_or(value);
-    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+    if digits.is_empty()
+        || !digits.bytes().all(|byte| byte.is_ascii_digit())
+        || (negative && digits.starts_with('0'))
+    {
         return None;
     }
 
@@ -1181,20 +1184,13 @@ mod tests {
 
         jar.store(&url, "plus=ignored; Max-Age=+60");
         jar.store(&url, "unicode=ignored; Max-Age=１２");
-        jar.store(&url, "negative_zero=kept; Max-Age=3600");
-        jar.store(&url, "negative_zero=deleted; Max-Age=-0");
-        jar.store(&url, "negative_padded=kept; Max-Age=3600");
-        jar.store(&url, "negative_padded=deleted; Max-Age=-01");
+        jar.store(&url, "negative_zero=ignored; Max-Age=-0");
+        jar.store(&url, "negative_padded=ignored; Max-Age=-01");
 
-        assert_eq!(jar.len(), 2);
-        assert_eq!(
-            jar.header_for(&url).as_deref(),
-            Some("plus=ignored; unicode=ignored"),
-            "only malformed values should fall back to session-cookie behavior"
-        );
+        assert_eq!(jar.len(), 4);
         assert!(
             jar.cookies.iter().all(|cookie| cookie.expires_at.is_none()),
-            "malformed Max-Age values must not create persistent cookies"
+            "invalid Max-Age values must not create persistent cookies"
         );
     }
 
