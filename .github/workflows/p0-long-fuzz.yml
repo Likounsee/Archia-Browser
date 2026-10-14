@@ -46,13 +46,17 @@ jobs:
         run: cargo +nightly fuzz build "${{ matrix.target }}"
         working-directory: fuzz
       - name: Fuzz target for 3.5 hours
-        run: cargo +nightly fuzz run "${{ matrix.target }}" -- -max_total_time=12600 -timeout=10 -rss_limit_mb=4096 -print_final_stats=1
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p artifacts
+          cargo +nightly fuzz run "${{ matrix.target }}" -- -max_total_time=12600 -timeout=10 -rss_limit_mb=4096 -print_final_stats=1 2>&1 | tee "artifacts/${{ matrix.target }}-run.log"
         working-directory: fuzz
-      - name: Preserve fuzz artifacts and crash inputs
+      - name: Preserve fuzz logs and crash inputs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: archia-browser-p0-fuzz-${{ matrix.target }}
           path: fuzz/artifacts/
-          if-no-files-found: ignore
+          if-no-files-found: warn
           retention-days: 14
