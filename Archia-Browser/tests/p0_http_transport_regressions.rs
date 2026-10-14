@@ -56,9 +56,8 @@ fn transport_rejects_conflicting_response_framing_end_to_end() {
 
 #[test]
 fn transport_rejects_incomplete_content_length_end_to_end() {
-    let (url, worker) = serve_once(
-        b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\nshort",
-    );
+    let (url, worker) =
+        serve_once(b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\nshort");
     let request = Request::new(Url::parse(&url).unwrap());
 
     assert_eq!(
