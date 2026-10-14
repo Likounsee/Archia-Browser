@@ -190,8 +190,10 @@ impl Node {
         {
             return Some(self);
         }
-        self.descendants()
-            .find(|node| node.tag_name().is_some_and(|name| name.eq_ignore_ascii_case(&tag_name)))
+        self.descendants().find(|node| {
+            node.tag_name()
+                .is_some_and(|name| name.eq_ignore_ascii_case(&tag_name))
+        })
     }
 
     /// Find the first descendant element whose `id` exactly matches `id`.
