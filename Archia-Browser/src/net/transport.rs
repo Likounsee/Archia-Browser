@@ -78,14 +78,20 @@ impl HttpTransport {
             .to_socket_addrs()
             .map_err(|_| TransportError::ConnectionFailed)?;
         let mut connected = None;
+        let mut connect_timed_out = false;
         for address in addresses {
             cancellation.check()?;
-            if let Ok(stream) = TcpStream::connect_timeout(&address, self.connect_timeout) {
-                connected = Some(stream);
-                break;
+            match TcpStream::connect_timeout(&address, self.connect_timeout) {
+                Ok(stream) => {
+                    connected = Some(stream);
+                    break;
+                }
+                Err(error) => {
+                    connect_timed_out |= is_timeout_error(error.kind());
+                }
             }
         }
-        let mut stream = connected.ok_or(TransportError::ConnectionFailed)?;
+        let mut stream = connected.ok_or_else(|| connect_failure_error(connect_timed_out))?;
 
         stream
             .set_read_timeout(Some(self.read_timeout))
@@ -252,10 +258,26 @@ fn tls_client_config() -> ClientConfig {
     config
 }
 
+fn is_timeout_error(kind: std::io::ErrorKind) -> bool {
+    matches!(
+        kind,
+        std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+    )
+}
+
+fn connect_failure_error(timed_out: bool) -> TransportError {
+    if timed_out {
+        TransportError::Timeout
+    } else {
+        TransportError::ConnectionFailed
+    }
+}
+
 fn map_tls_io_error(error: std::io::Error) -> TransportError {
-    match error.kind() {
-        std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock => TransportError::Timeout,
-        _ => TransportError::TlsFailed,
+    if is_timeout_error(error.kind()) {
+        TransportError::Timeout
+    } else {
+        TransportError::TlsFailed
     }
 }
 
@@ -4535,6 +4557,18 @@ mod limit_tests {
         // The transport rejects the first chunk whose projected length exceeds
         // the cap; it must not keep reading the rest of the peer's response.
         assert_eq!(stream.reads, 1);
+    }
+
+    #[test]
+    fn connect_timeout_is_not_collapsed_into_connection_failure() {
+        assert_eq!(connect_failure_error(true), TransportError::Timeout);
+        assert_eq!(
+            connect_failure_error(false),
+            TransportError::ConnectionFailed
+        );
+        assert!(is_timeout_error(std::io::ErrorKind::TimedOut));
+        assert!(is_timeout_error(std::io::ErrorKind::WouldBlock));
+        assert!(!is_timeout_error(std::io::ErrorKind::ConnectionRefused));
     }
 
     #[test]
