@@ -210,6 +210,14 @@ impl Node {
             .find(|node| node.is_element() && node.attribute("id") == Some(id))
     }
 
+    /// Collect descendant elements whose named attribute has the exact value.
+    /// Attribute names are ASCII case-insensitive; values remain case-sensitive.
+    pub fn find_by_attribute_value(&self, name: &str, value: &str) -> Vec<&Node> {
+        self.descendants()
+            .filter(|node| node.is_element() && node.attribute(name) == Some(value))
+            .collect()
+    }
+
     /// Collect descendant elements with the requested class token.
     /// Whitespace-separated class names are handled without substring matches.
     pub fn find_by_class(&self, class_name: &str) -> Vec<&Node> {
@@ -411,6 +419,26 @@ mod tests {
 
         let names: Vec<_> = root.descendants().filter_map(Node::tag_name).collect();
         assert_eq!(names, ["first", "nested", "last"]);
+    }
+
+    #[test]
+    fn attribute_value_queries_match_exact_values_in_document_order() {
+        let mut root = Node::document();
+        let mut first = Node::element("a");
+        first.set_attribute("DATA-kind", "guide");
+        let mut nested = Node::element("span");
+        nested.set_attribute("data-kind", "guide");
+        first.append(nested);
+        let mut partial = Node::element("a");
+        partial.set_attribute("data-kind", "guide-extra");
+        root.append(first);
+        root.append(partial);
+
+        let matches = root.find_by_attribute_value("DATA-KIND", "guide");
+        assert_eq!(matches.len(), 2);
+        assert_eq!(matches[0].tag_name(), Some("a"));
+        assert_eq!(matches[1].tag_name(), Some("span"));
+        assert!(root.find_by_attribute_value("data-kind", "GUIDE").is_empty());
     }
 
     #[test]
