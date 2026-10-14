@@ -216,6 +216,39 @@ impl Node {
         self.find_by_attribute_value("name", name)
     }
 
+    /// Find the first descendant element that has the named attribute.
+    pub fn find_first_by_attribute(&self, name: &str) -> Option<&Node> {
+        self.descendants()
+            .find(|node| node.is_element() && node.has_attribute(name))
+    }
+
+    /// Find the first descendant element whose named attribute exactly matches
+    /// the requested value.
+    pub fn find_first_by_attribute_value(&self, name: &str, value: &str) -> Option<&Node> {
+        self.descendants()
+            .find(|node| node.is_element() && node.attribute(name) == Some(value))
+    }
+
+    /// Find the first descendant element containing the requested class token.
+    pub fn find_first_by_class(&self, class_name: &str) -> Option<&Node> {
+        if class_name.is_empty() || class_name.chars().any(is_html_whitespace) {
+            return None;
+        }
+        self.descendants().find(|node| {
+            node.is_element()
+                && node.attribute("class").is_some_and(|classes| {
+                    classes
+                        .split(is_html_whitespace)
+                        .any(|name| name == class_name)
+                })
+        })
+    }
+
+    /// Find the first descendant form-related element whose `name` value matches.
+    pub fn find_first_by_name(&self, name: &str) -> Option<&Node> {
+        self.find_first_by_attribute_value("name", name)
+    }
+
     /// Collect descendant elements that have the named attribute, regardless
     /// of its value. Attribute names are ASCII case-insensitive.
     pub fn find_by_attribute(&self, name: &str) -> Vec<&Node> {
@@ -433,6 +466,30 @@ mod tests {
 
         let names: Vec<_> = root.descendants().filter_map(Node::tag_name).collect();
         assert_eq!(names, ["first", "nested", "last"]);
+    }
+
+    #[test]
+    fn first_match_queries_return_the_earliest_descendant() {
+        let mut root = Node::document();
+        let mut first = Node::element("input");
+        first.set_attribute("name", "email");
+        first.set_attribute("class", "field required");
+        first.set_attribute("data-state", "");
+        let mut second = Node::element("input");
+        second.set_attribute("name", "email");
+        second.set_attribute("class", "field");
+        root.append(first);
+        root.append(second);
+
+        assert_eq!(root.find_first_by_name("email").and_then(Node::tag_name), Some("input"));
+        assert_eq!(
+            root.find_first_by_attribute("data-state")
+                .and_then(|node| node.attribute("data-state")),
+            Some("")
+        );
+        assert_eq!(root.find_first_by_class("required").and_then(Node::tag_name), Some("input"));
+        assert_eq!(root.find_first_by_attribute_value("name", "missing"), None);
+        assert_eq!(root.find_first_by_class("field required extra"), None);
     }
 
     #[test]
