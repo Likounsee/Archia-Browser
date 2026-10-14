@@ -1504,6 +1504,17 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
         }
     }
 
+    // This transport connects directly to the origin; it has no proxy hop
+    // to authenticate. Forwarding Proxy-Authorization would disclose proxy
+    // credentials to the origin server, so reject it rather than serialize it.
+    if request
+        .headers
+        .keys()
+        .any(|name| name.eq_ignore_ascii_case("proxy-authorization"))
+    {
+        return Err(TransportError::InvalidRequest);
+    }
+
     // Connection-nominated fields are hop-by-hop. Since this transport
     // does not forward a proxy hop, accepting both fields would serialize a
     // header that Connection explicitly says must be removed.
@@ -3953,6 +3964,19 @@ mod tests {
         let head = String::from_utf8(stream.written).unwrap();
         assert_eq!(head.matches("Connection: close").count(), 1);
         assert!(!head.to_ascii_lowercase().contains("connection: keep-alive"));
+    }
+
+    #[test]
+    fn rejects_proxy_credentials_on_direct_origin_transport() {
+        for name in ["proxy-authorization", "Proxy-Authorization"] {
+            let mut request = Request::new(Url::parse("https://example.org/").unwrap());
+            request.headers.insert(name.to_owned(), "Basic secret".to_owned());
+            assert_eq!(
+                validate_request(&request),
+                Err(TransportError::InvalidRequest),
+                "proxy credentials must never be sent to an origin"
+            );
+        }
     }
 
     #[test]

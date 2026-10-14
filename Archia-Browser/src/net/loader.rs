@@ -289,6 +289,10 @@ where
                     }
                 }
                 remove_header_case_insensitive(&mut next.headers, "cookie");
+                // This loader does not route through an HTTP proxy. Never carry
+                // proxy credentials to any redirect target, including same-origin
+                // redirects where general cross-origin header filtering is skipped.
+                remove_header_case_insensitive(&mut next.headers, "proxy-authorization");
                 if cross_origin {
                     // Do not forward arbitrary caller-supplied headers to another
                     // origin. Custom headers frequently carry API keys or session
