@@ -1561,6 +1561,7 @@ mod tests {
             "max-age=+1",
             "max-age=+0",
             "max-age=１２",
+            "max-age=18446744073709551616",
             "min-fresh=+1",
             "max-age",
             "max-age=30, max-age=60",
@@ -1785,6 +1786,7 @@ mod tests {
             vec![("cache-control", "max-age=-1")],
             vec![("cache-control", "max-age=+1")],
             vec![("cache-control", "max-age=１２")],
+            vec![("cache-control", "max-age=18446744073709551616")],
         ] {
             let mut cache = HttpCache::default();
             let mut response = Response::new(200);
