@@ -401,22 +401,24 @@ fn close_element(root: &mut Node, stack: &mut Vec<Node>, name: &str) {
         stack.extend(completed.into_iter().rev());
         return;
     }
-    // The stack was popped deepest-first. Rebuild the detached open
-    // subtree from its outermost child inward, preserving the original nesting.
+    // Preflight the child slots needed to rebuild the open subtree. The
+    // popped nodes are deepest-first, so every node except the first needs
+    // one child slot to restore its original parent/child relationship.
+    for node in completed.iter_mut().skip(1) {
+        if node.children.try_reserve(1).is_err() {
+            stack.push(matching);
+            stack.extend(completed.into_iter().rev());
+            return;
+        }
+    }
+
+    // Rebuild from the outermost child inward, preserving original nesting.
     completed.reverse();
     let mut parent = &mut matching;
     for node in completed {
-        // Reserve all child slots before changing the detached subtree. If a
-        // nested allocation fails, retain the subtree on the stack for recovery.
-        if parent.children.try_reserve(1).is_err() {
-            stack.push(matching);
-            return;
-        }
+        // Every required slot was reserved above.
         parent.children.push(node);
-        parent = parent
-            .children
-            .last_mut()
-            .expect("the node was just appended");
+        parent = parent.children.last_mut().unwrap();
     }
 
     if let Err(node) = append_node_owned(root, stack, matching) {
