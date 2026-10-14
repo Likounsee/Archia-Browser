@@ -263,7 +263,7 @@ where
                 // boundary in either direction. Remote responses must not open
                 // local files, and a local document must not silently initiate a
                 // network navigation through its redirect response.
-                if (current.url.scheme() == "file") != (url.scheme() == "file") {
+                if crosses_file_boundary(&current.url, &url) {
                     return Err(DocumentLoadError::InvalidRedirect);
                 }
                 // Do not silently downgrade a secure top-level navigation to
@@ -510,7 +510,7 @@ where
 
         // A remote document must not load local files as CSS subresources,
         // including through a <base> element or @import.
-        if document_url.scheme() != "file" && url.scheme() == "file" {
+        if crosses_file_boundary(document_url, &url) {
             return None;
         }
         // HTTPS documents must not load active stylesheets over cleartext HTTP.
@@ -536,7 +536,7 @@ where
 
             // Check every hop, not only the original URL: a remote server must
             // not redirect a stylesheet request into the local filesystem.
-            if document_url.scheme() != "file" && current.scheme() == "file" {
+            if crosses_file_boundary(document_url, &current) {
                 return None;
             }
             if document_url.is_secure() && current.scheme() == "http" {
@@ -1119,6 +1119,11 @@ fn is_supported_redirect_scheme(scheme: &str) -> bool {
     matches!(scheme, "http" | "https" | "file")
 }
 
+/// Keep local filesystem resources separate from network-origin resources.
+fn crosses_file_boundary(source: &super::Url, target: &super::Url) -> bool {
+    (source.scheme() == "file") != (target.scheme() == "file")
+}
+
 fn is_supported_redirect_target(url: &super::Url) -> bool {
     // User-info is not part of the HTTP Host identity and is rejected by the
     // transport. Reject it at the redirect boundary instead of following a
@@ -1245,6 +1250,18 @@ mod tests {
                 "unsupported redirect scheme {scheme} must be rejected before another request"
             );
         }
+    }
+
+    #[test]
+    fn redirects_and_subresources_cannot_cross_file_network_boundary() {
+        let local = super::super::Url::parse("file:///tmp/index.html").unwrap();
+        let remote = super::super::Url::parse("https://example.org/index.html").unwrap();
+        let remote_http = super::super::Url::parse("http://example.org/index.html").unwrap();
+
+        assert!(!super::crosses_file_boundary(&local, &local));
+        assert!(!super::crosses_file_boundary(&remote, &remote_http));
+        assert!(super::crosses_file_boundary(&local, &remote));
+        assert!(super::crosses_file_boundary(&remote, &local));
     }
 
     #[test]

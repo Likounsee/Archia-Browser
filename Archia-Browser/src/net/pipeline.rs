@@ -71,15 +71,30 @@ impl<P: RequestPolicyEngine> NetworkPipeline<P> {
         // cannot accidentally bypass a loader-specific mixed-content check.
         // Top-level document navigation is intentionally exempt: following an
         // HTTP link is navigation, not mixed content within the current page.
-        let is_mixed_content = !(request.policy.resource_kind == ResourceKind::Document
-            && request.policy.top_level_navigation)
+        let is_top_level_navigation = request.policy.resource_kind == ResourceKind::Document
+            && request.policy.top_level_navigation;
+        let is_mixed_content = !is_top_level_navigation
             && request
                 .policy
                 .first_party
                 .as_ref()
                 .is_some_and(|first_party| first_party.is_secure())
             && request.url.scheme() == "http";
-        if is_mixed_content || self.policy.decide(request) == PolicyDecision::Block {
+        // Treat file URLs as a separate trust boundary for every embedded
+        // resource. Loader-level checks are defense in depth; the shared
+        // pipeline must also protect callers that bypass the HTML loader.
+        let crosses_file_boundary = !is_top_level_navigation
+            && request
+                .policy
+                .first_party
+                .as_ref()
+                .is_some_and(|first_party| {
+                    (first_party.scheme() == "file") != (request.url.scheme() == "file")
+                });
+        if is_mixed_content
+            || crosses_file_boundary
+            || self.policy.decide(request) == PolicyDecision::Block
+        {
             return Err(TransportError::BlockedByPolicy);
         }
         Ok(())
@@ -319,6 +334,36 @@ mod tests {
             pipeline.check_policy(&request),
             Err(TransportError::BlockedByPolicy)
         );
+    }
+
+    #[test]
+    fn shared_pipeline_blocks_file_network_boundary_for_subresources() {
+        #[derive(Debug, Default)]
+        struct AllowAll;
+
+        impl RequestPolicyEngine for AllowAll {
+            fn decide(&self, _: &Request) -> PolicyDecision {
+                PolicyDecision::Allow
+            }
+        }
+
+        let pipeline = NetworkPipeline::new(AllowAll);
+        for (first_party, target) in [
+            ("https://example.org/page", "file:///etc/passwd"),
+            ("file:///tmp/page.html", "https://example.org/remote.js"),
+        ] {
+            let mut request = Request::new(super::super::Url::parse(target).unwrap());
+            request.policy = RequestPolicy {
+                resource_kind: ResourceKind::Script,
+                first_party: Some(super::super::Url::parse(first_party).unwrap()),
+                ..RequestPolicy::default()
+            };
+            assert_eq!(
+                pipeline.check_policy(&request),
+                Err(TransportError::BlockedByPolicy),
+                "resource from {first_party} must not cross to {target}"
+            );
+        }
     }
 
     #[test]

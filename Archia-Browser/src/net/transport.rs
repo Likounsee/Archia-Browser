@@ -1918,14 +1918,9 @@ fn parse_http_response_head(
             if token.is_empty() || !token.bytes().all(is_http_token_byte) {
                 return Err(TransportError::ConnectionFailed);
             }
-            if response
-                .headers
-                .keys()
-                .any(|name| {
-                    !name.eq_ignore_ascii_case("connection")
-                        && name.eq_ignore_ascii_case(token)
-                })
-            {
+            if response.headers.keys().any(|name| {
+                !name.eq_ignore_ascii_case("connection") && name.eq_ignore_ascii_case(token)
+            }) {
                 return Err(TransportError::ConnectionFailed);
             }
         }
