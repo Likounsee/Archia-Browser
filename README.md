@@ -19,7 +19,7 @@ These percentages are engineering estimates of **functional coverage**, not line
 |---|---:|---|
 | Foundation / architecture | ~90% | Memory budgets, resource cache, event loop, modular layers and CI |
 | HTML tokenizer/parser | ~62% | Working tree builder with void elements, implicit `tbody`, nested-form recovery, RCDATA/plaintext handling, bogus-comment handling for unknown declarations, implied structure, text-node coalescing and null replacement; full HTML5 tree construction remains incomplete |
-| DOM | ~54% | Node/attribute model, iterative preorder traversal and text collection, id/class lookup and mutation primitives; namespaces and a complete standards DOM remain |
+| DOM | ~56% | Node/attribute model, iterative preorder traversal/text collection, tag/id/name/attribute/class lookup (including first-match and combined tag+attribute/class queries), and mutation primitives; namespaces and a complete standards DOM remain |
 | CSS tokenizer/parser | ~60% | Declarations, shorthands, growing value syntax and decoded CSS escapes in identifiers/hash tokens |
 | CSS selectors | ~65% | Specificity, attributes, siblings, form-state and structural pseudo-classes |
 | Cascade / computed style | ~55% | Inheritance, !important, CSS-wide keywords and custom properties/var() |
@@ -95,7 +95,7 @@ The implementation structure may evolve as the engine grows, but renderer and pl
 - Paragraph and list auto-closing rules.
 - Comment preservation and adjacent text-node coalescing.\n- Literal U+0000 replacement with U+FFFD in normal, attribute and raw-text input.
 - Attribute preservation and case-insensitive lookup/removal.
-- Iterative preorder descendant traversal and text collection, plus subtree element lookup (including id/class queries).
+- Iterative preorder descendant traversal and text collection.\n- Subtree lookup by tag, id, name, attribute presence/value, class token, first match, and combined tag+attribute/class criteria. Attribute names are matched case-insensitively; values remain case-sensitive. Class matching uses HTML whitespace and whole tokens.
 - Child insertion, removal, replacement and indexed access.
 - Anchor href extraction.
 - HTML `hidden` handling in layout.
@@ -165,7 +165,7 @@ The implementation structure may evolve as the engine grows, but renderer and pl
 
 ### Phase 2 — HTML / DOM
 - [x] Initial tokenizer, tree builder and DOM.
-- [x] Initial mutation and lookup APIs.
+- [x] Initial mutation and lookup APIs, including first-match and combined tag/attribute/class queries.
 - [ ] Standards-compliant HTML parsing and error recovery.
 - [ ] Full document traversal model.
 - [ ] Namespaces, text normalization and standards-compliant attributes.
@@ -261,3 +261,8 @@ Archia Browser is not:
 ## License
 
 License to be defined.
+
+
+## DOM query API update — 2026-10-14
+
+The DOM now exposes collection and first-match queries for attribute presence/value, class tokens and the `name` attribute, plus combined tag-and-attribute and tag-and-class searches. Queries traverse descendants in document order; attribute names are case-insensitive, attribute values and class tokens are exact, and class splitting follows HTML whitespace. These are convenience APIs over the existing DOM, not a complete implementation of the WHATWG DOM standard. The current branch's CI status must be checked on the exact latest commit before describing this change as validated.
