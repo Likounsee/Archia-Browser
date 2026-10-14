@@ -7,9 +7,18 @@ fn url(value: &str) -> Url {
 #[test]
 fn insecure_origin_cannot_replace_or_delete_secure_cookie() {
     let mut jar = CookieJar::new();
-    jar.store(&url("https://example.test/account/login"), "sid=trusted; Secure; Path=/account");
-    jar.store(&url("http://example.test/account/logout"), "sid=attacker; Path=/account");
-    jar.store(&url("http://example.test/account/logout"), "sid=; Max-Age=0; Path=/account");
+    jar.store(
+        &url("https://example.test/account/login"),
+        "sid=trusted; Secure; Path=/account",
+    );
+    jar.store(
+        &url("http://example.test/account/logout"),
+        "sid=attacker; Path=/account",
+    );
+    jar.store(
+        &url("http://example.test/account/logout"),
+        "sid=; Max-Age=0; Path=/account",
+    );
 
     assert_eq!(
         jar.header_for_context(
@@ -52,13 +61,8 @@ fn host_prefix_requires_secure_host_only_root_cookie() {
     );
 
     assert_eq!(
-        jar.header_for_context(
-            &origin,
-            Some(&origin),
-            true,
-            HttpMethod::Get,
-        )
-        .as_deref(),
+        jar.header_for_context(&origin, Some(&origin), true, HttpMethod::Get)
+            .as_deref(),
         Some("__Host-sid=good")
     );
 }
