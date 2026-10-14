@@ -433,11 +433,13 @@ mod tests {
     fn many_small_raw_text_elements_preserve_each_body() {
         let input = "<script>a</script><style>b</style>".repeat(2_000);
         let tokens = HtmlTokenizer::tokenize(&input);
-        assert_eq!(tokens.len(), 8_000);
+        assert_eq!(tokens.len(), 12_000);
         assert!(matches!(&tokens[0], HtmlToken::StartTag { name, .. } if name == "script"));
         assert_eq!(tokens[1], HtmlToken::Text("a".to_owned()));
-        assert!(matches!(&tokens[2], HtmlToken::StartTag { name, .. } if name == "style"));
-        assert_eq!(tokens[3], HtmlToken::Text("b".to_owned()));
+        assert!(matches!(&tokens[2], HtmlToken::EndTag(name) if name == "script"));
+        assert!(matches!(&tokens[3], HtmlToken::StartTag { name, .. } if name == "style"));
+        assert_eq!(tokens[4], HtmlToken::Text("b".to_owned()));
+        assert!(matches!(&tokens[5], HtmlToken::EndTag(name) if name == "style"));
     }
 
     #[test]
