@@ -95,6 +95,10 @@ impl HtmlTokenizer {
             if inside
                 .get(..8)
                 .is_some_and(|prefix| prefix.eq_ignore_ascii_case("!doctype"))
+                && matches!(
+                    inside.as_bytes().get(8),
+                    None | Some(b' ' | b'\\t' | b'\\n' | b'\\r' | b'\\x0c')
+                )
             {
                 if !try_push_token(
                     &mut tokens,
@@ -328,6 +332,13 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn doctype_keyword_requires_a_delimiter() {
+        let tokens = HtmlTokenizer::tokenize("<!doctypefoo><p>ok</p>");
+        assert!(matches!(&tokens[0], HtmlToken::Comment(value) if value == "doctypefoo"));
+        assert!(matches!(&tokens[1], HtmlToken::StartTag { name, .. } if name == "p"));
+    }
 
     #[test]
     fn unknown_declarations_and_processing_instructions_become_comments() {
