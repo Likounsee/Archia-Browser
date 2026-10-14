@@ -142,7 +142,13 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // Text directly inside a table, section, or row is foster-parented
                 // before the nearest open table instead of becoming table content.
                 let foster_table = stack.iter().rposition(|node| node.tag_name() == Some("table"));
-                let foster_parent = foster_table.filter(|&table_position| {
+                let is_html_whitespace = retained
+                    .bytes()
+                    .all(|byte| matches!(byte, b'\\t' | b'\\n' | b'\\x0C' | b'\\r' | b' '));
+                let foster_parent = (!is_html_whitespace)
+                    .then_some(foster_table)
+                    .flatten()
+                    .filter(|&table_position| {
                     !stack[table_position + 1..]
                         .iter()
                         .any(|node| matches!(node.tag_name(), Some("td" | "th")))
@@ -152,7 +158,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                                 Some("tbody" | "thead" | "tfoot" | "tr" | "table")
                             )
                         })
-                });
+                    });
                 let appended = if let Some(table_position) = foster_parent {
                     append_node(&mut root, &mut stack[..table_position], Node::text(retained))
                 } else {
@@ -994,6 +1000,18 @@ mod tests {
             super::super::dom::NodeKind::Text(text) if text == "end"
         ));
         assert_eq!(div.text_content(), "startbeforeaftercellend");
+    }
+
+    #[test]
+    fn whitespace_inside_table_remains_in_the_table() {
+        let root = parse(&HtmlTokenizer::tokenize("<table> \\n<tr><td>cell</td></tr></table>"));
+        let body = root.find_first_element("body").expect("body retained");
+        let table = body.find_first_element("table").expect("table retained");
+
+        assert_eq!(body.children.len(), 1);
+        assert_eq!(table.children[0].text_content(), " \\n");
+        assert_eq!(table.children[1].tag_name(), Some("tbody"));
+        assert_eq!(table.text_content(), " \\ncell");
     }
 
     #[test]
