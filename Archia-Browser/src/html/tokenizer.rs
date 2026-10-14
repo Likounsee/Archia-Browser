@@ -343,7 +343,9 @@ mod tests {
     #[test]
     fn cdata_syntax_outside_foreign_content_is_not_an_element() {
         let tokens = HtmlTokenizer::tokenize("<![CDATA[not HTML CDATA]]><p>text</p>");
-        assert!(matches!(&tokens[0], HtmlToken::Comment(value) if value == "[CDATA[not HTML CDATA]]"));
+        assert!(
+            matches!(&tokens[0], HtmlToken::Comment(value) if value == "[CDATA[not HTML CDATA]]")
+        );
         assert!(matches!(&tokens[1], HtmlToken::StartTag { name, .. } if name == "p"));
     }
 
