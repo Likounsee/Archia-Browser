@@ -221,7 +221,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                     // Table structure elements are scoped to their nearest table.
                     // A nested table must not implicitly close the outer table's
                     // row, cell, or section just because the names match.
-                    let scope_boundary = match implied_end {
+                    let scope_boundary = match *implied_end {
                         "tr" | "td" | "th" | "thead" | "tbody" | "tfoot" => Some("table"),
                         "dt" | "dd" => Some("dl"),
                         "option" | "optgroup" => Some("select"),
