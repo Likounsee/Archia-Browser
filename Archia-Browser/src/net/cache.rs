@@ -6,7 +6,7 @@ use crate::core::{
 };
 use std::sync::Arc;
 
-use super::{HttpMethod, Request, Response, Url};
+use super::{HttpMethod, Request, Response};
 
 const DEFAULT_CAPACITY: usize = 16 * 1024 * 1024;
 
@@ -886,7 +886,7 @@ mod tests {
     #[test]
     fn connection_requests_bypass_cache_lookup_and_storage() {
         let mut request =
-            super::Request::new(super::super::Url::parse("https://example.org/resource").unwrap());
+            super::Request::new(super::super::super::super::Url::parse("https://example.org/resource").unwrap());
         request
             .headers
             .insert("connection".into(), "x-private".into());
@@ -902,7 +902,7 @@ mod tests {
 
     #[test]
     fn proxy_credentials_and_connection_bypass_cache_without_evicting_public_entry() {
-        let url = super::super::Url::parse("https://example.org/resource").unwrap();
+        let url = super::super::super::super::Url::parse("https://example.org/resource").unwrap();
         let public_request = super::Request::new(url.clone());
         let public_response = super::Response::new(200)
             .with_header("cache-control", "max-age=60")
@@ -936,7 +936,7 @@ mod tests {
     #[test]
     fn cache_rejects_ambiguous_content_type_metadata() {
         let request =
-            super::Request::new(super::super::Url::parse("https://example.org/resource").unwrap());
+            super::Request::new(super::super::super::super::Url::parse("https://example.org/resource").unwrap());
         let mut response = super::Response::new(200)
             .with_header("cache-control", "max-age=60")
             .with_header("content-type", "text/html")
@@ -991,7 +991,7 @@ mod tests {
     #[test]
     fn cache_rejects_connection_specific_response_metadata() {
         let request =
-            super::Request::new(super::super::Url::parse("https://example.org/resource").unwrap());
+            super::Request::new(super::super::super::super::Url::parse("https://example.org/resource").unwrap());
 
         for name in [
             "Transfer-Encoding",
@@ -1023,7 +1023,7 @@ mod tests {
     #[test]
     fn malformed_pragma_quoted_value_fails_closed_for_cache_reuse() {
         let mut request =
-            super::Request::new(super::super::Url::parse("https://example.org/resource").unwrap());
+            super::Request::new(super::super::super::super::Url::parse("https://example.org/resource").unwrap());
         request.headers.insert(
             "Pragma".into(),
             r#"extension="unterminated,no-cache"#.into(),
@@ -1047,10 +1047,10 @@ mod tests {
     #[test]
     fn cache_key_uses_canonical_host_default_port_and_ignores_fragment() {
         let implicit = super::cache_key(&super::Request::new(
-            super::super::Url::parse("https://EXAMPLE.ORG:443/resource?q=1#top").unwrap(),
+            super::super::super::super::Url::parse("https://EXAMPLE.ORG:443/resource?q=1#top").unwrap(),
         ));
         let equivalent = super::cache_key(&super::Request::new(
-            super::super::Url::parse("https://example.org/resource?q=1#other").unwrap(),
+            super::super::super::super::Url::parse("https://example.org/resource?q=1#other").unwrap(),
         ));
 
         assert_eq!(
@@ -1059,7 +1059,7 @@ mod tests {
         );
 
         let different_query = super::cache_key(&super::Request::new(
-            super::super::Url::parse("https://example.org/resource?q=2").unwrap(),
+            super::super::super::super::Url::parse("https://example.org/resource?q=2").unwrap(),
         ));
         assert_ne!(
             implicit, different_query,
@@ -1070,8 +1070,8 @@ mod tests {
     #[test]
     fn trailing_dot_host_uses_the_same_http_cache_entry() {
         let mut cache = HttpCache::default();
-        let dotted = Request::new(Url::parse("https://example.org./resource").unwrap());
-        let ordinary = Request::new(Url::parse("https://example.org/resource").unwrap());
+        let dotted = Request::new(super::super::Url::parse("https://example.org./resource").unwrap());
+        let ordinary = Request::new(super::super::Url::parse("https://example.org/resource").unwrap());
         let response = Response::new(200)
             .with_header("cache-control", "max-age=60")
             .with_body(b"canonical host".to_vec());
@@ -1097,7 +1097,7 @@ mod tests {
         use std::sync::Arc;
 
         let budget = Arc::new(MemoryBudget::new(1024));
-        let request = Request::new(super::super::Url::parse("https://example.org/").unwrap());
+        let request = Request::new(super::super::super::super::Url::parse("https://example.org/").unwrap());
         let response = Response::new(200)
             .with_header("cache-control", "max-age=60")
             .with_body(vec![b'x'; 8]);
@@ -1119,8 +1119,8 @@ mod tests {
         use std::sync::Arc;
 
         let budget = Arc::new(MemoryBudget::new(600));
-        let first = Request::new(super::super::Url::parse("https://example.org/first").unwrap());
-        let second = Request::new(super::super::Url::parse("https://example.org/second").unwrap());
+        let first = Request::new(super::super::super::super::Url::parse("https://example.org/first").unwrap());
+        let second = Request::new(super::super::super::super::Url::parse("https://example.org/second").unwrap());
         let response = Response::new(200)
             .with_header("cache-control", "max-age=60")
             .with_header("content-type", "text/plain")
@@ -1157,7 +1157,7 @@ mod tests {
         let budget = Arc::new(MemoryBudget::new(256));
         let mut resources = ResourceManager::with_budget(Arc::clone(&budget));
         let live_resource = resources.allocate(200).unwrap();
-        let request = Request::new(super::super::Url::parse("https://example.org/").unwrap());
+        let request = Request::new(super::super::super::super::Url::parse("https://example.org/").unwrap());
         let response = Response::new(200)
             .with_header("cache-control", "max-age=60")
             .with_header("content-type", "text/plain")
@@ -1183,8 +1183,8 @@ mod tests {
         use std::sync::Arc;
 
         let budget = Arc::new(MemoryBudget::new(320));
-        let first = Request::new(super::super::Url::parse("https://example.org/first").unwrap());
-        let second = Request::new(super::super::Url::parse("https://example.org/second").unwrap());
+        let first = Request::new(super::super::super::super::Url::parse("https://example.org/first").unwrap());
+        let second = Request::new(super::super::super::super::Url::parse("https://example.org/second").unwrap());
         let response = Response::new(200)
             .with_header("cache-control", "max-age=60")
             .with_header("content-type", "text/plain")
@@ -1262,7 +1262,7 @@ mod tests {
     #[test]
     fn cache_accounting_includes_long_retained_url_keys() {
         let url = format!("https://example.org/{}", "a".repeat(512));
-        let request = Request::new(Url::parse(&url).unwrap());
+        let request = Request::new(super::super::Url::parse(&url).unwrap());
         let response = Response::new(200)
             .with_header("cache-control", "max-age=60")
             .with_body(b"x".to_vec());
@@ -1382,7 +1382,7 @@ mod tests {
         use std::sync::Arc;
 
         let budget = Arc::new(MemoryBudget::new(4096));
-        let request = Request::new(super::super::Url::parse("https://example.org/").unwrap());
+        let request = Request::new(super::super::super::super::Url::parse("https://example.org/").unwrap());
         let response = Response::new(200)
             .with_header("cache-control", "max-age=60")
             .with_header("content-type", "text/plain")
@@ -1402,7 +1402,7 @@ mod tests {
     use crate::net::Url;
 
     fn make_request(url: &str) -> Request {
-        Request::new(Url::parse(url).unwrap())
+        Request::new(super::super::Url::parse(url).unwrap())
     }
 
     #[test]
@@ -2051,7 +2051,7 @@ mod tests {
     #[test]
     fn does_not_cache_non_http_or_non_success_responses() {
         let mut cache = HttpCache::default();
-        let request = Request::new(Url::parse("file:///tmp/index.html").unwrap());
+        let request = Request::new(super::super::Url::parse("file:///tmp/index.html").unwrap());
         cache.store(
             &request,
             &Response::new(200)
@@ -2537,7 +2537,7 @@ mod tests {
             HttpMethod::Patch,
             HttpMethod::Delete,
         ] {
-            let url = Url::parse("https://example.org/resource?item=1").unwrap();
+            let url = super::super::Url::parse("https://example.org/resource?item=1").unwrap();
             let get = Request::new(url.clone());
             let mut cache = HttpCache::default();
             cache.store(
@@ -2564,8 +2564,8 @@ mod tests {
     #[test]
     fn successful_unsafe_response_invalidates_same_origin_location_targets() {
         for header in ["location", "content-location"] {
-            let origin = Url::parse("https://example.org/api/update").unwrap();
-            let related_url = Url::parse("https://example.org/api/related?view=full").unwrap();
+            let origin = super::super::Url::parse("https://example.org/api/update").unwrap();
+            let related_url = super::super::Url::parse("https://example.org/api/related?view=full").unwrap();
             let related = Request::new(related_url.clone());
             let mutation = Request::new(origin.clone()).with_method(HttpMethod::Post);
             let mut cache = HttpCache::default();
@@ -2589,9 +2589,9 @@ mod tests {
 
     #[test]
     fn successful_unsafe_response_does_not_invalidate_cross_origin_location() {
-        let related_url = Url::parse("https://other.example/related").unwrap();
+        let related_url = super::super::Url::parse("https://other.example/related").unwrap();
         let related = Request::new(related_url);
-        let mutation = Request::new(Url::parse("https://example.org/update").unwrap())
+        let mutation = Request::new(super::super::Url::parse("https://example.org/update").unwrap())
             .with_method(HttpMethod::Post);
         let mut cache = HttpCache::default();
         cache.store(
@@ -2615,7 +2615,7 @@ mod tests {
 
     #[test]
     fn unsuccessful_unsafe_response_preserves_cached_get_representation() {
-        let url = Url::parse("https://example.org/resource").unwrap();
+        let url = super::super::Url::parse("https://example.org/resource").unwrap();
         let get = Request::new(url.clone());
         let mut cache = HttpCache::default();
         cache.store(
@@ -2637,8 +2637,8 @@ mod tests {
 
     #[test]
     fn unsafe_method_invalidation_is_scoped_to_exact_target_uri() {
-        let target_url = Url::parse("https://example.org/resource?a=1").unwrap();
-        let other_url = Url::parse("https://example.org/resource?a=2").unwrap();
+        let target_url = super::super::Url::parse("https://example.org/resource?a=1").unwrap();
+        let other_url = super::super::Url::parse("https://example.org/resource?a=2").unwrap();
         let target = Request::new(target_url.clone());
         let other = Request::new(other_url.clone());
         let mut cache = HttpCache::default();
