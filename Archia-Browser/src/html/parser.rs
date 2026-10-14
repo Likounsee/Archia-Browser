@@ -19,9 +19,16 @@ const BLOCK_CLOSES_P: &[&str] = &[
     "article",
     "aside",
     "blockquote",
+    "caption",
+    "center",
+    "col",
+    "colgroup",
+    "dd",
     "details",
+    "dir",
     "div",
     "dl",
+    "dt",
     "fieldset",
     "figcaption",
     "figure",
@@ -36,6 +43,8 @@ const BLOCK_CLOSES_P: &[&str] = &[
     "header",
     "hgroup",
     "hr",
+    "li",
+    "listing",
     "main",
     "menu",
     "nav",
@@ -44,6 +53,7 @@ const BLOCK_CLOSES_P: &[&str] = &[
     "pre",
     "search",
     "section",
+    "summary",
     "table",
     "ul",
 ];
@@ -1023,6 +1033,19 @@ mod tests {
             second_section.children[0].children[0].text_content(),
             "four"
         );
+    }
+
+    #[test]
+    fn paragraph_closes_before_definition_and_list_items() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<div><p>paragraph<dt>term<dd>definition<li>item</div>",
+        ));
+        let div = root.find_first_element("div").expect("container retained");
+        assert_eq!(div.children[0].tag_name(), Some("p"));
+        assert_eq!(div.children[0].text_content(), "paragraph");
+        assert_eq!(div.children[1].tag_name(), Some("dt"));
+        assert_eq!(div.children[2].tag_name(), Some("dd"));
+        assert_eq!(div.children[3].tag_name(), Some("li"));
     }
 
     #[test]
