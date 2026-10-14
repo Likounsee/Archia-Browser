@@ -93,9 +93,11 @@ The implementation structure may evolve as the engine grows, but renderer and pl
 - Void elements.
 - Implicit html/head/body structure.
 - Paragraph and list auto-closing rules.
-- Comment preservation and adjacent text-node coalescing.\n- Literal U+0000 replacement with U+FFFD in normal, attribute and raw-text input.
+- Comment preservation and adjacent text-node coalescing.
+- Literal U+0000 replacement with U+FFFD in normal, attribute and raw-text input.
 - Attribute preservation and case-insensitive lookup/removal.
-- Iterative preorder descendant traversal and text collection.\n- Subtree lookup by tag, id, name, attribute presence/value, class token, first match, and combined tag+attribute/class criteria. Attribute names are matched case-insensitively; values remain case-sensitive. Class matching uses HTML whitespace and whole tokens.
+- Iterative preorder descendant traversal and text collection.
+- Subtree lookup by tag, id, name, attribute presence/value, class token, first match, and combined tag+attribute/class criteria. Attribute names are matched case-insensitively; values remain case-sensitive. Class matching uses HTML whitespace and whole tokens.
 - Child insertion, removal, replacement and indexed access.
 - Anchor href extraction.
 - HTML `hidden` handling in layout.
