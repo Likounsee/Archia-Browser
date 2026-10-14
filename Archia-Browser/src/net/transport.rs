@@ -4288,7 +4288,11 @@ mod limit_tests {
         let transport = HttpTransport::new().with_limits(1024 * 1024, 16 * 1024);
 
         assert_eq!(
-            transport.read_response(&mut stream, super::super::HttpMethod::Get, &CancellationToken::new()),
+            transport.read_response(
+                &mut stream,
+                super::super::HttpMethod::Get,
+                &CancellationToken::new()
+            ),
             Err(TransportError::ResponseTooLarge)
         );
         // The oversized header is rejected on the read that reveals its end,
@@ -4308,7 +4312,11 @@ mod limit_tests {
             wire.extend_from_slice(b"\r\n\r\nBODY");
             let mut stream = std::io::Cursor::new(wire);
             let response = transport
-                .read_response(&mut stream, super::super::HttpMethod::Get, &CancellationToken::new())
+                .read_response(
+                &mut stream,
+                super::super::HttpMethod::Get,
+                &CancellationToken::new()
+            )
                 .expect("headers at or below the configured limit must be accepted");
             assert_eq!(response.body, b"BODY");
         }
@@ -4318,7 +4326,11 @@ mod limit_tests {
         wire.extend_from_slice(b"\r\n\r\nBODY");
         let mut stream = std::io::Cursor::new(wire);
         assert_eq!(
-            transport.read_response(&mut stream, super::super::HttpMethod::Get, &CancellationToken::new()),
+            transport.read_response(
+                &mut stream,
+                super::super::HttpMethod::Get,
+                &CancellationToken::new()
+            ),
             Err(TransportError::ResponseTooLarge),
             "one byte over the header limit must be rejected"
         );
@@ -4374,7 +4386,11 @@ mod limit_tests {
         let transport = HttpTransport::new().with_limits(4096, header_limit);
 
         let response = transport
-            .read_response(&mut stream, super::super::HttpMethod::Get, &CancellationToken::new())
+            .read_response(
+                &mut stream,
+                super::super::HttpMethod::Get,
+                &CancellationToken::new()
+            )
             .expect("a partial delimiter must not make an exact-limit header oversized");
         assert_eq!(response.body, b"BODY");
     }
@@ -4461,7 +4477,11 @@ mod limit_tests {
         let transport = HttpTransport::new().with_limits(64, 1024);
 
         assert_eq!(
-            transport.read_response(&mut stream, super::super::HttpMethod::Get, &CancellationToken::new()),
+            transport.read_response(
+                &mut stream,
+                super::super::HttpMethod::Get,
+                &CancellationToken::new()
+            ),
             Err(TransportError::ResponseTooLarge)
         );
         // The transport rejects the first chunk whose projected length exceeds
