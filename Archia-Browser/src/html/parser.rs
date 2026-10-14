@@ -316,8 +316,10 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // Avoid expensive comparisons against every open element when a
                 // direct-token caller supplies an unbounded closing-tag name.
                 if name.len() <= MAX_DOM_TAG_NAME_BYTES {
-                    let table_scoped_end_tag =
-                        matches!(name.as_str(), "tr" | "td" | "th" | "thead" | "tbody" | "tfoot");
+                    let table_scoped_end_tag = matches!(
+                        name.as_str(),
+                        "tr" | "td" | "th" | "thead" | "tbody" | "tfoot"
+                    );
                     if table_scoped_end_tag {
                         let matching_position = stack
                             .iter()
@@ -1008,7 +1010,9 @@ mod tests {
 
     #[test]
     fn table_section_end_tags_without_an_open_table_still_close_matching_nodes() {
-        let root = parse(&HtmlTokenizer::tokenize("<tbody><div>inside</div></tbody><p>after</p>"));
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<tbody><div>inside</div></tbody><p>after</p>",
+        ));
         let body = root.find_first_element("body").expect("body retained");
         assert_eq!(body.children[0].tag_name(), Some("tbody"));
         assert_eq!(body.children[0].children[0].tag_name(), Some("div"));
@@ -1021,7 +1025,9 @@ mod tests {
         let root = parse(&HtmlTokenizer::tokenize(
             "<table><tr><td>outer<table></table></td><td>second</td></tr></table>",
         ));
-        let table = root.find_first_element("table").expect("outer table retained");
+        let table = root
+            .find_first_element("table")
+            .expect("outer table retained");
         let row = table.find_first_element("tr").expect("outer row retained");
         assert_eq!(row.children.len(), 2);
         assert_eq!(row.children[0].tag_name(), Some("td"));
