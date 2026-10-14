@@ -354,7 +354,10 @@ mod tests {
     #[test]
     fn tag_and_attribute_separation_uses_only_html_whitespace() {
         let tokens = HtmlTokenizer::tokenize("<div id='first'\u{2003}class='second'></div>");
-        let HtmlToken::StartTag { name, attributes, .. } = &tokens[0] else {
+        let HtmlToken::StartTag {
+            name, attributes, ..
+        } = &tokens[0]
+        else {
             panic!("expected start tag");
         };
 
