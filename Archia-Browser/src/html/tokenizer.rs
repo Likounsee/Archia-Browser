@@ -353,7 +353,7 @@ mod tests {
 
     #[test]
     fn tag_and_attribute_separation_uses_only_html_whitespace() {
-        let tokens = HtmlTokenizer::tokenize("<div id='first'\\u{2003}class='second'></div>");
+        let tokens = HtmlTokenizer::tokenize("<div id='first'\u{2003}class='second'></div>");
         let HtmlToken::StartTag { name, attributes, .. } = &tokens[0] else {
             panic!("expected start tag");
         };
@@ -362,7 +362,7 @@ mod tests {
         assert_eq!(attributes.get("id").map(String::as_str), Some("first"));
         assert!(!attributes.contains_key("class"));
         assert_eq!(
-            attributes.get("\\u{2003}class").map(String::as_str),
+            attributes.get("\u{2003}class").map(String::as_str),
             Some("second")
         );
     }
