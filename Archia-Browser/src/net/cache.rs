@@ -203,11 +203,9 @@ impl HttpCache {
                     // until the incremental reservation succeeds or no entry remains.
                     if self.entries.remove_oldest().is_none() {
                         if let Some(previous) = previous {
-                            // ResourceCache's capacity accounting must include the retained key,
-                            // just like the shared MemoryBudget reservation above. Omitting it
-                            // here undercounts the restored entry after a failed replacement.
-                            let previous_bytes =
-                                accounted_response_bytes(&previous.response).saturating_add(key.len());
+                            // ResourceCache::insert accounts for the key internally, so pass
+                            // only the response payload estimate when restoring this entry.
+                            let previous_bytes = accounted_response_bytes(&previous.response);
                             self.entries.insert(key.clone(), previous, previous_bytes);
                         }
                         return;
