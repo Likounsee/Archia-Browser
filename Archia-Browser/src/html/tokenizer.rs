@@ -342,7 +342,7 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
         // checks and later DOM consumers could interpret different values.
         attributes
             .entry(attr_name)
-            .or_insert_with(|| decode_character_references(&value));
+            .or_insert_with(|| decode_character_references_with_context(&value, true));
     }
     Some((name, attributes, self_closing))
 }
@@ -697,6 +697,10 @@ fn decode_numeric_character_reference(codepoint: u32) -> char {
 }
 
 fn decode_character_references(input: &str) -> String {
+    decode_character_references_with_context(input, false)
+}
+
+fn decode_character_references_with_context(input: &str, in_attribute: bool) -> String {
     // HTML input preprocessing replaces literal U+0000 with U+FFFD, even
     // when the input contains no character references.
     if !input.contains('&') {
@@ -738,6 +742,35 @@ fn decode_character_references(input: &str) -> String {
                     cursor = end + usize::from(has_semicolon);
                     continue;
                 }
+            }
+        }
+
+        // HTML permits a small legacy set of named references without a
+        // semicolon. In attributes, do not consume one when followed by an
+        // ASCII alphanumeric or '='; otherwise values such as '&copycat' change.
+        let remainder = &input[start + 1..];
+        let legacy = [
+            ("nbsp", '\u{00A0}'),
+            ("copy", '\u{00A9}'),
+            ("reg", '\u{00AE}'),
+            ("amp", '&'),
+            ("lt", '<'),
+            ("gt", '>'),
+            ("quot", '"'),
+        ];
+        let legacy_match = legacy
+            .iter()
+            .filter(|(name, _)| remainder.starts_with(name))
+            .max_by_key(|(name, _)| name.len());
+        if let Some((name, character)) = legacy_match {
+            let end = start + 1 + name.len();
+            let next = input[end..].chars().next();
+            let blocked_in_attribute = in_attribute
+                && next.is_some_and(|ch| ch.is_ascii_alphanumeric() || ch == '=');
+            if !blocked_in_attribute {
+                output.push(*character);
+                cursor = end;
+                continue;
             }
         }
 
@@ -885,6 +918,29 @@ mod character_reference_tests {
             decode_character_references("&unknown&copy; &bad&amp;"),
             "&unknown© &bad&"
         );
+    }
+
+    #[test]
+    fn decodes_legacy_named_references_without_semicolons() {
+        assert_eq!(
+            decode_character_references("Tom &amp Jerry &copy 2026 &nbsp!"),
+            "Tom & Jerry © 2026 \u{00A0}!"
+        );
+    }
+
+    #[test]
+    fn legacy_references_respect_attribute_ambiguity_rules() {
+        let tokens = HtmlTokenizer::tokenize(
+            r#"<a title="&copycat &copy=foo &copy test" href="x&amp;y">ok</a>"#,
+        );
+        let HtmlToken::StartTag { attributes, .. } = &tokens[0] else {
+            panic!("expected anchor start tag");
+        };
+        assert_eq!(
+            attributes.get("title").map(String::as_str),
+            Some("&copycat &copy=foo © test")
+        );
+        assert_eq!(attributes.get("href").map(String::as_str), Some("x&y"));
     }
 
     #[test]
