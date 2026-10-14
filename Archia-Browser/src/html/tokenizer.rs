@@ -725,7 +725,8 @@ fn decode_character_references(input: &str) -> String {
         // reference; do not swallow a valid reference that follows an unknown one.
         if let Some(next_ampersand) = input[start + 1..start + 1 + end_relative].find('&') {
             let next_start = start + 1 + next_ampersand;
-            output.push('&');
+            // Preserve the entire unknown candidate, including its name.
+            output.push_str(&input[start..next_start]);
             cursor = next_start;
             continue;
         }
