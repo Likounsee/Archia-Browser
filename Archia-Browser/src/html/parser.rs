@@ -1020,7 +1020,11 @@ mod tests {
         assert_eq!(list.children[1].text_content(), "twonested");
         assert_eq!(list.children[2].text_content(), "three");
         assert_eq!(
-            list.children[1].find_first_element("ul").unwrap().children[0].text_content(),
+            list.children[1]
+                .find_first_element("ul")
+                .unwrap()
+                .children[0]
+                .text_content(),
             "nested"
         );
     }
