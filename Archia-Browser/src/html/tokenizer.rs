@@ -767,7 +767,7 @@ fn decode_character_references_with_context(input: &str, in_attribute: bool) -> 
             let next = input[end..].chars().next();
             let blocked_in_attribute = in_attribute
                 && next.is_some_and(|ch| ch.is_ascii_alphanumeric() || ch == '=');
-            if !blocked_in_attribute {
+            if !blocked_in_attribute && next != Some(';') {
                 output.push(*character);
                 cursor = end;
                 continue;
