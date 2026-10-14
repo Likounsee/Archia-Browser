@@ -1684,6 +1684,53 @@ mod tests {
     }
 
     #[derive(Debug, Default)]
+    #[test]
+    fn cancelled_stylesheet_load_does_not_fetch_nested_imports() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        #[derive(Debug)]
+        struct CancelOnStylesheetTransport {
+            cancellation: CancellationToken,
+            requests: Arc<AtomicUsize>,
+        }
+
+        impl Transport for CancelOnStylesheetTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                self.requests.fetch_add(1, Ordering::SeqCst);
+                assert_eq!(request.policy.resource_kind, ResourceKind::Stylesheet);
+                self.cancellation.cancel();
+                Ok(Response::new(200)
+                    .with_header("content-type", "text/css")
+                    .with_body(b"@import \"nested.css\"; body { color: red; }".to_vec()))
+            }
+        }
+
+        let cancellation = CancellationToken::new();
+        let requests = Arc::new(AtomicUsize::new(0));
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            CancelOnStylesheetTransport {
+                cancellation: cancellation.clone(),
+                requests: Arc::clone(&requests),
+            },
+        );
+
+        let stylesheet = loader.load_linked_stylesheets_cancellable(
+            &super::super::Url::parse("https://example.org/page").unwrap(),
+            r#"<html><head><link rel="stylesheet" href="/style.css"></head></html>"#,
+            None,
+            &cancellation,
+        );
+
+        assert!(stylesheet.is_empty());
+        assert!(cancellation.is_cancelled());
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            1,
+            "cancellation must prevent fetching the nested @import"
+        );
+    }
+
     struct AllowAll;
 
     impl RequestPolicyEngine for AllowAll {
