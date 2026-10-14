@@ -193,6 +193,17 @@ impl Node {
         })
     }
 
+    /// Collect descendant elements matching a tag name in document order.
+    /// The node itself is excluded, matching the other descendant lookup APIs.
+    pub fn find_elements_by_tag(&self, tag_name: &str) -> Vec<&Node> {
+        self.descendants()
+            .filter(|node| {
+                node.tag_name()
+                    .is_some_and(|name| name.eq_ignore_ascii_case(tag_name))
+            })
+            .collect()
+    }
+
     /// Find the first descendant element whose `id` exactly matches `id`.
     pub fn find_by_id(&self, id: &str) -> Option<&Node> {
         self.descendants()
@@ -361,6 +372,20 @@ mod tests {
             Some("title")
         );
         assert!(document.find_first_element("missing").is_none());
+    }
+
+    #[test]
+    fn finds_all_matching_tags_in_document_order() {
+        let mut root = Node::element("section");
+        let mut first = Node::element("div");
+        first.append(Node::element("span"));
+        root.append(first);
+        root.append(Node::element("DIV"));
+
+        let matches = root.find_elements_by_tag("div");
+        assert_eq!(matches.len(), 2);
+        assert_eq!(matches[0].tag_name(), Some("div"));
+        assert_eq!(matches[1].tag_name(), Some("div"));
     }
 
     #[test]
