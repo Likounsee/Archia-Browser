@@ -1974,6 +1974,69 @@ mod tests {
     }
 
     #[test]
+    fn document_cache_entry_is_refetched_when_used_as_stylesheet() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        struct SharedUrlTransport(Arc<AtomicUsize>);
+
+        impl Transport for SharedUrlTransport {
+            fn send(&self, request: &Request) -> Result<Response, TransportError> {
+                match request.url.path() {
+                    "/shared" => {
+                        let request_number = self.0.fetch_add(1, Ordering::SeqCst);
+                        if request_number == 0 {
+                            Ok(Response::new(200)
+                                .with_header("content-type", "text/html")
+                                .with_header("cache-control", "max-age=60")
+                                .with_body(b"<html><body>first document</body></html>".to_vec()))
+                        } else {
+                            Ok(Response::new(200)
+                                .with_header("content-type", "text/css")
+                                .with_header("cache-control", "max-age=60")
+                                .with_body(b"body { color: red; }".to_vec()))
+                        }
+                    }
+                    "/" => Ok(Response::new(200)
+                        .with_header("content-type", "text/html")
+                        .with_body(
+                            b"<html><head><link rel=\"stylesheet\" href=\"/shared\"></head><body>home</body></html>"
+                                .to_vec(),
+                        )),
+                    path => panic!("unexpected request path: {path}"),
+                }
+            }
+        }
+
+        let requests = Arc::new(AtomicUsize::new(0));
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            SharedUrlTransport(Arc::clone(&requests)),
+        );
+        let viewport = LayoutViewport::new(320, 200);
+
+        loader
+            .load(
+                &Request::new(Url::parse("https://example.org/shared").unwrap()),
+                viewport,
+            )
+            .unwrap();
+        let page = loader
+            .load(
+                &Request::new(Url::parse("https://example.org/").unwrap()),
+                viewport,
+            )
+            .unwrap();
+
+        assert_eq!(page.document.text_content(), "home");
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            2,
+            "cached HTML must be evicted and the stylesheet fetched as CSS"
+        );
+    }
+
+    #[test]
     fn cached_documents_still_obey_current_request_policy() {
         use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
         use std::sync::Arc;
