@@ -438,7 +438,9 @@ mod tests {
         assert_eq!(matches.len(), 2);
         assert_eq!(matches[0].tag_name(), Some("a"));
         assert_eq!(matches[1].tag_name(), Some("span"));
-        assert!(root.find_by_attribute_value("data-kind", "GUIDE").is_empty());
+        assert!(root
+            .find_by_attribute_value("data-kind", "GUIDE")
+            .is_empty());
     }
 
     #[test]
