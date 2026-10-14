@@ -1921,7 +1921,10 @@ fn parse_http_response_head(
             if response
                 .headers
                 .keys()
-                .any(|name| !name.eq_ignore_ascii_case("connection") && name.eq_ignore_ascii_case(token))
+                .any(|name| {
+                    !name.eq_ignore_ascii_case("connection")
+                        && name.eq_ignore_ascii_case(token)
+                })
             {
                 return Err(TransportError::ConnectionFailed);
             }
