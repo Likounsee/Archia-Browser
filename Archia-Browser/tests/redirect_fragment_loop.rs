@@ -192,3 +192,39 @@ fn proxy_authorization_is_removed_even_on_same_origin_redirects() {
     assert_eq!(requests.len(), 2);
     assert!(!requests[1].headers.contains_key("proxy-authorization"));
 }
+
+
+#[test]
+fn post_redirect_to_same_origin_302_becomes_bodyless_get() {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let transport = RequestRecordingTransport {
+        responses: Mutex::new(vec![
+            Response::new(302).with_header("location", "/after-submit"),
+            html_response(),
+        ]),
+        requests: Arc::clone(&requests),
+    };
+    let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
+    let mut request = Request::new(Url::parse("https://example.org/submit").unwrap())
+        .with_method(HttpMethod::Post);
+    request.body = b"secret=payload".to_vec();
+    request
+        .headers
+        .insert("content-type".into(), "application/x-www-form-urlencoded".into());
+    request
+        .headers
+        .insert("content-length".into(), request.body.len().to_string());
+
+    loader
+        .load(&request, LayoutViewport::new(320, 200))
+        .expect("redirected HTML document should load");
+
+    let requests = requests.lock().expect("request log mutex poisoned");
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[0].method, HttpMethod::Post);
+    assert_eq!(requests[1].method, HttpMethod::Get);
+    assert!(requests[1].body.is_empty());
+    assert!(!requests[1].headers.contains_key("content-length"));
+    assert!(!requests[1].headers.contains_key("content-type"));
+    assert_eq!(requests[1].url.path(), "/after-submit");
+}
