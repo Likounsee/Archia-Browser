@@ -207,9 +207,10 @@ fn post_redirect_to_same_origin_302_becomes_bodyless_get() {
     let mut request = Request::new(Url::parse("https://example.org/submit").unwrap())
         .with_method(HttpMethod::Post);
     request.body = b"secret=payload".to_vec();
-    request
-        .headers
-        .insert("content-type".into(), "application/x-www-form-urlencoded".into());
+    request.headers.insert(
+        "content-type".into(),
+        "application/x-www-form-urlencoded".into(),
+    );
     request
         .headers
         .insert("content-length".into(), request.body.len().to_string());
