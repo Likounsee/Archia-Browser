@@ -1070,8 +1070,10 @@ mod tests {
     #[test]
     fn trailing_dot_host_uses_the_same_http_cache_entry() {
         let mut cache = HttpCache::default();
-        let dotted = Request::new(super::super::Url::parse("https://example.org./resource").unwrap());
-        let ordinary = Request::new(super::super::Url::parse("https://example.org/resource").unwrap());
+        let dotted =
+            Request::new(super::super::Url::parse("https://example.org./resource").unwrap());
+        let ordinary =
+            Request::new(super::super::Url::parse("https://example.org/resource").unwrap());
         let response = Response::new(200)
             .with_header("cache-control", "max-age=60")
             .with_body(b"canonical host".to_vec());
@@ -2565,7 +2567,8 @@ mod tests {
     fn successful_unsafe_response_invalidates_same_origin_location_targets() {
         for header in ["location", "content-location"] {
             let origin = super::super::Url::parse("https://example.org/api/update").unwrap();
-            let related_url = super::super::Url::parse("https://example.org/api/related?view=full").unwrap();
+            let related_url =
+                super::super::Url::parse("https://example.org/api/related?view=full").unwrap();
             let related = Request::new(related_url.clone());
             let mutation = Request::new(origin.clone()).with_method(HttpMethod::Post);
             let mut cache = HttpCache::default();
@@ -2591,8 +2594,9 @@ mod tests {
     fn successful_unsafe_response_does_not_invalidate_cross_origin_location() {
         let related_url = super::super::Url::parse("https://other.example/related").unwrap();
         let related = Request::new(related_url);
-        let mutation = Request::new(super::super::Url::parse("https://example.org/update").unwrap())
-            .with_method(HttpMethod::Post);
+        let mutation =
+            Request::new(super::super::Url::parse("https://example.org/update").unwrap())
+                .with_method(HttpMethod::Post);
         let mut cache = HttpCache::default();
         cache.store(
             &related,
