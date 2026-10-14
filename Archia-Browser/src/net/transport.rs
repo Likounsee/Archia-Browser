@@ -3970,7 +3970,9 @@ mod tests {
     fn rejects_proxy_credentials_on_direct_origin_transport() {
         for name in ["proxy-authorization", "Proxy-Authorization"] {
             let mut request = Request::new(Url::parse("https://example.org/").unwrap());
-            request.headers.insert(name.to_owned(), "Basic secret".to_owned());
+            request
+                .headers
+                .insert(name.to_owned(), "Basic secret".to_owned());
             assert_eq!(
                 validate_request(&request),
                 Err(TransportError::InvalidRequest),
