@@ -1,6 +1,7 @@
 use super::cache::request_only_if_cached;
 use super::{
     pipeline::{NetworkPipeline, RequestPolicy, ResourceKind},
+    CancellationToken,
     HttpMethod, Request, Response, Transport, TransportError,
 };
 use crate::{
@@ -101,11 +102,17 @@ where
     P: super::pipeline::RequestPolicyEngine,
     T: Transport,
 {
-    pub fn load(
+    pub fn load(&self, request: &Request, viewport: LayoutViewport) -> Result<Page, DocumentLoadError> {
+        self.load_cancellable(request, viewport, &CancellationToken::new())
+    }
+
+    pub fn load_cancellable(
         &self,
         request: &Request,
         viewport: LayoutViewport,
+        cancellation: &CancellationToken,
     ) -> Result<Page, DocumentLoadError> {
+        cancellation.check().map_err(DocumentLoadError::Network)?;
         // A direct navigation without an explicit initiator is same-site
         // with its destination. Preserve an explicit first-party URL when the
         // caller supplies one, and reuse that context across redirect hops.
@@ -142,6 +149,7 @@ where
 
         let mut visited_redirect_targets = HashSet::new();
         for redirect_count in 0..=self.max_redirects {
+            cancellation.check().map_err(DocumentLoadError::Network)?;
             // Fragments are not sent in HTTP request targets. Exclude them from
             // loop detection so a server cannot evade the guard by alternating
             // fragment-only redirects.
@@ -171,7 +179,7 @@ where
             } else {
                 let response = self
                     .pipeline
-                    .execute(&self.transport, &current)
+                    .execute_cancellable(&self.transport, &current, cancellation)
                     .map_err(DocumentLoadError::Network)?;
                 // Do not transiently retain an HTML document that the loader
                 // will reject for exceeding its parser input limit. In particular,
@@ -335,6 +343,7 @@ where
             // during the hand-off into the document's accumulated stylesheet.
             let stylesheet =
                 self.load_linked_stylesheets(&current.url, &html, reservation.as_ref());
+            cancellation.check().map_err(DocumentLoadError::Network)?;
 
             let page = if let Some(reservation) = reservation.take() {
                 Page::try_from_html_at_with_reservation(

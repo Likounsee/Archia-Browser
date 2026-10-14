@@ -6,7 +6,7 @@ use std::time::Duration;
 use rustls::pki_types::ServerName;
 use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 
-use super::{Request, Response, Transport, TransportError};
+use super::{CancellationToken, Request, Response, Transport, TransportError};
 
 const MAX_REQUEST_HEADER_BYTES: usize = 64 * 1024;
 const MAX_REQUEST_BODY_BYTES: usize = 8 * 1024 * 1024;
@@ -54,7 +54,8 @@ impl HttpTransport {
         self
     }
 
-    fn connect(&self, request: &Request) -> Result<Box<dyn ReadWrite>, TransportError> {
+    fn connect(&self, request: &Request, cancellation: &CancellationToken) -> Result<Box<dyn ReadWrite>, TransportError> {
+        cancellation.check()?;
         match request.url.scheme() {
             "http" | "https" => {}
             _ => return Err(TransportError::UnsupportedScheme),
@@ -72,10 +73,15 @@ impl HttpTransport {
         let addresses = address
             .to_socket_addrs()
             .map_err(|_| TransportError::ConnectionFailed)?;
-        let mut stream = addresses
-            .into_iter()
-            .find_map(|address| TcpStream::connect_timeout(&address, self.connect_timeout).ok())
-            .ok_or(TransportError::ConnectionFailed)?;
+        let mut connected = None;
+        for address in addresses {
+            cancellation.check()?;
+            if let Ok(stream) = TcpStream::connect_timeout(&address, self.connect_timeout) {
+                connected = Some(stream);
+                break;
+            }
+        }
+        let mut stream = connected.ok_or(TransportError::ConnectionFailed)?;
 
         stream
             .set_read_timeout(Some(self.read_timeout))
@@ -95,6 +101,7 @@ impl HttpTransport {
         // Complete the handshake here so certificate and protocol failures are
         // reported as TLS errors, rather than being misclassified as HTTP I/O.
         while connection.is_handshaking() {
+            cancellation.check()?;
             connection
                 .complete_io(&mut stream)
                 .map_err(|_| TransportError::TlsFailed)?;
@@ -163,12 +170,14 @@ impl HttpTransport {
         &self,
         stream: &mut dyn ReadWrite,
         method: super::HttpMethod,
+        cancellation: &CancellationToken,
     ) -> Result<Response, TransportError> {
         let mut bytes = Vec::new();
         let mut buffer = [0_u8; 16 * 1024];
         let mut header_end = None;
 
         loop {
+            cancellation.check()?;
             match stream.read(&mut buffer) {
                 Ok(0) => break,
                 Ok(count) => {
@@ -248,11 +257,17 @@ fn tls_server_name(host: &str) -> Result<ServerName<'static>, TransportError> {
 
 impl Transport for HttpTransport {
     fn send(&self, request: &Request) -> Result<Response, TransportError> {
-        // Reject malformed request targets before DNS lookup or socket creation.
+        self.send_cancellable(request, &CancellationToken::new())
+    }
+
+    fn send_cancellable(&self, request: &Request, cancellation: &CancellationToken) -> Result<Response, TransportError> {
+        cancellation.check()?;
         validate_request(request)?;
-        let mut stream = self.connect(request)?;
+        let mut stream = self.connect(request, cancellation)?;
+        cancellation.check()?;
         self.write_request(&mut stream, request)?;
-        self.read_response(&mut stream, request.method)
+        cancellation.check()?;
+        self.read_response(&mut stream, request.method, cancellation)
     }
 }
 

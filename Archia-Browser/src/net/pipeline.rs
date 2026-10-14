@@ -1,4 +1,4 @@
-use super::{Request, Response, Transport, TransportError};
+use super::{CancellationToken, Request, Response, Transport, TransportError};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RequestPolicy {
@@ -92,6 +92,17 @@ impl<P: RequestPolicyEngine> NetworkPipeline<P> {
     ) -> Result<Response, TransportError> {
         self.check_policy(request)?;
         transport.send(request)
+    }
+
+    pub fn execute_cancellable<T: Transport>(
+        &self,
+        transport: &T,
+        request: &Request,
+        cancellation: &CancellationToken,
+    ) -> Result<Response, TransportError> {
+        cancellation.check()?;
+        self.check_policy(request)?;
+        transport.send_cancellable(request, cancellation)
     }
 }
 

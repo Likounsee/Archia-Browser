@@ -205,7 +205,7 @@ impl Browser {
         P: net::pipeline::RequestPolicyEngine,
         T: net::Transport,
     {
-        let page = match loader.load(request, viewport) {
+        let page = match loader.load_cancellable(request, viewport, token.cancellation()) {
             Ok(page) => page,
             Err(error) => {
                 self.cancel_navigation(&token);

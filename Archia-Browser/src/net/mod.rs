@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{ collections::BTreeMap, sync::{atomic::{AtomicBool, Ordering}, Arc} };
 
 pub mod cache;
 pub mod cookies;
@@ -152,14 +152,46 @@ pub enum TransportError {
     Timeout,
     TlsFailed,
     ResponseTooLarge,
+    Cancelled,
 }
+#[derive(Debug, Clone, Default)]
+pub struct CancellationToken(Arc<AtomicBool>);
+impl CancellationToken {
+    pub fn new() -> Self { Self::default() }
+    pub fn cancel(&self) { self.0.store(true, Ordering::Release); }
+    pub fn is_cancelled(&self) -> bool { self.0.load(Ordering::Acquire) }
+    pub fn check(&self) -> Result<(), TransportError> {
+        if self.is_cancelled() { Err(TransportError::Cancelled) } else { Ok(()) }
+    }
+}
+impl PartialEq for CancellationToken {
+    fn eq(&self, other: &Self) -> bool { Arc::ptr_eq(&self.0, &other.0) }
+}
+impl Eq for CancellationToken {}
+
 pub trait Transport {
     fn send(&self, request: &Request) -> Result<Response, TransportError>;
+    fn send_cancellable(&self, request: &Request, cancellation: &CancellationToken) -> Result<Response, TransportError> {
+        cancellation.check()?;
+        let response = self.send(request)?;
+        cancellation.check()?;
+        Ok(response)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cancellation_token_clones_share_state() {
+        let token = CancellationToken::new();
+        let clone = token.clone();
+        assert!(!clone.is_cancelled());
+        token.cancel();
+        assert!(clone.is_cancelled());
+        assert!(matches!(clone.check(), Err(TransportError::Cancelled)));
+    }
+
     #[test]
     fn builds_http_request() {
         let request = Request::new(Url::parse("https://example.org/").unwrap())

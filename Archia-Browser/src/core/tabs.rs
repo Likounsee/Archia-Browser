@@ -1,5 +1,5 @@
 use super::navigation::{NavigationEntry, NavigationHistory};
-use crate::document::Page;
+use crate::{document::Page, net::CancellationToken};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TabId(u64);
@@ -27,6 +27,7 @@ pub struct NavigationToken {
     requested_url: crate::net::Url,
     action: NavigationAction,
     history_index: Option<usize>,
+    cancellation: CancellationToken,
 }
 
 impl NavigationToken {
@@ -42,9 +43,9 @@ impl NavigationToken {
         &self.requested_url
     }
 
-    pub const fn action(&self) -> NavigationAction {
-        self.action
-    }
+    pub const fn action(&self) -> NavigationAction { self.action }
+
+    pub fn cancellation(&self) -> &CancellationToken { &self.cancellation }
 }
 
 #[derive(Debug)]
@@ -119,12 +120,16 @@ impl Tab {
         history_index: Option<usize>,
     ) -> Option<NavigationToken> {
         let generation = self.navigation_generation.checked_add(1)?;
+        if let Some(previous) = self.pending_navigation.take() {
+            previous.cancellation.cancel();
+        }
         let token = NavigationToken {
             tab_id: self.id,
             generation,
             requested_url,
             action,
             history_index,
+            cancellation: CancellationToken::new(),
         };
         self.navigation_generation = generation;
         self.pending_navigation = Some(token.clone());
@@ -141,6 +146,7 @@ impl Tab {
         if !self.is_navigation_current(token) {
             return false;
         }
+        token.cancellation.cancel();
         self.pending_navigation = None;
         true
     }
@@ -155,9 +161,9 @@ impl Tab {
         token: &NavigationToken,
         page: Page,
         title: Option<String>,
-    ) -> Result<(), Page> {
+    ) -> Result<(), Box<Page>> {
         if !self.is_navigation_current(token) {
-            return Err(page);
+            return Err(Box::new(page));
         }
 
         let final_url = page
@@ -183,7 +189,7 @@ impl Tab {
                 .is_some_and(|index| self.history.replace_at_and_select(index, entry)),
         };
         if !history_updated {
-            return Err(page);
+            return Err(Box::new(page));
         }
         self.page = Some(page);
         self.pending_navigation = None;
@@ -262,6 +268,9 @@ impl TabManager {
             return false;
         };
 
+        if let Some(pending) = self.tabs[index].pending_navigation.take() {
+            pending.cancellation.cancel();
+        }
         self.tabs.remove(index);
         self.active = match self.active {
             None => None,
@@ -290,12 +299,12 @@ impl TabManager {
         token: &NavigationToken,
         page: Page,
         title: Option<String>,
-    ) -> Result<(), Page> {
+    ) -> Result<(), Box<Page>> {
         let Some(tab) = self.tab_mut(id) else {
-            return Err(page);
+            return Err(Box::new(page));
         };
         if token.tab_id != id {
-            return Err(page);
+            return Err(Box::new(page));
         }
         tab.commit_navigation(token, page, title)
     }
@@ -475,6 +484,16 @@ mod tests {
         );
         assert_eq!(committed.history().current().unwrap().title(), Some("Fast"));
         assert!(committed.pending_navigation.is_none());
+    }
+
+    #[test]
+    fn superseding_navigation_cancels_the_previous_transport_token() {
+        let mut manager = TabManager::new();
+        let tab = manager.open();
+        let old = manager.begin_navigation(tab, Url::parse("https://example.org/old").unwrap()).unwrap();
+        let new = manager.begin_navigation(tab, Url::parse("https://example.org/new").unwrap()).unwrap();
+        assert!(old.cancellation().is_cancelled());
+        assert!(!new.cancellation().is_cancelled());
     }
 
     #[test]
