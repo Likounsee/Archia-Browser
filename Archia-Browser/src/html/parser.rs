@@ -231,12 +231,18 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                         "rt" | "rp" => Some("ruby"),
                         _ => None,
                     };
-                    if scope_boundary.is_some_and(|boundary| {
-                        stack
-                            .iter()
-                            .rposition(|node| node.tag_name() == Some(boundary))
-                            .is_some_and(|boundary_position| position < boundary_position)
-                    }) {
+                    let crossed_list_boundary = *implied_end == "li"
+                        && stack[position + 1..].iter().any(|node| {
+                            matches!(node.tag_name(), Some("ul" | "ol" | "menu"))
+                        });
+                    if crossed_list_boundary
+                        || scope_boundary.is_some_and(|boundary| {
+                            stack
+                                .iter()
+                                .rposition(|node| node.tag_name() == Some(boundary))
+                                .is_some_and(|boundary_position| position < boundary_position)
+                        })
+                    {
                         continue;
                     }
                     close_element(&mut root, &mut stack, implied_end);
@@ -450,6 +456,7 @@ fn implied_end_tags_for_start(name: &str) -> &'static [&'static str] {
         "button" => &["button"],
         "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => &["h1", "h2", "h3", "h4", "h5", "h6"],
         "dt" | "dd" => &["dt", "dd"],
+        "li" => &["li"],
         "option" => &["option"],
         "optgroup" => &["option", "optgroup"],
         "tr" => &["tr"],
@@ -1000,6 +1007,22 @@ mod tests {
         assert_eq!(list.children[0].text_content(), "term");
         assert_eq!(list.children[1].tag_name(), Some("dd"));
         assert_eq!(list.children[1].text_content(), "definition");
+    }
+
+    #[test]
+    fn list_items_close_before_the_next_sibling_item() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<ul><li>one<li>two<ul><li>nested</ul><li>three</ul>",
+        ));
+        let list = root.find_first_element("ul").expect("list retained");
+        assert_eq!(list.children.len(), 3);
+        assert_eq!(list.children[0].text_content(), "one");
+        assert_eq!(list.children[1].text_content(), "twonested");
+        assert_eq!(list.children[2].text_content(), "three");
+        assert_eq!(
+            list.children[1].find_first_element("ul").unwrap().children[0].text_content(),
+            "nested"
+        );
     }
 
     #[test]
