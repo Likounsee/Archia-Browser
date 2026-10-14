@@ -2617,6 +2617,31 @@ mod tests {
     }
 
     #[test]
+    fn redirect_status_unsafe_response_invalidates_cached_get_representation() {
+        let url = super::super::Url::parse("https://example.org/resource").unwrap();
+        let get = Request::new(url.clone());
+        let mut cache = HttpCache::default();
+        cache.store(
+            &get,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=3600")
+                .with_body(b"stale representation".to_vec()),
+        );
+        assert!(cache.get(&get).is_some());
+
+        let post = Request::new(url).with_method(HttpMethod::Post);
+        cache.store(
+            &post,
+            &Response::new(302).with_header("location", "/login"),
+        );
+
+        assert!(
+            cache.get(&get).is_none(),
+            "a successful 3xx unsafe response must invalidate the target URI"
+        );
+    }
+
+    #[test]
     fn unsuccessful_unsafe_response_preserves_cached_get_representation() {
         let url = super::super::Url::parse("https://example.org/resource").unwrap();
         let get = Request::new(url.clone());
