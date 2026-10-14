@@ -1523,6 +1523,19 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
             }) {
                 return Err(TransportError::InvalidRequest);
             }
+            // Host and Content-Length can be synthesized by write_request()
+            // after this validation. A Connection token must not bypass the
+            // nominated-field check merely because the caller omitted them.
+            if token.eq_ignore_ascii_case("host")
+                || (token.eq_ignore_ascii_case("content-length")
+                    && request.has_body()
+                    && !request
+                        .headers
+                        .keys()
+                        .any(|name| name.eq_ignore_ascii_case("content-length")))
+            {
+                return Err(TransportError::InvalidRequest);
+            }
         }
     }
 
@@ -3957,6 +3970,19 @@ mod tests {
                 Err(TransportError::InvalidRequest)
             );
         }
+
+        let generated_host = Request::new(url.clone()).with_header("connection", "host");
+        assert_eq!(
+            validate_request(&generated_host),
+            Err(TransportError::InvalidRequest)
+        );
+        let generated_length = Request::new(url.clone())
+            .with_header("connection", "content-length")
+            .with_body(b"payload".to_vec());
+        assert_eq!(
+            validate_request(&generated_length),
+            Err(TransportError::InvalidRequest)
+        );
 
         let valid = Request::new(url).with_header("connection", "close");
         assert_eq!(validate_request(&valid), Ok(()));
