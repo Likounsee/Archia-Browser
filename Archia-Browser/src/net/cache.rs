@@ -886,7 +886,7 @@ mod tests {
     #[test]
     fn connection_requests_bypass_cache_lookup_and_storage() {
         let mut request =
-            super::Request::new(super::super::super::super::Url::parse("https://example.org/resource").unwrap());
+            super::Request::new(super::super::Url::parse("https://example.org/resource").unwrap());
         request
             .headers
             .insert("connection".into(), "x-private".into());
@@ -902,7 +902,7 @@ mod tests {
 
     #[test]
     fn proxy_credentials_and_connection_bypass_cache_without_evicting_public_entry() {
-        let url = super::super::super::super::Url::parse("https://example.org/resource").unwrap();
+        let url = super::super::Url::parse("https://example.org/resource").unwrap();
         let public_request = super::Request::new(url.clone());
         let public_response = super::Response::new(200)
             .with_header("cache-control", "max-age=60")
@@ -936,7 +936,7 @@ mod tests {
     #[test]
     fn cache_rejects_ambiguous_content_type_metadata() {
         let request =
-            super::Request::new(super::super::super::super::Url::parse("https://example.org/resource").unwrap());
+            super::Request::new(super::super::Url::parse("https://example.org/resource").unwrap());
         let mut response = super::Response::new(200)
             .with_header("cache-control", "max-age=60")
             .with_header("content-type", "text/html")
@@ -991,7 +991,7 @@ mod tests {
     #[test]
     fn cache_rejects_connection_specific_response_metadata() {
         let request =
-            super::Request::new(super::super::super::super::Url::parse("https://example.org/resource").unwrap());
+            super::Request::new(super::super::Url::parse("https://example.org/resource").unwrap());
 
         for name in [
             "Transfer-Encoding",
@@ -1023,7 +1023,7 @@ mod tests {
     #[test]
     fn malformed_pragma_quoted_value_fails_closed_for_cache_reuse() {
         let mut request =
-            super::Request::new(super::super::super::super::Url::parse("https://example.org/resource").unwrap());
+            super::Request::new(super::super::Url::parse("https://example.org/resource").unwrap());
         request.headers.insert(
             "Pragma".into(),
             r#"extension="unterminated,no-cache"#.into(),
@@ -1047,10 +1047,10 @@ mod tests {
     #[test]
     fn cache_key_uses_canonical_host_default_port_and_ignores_fragment() {
         let implicit = super::cache_key(&super::Request::new(
-            super::super::super::super::Url::parse("https://EXAMPLE.ORG:443/resource?q=1#top").unwrap(),
+            super::super::Url::parse("https://EXAMPLE.ORG:443/resource?q=1#top").unwrap(),
         ));
         let equivalent = super::cache_key(&super::Request::new(
-            super::super::super::super::Url::parse("https://example.org/resource?q=1#other").unwrap(),
+            super::super::Url::parse("https://example.org/resource?q=1#other").unwrap(),
         ));
 
         assert_eq!(
@@ -1059,7 +1059,7 @@ mod tests {
         );
 
         let different_query = super::cache_key(&super::Request::new(
-            super::super::super::super::Url::parse("https://example.org/resource?q=2").unwrap(),
+            super::super::Url::parse("https://example.org/resource?q=2").unwrap(),
         ));
         assert_ne!(
             implicit, different_query,
@@ -1097,7 +1097,7 @@ mod tests {
         use std::sync::Arc;
 
         let budget = Arc::new(MemoryBudget::new(1024));
-        let request = Request::new(super::super::super::super::Url::parse("https://example.org/").unwrap());
+        let request = Request::new(super::super::Url::parse("https://example.org/").unwrap());
         let response = Response::new(200)
             .with_header("cache-control", "max-age=60")
             .with_body(vec![b'x'; 8]);
@@ -1119,8 +1119,8 @@ mod tests {
         use std::sync::Arc;
 
         let budget = Arc::new(MemoryBudget::new(600));
-        let first = Request::new(super::super::super::super::Url::parse("https://example.org/first").unwrap());
-        let second = Request::new(super::super::super::super::Url::parse("https://example.org/second").unwrap());
+        let first = Request::new(super::super::Url::parse("https://example.org/first").unwrap());
+        let second = Request::new(super::super::Url::parse("https://example.org/second").unwrap());
         let response = Response::new(200)
             .with_header("cache-control", "max-age=60")
             .with_header("content-type", "text/plain")
@@ -1157,7 +1157,7 @@ mod tests {
         let budget = Arc::new(MemoryBudget::new(256));
         let mut resources = ResourceManager::with_budget(Arc::clone(&budget));
         let live_resource = resources.allocate(200).unwrap();
-        let request = Request::new(super::super::super::super::Url::parse("https://example.org/").unwrap());
+        let request = Request::new(super::super::Url::parse("https://example.org/").unwrap());
         let response = Response::new(200)
             .with_header("cache-control", "max-age=60")
             .with_header("content-type", "text/plain")
@@ -1183,8 +1183,8 @@ mod tests {
         use std::sync::Arc;
 
         let budget = Arc::new(MemoryBudget::new(320));
-        let first = Request::new(super::super::super::super::Url::parse("https://example.org/first").unwrap());
-        let second = Request::new(super::super::super::super::Url::parse("https://example.org/second").unwrap());
+        let first = Request::new(super::super::Url::parse("https://example.org/first").unwrap());
+        let second = Request::new(super::super::Url::parse("https://example.org/second").unwrap());
         let response = Response::new(200)
             .with_header("cache-control", "max-age=60")
             .with_header("content-type", "text/plain")
@@ -1382,7 +1382,7 @@ mod tests {
         use std::sync::Arc;
 
         let budget = Arc::new(MemoryBudget::new(4096));
-        let request = Request::new(super::super::super::super::Url::parse("https://example.org/").unwrap());
+        let request = Request::new(super::super::Url::parse("https://example.org/").unwrap());
         let response = Response::new(200)
             .with_header("cache-control", "max-age=60")
             .with_header("content-type", "text/plain")
