@@ -84,13 +84,14 @@ impl<P: RequestPolicyEngine> NetworkPipeline<P> {
         // resource. Loader-level checks are defense in depth; the shared
         // pipeline must also protect callers that bypass the HTML loader.
         let crosses_file_boundary = !is_top_level_navigation
-            && request
-                .policy
-                .first_party
-                .as_ref()
-                .is_some_and(|first_party| {
+            && match request.policy.first_party.as_ref() {
+                Some(first_party) => {
                     (first_party.scheme() == "file") != (request.url.scheme() == "file")
-                });
+                }
+                // A file target without a known first party cannot be proven
+                // to belong to a trusted local document, so fail closed.
+                None => request.url.scheme() == "file",
+            };
         if is_mixed_content
             || crosses_file_boundary
             || self.policy.decide(request) == PolicyDecision::Block
@@ -364,6 +365,45 @@ mod tests {
                 "resource from {first_party} must not cross to {target}"
             );
         }
+    }
+
+    #[test]
+    fn file_subresources_without_a_first_party_fail_closed_but_top_level_navigation_works() {
+        #[derive(Debug, Default)]
+        struct AllowAll;
+
+        impl RequestPolicyEngine for AllowAll {
+            fn decide(&self, _: &Request) -> PolicyDecision {
+                PolicyDecision::Allow
+            }
+        }
+
+        let pipeline = NetworkPipeline::new(AllowAll);
+        let mut unscoped = Request::new(
+            super::super::Url::parse("file:///etc/passwd").unwrap(),
+        );
+        unscoped.policy = RequestPolicy {
+            resource_kind: ResourceKind::Script,
+            ..RequestPolicy::default()
+        };
+        assert_eq!(
+            pipeline.check_policy(&unscoped),
+            Err(TransportError::BlockedByPolicy)
+        );
+
+        let mut navigation = Request::new(
+            super::super::Url::parse("file:///tmp/index.html").unwrap(),
+        );
+        navigation.policy = RequestPolicy {
+            resource_kind: ResourceKind::Document,
+            top_level_navigation: true,
+            ..RequestPolicy::default()
+        };
+        assert_eq!(
+            pipeline.check_policy(&navigation),
+            Ok(()),
+            "explicit top-level local-file navigation remains supported"
+        );
     }
 
     #[test]
