@@ -18,7 +18,7 @@ These percentages are engineering estimates of **functional coverage**, not line
 | Subsystem | Progress | Current state |
 |---|---:|---|
 | Foundation / architecture | ~90% | Memory budgets, resource cache, event loop, modular layers and CI |
-| HTML tokenizer/parser | ~58% | Working tree builder with void elements, implied structure, text-node coalescing, null replacement and expanded implied-end-tag recovery; full HTML5 tree construction remains incomplete |
+| HTML tokenizer/parser | ~59% | Working tree builder with void elements, implicit `tbody`, implied structure, text-node coalescing, null replacement and expanded implied-end-tag recovery; full HTML5 tree construction remains incomplete |
 | DOM | ~53% | Node/attribute model, iterative preorder descendant traversal, id/class lookup and mutation primitives; namespaces and a complete standards DOM remain |
 | CSS tokenizer/parser | ~60% | Declarations, shorthands, growing value syntax and decoded CSS escapes in identifiers/hash tokens |
 | CSS selectors | ~65% | Specificity, attributes, siblings, form-state and structural pseudo-classes |
@@ -86,6 +86,7 @@ The implementation structure may evolve as the engine grows, but renderer and pl
 
 ### HTML / DOM
 - Initial HTML tokenization and tree construction.
+- Implicit `tbody` insertion for table rows without an explicit section.
 - Void elements.
 - Implicit html/head/body structure.
 - Paragraph and list auto-closing rules.
