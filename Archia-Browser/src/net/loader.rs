@@ -193,7 +193,10 @@ where
                 // documents. Caching an arbitrary 200 response before MIME validation
                 // can poison a later request for the same URL (for example, CSS served
                 // to a navigation).
-                if is_html_response(&response) && response.body.len() <= MAX_HTML_DOCUMENT_BYTES {
+                if (200..300).contains(&response.status)
+                    && is_html_response(&response)
+                    && response.body.len() <= MAX_HTML_DOCUMENT_BYTES
+                {
                     self.cache
                         .lock()
                         .map_err(|_| DocumentLoadError::InternalStatePoisoned)?
@@ -568,7 +571,10 @@ where
                 // Do not retain a successful but unusable representation as a
                 // stylesheet. In particular, an HTML response with a long freshness
                 // lifetime must not poison later stylesheet loads for this URL.
-                if is_css_response(&response) && response.body.len() <= *remaining_css_bytes {
+                if (200..300).contains(&response.status)
+                    && is_css_response(&response)
+                    && response.body.len() <= *remaining_css_bytes
+                {
                     self.cache.lock().ok()?.store(&request, &response);
                 }
                 response
