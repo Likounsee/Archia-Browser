@@ -507,8 +507,13 @@ fn response_can_store(response: &Response) -> bool {
             "transfer-encoding",
             "trailer",
             "te",
+            "connection",
+            "keep-alive",
             "upgrade",
             "proxy-connection",
+            // This cache does not merge partial representations. Never retain
+            // range metadata even if a broken origin labels it as status 200.
+            "content-range",
             "proxy-authenticate",
             "proxy-authorization",
         ]
@@ -860,8 +865,11 @@ mod tests {
             "Transfer-Encoding",
             "Trailer",
             "TE",
+            "Connection",
+            "Keep-Alive",
             "Upgrade",
             "Proxy-Connection",
+            "Content-Range",
             "Proxy-Authenticate",
             "Proxy-Authorization",
         ] {
