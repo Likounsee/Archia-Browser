@@ -290,13 +290,19 @@ fn checked_entry_bytes(payload_bytes: usize, key_bytes: usize) -> Option<usize> 
     payload_bytes.checked_add(key_bytes)
 }
 
+fn canonical_cache_host(host: &str) -> String {
+    // A single trailing dot marks an absolute DNS name; it does not identify
+    // a different HTTP origin from the same name without that dot.
+    host.strip_suffix('.').unwrap_or(host).to_ascii_lowercase()
+}
+
 fn cache_key(request: &Request) -> String {
     // DNS host names are case-insensitive, and omitting an HTTP(S) default
     // port is equivalent to spelling it explicitly. Normalize both so these
     // URL spellings do not create duplicate entries for the same resource.
     // URL fragments are client-side identifiers and are never sent in an
     // HTTP request target, so they must not participate in the cache key.
-    let host = request.url.host().to_ascii_lowercase();
+    let host = canonical_cache_host(request.url.host());
     let authority = if host.contains(':') {
         format!("[{host}]:{}", request.url.effective_port())
     } else {
@@ -688,6 +694,30 @@ mod tests {
             implicit, different_query,
             "query strings must remain part of the cache resource identity"
         );
+    }
+
+    #[test]
+    fn trailing_dot_host_uses_the_same_http_cache_entry() {
+        let mut cache = HttpCache::default();
+        let dotted = Request::new(Url::parse("https://example.org./resource").unwrap());
+        let ordinary = Request::new(Url::parse("https://example.org/resource").unwrap());
+        let response = Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_body(b"canonical host".to_vec());
+
+        cache.store(&dotted, &response);
+
+        assert_eq!(
+            cache.get(&ordinary).unwrap().body,
+            b"canonical host",
+            "an absolute DNS name and its undotted spelling must share a cache entry"
+        );
+        assert_eq!(
+            cache_key(&dotted),
+            cache_key(&ordinary),
+            "canonical host spelling must not create duplicate cache keys"
+        );
+        assert_eq!(cache.len(), 1);
     }
 
     #[test]
