@@ -2528,7 +2528,7 @@ mod tests {
             "malformed Pragma must not allow a response to be stored for reuse"
         );
         assert!(cache.is_empty());
-    } 
+    }
     #[test]
     fn successful_unsafe_methods_invalidate_cached_get_representation() {
         for method in [
@@ -2659,5 +2659,4 @@ mod tests {
         assert!(cache.get(&target).is_none());
         assert_eq!(cache.get(&other).unwrap().body, b"a=2");
     }
-
 }
