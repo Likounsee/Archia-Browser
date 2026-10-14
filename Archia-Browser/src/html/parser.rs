@@ -155,6 +155,10 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 if name.len() > MAX_DOM_TAG_NAME_BYTES {
                     continue;
                 }
+                // HTML ignores a nested form start tag while a form is open.
+                if name == "form" && has_open(&stack, "form") {
+                    continue;
+                }
                 // Bound retained DOM nodes independently of token and byte limits.
                 // Once saturated, discard each new subtree without allocating a Node
                 // or cloning its attributes; matching end tags recover below.
@@ -877,6 +881,21 @@ mod tests {
             second_section.children[0].children[0].text_content(),
             "four"
         );
+    }
+
+    #[test]
+    fn nested_form_start_tags_are_ignored() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<form><input id='first'><form><input id='second'></form><input id='third'>",
+        ));
+        let forms: Vec<_> = root
+            .descendants()
+            .filter(|node| node.tag_name() == Some("form"))
+            .collect();
+        assert_eq!(forms.len(), 1);
+        assert!(forms[0].find_by_id("first").is_some());
+        assert!(forms[0].find_by_id("second").is_some());
+        assert!(forms[0].find_by_id("third").is_none());
     }
 
     #[test]
