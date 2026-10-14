@@ -288,6 +288,11 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
 
                 let mut node = Node::element(name.clone());
                 for (attribute, value) in attributes {
+                    // HTML discards later duplicate attributes on the same tag.
+                    // Check after normalization so names such as ID and id collide.
+                    if node.has_attribute(attribute) {
+                        continue;
+                    }
                     let Some(attribute_bytes) = attribute.len().checked_add(value.len()) else {
                         continue;
                     };
@@ -622,6 +627,17 @@ fn normalize_document_structure(mut root: Node) -> Node {
 mod tests {
     use super::*;
     use crate::html::tokenizer::HtmlTokenizer;
+
+    #[test]
+    fn duplicate_html_attributes_keep_the_first_value() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<div ID='first' class='one' id='second' CLASS='two'></div>",
+        ));
+        let div = root.find_first_element("div").expect("div retained");
+
+        assert_eq!(div.attribute("id"), Some("first"));
+        assert_eq!(div.attribute("class"), Some("one"));
+    }
 
     #[test]
     fn raw_text_and_rcdata_closing_tags_restore_document_nesting() {
