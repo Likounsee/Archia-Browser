@@ -229,7 +229,6 @@ fn post_redirect_to_same_origin_302_becomes_bodyless_get() {
     assert_eq!(requests[1].url.path(), "/after-submit");
 }
 
-
 #[test]
 fn post_redirect_to_303_becomes_bodyless_get() {
     let requests = Arc::new(Mutex::new(Vec::new()));
@@ -294,17 +293,17 @@ fn temporary_and_permanent_preserving_redirects_keep_method_and_body() {
         let requests = requests.lock().expect("request log mutex poisoned");
         assert_eq!(requests.len(), 2, "status {status}");
         assert_eq!(requests[1].method, HttpMethod::Post, "status {status}");
-        assert_eq!(
-            requests[1].body, b"secret=payload",
-            "status {status}"
-        );
+        assert_eq!(requests[1].body, b"secret=payload", "status {status}");
         assert_eq!(
             requests[1].headers.get("content-type").map(String::as_str),
             Some("application/x-www-form-urlencoded"),
             "status {status}"
         );
         assert_eq!(
-            requests[1].headers.get("content-length").map(String::as_str),
+            requests[1]
+                .headers
+                .get("content-length")
+                .map(String::as_str),
             Some("13"),
             "status {status}"
         );
