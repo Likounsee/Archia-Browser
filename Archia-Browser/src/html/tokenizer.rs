@@ -130,7 +130,7 @@ impl HtmlTokenizer {
                             && tokens.len() < MAX_HTML_TOKENS
                             && !try_push_token(
                                 &mut tokens,
-                                HtmlToken::Text(input[end + 1..text_end].to_owned()),
+                                HtmlToken::Text(input[end + 1..text_end].replace('\0', "\u{FFFD}")),
                             )
                         {
                             return tokens;
@@ -147,7 +147,7 @@ impl HtmlTokenizer {
                         && tokens.len() < MAX_HTML_TOKENS
                         && !try_push_token(
                             &mut tokens,
-                            HtmlToken::Text(input[end + 1..].to_owned()),
+                            HtmlToken::Text(input[end + 1..].replace('\0', "\u{FFFD}")),
                         )
                     {
                         return tokens;
@@ -583,6 +583,11 @@ fn decode_numeric_character_reference(codepoint: u32) -> char {
 }
 
 fn decode_character_references(input: &str) -> String {
+    // HTML input preprocessing replaces literal U+0000 with U+FFFD, even
+    // when the input contains no character references.
+    if !input.contains('&') {
+        return input.replace('\0', "\u{FFFD}");
+    }
     let mut output = String::with_capacity(input.len());
     let mut cursor = 0;
 
@@ -592,7 +597,7 @@ fn decode_character_references(input: &str) -> String {
 
         let Some(end_relative) = input[start + 1..].find(';') else {
             output.push_str(&input[start..]);
-            return output;
+            return output.replace('\0', "\u{FFFD}");
         };
         let end = start + 1 + end_relative;
         let reference = &input[start + 1..end];
@@ -646,7 +651,7 @@ fn decode_character_references(input: &str) -> String {
     }
 
     output.push_str(&input[cursor..]);
-    output
+    output.replace('\0', "\u{FFFD}")
 }
 
 #[cfg(test)]
@@ -682,6 +687,22 @@ mod character_reference_tests {
     #[test]
     fn maps_legacy_numeric_control_references() {
         assert_eq!(decode_character_references("&#x80; &#x91;"), "€ ‘");
+    }
+
+    #[test]
+    fn replaces_literal_nulls_in_text_and_attribute_values() {
+        let tokens = HtmlTokenizer::tokenize("<p>a\0b</p><input value='x\0y'>");
+        assert!(matches!(&tokens[1], HtmlToken::Text(text) if text == "a\u{FFFD}b"));
+        let HtmlToken::StartTag { attributes, .. } = &tokens[4] else {
+            panic!("expected input start tag");
+        };
+        assert_eq!(attributes.get("value").map(String::as_str), Some("x\u{FFFD}y"));
+    }
+
+    #[test]
+    fn replaces_literal_nulls_inside_raw_text() {
+        let tokens = HtmlTokenizer::tokenize("<script>a\0b</script>");
+        assert!(matches!(&tokens[1], HtmlToken::Text(text) if text == "a\u{FFFD}b"));
     }
 
     #[test]
