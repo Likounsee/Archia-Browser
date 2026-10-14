@@ -588,7 +588,10 @@ fn response_freshness_lifetime(response: &Response) -> Option<u64> {
         None => std::time::SystemTime::now(),
     };
 
-    expires.duration_since(date).ok().map(|duration| duration.as_secs())
+    expires
+        .duration_since(date)
+        .ok()
+        .map(|duration| duration.as_secs())
 }
 
 fn response_max_age(response: &Response) -> Option<u64> {
@@ -1866,6 +1869,46 @@ mod tests {
                 "invalid or duplicate Expires values must invalidate an older representation"
             );
         }
+    }
+
+    #[test]
+    fn invalid_max_age_is_not_rescued_by_a_valid_expires_header() {
+        let request = make_request("https://example.org/expires-max-age");
+        for cache_control in ["max-age=invalid", "max-age=60, max-age=120"] {
+            let response = Response::new(200)
+                .with_header("cache-control", cache_control)
+                .with_header("date", "Wed, 21 Oct 2015 07:28:00 GMT")
+                .with_header("expires", "Wed, 21 Oct 2037 07:28:00 GMT")
+                .with_body(b"must not cache".to_vec());
+            let mut cache = HttpCache::default();
+
+            cache.store(&request, &response);
+
+            assert!(
+                cache.get(&request).is_none(),
+                "invalid or ambiguous max-age must not fall back to Expires: {cache_control}"
+            );
+        }
+    }
+
+    #[test]
+    fn expires_freshness_still_obeys_age_header() {
+        let request = make_request("https://example.org/expires-age");
+        let date = std::time::SystemTime::now();
+        let expires = date + Duration::from_secs(120);
+        let response = Response::new(200)
+            .with_header("date", httpdate::fmt_http_date(date))
+            .with_header("expires", httpdate::fmt_http_date(expires))
+            .with_header("age", "120")
+            .with_body(b"already stale".to_vec());
+        let mut cache = HttpCache::default();
+
+        cache.store(&request, &response);
+
+        assert!(
+            cache.get(&request).is_none(),
+            "Age must reduce Expires-based freshness just as it reduces max-age"
+        );
     }
 
     #[test]

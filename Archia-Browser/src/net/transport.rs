@@ -108,7 +108,7 @@ impl HttpTransport {
             cancellation.check()?;
             connection
                 .complete_io(&mut stream)
-                .map_err(|_| TransportError::TlsFailed)?;
+                .map_err(map_tls_io_error)?;
         }
         Ok(Box::new(StreamOwned::new(connection, stream)))
     }
@@ -250,6 +250,13 @@ fn tls_client_config() -> ClientConfig {
     // cannot decode, and make the supported application protocol explicit.
     config.alpn_protocols = vec![b"http/1.1".to_vec()];
     config
+}
+
+fn map_tls_io_error(error: std::io::Error) -> TransportError {
+    match error.kind() {
+        std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock => TransportError::Timeout,
+        _ => TransportError::TlsFailed,
+    }
 }
 
 fn tls_server_name(host: &str) -> Result<ServerName<'static>, TransportError> {
@@ -4528,6 +4535,22 @@ mod limit_tests {
         // The transport rejects the first chunk whose projected length exceeds
         // the cap; it must not keep reading the rest of the peer's response.
         assert_eq!(stream.reads, 1);
+    }
+
+    #[test]
+    fn tls_handshake_io_timeouts_are_reported_as_timeouts() {
+        assert_eq!(
+            map_tls_io_error(std::io::Error::from(std::io::ErrorKind::TimedOut)),
+            TransportError::Timeout
+        );
+        assert_eq!(
+            map_tls_io_error(std::io::Error::from(std::io::ErrorKind::WouldBlock)),
+            TransportError::Timeout
+        );
+        assert_eq!(
+            map_tls_io_error(std::io::Error::from(std::io::ErrorKind::ConnectionReset)),
+            TransportError::TlsFailed
+        );
     }
 
     #[test]
