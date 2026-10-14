@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 fn is_html_whitespace(character: char) -> bool {
-    matches!(character, '\\t' | '\\n' | '\\u{000C}' | '\\r' | ' ')
+    matches!(character, '\t' | '\n' | '\u{000C}' | '\r' | ' ')
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -392,7 +392,7 @@ mod tests {
     fn class_queries_use_html_whitespace_not_unicode_whitespace() {
         let mut root = Node::document();
         let mut element = Node::element("div");
-        element.set_attribute("class", "wide\\u{2003}screen");
+        element.set_attribute("class", "wide\u{2003}screen");
         root.append(element);
 
         assert_eq!(root.find_by_class("wide\\u{2003}screen").len(), 1);
