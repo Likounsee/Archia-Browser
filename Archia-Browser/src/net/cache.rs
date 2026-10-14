@@ -6,7 +6,7 @@ use crate::core::{
 };
 use std::sync::Arc;
 
-use super::{HttpMethod, Request, Response};
+use super::{HttpMethod, Request, Response, Url};
 
 const DEFAULT_CAPACITY: usize = 16 * 1024 * 1024;
 
@@ -129,6 +129,26 @@ impl HttpCache {
                 let mut target = request.clone();
                 target.method = HttpMethod::Get;
                 self.entries.remove(&cache_key(&target));
+
+                // RFC 9111 also invalidates same-origin Location and
+                // Content-Location targets on successful unsafe responses.
+                // Resolve references against the request URL, and fail closed
+                // for malformed, non-network, user-info, or cross-origin URLs.
+                for header in ["location", "content-location"] {
+                    if let Some(reference) = response.header(header) {
+                        if let Ok(url) = request.url.resolve(reference) {
+                            if matches!(url.scheme(), "http" | "https")
+                                && !url.authority().contains('@')
+                                && request.url.same_origin(&url)
+                            {
+                                let mut related = request.clone();
+                                related.url = url;
+                                related.method = HttpMethod::Get;
+                                self.entries.remove(&cache_key(&related));
+                            }
+                        }
+                    }
+                }
             }
             return;
         }
@@ -2539,6 +2559,58 @@ mod tests {
                 "{method:?} success must invalidate the cached GET representation"
             );
         }
+    }
+
+    #[test]
+    fn successful_unsafe_response_invalidates_same_origin_location_targets() {
+        for header in ["location", "content-location"] {
+            let origin = Url::parse("https://example.org/api/update").unwrap();
+            let related_url = Url::parse("https://example.org/api/related?view=full").unwrap();
+            let related = Request::new(related_url.clone());
+            let mutation = Request::new(origin.clone()).with_method(HttpMethod::Post);
+            let mut cache = HttpCache::default();
+            cache.store(
+                &related,
+                &Response::new(200)
+                    .with_header("cache-control", "max-age=3600")
+                    .with_body(b"stale related representation".to_vec()),
+            );
+            assert!(cache.get(&related).is_some());
+
+            let response = Response::new(204).with_header(header, "../api/related?view=full");
+            cache.store(&mutation, &response);
+
+            assert!(
+                cache.get(&related).is_none(),
+                "successful unsafe response must invalidate same-origin {header} target"
+            );
+        }
+    }
+
+    #[test]
+    fn successful_unsafe_response_does_not_invalidate_cross_origin_location() {
+        let related_url = Url::parse("https://other.example/related").unwrap();
+        let related = Request::new(related_url);
+        let mutation = Request::new(Url::parse("https://example.org/update").unwrap())
+            .with_method(HttpMethod::Post);
+        let mut cache = HttpCache::default();
+        cache.store(
+            &related,
+            &Response::new(200)
+                .with_header("cache-control", "max-age=3600")
+                .with_body(b"other origin remains cached".to_vec()),
+        );
+
+        cache.store(
+            &mutation,
+            &Response::new(204).with_header("location", "https://other.example/related"),
+        );
+
+        assert_eq!(
+            cache.get(&related).unwrap().body,
+            b"other origin remains cached",
+            "a response must not invalidate a cache entry on another origin"
+        );
     }
 
     #[test]
