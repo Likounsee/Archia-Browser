@@ -225,6 +225,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                         "tr" | "td" | "th" | "thead" | "tbody" | "tfoot" => Some("table"),
                         "dt" | "dd" => Some("dl"),
                         "option" | "optgroup" => Some("select"),
+                        "rt" | "rp" => Some("ruby"),
                         _ => None,
                     };
                     if scope_boundary.is_some_and(|boundary| {
@@ -325,6 +326,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                         "li" => Some("list"),
                         "dt" | "dd" => Some("description-list"),
                         "option" | "optgroup" => Some("select"),
+                        "rt" | "rp" => Some("ruby"),
                         _ => None,
                     };
                     if let Some(boundary_kind) = scope_boundary {
@@ -337,6 +339,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                                 "list" => matches!(node.tag_name(), Some("ol" | "ul")),
                                 "description-list" => node.tag_name() == Some("dl"),
                                 "select" => node.tag_name() == Some("select"),
+                                "ruby" => node.tag_name() == Some("ruby"),
                                 _ => false,
                             });
                         // End tags must not cross the nearest matching scope boundary.
@@ -1020,6 +1023,17 @@ mod tests {
             second_section.children[0].children[0].text_content(),
             "four"
         );
+    }
+
+    #[test]
+    fn nested_ruby_annotations_do_not_close_outer_annotations() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<ruby>outer<rt>reading<ruby>inner<rt>nested</rt></ruby>tail</rt></ruby>",
+        ));
+        let ruby = root.find_first_element("ruby").expect("outer ruby retained");
+        let annotation = ruby.find_first_element("rt").expect("outer annotation retained");
+        assert_eq!(annotation.text_content(), "readinginnernestedtail");
+        assert!(annotation.find_first_element("ruby").is_some());
     }
 
     #[test]
