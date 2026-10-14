@@ -1836,6 +1836,44 @@ mod tests {
     }
 
     #[test]
+    fn unsuccessful_html_responses_are_not_cached_as_documents() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        struct CountingErrorTransport(Arc<AtomicUsize>);
+
+        impl Transport for CountingErrorTransport {
+            fn send(&self, _: &Request) -> Result<Response, TransportError> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Ok(Response::new(404)
+                    .with_header("content-type", "text/html")
+                    .with_header("cache-control", "max-age=60")
+                    .with_body(b"<body>Not found</body>".to_vec()))
+            }
+        }
+
+        let requests = Arc::new(AtomicUsize::new(0));
+        let loader = DocumentLoader::new(
+            NetworkPipeline::new(AllowAll),
+            CountingErrorTransport(Arc::clone(&requests)),
+        );
+        let request = Request::new(Url::parse("https://example.org/missing").unwrap());
+        let viewport = LayoutViewport::new(320, 200);
+
+        for _ in 0..2 {
+            assert!(matches!(
+                loader.load(&request, viewport),
+                Err(DocumentLoadError::HttpStatus(404))
+            ));
+        }
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            2,
+            "an unsuccessful HTML response must not be reused from the document cache"
+        );
+    }
+
+    #[test]
     fn cached_documents_still_obey_current_request_policy() {
         use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
         use std::sync::Arc;
