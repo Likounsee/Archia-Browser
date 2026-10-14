@@ -133,12 +133,17 @@ impl CookieJar {
         let mut max_age = None;
         let mut expires_attribute = None;
         let mut path_attribute_set = false;
+        // __Host- cookies must omit Domain entirely. Tracking host_only alone
+        // is insufficient for unusual hosts/public suffixes where a Domain
+        // attribute can be normalized back to host-only scope.
+        let mut domain_attribute_set = false;
 
         for attribute in parts {
             let mut pieces = attribute.splitn(2, '=');
             let key = trim_cookie_ows(pieces.next().unwrap_or_default()).to_ascii_lowercase();
             match key.as_str() {
                 "domain" => {
+                    domain_attribute_set = true;
                     if let Some(value) = pieces.next() {
                         let raw_domain = trim_cookie_ows(value);
                         // RFC 6265 ignores one leading dot, but accepting
@@ -286,6 +291,7 @@ impl CookieJar {
             && (!cookie.secure
                 || !url.is_secure()
                 || !cookie.host_only
+                || domain_attribute_set
                 || cookie.path != "/"
                 || !path_attribute_set)
         {
@@ -1561,6 +1567,13 @@ mod tests {
         jar.store(
             &url,
             "__Host-session=domain; Secure; Path=/; Domain=example.org",
+        );
+        // Even if a Domain attribute would normalize to host-only scope on an
+        // unusual hostname, __Host- forbids the attribute itself.
+        let localhost = Url::parse("https://localhost/account").unwrap();
+        jar.store(
+            &localhost,
+            "__Host-local=domain; Secure; Path=/; Domain=localhost",
         );
         assert!(jar.is_empty(), "invalid __Host- cookies must be rejected");
 

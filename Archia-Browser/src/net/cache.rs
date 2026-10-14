@@ -744,9 +744,16 @@ fn has_pragma_no_cache(request: &Request) -> bool {
         .iter()
         .filter(|(name, _)| name.eq_ignore_ascii_case("pragma"))
         .any(|(_, value)| {
-            value
-                .split(',')
-                .any(|d| trim_http_ows(d).eq_ignore_ascii_case("no-cache"))
+            // A malformed quoted value is ambiguous. Fail closed and bypass
+            // the cache rather than accidentally treating a hidden directive
+            // as permission to reuse a stored response.
+            cache_control_is_malformed(value)
+                || cache_control_directives(value).into_iter().any(|directive| {
+                    let name = directive
+                        .split_once('=')
+                        .map_or(directive, |(name, _)| name);
+                    trim_http_ows(name).eq_ignore_ascii_case("no-cache")
+                })
         })
 }
 
@@ -758,6 +765,24 @@ mod tests {
         assert_eq!(super::checked_entry_bytes(0, 0), Some(0));
         assert_eq!(super::checked_entry_bytes(usize::MAX, 1), None);
         assert_eq!(super::checked_entry_bytes(usize::MAX - 3, 4), None);
+    }
+
+    #[test]
+    fn malformed_pragma_quoted_value_fails_closed_for_cache_reuse() {
+        let mut request = super::Request::new(
+            super::super::Url::parse("https://example.org/resource").unwrap(),
+        );
+        request.headers.insert("Pragma".into(), r#"extension="unterminated,no-cache"#.into());
+        assert!(
+            super::has_pragma_no_cache(&request),
+            "malformed Pragma must not permit cache reuse"
+        );
+
+        request.headers.insert("Pragma".into(), "extension=value, No-Cache".into());
+        assert!(super::has_pragma_no_cache(&request));
+
+        request.headers.insert("Pragma".into(), "extension=value".into());
+        assert!(!super::has_pragma_no_cache(&request));
     }
 
     #[test]
