@@ -1401,7 +1401,6 @@ mod tests {
     }
 
     use super::*;
-    use crate::net::Url;
 
     fn make_request(url: &str) -> Request {
         Request::new(super::super::Url::parse(url).unwrap())
