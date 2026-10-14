@@ -221,11 +221,13 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                     // Table structure elements are scoped to their nearest table.
                     // A nested table must not implicitly close the outer table's
                     // row, cell, or section just because the names match.
-                    if matches!(implied_end, "tr" | "td" | "th" | "thead" | "tbody" | "tfoot")
-                        && stack
-                            .iter()
-                            .rposition(|node| node.tag_name() == Some("table"))
-                            .is_some_and(|table_position| position < table_position)
+                    if matches!(
+                        implied_end,
+                        "tr" | "td" | "th" | "thead" | "tbody" | "tfoot"
+                    ) && stack
+                        .iter()
+                        .rposition(|node| node.tag_name() == Some("table"))
+                        .is_some_and(|table_position| position < table_position)
                     {
                         continue;
                     }
@@ -991,7 +993,9 @@ mod tests {
         let root = parse(&HtmlTokenizer::tokenize(
             "<table><tbody><tr><td>outer<table><tbody><tr><td>inner</td></tr></tbody></table>tail</td></tr></tbody></table>",
         ));
-        let outer_table = root.find_first_element("table").expect("outer table retained");
+        let outer_table = root
+            .find_first_element("table")
+            .expect("outer table retained");
         let outer_section = &outer_table.children[0];
         assert_eq!(outer_section.tag_name(), Some("tbody"));
         let outer_row = &outer_section.children[0];
