@@ -231,8 +231,7 @@ impl Node {
     /// created by DOM mutation APIs, not only trees produced by the bounded parser.
     pub fn text_content(&self) -> String {
         let mut output = String::new();
-        let mut stack = Vec::new();
-        stack.extend(self.children.iter().rev());
+        let mut stack = vec![self];
 
         while let Some(node) = stack.pop() {
             if let NodeKind::Text(text) = &node.kind {
