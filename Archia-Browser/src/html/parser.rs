@@ -1004,14 +1004,14 @@ mod tests {
 
     #[test]
     fn whitespace_inside_table_remains_in_the_table() {
-        let root = parse(&HtmlTokenizer::tokenize("<table> \\n<tr><td>cell</td></tr></table>"));
+        let root = parse(&HtmlTokenizer::tokenize("<table> \n<tr><td>cell</td></tr></table>"));
         let body = root.find_first_element("body").expect("body retained");
         let table = body.find_first_element("table").expect("table retained");
 
         assert_eq!(body.children.len(), 1);
         assert_eq!(table.children[0].text_content(), " \n");
         assert_eq!(table.children[1].tag_name(), Some("tbody"));
-        assert_eq!(table.text_content(), " \\ncell");
+        assert_eq!(table.text_content(), " \ncell");
     }
 
     #[test]
