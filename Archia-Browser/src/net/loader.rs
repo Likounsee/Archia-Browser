@@ -344,13 +344,12 @@ where
             // Charge retained stylesheet bytes before the per-resource temporary
             // reservation is released, so the decoded CSS is never unaccounted for
             // during the hand-off into the document's accumulated stylesheet.
-            let stylesheet =
-                self.load_linked_stylesheets_cancellable(
-                    &current.url,
-                    &html,
-                    reservation.as_ref(),
-                    cancellation,
-                );
+            let stylesheet = self.load_linked_stylesheets_cancellable(
+                &current.url,
+                &html,
+                reservation.as_ref(),
+                cancellation,
+            );
             cancellation.check().map_err(DocumentLoadError::Network)?;
 
             let page = if let Some(reservation) = reservation.take() {
@@ -553,14 +552,14 @@ where
             let response = if let Some(response) = cached_response {
                 response
             } else {
-                let response = match self.pipeline.execute_cancellable(
-                    &self.transport,
-                    &request,
-                    cancellation,
-                ) {
-                    Ok(response) => response,
-                    Err(_) => return None,
-                };
+                let response =
+                    match self
+                        .pipeline
+                        .execute_cancellable(&self.transport, &request, cancellation)
+                    {
+                        Ok(response) => response,
+                        Err(_) => return None,
+                    };
                 // Do not retain a stylesheet response that is already larger
                 // than the remaining document CSS budget. The transport has a
                 // broader generic response ceiling; caching this body here
