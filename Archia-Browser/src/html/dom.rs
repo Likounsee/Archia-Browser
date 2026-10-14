@@ -28,7 +28,7 @@ impl Node {
     pub fn element(name: impl Into<String>) -> Self {
         Self {
             kind: NodeKind::Element {
-                name: name.into(),
+                name: name.into().to_ascii_lowercase(),
                 attributes: BTreeMap::new(),
             },
             children: Vec::new(),
@@ -332,6 +332,13 @@ mod tests {
         assert!(parent.insert_child(99, Node::element("invalid")).is_err());
         assert!(parent.replace_child(99, Node::element("invalid")).is_err());
         assert!(parent.remove_child(99).is_none());
+    }
+
+    #[test]
+    fn element_constructor_normalizes_html_tag_names() {
+        let element = Node::element("DiV");
+        assert_eq!(element.tag_name(), Some("div"));
+        assert!(element.is_element());
     }
 
     #[test]
