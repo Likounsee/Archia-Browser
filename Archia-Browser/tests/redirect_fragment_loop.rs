@@ -228,3 +228,85 @@ fn post_redirect_to_same_origin_302_becomes_bodyless_get() {
     assert!(!requests[1].headers.contains_key("content-type"));
     assert_eq!(requests[1].url.path(), "/after-submit");
 }
+
+
+#[test]
+fn post_redirect_to_303_becomes_bodyless_get() {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let transport = RequestRecordingTransport {
+        responses: Mutex::new(vec![
+            Response::new(303).with_header("location", "/after-submit"),
+            html_response(),
+        ]),
+        requests: Arc::clone(&requests),
+    };
+    let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
+    let mut request = Request::new(Url::parse("https://example.org/submit").unwrap())
+        .with_method(HttpMethod::Post);
+    request.body = b"secret=payload".to_vec();
+    request.headers.insert(
+        "content-type".into(),
+        "application/x-www-form-urlencoded".into(),
+    );
+    request
+        .headers
+        .insert("content-length".into(), request.body.len().to_string());
+
+    loader
+        .load(&request, LayoutViewport::new(320, 200))
+        .expect("redirected HTML document should load");
+
+    let requests = requests.lock().expect("request log mutex poisoned");
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[1].method, HttpMethod::Get);
+    assert!(requests[1].body.is_empty());
+    assert!(!requests[1].headers.contains_key("content-length"));
+    assert!(!requests[1].headers.contains_key("content-type"));
+}
+
+#[test]
+fn temporary_and_permanent_preserving_redirects_keep_method_and_body() {
+    for status in [307, 308] {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let transport = RequestRecordingTransport {
+            responses: Mutex::new(vec![
+                Response::new(status).with_header("location", "/retry-submit"),
+                html_response(),
+            ]),
+            requests: Arc::clone(&requests),
+        };
+        let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
+        let mut request = Request::new(Url::parse("https://example.org/submit").unwrap())
+            .with_method(HttpMethod::Post);
+        request.body = b"secret=payload".to_vec();
+        request.headers.insert(
+            "content-type".into(),
+            "application/x-www-form-urlencoded".into(),
+        );
+        request
+            .headers
+            .insert("content-length".into(), request.body.len().to_string());
+
+        loader
+            .load(&request, LayoutViewport::new(320, 200))
+            .expect("redirected HTML document should load");
+
+        let requests = requests.lock().expect("request log mutex poisoned");
+        assert_eq!(requests.len(), 2, "status {status}");
+        assert_eq!(requests[1].method, HttpMethod::Post, "status {status}");
+        assert_eq!(
+            requests[1].body, b"secret=payload",
+            "status {status}"
+        );
+        assert_eq!(
+            requests[1].headers.get("content-type").map(String::as_str),
+            Some("application/x-www-form-urlencoded"),
+            "status {status}"
+        );
+        assert_eq!(
+            requests[1].headers.get("content-length").map(String::as_str),
+            Some("13"),
+            "status {status}"
+        );
+    }
+}
