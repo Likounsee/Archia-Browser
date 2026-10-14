@@ -395,7 +395,7 @@ mod tests {
         element.set_attribute("class", "wide\u{2003}screen");
         root.append(element);
 
-        assert_eq!(root.find_by_class("wide\\u{2003}screen").len(), 1);
+        assert_eq!(root.find_by_class("wide\u{2003}screen").len(), 1);
         assert!(root.find_by_class("wide").is_empty());
         assert!(root.find_by_class("screen").is_empty());
     }
