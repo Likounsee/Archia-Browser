@@ -47,14 +47,18 @@ jobs:
         working-directory: fuzz
 
       - name: Fuzz ${{ matrix.target }} for its allocated budget
-        run: cargo +nightly fuzz run "${{ matrix.target }}" -- -max_total_time=12343 -print_final_stats=1
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p artifacts
+          cargo +nightly fuzz run "${{ matrix.target }}" -- -max_total_time=12343 -print_final_stats=1 2>&1 | tee "artifacts/${{ matrix.target }}-run.log"
         working-directory: fuzz
 
-      - name: Upload fuzz artifacts and crash inputs
+      - name: Upload fuzz logs and crash inputs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: archia-browser-fuzz-${{ matrix.target }}
           path: fuzz/artifacts/
-          if-no-files-found: ignore
+          if-no-files-found: warn
           retention-days: 14
