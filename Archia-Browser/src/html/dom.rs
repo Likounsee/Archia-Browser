@@ -259,7 +259,8 @@ impl Node {
     ) -> Vec<&Node> {
         self.descendants()
             .filter(|node| {
-                node.tag_name().is_some_and(|tag| tag.eq_ignore_ascii_case(tag_name))
+                node.tag_name()
+                    .is_some_and(|tag| tag.eq_ignore_ascii_case(tag_name))
                     && node.attribute(attribute_name) == Some(value)
             })
             .collect()
@@ -525,7 +526,9 @@ mod tests {
         assert_eq!(compact_inputs.len(), 1);
         assert_eq!(compact_inputs[0].attribute("type"), Some("email"));
 
-        assert!(root.find_by_tag_and_class("input", "field compact").is_empty());
+        assert!(root
+            .find_by_tag_and_class("input", "field compact")
+            .is_empty());
     }
 
     #[test]
