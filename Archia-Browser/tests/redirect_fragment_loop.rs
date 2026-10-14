@@ -103,7 +103,6 @@ fn redirect_target_is_rechecked_by_policy_before_transport() {
     assert_eq!(requests[0], "https://example.org/start");
 }
 
-
 struct RequestRecordingTransport {
     responses: Mutex<Vec<Response>>,
     requests: Arc<Mutex<Vec<Request>>>,
@@ -144,9 +143,13 @@ fn cross_origin_redirect_does_not_forward_credentials_or_custom_headers() {
     };
     let loader = DocumentLoader::new(NetworkPipeline::new(AllowAll), transport);
     let mut request = Request::new(Url::parse("https://example.org/start").unwrap());
-    request.headers.insert("authorization".into(), "Bearer secret".into());
+    request
+        .headers
+        .insert("authorization".into(), "Bearer secret".into());
     request.headers.insert("x-api-key".into(), "secret-key".into());
-    request.headers.insert("accept-language".into(), "fr-FR".into());
+    request
+        .headers
+        .insert("accept-language".into(), "fr-FR".into());
 
     loader
         .load(&request, LayoutViewport::new(320, 200))
@@ -157,7 +160,10 @@ fn cross_origin_redirect_does_not_forward_credentials_or_custom_headers() {
     let redirected = &requests[1].headers;
     assert!(!redirected.contains_key("authorization"));
     assert!(!redirected.contains_key("x-api-key"));
-    assert_eq!(redirected.get("accept-language").map(String::as_str), Some("fr-FR"));
+    assert_eq!(
+        redirected.get("accept-language").map(String::as_str),
+        Some("fr-FR")
+    );
 }
 
 #[test]
