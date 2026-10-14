@@ -184,6 +184,9 @@ impl Node {
     /// therefore ASCII case-insensitive for callers using HTML tag names.
     pub fn find_first_element(&self, tag_name: &str) -> Option<&Node> {
         let tag_name = tag_name.to_ascii_lowercase();
+        if self.tag_name().is_some_and(|name| name.eq_ignore_ascii_case(&tag_name)) {
+            return Some(self);
+        }
         self.descendants()
             .find(|node| node.tag_name().is_some_and(|name| name.eq_ignore_ascii_case(&tag_name)))
     }
