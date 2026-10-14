@@ -249,6 +249,39 @@ impl Node {
         self.find_first_by_attribute_value("name", name)
     }
 
+    /// Collect descendant elements matching a tag and an exact attribute value.
+    /// Tag and attribute names are ASCII case-insensitive; values are case-sensitive.
+    pub fn find_by_tag_and_attribute_value(
+        &self,
+        tag_name: &str,
+        attribute_name: &str,
+        value: &str,
+    ) -> Vec<&Node> {
+        self.descendants()
+            .filter(|node| {
+                node.tag_name().is_some_and(|tag| tag.eq_ignore_ascii_case(tag_name))
+                    && node.attribute(attribute_name) == Some(value)
+            })
+            .collect()
+    }
+
+    /// Collect descendant elements matching a tag and a class token.
+    pub fn find_by_tag_and_class(&self, tag_name: &str, class_name: &str) -> Vec<&Node> {
+        if class_name.is_empty() || class_name.chars().any(is_html_whitespace) {
+            return Vec::new();
+        }
+        self.descendants()
+            .filter(|node| {
+                node.tag_name().is_some_and(|tag| tag.eq_ignore_ascii_case(tag_name))
+                    && node.attribute("class").is_some_and(|classes| {
+                        classes
+                            .split(is_html_whitespace)
+                            .any(|name| name == class_name)
+                    })
+            })
+            .collect()
+    }
+
     /// Collect descendant elements that have the named attribute, regardless
     /// of its value. Attribute names are ASCII case-insensitive.
     pub fn find_by_attribute(&self, name: &str) -> Vec<&Node> {
@@ -466,6 +499,33 @@ mod tests {
 
         let names: Vec<_> = root.descendants().filter_map(Node::tag_name).collect();
         assert_eq!(names, ["first", "nested", "last"]);
+    }
+
+    #[test]
+    fn combined_tag_attribute_and_class_queries_filter_precisely() {
+        let mut root = Node::document();
+        let mut first = Node::element("input");
+        first.set_attribute("type", "email");
+        first.set_attribute("class", "field compact");
+        let mut second = Node::element("input");
+        second.set_attribute("type", "text");
+        second.set_attribute("class", "field");
+        let mut third = Node::element("textarea");
+        third.set_attribute("type", "email");
+        third.set_attribute("class", "field compact");
+        root.append(first);
+        root.append(second);
+        root.append(third);
+
+        let email_inputs = root.find_by_tag_and_attribute_value("INPUT", "TYPE", "email");
+        assert_eq!(email_inputs.len(), 1);
+        assert_eq!(email_inputs[0].attribute("type"), Some("email"));
+
+        let compact_inputs = root.find_by_tag_and_class("input", "compact");
+        assert_eq!(compact_inputs.len(), 1);
+        assert_eq!(compact_inputs[0].attribute("type"), Some("email"));
+
+        assert!(root.find_by_tag_and_class("input", "field compact").is_empty());
     }
 
     #[test]
