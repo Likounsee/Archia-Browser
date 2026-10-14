@@ -696,7 +696,10 @@ mod character_reference_tests {
         let HtmlToken::StartTag { attributes, .. } = &tokens[3] else {
             panic!("expected input start tag");
         };
-        assert_eq!(attributes.get("value").map(String::as_str), Some("x\u{FFFD}y"));
+        assert_eq!(
+            attributes.get("value").map(String::as_str),
+            Some("x\u{FFFD}y")
+        );
     }
 
     #[test]
