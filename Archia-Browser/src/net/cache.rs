@@ -609,10 +609,15 @@ fn response_age(response: &Response) -> Option<u64> {
             if age_headers.next().is_some() {
                 return None;
             }
-            value
-                .trim_matches(|character| character == ' ' || character == '\t')
-                .parse::<u64>()
-                .ok()?
+            let value = value.trim_matches(|character| character == ' ' || character == '\t');
+            // RFC 9111 defines Age as delta-seconds (1*DIGIT). Integer parsing
+            // alone is too permissive on some inputs; reject signs and every
+            // non-ASCII digit so malformed intermediaries cannot influence
+            // freshness calculations.
+            if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+                return None;
+            }
+            value.parse::<u64>().ok()?
         }
         None => 0,
     };
@@ -1858,7 +1863,7 @@ mod tests {
     #[test]
     fn malformed_or_duplicate_age_headers_prevent_caching() {
         let request = make_request("https://example.org/resource");
-        for age in ["unknown", "-1", "1, 2"] {
+        for age in ["unknown", "-1", "+1", "1, 2", "１２"] {
             let mut cache = HttpCache::default();
             let response = Response::new(200)
                 .with_header("cache-control", "max-age=60")
