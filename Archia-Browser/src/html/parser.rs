@@ -1027,7 +1027,9 @@ mod tests {
         let root = parse(&HtmlTokenizer::tokenize(
             "<select><option>outer<select></option>tail</select><option>second</option></select>",
         ));
-        let select = root.find_first_element("select").expect("outer select retained");
+        let select = root
+            .find_first_element("select")
+            .expect("outer select retained");
         assert_eq!(select.children[0].tag_name(), Some("option"));
         assert_eq!(select.children[0].text_content(), "outertail");
         assert_eq!(select.children[1].tag_name(), Some("select"));
