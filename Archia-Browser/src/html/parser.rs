@@ -141,7 +141,9 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 }
                 // Text directly inside a table, section, or row is foster-parented
                 // before the nearest open table instead of becoming table content.
-                let foster_table = stack.iter().rposition(|node| node.tag_name() == Some("table"));
+                let foster_table = stack
+                    .iter()
+                    .rposition(|node| node.tag_name() == Some("table"));
                 let is_html_whitespace = retained
                     .bytes()
                     .all(|byte| matches!(byte, b'\t' | b'\n' | b'\x0C' | b'\r' | b' '));
@@ -149,18 +151,22 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                     .then_some(foster_table)
                     .flatten()
                     .filter(|&table_position| {
-                    !stack[table_position + 1..]
-                        .iter()
-                        .any(|node| matches!(node.tag_name(), Some("td" | "th")))
-                        && stack[table_position + 1..].iter().all(|node| {
-                            matches!(
-                                node.tag_name(),
-                                Some("tbody" | "thead" | "tfoot" | "tr" | "table")
-                            )
-                        })
+                        !stack[table_position + 1..]
+                            .iter()
+                            .any(|node| matches!(node.tag_name(), Some("td" | "th")))
+                            && stack[table_position + 1..].iter().all(|node| {
+                                matches!(
+                                    node.tag_name(),
+                                    Some("tbody" | "thead" | "tfoot" | "tr" | "table")
+                                )
+                            })
                     });
                 let appended = if let Some(table_position) = foster_parent {
-                    append_node(&mut root, &mut stack[..table_position], Node::text(retained))
+                    append_node(
+                        &mut root,
+                        &mut stack[..table_position],
+                        Node::text(retained),
+                    )
                 } else {
                     append_node(&mut root, &mut stack, Node::text(retained))
                 };
@@ -1004,7 +1010,9 @@ mod tests {
 
     #[test]
     fn whitespace_inside_table_remains_in_the_table() {
-        let root = parse(&HtmlTokenizer::tokenize("<table> \n<tr><td>cell</td></tr></table>"));
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<table> \n<tr><td>cell</td></tr></table>",
+        ));
         let body = root.find_first_element("body").expect("body retained");
         let table = body.find_first_element("table").expect("table retained");
 
