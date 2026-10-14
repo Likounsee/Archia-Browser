@@ -18,6 +18,16 @@ fn cookie_storage_bytes(cookie: &Cookie) -> usize {
         .saturating_add(128)
 }
 
+/// Parse the cookie Max-Age grammar without accepting Rust's optional leading `+`.
+/// Zero remains accepted for compatibility with the widely used deletion form.
+fn parse_cookie_max_age(value: &str) -> Option<i64> {
+    let digits = value.strip_prefix('-').unwrap_or(value);
+    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    value.parse::<i64>().ok()
+}
+
 fn trim_cookie_ows(value: &str) -> &str {
     value.trim_matches(|character| character == ' ' || character == '\t')
 }
@@ -164,10 +174,7 @@ impl CookieJar {
                     }
                 }
                 "max-age" => {
-                    if let Some(seconds) = pieces
-                        .next()
-                        .and_then(|value| trim_cookie_ows(value).parse::<i64>().ok())
-                    {
+                    if let Some(seconds) = pieces.next().and_then(|value| parse_cookie_max_age(trim_cookie_ows(value))) {
                         max_age = Some(seconds);
                     }
                 }
@@ -1120,6 +1127,21 @@ mod tests {
         jar.store(&url, "sid=too-far; Max-Age=9223372036854775807");
 
         assert!(jar.is_empty());
+    }
+
+    #[test]
+    fn cookie_max_age_rejects_plus_sign_and_non_ascii_digits() {
+        let url = Url::parse("https://example.org/").unwrap();
+        let mut jar = CookieJar::new();
+
+        jar.store(&url, "plus=ignored; Max-Age=+60");
+        jar.store(&url, "unicode=ignored; Max-Age=１２");
+
+        assert_eq!(jar.len(), 2);
+        assert!(
+            jar.cookies.iter().all(|cookie| cookie.expires_at.is_none()),
+            "invalid Max-Age values must not create persistent cookies"
+        );
     }
 
     #[test]
