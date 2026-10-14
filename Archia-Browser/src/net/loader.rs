@@ -180,7 +180,8 @@ where
             // and fetch a fresh representation when network access is allowed.
             let cached_response = match cached_response {
                 Some(response)
-                    if (200..300).contains(&response.status) && is_html_response(&response, current.url.scheme() == "file") =>
+                    if (200..300).contains(&response.status)
+                        && is_html_response(&response, current.url.scheme() == "file") =>
                 {
                     Some(response)
                 }
