@@ -212,9 +212,24 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // markup such as adjacent anchors or options produces a DOM
                 // tree different from browser expectations.
                 for implied_end in implied_end_tags_for_start(name) {
-                    if has_open(&stack, implied_end) {
-                        close_element(&mut root, &mut stack, implied_end);
+                    let Some(position) = stack
+                        .iter()
+                        .rposition(|node| node.tag_name() == Some(implied_end))
+                    else {
+                        continue;
+                    };
+                    // Table structure elements are scoped to their nearest table.
+                    // A nested table must not implicitly close the outer table's
+                    // row, cell, or section just because the names match.
+                    if matches!(implied_end, "tr" | "td" | "th" | "thead" | "tbody" | "tfoot")
+                        && stack
+                            .iter()
+                            .rposition(|node| node.tag_name() == Some("table"))
+                            .is_some_and(|table_position| position < table_position)
+                    {
+                        continue;
                     }
+                    close_element(&mut root, &mut stack, implied_end);
                 }
 
                 if (name == "p" || is_block_closing_p(name)) && has_open(&stack, "p") {
@@ -968,6 +983,31 @@ mod tests {
         assert_eq!(
             second_section.children[0].children[0].text_content(),
             "four"
+        );
+    }
+
+    #[test]
+    fn nested_tables_keep_outer_rows_cells_and_sections_open() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<table><tbody><tr><td>outer<table><tbody><tr><td>inner</td></tr></tbody></table>tail</td></tr></tbody></table>",
+        ));
+        let outer_table = root.find_first_element("table").expect("outer table retained");
+        let outer_section = &outer_table.children[0];
+        assert_eq!(outer_section.tag_name(), Some("tbody"));
+        let outer_row = &outer_section.children[0];
+        assert_eq!(outer_row.tag_name(), Some("tr"));
+        let outer_cell = &outer_row.children[0];
+        assert_eq!(outer_cell.tag_name(), Some("td"));
+        assert_eq!(outer_cell.text_content(), "outerinnertail");
+
+        let inner_table = outer_cell
+            .find_first_element("table")
+            .expect("inner table retained");
+        assert_eq!(inner_table.children[0].tag_name(), Some("tbody"));
+        assert_eq!(inner_table.children[0].children[0].tag_name(), Some("tr"));
+        assert_eq!(
+            inner_table.children[0].children[0].children[0].text_content(),
+            "inner"
         );
     }
 
