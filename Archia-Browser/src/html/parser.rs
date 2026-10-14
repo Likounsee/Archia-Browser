@@ -350,7 +350,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                         let boundary_position =
                             stack.iter().rposition(|node| match boundary_kind {
                                 "table" => node.tag_name() == Some("table"),
-                                "list" => matches!(node.tag_name(), Some("ol" | "ul")),
+                                "list" => matches!(node.tag_name(), Some("menu" | "ol" | "ul")),
                                 "description-list" => node.tag_name() == Some("dl"),
                                 "select" => node.tag_name() == Some("select"),
                                 "ruby" => node.tag_name() == Some("ruby"),
@@ -1007,6 +1007,17 @@ mod tests {
         assert_eq!(list.children[0].text_content(), "term");
         assert_eq!(list.children[1].tag_name(), Some("dd"));
         assert_eq!(list.children[1].text_content(), "definition");
+    }
+
+    #[test]
+    fn menu_items_use_list_item_scope_for_end_tags() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<menu><li>one</li><li>two</li></menu>",
+        ));
+        let menu = root.find_first_element("menu").expect("menu retained");
+        assert_eq!(menu.children.len(), 2);
+        assert_eq!(menu.children[0].text_content(), "one");
+        assert_eq!(menu.children[1].text_content(), "two");
     }
 
     #[test]
