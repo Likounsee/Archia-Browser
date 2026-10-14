@@ -365,8 +365,7 @@ mod tests {
         root.append(Node::element("section"));
 
         assert_eq!(
-            root.find_first_element("section")
-                .and_then(Node::tag_name),
+            root.find_first_element("section").and_then(Node::tag_name),
             Some("section")
         );
         assert!(root.find_first_element("missing").is_none());
