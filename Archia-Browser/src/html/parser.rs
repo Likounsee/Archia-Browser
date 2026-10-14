@@ -1045,7 +1045,7 @@ mod tests {
         assert_eq!(div.children[0].text_content(), "paragraph");
         assert_eq!(div.children[1].tag_name(), Some("dt"));
         assert_eq!(div.children[2].tag_name(), Some("dd"));
-        assert_eq!(div.children[3].tag_name(), Some("li"));
+        assert_eq!(div.children[2].children[1].tag_name(), Some("li"));
     }
 
     #[test]
