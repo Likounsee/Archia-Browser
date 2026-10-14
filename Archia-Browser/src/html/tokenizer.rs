@@ -1,5 +1,9 @@
 use std::collections::BTreeMap;
 
+fn is_html_whitespace(character: char) -> bool {
+    matches!(character, '\t' | '\n' | '\u{000C}' | '\r' | ' ')
+}
+
 // Bound scanning and retained token data for untrusted documents.
 const MAX_HTML_INPUT_BYTES: usize = 4 * 1024 * 1024;
 const MAX_HTML_TOKENS: usize = 100_000;
@@ -232,7 +236,7 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
     let mut chars = input.chars().peekable();
     let mut name = String::new();
     while let Some(&ch) = chars.peek() {
-        if ch.is_whitespace() || ch == '/' {
+        if is_html_whitespace(ch) || ch == '/' {
             break;
         }
         if name.len().saturating_add(ch.len_utf8()) > MAX_HTML_TAG_NAME_BYTES {
@@ -249,7 +253,7 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
     let mut parsed_attribute_count = 0usize;
     let mut self_closing = false;
     loop {
-        while chars.peek().is_some_and(|c| c.is_whitespace()) {
+        while chars.peek().is_some_and(|c| is_html_whitespace(*c)) {
             chars.next();
         }
         if chars.peek().is_none() || parsed_attribute_count >= MAX_HTML_ATTRIBUTES_PER_TAG {
@@ -258,7 +262,7 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
         if chars.peek() == Some(&'/') {
             chars.next();
             self_closing = true;
-            while chars.peek().is_some_and(|c| c.is_whitespace()) {
+            while chars.peek().is_some_and(|c| is_html_whitespace(*c)) {
                 chars.next();
             }
             break;
@@ -271,7 +275,7 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
         let mut attr_name = String::new();
         let mut attr_name_too_long = false;
         while let Some(&ch) = chars.peek() {
-            if ch.is_whitespace() || matches!(ch, '=' | '/') {
+            if is_html_whitespace(ch) || matches!(ch, '=' | '/') {
                 break;
             }
             if attr_name.len() + ch.len_utf8() <= MAX_HTML_ATTRIBUTE_NAME_BYTES {
@@ -285,7 +289,7 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
             chars.next();
             continue;
         }
-        while chars.peek().is_some_and(|c| c.is_whitespace()) {
+        while chars.peek().is_some_and(|c| is_html_whitespace(*c)) {
             chars.next();
         }
 
@@ -293,7 +297,7 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
         let mut value_too_long = false;
         if chars.peek() == Some(&'=') {
             chars.next();
-            while chars.peek().is_some_and(|c| c.is_whitespace()) {
+            while chars.peek().is_some_and(|c| is_html_whitespace(*c)) {
                 chars.next();
             }
             let quote = chars.peek().copied().filter(|c| *c == '\'' || *c == '"');
@@ -316,7 +320,7 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
                 // only marks a self-closing tag when encountered between
                 // attributes, not while consuming a value.
                 while let Some(&ch) = chars.peek() {
-                    if ch.is_whitespace() {
+                    if is_html_whitespace(ch) {
                         break;
                     }
                     if value.len().saturating_add(ch.len_utf8()) <= MAX_HTML_ATTRIBUTE_VALUE_BYTES {
@@ -346,6 +350,22 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tag_and_attribute_separation_uses_only_html_whitespace() {
+        let tokens = HtmlTokenizer::tokenize("<div id='first'\\u{2003}class='second'></div>");
+        let HtmlToken::StartTag { name, attributes, .. } = &tokens[0] else {
+            panic!("expected start tag");
+        };
+
+        assert_eq!(name, "div");
+        assert_eq!(attributes.get("id").map(String::as_str), Some("first"));
+        assert!(!attributes.contains_key("class"));
+        assert_eq!(
+            attributes.get("\\u{2003}class").map(String::as_str),
+            Some("second")
+        );
+    }
 
     #[test]
     fn doctype_keyword_requires_a_delimiter() {
