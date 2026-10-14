@@ -401,9 +401,22 @@ fn close_element(root: &mut Node, stack: &mut Vec<Node>, name: &str) {
         stack.extend(completed.into_iter().rev());
         return;
     }
-    while let Some(node) = completed.pop() {
-        // The capacity was reserved above, so this path cannot need to grow.
-        matching.children.push(node);
+    // The stack was popped deepest-first. Rebuild the detached open
+    // subtree from its outermost child inward, preserving the original nesting.
+    completed.reverse();
+    let mut parent = &mut matching;
+    for node in completed {
+        // Reserve all child slots before changing the detached subtree. If a
+        // nested allocation fails, retain the subtree on the stack for recovery.
+        if parent.children.try_reserve(1).is_err() {
+            stack.push(matching);
+            return;
+        }
+        parent.children.push(node);
+        parent = parent
+            .children
+            .last_mut()
+            .expect("the node was just appended");
     }
 
     if let Err(node) = append_node_owned(root, stack, matching) {
