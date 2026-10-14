@@ -1037,15 +1037,17 @@ mod tests {
 
     #[test]
     fn paragraph_closes_before_definition_and_list_items() {
-        let root = parse(&HtmlTokenizer::tokenize(
-            "<div><p>paragraph<dt>term<dd>definition<li>item</div>",
-        ));
-        let div = root.find_first_element("div").expect("container retained");
-        assert_eq!(div.children[0].tag_name(), Some("p"));
-        assert_eq!(div.children[0].text_content(), "paragraph");
-        assert_eq!(div.children[1].tag_name(), Some("dt"));
-        assert_eq!(div.children[2].tag_name(), Some("dd"));
-        assert_eq!(div.children[2].children[1].tag_name(), Some("li"));
+        for tag in ["dt", "dd", "li"] {
+            let markup = format!("<div><p>paragraph<{tag}>item</div>");
+            let root = parse(&HtmlTokenizer::tokenize(&markup));
+            let div = root.find_first_element("div").expect("container retained");
+
+            assert_eq!(div.children.len(), 2, "tag: {tag}");
+            assert_eq!(div.children[0].tag_name(), Some("p"), "tag: {tag}");
+            assert_eq!(div.children[0].text_content(), "paragraph", "tag: {tag}");
+            assert_eq!(div.children[1].tag_name(), Some(tag), "tag: {tag}");
+            assert_eq!(div.children[1].text_content(), "item", "tag: {tag}");
+        }
     }
 
     #[test]
