@@ -475,9 +475,16 @@ fn response_can_store(response: &Response) -> bool {
             .iter()
             .filter(|(name, _)| name.eq_ignore_ascii_case("pragma"))
             .any(|(_, value)| {
-                value
-                    .split(',')
-                    .any(|d| trim_http_ows(d).eq_ignore_ascii_case("no-cache"))
+                // Pragma is legacy, but malformed quoted directives must not
+                // make an otherwise non-cacheable response reusable. Reuse the
+                // quote-aware tokenizer shared with Cache-Control parsing.
+                cache_control_is_malformed(value)
+                    || cache_control_directives(value).into_iter().any(|directive| {
+                        let name = directive
+                            .split_once('=')
+                            .map_or(directive, |(name, _)| name);
+                        trim_http_ows(name).eq_ignore_ascii_case("no-cache")
+                    })
             })
         // A 200 response carrying Content-Range is still a partial representation;
         // caching it under the full-resource key could serve truncated content later.
@@ -2252,5 +2259,22 @@ mod tests {
                 "{name} must not poison the unconditional cached representation"
             );
         }
+    } 
+    #[test]
+    fn malformed_response_pragma_fails_closed_for_cache_storage() {
+        let request = make_request("https://example.org/malformed-pragma-response");
+        let response = Response::new(200)
+            .with_header("cache-control", "max-age=3600")
+            .with_header("pragma", r#"extension="unterminated,no-cache"#);
+        let mut cache = HttpCache::new(4096);
+
+        cache.store(&request, &response);
+
+        assert!(
+            cache.get(&request).is_none(),
+            "malformed Pragma must not allow a response to be stored for reuse"
+        );
+        assert!(cache.is_empty());
     }
+
 }

@@ -2152,6 +2152,13 @@ fn decode_chunked(
                             | "location"
                             | "retry-after"
                             | "vary"
+                            | "connection"
+                            | "keep-alive"
+                            | "proxy-connection"
+                            | "upgrade"
+                            | "expect"
+                            | "authentication-info"
+                            | "proxy-authentication-info"
                     )
                 {
                     return Err(TransportError::ConnectionFailed);
@@ -2503,6 +2510,13 @@ mod tests {
             "Location: https://attacker.example/",
             "Authorization: Basic dGVzdA==",
             "Trailer: X-Other",
+            "Connection: keep-alive",
+            "Keep-Alive: timeout=5",
+            "Proxy-Connection: keep-alive",
+            "Upgrade: websocket",
+            "Expect: 100-continue",
+            "Authentication-Info: nextnonce=abc",
+            "Proxy-Authentication-Info: nextnonce=abc",
         ] {
             let response = format!(
                 "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n{trailer}\r\n\r\n"
