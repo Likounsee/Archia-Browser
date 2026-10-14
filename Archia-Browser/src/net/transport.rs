@@ -1907,6 +1907,27 @@ fn parse_http_response_head(
         response = response.with_header(name, value);
     }
 
+    // A Connection field can nominate otherwise ordinary headers as
+    // hop-by-hop. If we expose those fields to MIME, cookie, or cache policy,
+    // different layers may interpret a response differently. This client does
+    // not forward hop-by-hop metadata, so reject a response that nominates any
+    // other field it actually carries. Validate the token list as well.
+    if let Some(connection) = response.header("connection") {
+        for token in connection.split(',') {
+            let token = trim_http_ows(token);
+            if token.is_empty() || !token.bytes().all(is_http_token_byte) {
+                return Err(TransportError::ConnectionFailed);
+            }
+            if response
+                .headers
+                .keys()
+                .any(|name| !name.eq_ignore_ascii_case("connection") && name.eq_ignore_ascii_case(token))
+            {
+                return Err(TransportError::ConnectionFailed);
+            }
+        }
+    }
+
     // Transfer-Encoding is an HTTP/1.1 framing mechanism. Accepting it on an
     // HTTP/1.0 response risks disagreement with peers that ignore the field.
     if version == "HTTP/1.0" && response.header("transfer-encoding").is_some() {
@@ -2394,6 +2415,33 @@ mod tests {
         assert!(tls_server_name("bad host.example").is_err());
         assert!(tls_server_name("*.example.org").is_err());
         assert!(tls_server_name("example.org/path").is_err());
+    }
+
+    #[test]
+    fn rejects_connection_nominated_representation_and_framing_headers() {
+        for response in [
+            b"HTTP/1.1 200 OK\r\nConnection: Content-Type\r\nContent-Type: text/html\r\nContent-Length: 0\r\n\r\n".as_slice(),
+            b"HTTP/1.1 200 OK\r\nConnection: Content-Length\r\nContent-Length: 0\r\n\r\n".as_slice(),
+            b"HTTP/1.1 200 OK\r\nConnection: Set-Cookie\r\nSet-Cookie: sid=secret\r\nContent-Length: 0\r\n\r\n".as_slice(),
+            b"HTTP/1.1 200 OK\r\nConnection: ,close\r\nContent-Length: 0\r\n\r\n".as_slice(),
+            b"HTTP/1.1 200 OK\r\nConnection: bad token\r\nContent-Length: 0\r\n\r\n".as_slice(),
+        ] {
+            assert_eq!(
+                parse_http_response(response, 1024, 1024),
+                Err(TransportError::ConnectionFailed)
+            );
+        }
+    }
+
+    #[test]
+    fn accepts_connection_close_without_nominated_headers() {
+        let response = parse_http_response(
+            b"HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nOK",
+            1024,
+            1024,
+        )
+        .unwrap();
+        assert_eq!(response.body, b"OK");
     }
 
     #[test]
