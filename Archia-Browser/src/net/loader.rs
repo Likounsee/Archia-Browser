@@ -1,8 +1,7 @@
 use super::cache::request_only_if_cached;
 use super::{
     pipeline::{NetworkPipeline, RequestPolicy, ResourceKind},
-    CancellationToken,
-    HttpMethod, Request, Response, Transport, TransportError,
+    CancellationToken, HttpMethod, Request, Response, Transport, TransportError,
 };
 use crate::{
     document::Page,
@@ -102,7 +101,11 @@ where
     P: super::pipeline::RequestPolicyEngine,
     T: Transport,
 {
-    pub fn load(&self, request: &Request, viewport: LayoutViewport) -> Result<Page, DocumentLoadError> {
+    pub fn load(
+        &self,
+        request: &Request,
+        viewport: LayoutViewport,
+    ) -> Result<Page, DocumentLoadError> {
         self.load_cancellable(request, viewport, &CancellationToken::new())
     }
 

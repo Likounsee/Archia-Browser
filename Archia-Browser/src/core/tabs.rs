@@ -43,9 +43,13 @@ impl NavigationToken {
         &self.requested_url
     }
 
-    pub const fn action(&self) -> NavigationAction { self.action }
+    pub const fn action(&self) -> NavigationAction {
+        self.action
+    }
 
-    pub fn cancellation(&self) -> &CancellationToken { &self.cancellation }
+    pub fn cancellation(&self) -> &CancellationToken {
+        &self.cancellation
+    }
 }
 
 #[derive(Debug)]
@@ -490,8 +494,12 @@ mod tests {
     fn superseding_navigation_cancels_the_previous_transport_token() {
         let mut manager = TabManager::new();
         let tab = manager.open();
-        let old = manager.begin_navigation(tab, Url::parse("https://example.org/old").unwrap()).unwrap();
-        let new = manager.begin_navigation(tab, Url::parse("https://example.org/new").unwrap()).unwrap();
+        let old = manager
+            .begin_navigation(tab, Url::parse("https://example.org/old").unwrap())
+            .unwrap();
+        let new = manager
+            .begin_navigation(tab, Url::parse("https://example.org/new").unwrap())
+            .unwrap();
         assert!(old.cancellation().is_cancelled());
         assert!(!new.cancellation().is_cancelled());
     }

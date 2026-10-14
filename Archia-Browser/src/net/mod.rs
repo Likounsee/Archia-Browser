@@ -1,4 +1,10 @@
-use std::{ collections::BTreeMap, sync::{atomic::{AtomicBool, Ordering}, Arc} };
+use std::{
+    collections::BTreeMap,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
 
 pub mod cache;
 pub mod cookies;
@@ -157,21 +163,37 @@ pub enum TransportError {
 #[derive(Debug, Clone, Default)]
 pub struct CancellationToken(Arc<AtomicBool>);
 impl CancellationToken {
-    pub fn new() -> Self { Self::default() }
-    pub fn cancel(&self) { self.0.store(true, Ordering::Release); }
-    pub fn is_cancelled(&self) -> bool { self.0.load(Ordering::Acquire) }
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn cancel(&self) {
+        self.0.store(true, Ordering::Release);
+    }
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
     pub fn check(&self) -> Result<(), TransportError> {
-        if self.is_cancelled() { Err(TransportError::Cancelled) } else { Ok(()) }
+        if self.is_cancelled() {
+            Err(TransportError::Cancelled)
+        } else {
+            Ok(())
+        }
     }
 }
 impl PartialEq for CancellationToken {
-    fn eq(&self, other: &Self) -> bool { Arc::ptr_eq(&self.0, &other.0) }
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
 }
 impl Eq for CancellationToken {}
 
 pub trait Transport {
     fn send(&self, request: &Request) -> Result<Response, TransportError>;
-    fn send_cancellable(&self, request: &Request, cancellation: &CancellationToken) -> Result<Response, TransportError> {
+    fn send_cancellable(
+        &self,
+        request: &Request,
+        cancellation: &CancellationToken,
+    ) -> Result<Response, TransportError> {
         cancellation.check()?;
         let response = self.send(request)?;
         cancellation.check()?;

@@ -54,7 +54,11 @@ impl HttpTransport {
         self
     }
 
-    fn connect(&self, request: &Request, cancellation: &CancellationToken) -> Result<Box<dyn ReadWrite>, TransportError> {
+    fn connect(
+        &self,
+        request: &Request,
+        cancellation: &CancellationToken,
+    ) -> Result<Box<dyn ReadWrite>, TransportError> {
         cancellation.check()?;
         match request.url.scheme() {
             "http" | "https" => {}
@@ -260,7 +264,11 @@ impl Transport for HttpTransport {
         self.send_cancellable(request, &CancellationToken::new())
     }
 
-    fn send_cancellable(&self, request: &Request, cancellation: &CancellationToken) -> Result<Response, TransportError> {
+    fn send_cancellable(
+        &self,
+        request: &Request,
+        cancellation: &CancellationToken,
+    ) -> Result<Response, TransportError> {
         cancellation.check()?;
         validate_request(request)?;
         let mut stream = self.connect(request, cancellation)?;
