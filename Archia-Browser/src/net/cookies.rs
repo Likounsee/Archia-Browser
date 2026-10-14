@@ -664,7 +664,10 @@ mod tests {
 
         let mut reverse = CookieJar::new();
         reverse.store(&canonical, "sid=canonical; Path=/; Secure");
-        assert_eq!(reverse.header_for(&dotted).as_deref(), Some("sid=canonical"));
+        assert_eq!(
+            reverse.header_for(&dotted).as_deref(),
+            Some("sid=canonical")
+        );
     }
 
     #[test]
