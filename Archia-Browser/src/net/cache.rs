@@ -465,8 +465,31 @@ fn response_has_header(response: &Response, wanted: &str) -> bool {
         .any(|name| name.eq_ignore_ascii_case(wanted))
 }
 
+fn response_has_valid_content_length(response: &Response) -> bool {
+    let mut values = response
+        .headers
+        .iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+        .map(|(_, value)| trim_http_ows(value));
+
+    let Some(value) = values.next() else {
+        return true;
+    };
+    if values.next().is_some()
+        || value.is_empty()
+        || !value.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return false;
+    }
+
+    value
+        .parse::<usize>()
+        .is_ok_and(|length| length == response.body.len())
+}
+
 fn response_can_store(response: &Response) -> bool {
     response.status == 200
+        && response_has_valid_content_length(response)
         && response.set_cookie_headers().is_empty()
         && !response_has_header(response, "set-cookie")
         && !response
@@ -835,8 +858,8 @@ mod tests {
         assert_eq!(cache.len(), 1);
 
         for header in ["proxy-authorization", "connection"] {
-            let mut private_request = super::Request::new(url.clone())
-                .with_header("cache-control", "no-cache");
+            let mut private_request =
+                super::Request::new(url.clone()).with_header("cache-control", "no-cache");
             private_request.headers.insert(
                 header.to_owned(),
                 if header == "connection" {
@@ -854,6 +877,38 @@ mod tests {
             cache.store(&private_request, &public_response);
             assert_eq!(cache.len(), 1, "{header} request must not be stored");
         }
+    }
+
+    #[test]
+    fn cache_rejects_invalid_or_conflicting_content_length_metadata() {
+        let valid = super::Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_header("content-length", "4")
+            .with_body(b"data".to_vec());
+        assert!(super::response_can_store(&valid));
+
+        for response in [
+            super::Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_header("content-length", "invalid")
+                .with_body(b"data".to_vec()),
+            super::Response::new(200)
+                .with_header("cache-control", "max-age=60")
+                .with_header("content-length", "3")
+                .with_body(b"data".to_vec()),
+        ] {
+            assert!(
+                !super::response_can_store(&response),
+                "invalid or mismatched Content-Length must not be cached"
+            );
+        }
+
+        let mut duplicate = super::Response::new(200)
+            .with_header("cache-control", "max-age=60")
+            .with_header("content-length", "4")
+            .with_body(b"data".to_vec());
+        duplicate.headers.insert("Content-Length".into(), "4".into());
+        assert!(!super::response_can_store(&duplicate));
     }
 
     #[test]
