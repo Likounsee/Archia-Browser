@@ -329,6 +329,10 @@ fn implied_end_tags_for_start(name: &str) -> &'static [&'static str] {
         "dt" | "dd" => &["dt", "dd"],
         "option" => &["option"],
         "optgroup" => &["option", "optgroup"],
+        "tr" => &["tr"],
+        "td" | "th" => &["td", "th"],
+        "thead" | "tbody" | "tfoot" => &["thead", "tbody", "tfoot"],
+        "rt" | "rp" => &["rt", "rp"],
         _ => &[],
     }
 }
@@ -819,6 +823,35 @@ mod tests {
         assert_eq!(select.children[2].tag_name(), Some("optgroup"));
         assert_eq!(select.children[2].children[0].tag_name(), Some("option"));
         assert_eq!(select.children[2].children[0].text_content(), "three");
+    }
+
+    #[test]
+    fn table_rows_cells_and_sections_close_previous_peers() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<table><tbody><tr><td>one<td>two<tr><th>three</tbody><tbody><tr><td>four",
+        ));
+        let table = root.find_first_element("table").expect("table retained");
+        assert_eq!(table.children.len(), 1);
+        let first_section = &table.children[0];
+        assert_eq!(first_section.tag_name(), Some("tbody"));
+        assert_eq!(first_section.children.len(), 2);
+        assert_eq!(first_section.children[0].tag_name(), Some("tr"));
+        assert_eq!(first_section.children[0].children.len(), 2);
+        assert_eq!(first_section.children[0].children[0].text_content(), "one");
+        assert_eq!(first_section.children[0].children[1].text_content(), "two");
+        assert_eq!(first_section.children[1].children[0].text_content(), "three");
+    }
+
+    #[test]
+    fn ruby_annotation_peers_close_implicitly() {
+        let root = parse(&HtmlTokenizer::tokenize("<ruby><rt>one<rp>(<rt>two"));
+        let ruby = root.find_first_element("ruby").expect("ruby retained");
+        assert_eq!(ruby.children.len(), 3);
+        assert_eq!(ruby.children[0].tag_name(), Some("rt"));
+        assert_eq!(ruby.children[0].text_content(), "one");
+        assert_eq!(ruby.children[1].tag_name(), Some("rp"));
+        assert_eq!(ruby.children[2].tag_name(), Some("rt"));
+        assert_eq!(ruby.children[2].text_content(), "two");
     }
 
     #[test]
