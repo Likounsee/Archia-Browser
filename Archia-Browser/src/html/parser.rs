@@ -195,6 +195,14 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                         .is_some_and(|node| node.tag_name() == Some("table"))
                 {
                     if created_nodes >= MAX_DOM_NODES - 1 {
+                        if !push_suppressed(
+                            &mut suppressed_stack,
+                            &mut suppressed_positions,
+                            name,
+                            0,
+                        ) {
+                            break;
+                        }
                         continue;
                     }
                     if stack.try_reserve(1).is_err() {
