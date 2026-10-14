@@ -149,7 +149,13 @@ impl HttpCache {
         // The normalized URL key is retained alongside the response. Long URLs
         // can exceed the fixed per-entry overhead, so account for their bytes too.
         let payload_bytes = accounted_response_bytes(response);
-        let bytes = payload_bytes.saturating_add(key.len());
+        let Some(bytes) = checked_entry_bytes(payload_bytes, key.len()) else {
+            // An unrepresentable size must never saturate into a seemingly
+            // valid reservation. Invalidate this representation, but leave
+            // unrelated entries untouched.
+            self.entries.remove(&key);
+            return;
+        };
 
         // Cache entries participate in the browser-wide budget when one is supplied.
         // The reservation follows the entry and is released on eviction or cache drop.
@@ -278,6 +284,10 @@ fn accounted_response_bytes(response: &Response) -> usize {
             total.saturating_add(name.len()).saturating_add(value.len())
         })
         .saturating_add(64)
+}
+
+fn checked_entry_bytes(payload_bytes: usize, key_bytes: usize) -> Option<usize> {
+    payload_bytes.checked_add(key_bytes)
 }
 
 fn cache_key(request: &Request) -> String {
@@ -649,6 +659,14 @@ fn has_pragma_no_cache(request: &Request) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn cache_entry_size_overflow_is_rejected_without_saturating() {
+        assert_eq!(super::checked_entry_bytes(10, 20), Some(30));
+        assert_eq!(super::checked_entry_bytes(0, 0), Some(0));
+        assert_eq!(super::checked_entry_bytes(usize::MAX, 1), None);
+        assert_eq!(super::checked_entry_bytes(usize::MAX - 3, 4), None);
+    }
+
     #[test]
     fn cache_key_uses_canonical_host_default_port_and_ignores_fragment() {
         let implicit = super::cache_key(&super::Request::new(
