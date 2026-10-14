@@ -139,7 +139,26 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 if retained.is_empty() {
                     continue;
                 }
-                if !append_node(&mut root, &mut stack, Node::text(retained)) {
+                // Text directly inside a table, section, or row is foster-parented
+                // before the nearest open table instead of becoming table content.
+                let foster_table = stack.iter().rposition(|node| node.tag_name() == Some("table"));
+                let foster_parent = foster_table.filter(|&table_position| {
+                    !stack[table_position + 1..]
+                        .iter()
+                        .any(|node| matches!(node.tag_name(), Some("td" | "th")))
+                        && stack[table_position + 1..].iter().all(|node| {
+                            matches!(
+                                node.tag_name(),
+                                Some("tbody" | "thead" | "tfoot" | "tr" | "table")
+                            )
+                        })
+                });
+                let appended = if let Some(table_position) = foster_parent {
+                    append_node(&mut root, &mut stack[..table_position], Node::text(retained))
+                } else {
+                    append_node(&mut root, &mut stack, Node::text(retained))
+                };
+                if !appended {
                     break;
                 }
                 retained_text_bytes += retained.len();
@@ -953,6 +972,28 @@ mod tests {
         assert!(forms[0].find_by_id("first").is_some());
         assert!(forms[0].find_by_id("second").is_some());
         assert!(forms[0].find_by_id("third").is_none());
+    }
+
+    #[test]
+    fn text_inside_table_is_foster_parented_before_the_table() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<div>start<table>before<tr><td>cell</td></tr>after</table>end</div>",
+        ));
+        let div = root.find_first_element("div").expect("div retained");
+        let table = div.find_first_element("table").expect("table retained");
+
+        assert_eq!(div.children.len(), 3);
+        assert!(matches!(
+            &div.children[0].kind,
+            super::super::dom::NodeKind::Text(text) if text == "startbeforeafter"
+        ));
+        assert_eq!(div.children[1].tag_name(), Some("table"));
+        assert_eq!(table.text_content(), "cell");
+        assert!(matches!(
+            &div.children[2].kind,
+            super::super::dom::NodeKind::Text(text) if text == "end"
+        ));
+        assert_eq!(div.text_content(), "startbeforeaftercellend");
     }
 
     #[test]
