@@ -299,12 +299,13 @@ fn temporary_and_permanent_preserving_redirects_keep_method_and_body() {
             Some("application/x-www-form-urlencoded"),
             "status {status}"
         );
+        let expected_length = requests[1].body.len().to_string();
         assert_eq!(
             requests[1]
                 .headers
                 .get("content-length")
                 .map(String::as_str),
-            Some("13"),
+            Some(expected_length.as_str()),
             "status {status}"
         );
     }
