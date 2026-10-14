@@ -18,7 +18,7 @@ These percentages are engineering estimates of **functional coverage**, not line
 | Subsystem | Progress | Current state |
 |---|---:|---|
 | Foundation / architecture | ~90% | Memory budgets, resource cache, event loop, modular layers and CI |
-| HTML tokenizer/parser | ~61% | Working tree builder with void elements, implicit `tbody`, nested-form recovery, RCDATA/plaintext handling, implied structure, text-node coalescing, null replacement and expanded implied-end-tag recovery; full HTML5 tree construction remains incomplete |
+| HTML tokenizer/parser | ~62% | Working tree builder with void elements, implicit `tbody`, nested-form recovery, RCDATA/plaintext handling, bogus-comment handling for unknown declarations, implied structure, text-node coalescing and null replacement; full HTML5 tree construction remains incomplete |
 | DOM | ~53% | Node/attribute model, iterative preorder descendant traversal, id/class lookup and mutation primitives; namespaces and a complete standards DOM remain |
 | CSS tokenizer/parser | ~60% | Declarations, shorthands, growing value syntax and decoded CSS escapes in identifiers/hash tokens |
 | CSS selectors | ~65% | Specificity, attributes, siblings, form-state and structural pseudo-classes |
@@ -89,6 +89,7 @@ The implementation structure may evolve as the engine grows, but renderer and pl
 - Implicit `tbody` insertion for table rows without an explicit section.
 - Ignore nested form start tags while a form is open.
 - Tokenize `title`/`textarea` as RCDATA and `plaintext` through EOF.
+- Treat unknown declarations, processing-instruction-like markup and CDATA syntax outside foreign content as bogus comments.
 - Void elements.
 - Implicit html/head/body structure.
 - Paragraph and list auto-closing rules.
