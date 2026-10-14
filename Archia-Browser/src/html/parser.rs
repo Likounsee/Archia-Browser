@@ -831,7 +831,7 @@ mod tests {
             "<table><tbody><tr><td>one<td>two<tr><th>three</tbody><tbody><tr><td>four",
         ));
         let table = root.find_first_element("table").expect("table retained");
-        assert_eq!(table.children.len(), 1);
+        assert_eq!(table.children.len(), 2);
         let first_section = &table.children[0];
         assert_eq!(first_section.tag_name(), Some("tbody"));
         assert_eq!(first_section.children.len(), 2);
@@ -840,6 +840,9 @@ mod tests {
         assert_eq!(first_section.children[0].children[0].text_content(), "one");
         assert_eq!(first_section.children[0].children[1].text_content(), "two");
         assert_eq!(first_section.children[1].children[0].text_content(), "three");
+        let second_section = &table.children[1];
+        assert_eq!(second_section.tag_name(), Some("tbody"));
+        assert_eq!(second_section.children[0].children[0].text_content(), "four");
     }
 
     #[test]
