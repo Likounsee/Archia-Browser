@@ -114,9 +114,7 @@ impl HttpCache {
         if !request_can_store(request) {
             // Explicit cache-bypass directives invalidate the old entry, but
             // a credentialed request must not evict an unrelated public copy.
-            if request_forces_cache_bypass(request)
-                && request_can_invalidate_cache_entry(request)
-            {
+            if request_forces_cache_bypass(request) && request_can_invalidate_cache_entry(request) {
                 self.entries.remove(&key);
             }
             return;
