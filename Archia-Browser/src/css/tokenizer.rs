@@ -221,7 +221,10 @@ fn consume_number(first: char, chars: &mut std::iter::Peekable<std::str::Chars<'
         value.push(chars.next().expect("peeked digit must exist"));
     }
 
-    if first != '.' && chars.peek() == Some(&'.') {
+    let mut decimal_lookahead = chars.clone();
+    let has_fraction = decimal_lookahead.next() == Some('.')
+        && decimal_lookahead.peek().is_some_and(|ch| ch.is_ascii_digit());
+    if first != '.' && has_fraction {
         value.push(chars.next().expect("peeked decimal point must exist"));
         while chars.peek().is_some_and(|ch| ch.is_ascii_digit()) {
             value.push(chars.next().expect("peeked digit must exist"));
@@ -518,7 +521,7 @@ mod tests {
                 CssToken::Number("1".into()),
                 CssToken::Ident("-2".into()),
                 CssToken::Whitespace,
-                CssToken::Number("1.".into()),
+                CssToken::Number("1".into()),
                 CssToken::Delim('.'),
                 CssToken::Number(".2".into()),
             ]
