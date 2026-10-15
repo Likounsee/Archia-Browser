@@ -468,12 +468,19 @@ impl Transport for LocalFileTransport {
             std::fs::canonicalize(&path).map_err(|_| TransportError::ConnectionFailed)?;
         let mut authorized_root = None;
         for root in &self.allowed_roots {
-            // Roots are explicit grants from the embedding application, so
-            // resolve a trusted root's own aliases before validating it.
-            let canonical_root =
-                std::fs::canonicalize(root).map_err(|_| TransportError::ConnectionFailed)?;
-            reject_symlink_path_components(&canonical_root)?;
-            if !canonical_root.is_dir() {
+            // A grant can become unavailable after configuration (for example,
+            // a removable directory disappears). Skip that grant and continue
+            // checking the remaining pinned grants instead of making one stale
+            // entry disable access to every other authorized root.
+            let Ok(canonical_root) = std::fs::canonicalize(root) else {
+                continue;
+            };
+            // A root that has become a symlink or otherwise fails validation
+            // is no longer a usable grant. Fail closed for that root, not for
+            // unrelated roots in the same allowlist.
+            if reject_symlink_path_components(&canonical_root).is_err()
+                || !canonical_root.is_dir()
+            {
                 continue;
             }
             if canonical_path.starts_with(&canonical_root) {
@@ -3086,6 +3093,33 @@ mod tests {
             percent_decode("/tmp/caf%C3%A9.html").unwrap(),
             "/tmp/café.html"
         );
+    }
+
+    #[test]
+    fn unavailable_allowed_root_does_not_disable_other_valid_roots() {
+        let base = std::env::temp_dir().join(format!(
+            "archia-browser-multiple-roots-{}",
+            std::process::id()
+        ));
+        let valid_root = base.join("valid");
+        let missing_root = base.join("missing");
+        std::fs::create_dir_all(&valid_root).unwrap();
+        let page = valid_root.join("page.html");
+        std::fs::write(&page, b"<body>valid grant</body>").unwrap();
+
+        // The missing root is first on purpose: stale grants must not prevent
+        // the transport from reaching a later, still-authorized directory.
+        let transport = LocalFileTransport::new()
+            .with_allowed_roots([missing_root, valid_root.clone()]);
+        let request = Request::new(Url::parse(&local_file_test_url(&page)).unwrap());
+        let response = transport
+            .send(&request)
+            .expect("a stale grant must not disable another valid root");
+        assert_eq!(response.body, b"<body>valid grant</body>");
+
+        std::fs::remove_file(page).unwrap();
+        std::fs::remove_dir(valid_root).unwrap();
+        std::fs::remove_dir(base).unwrap();
     }
 
     #[cfg(unix)]
