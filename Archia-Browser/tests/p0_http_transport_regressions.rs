@@ -403,3 +403,41 @@ fn transport_rejects_synthesized_headers_that_exceed_request_header_count() {
         Err(TransportError::InvalidRequest)
     );
 }
+
+#[test]
+fn request_content_length_must_match_body_before_opening_a_connection() {
+    let request = Request::new(Url::parse("http://127.0.0.1:1/upload").unwrap())
+        .with_method(archia_browser::net::HttpMethod::Post)
+        .with_header("Content-Length", "4")
+        .with_body(b"abc".to_vec());
+
+    assert_eq!(
+        HttpTransport::new().send(&request),
+        Err(TransportError::InvalidRequest)
+    );
+}
+
+#[test]
+fn mixed_case_transfer_encoding_is_rejected_before_opening_a_connection() {
+    let request = Request::new(Url::parse("http://127.0.0.1:1/upload").unwrap())
+        .with_method(archia_browser::net::HttpMethod::Post)
+        .with_header("TrAnSfEr-EnCoDiNg", "chunked")
+        .with_body(b"abc".to_vec());
+
+    assert_eq!(
+        HttpTransport::new().send(&request),
+        Err(TransportError::InvalidRequest)
+    );
+}
+
+#[test]
+fn oversized_request_header_block_is_rejected_before_opening_a_connection() {
+    let request = Request::new(Url::parse("http://127.0.0.1:1/").unwrap())
+        .with_header("X-Oversized", "x".repeat(64 * 1024));
+
+    assert_eq!(
+        HttpTransport::new().send(&request),
+        Err(TransportError::InvalidRequest)
+    );
+}
+
