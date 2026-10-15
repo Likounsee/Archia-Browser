@@ -478,9 +478,7 @@ impl Transport for LocalFileTransport {
             // A root that has become a symlink or otherwise fails validation
             // is no longer a usable grant. Fail closed for that root, not for
             // unrelated roots in the same allowlist.
-            if reject_symlink_path_components(&canonical_root).is_err()
-                || !canonical_root.is_dir()
-            {
+            if reject_symlink_path_components(&canonical_root).is_err() || !canonical_root.is_dir() {
                 continue;
             }
             if canonical_path.starts_with(&canonical_root) {
@@ -3109,8 +3107,8 @@ mod tests {
 
         // The missing root is first on purpose: stale grants must not prevent
         // the transport from reaching a later, still-authorized directory.
-        let transport = LocalFileTransport::new()
-            .with_allowed_roots([missing_root, valid_root.clone()]);
+        let transport =
+            LocalFileTransport::new().with_allowed_roots([missing_root, valid_root.clone()]);
         let request = Request::new(Url::parse(&local_file_test_url(&page)).unwrap());
         let response = transport
             .send(&request)
