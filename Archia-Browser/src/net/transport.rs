@@ -1509,10 +1509,10 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
     let serialized_header_count = request
         .headers
         .len()
-        .saturating_sub(usize::from(has_connection_header))
-        .saturating_add(usize::from(!has_host_header))
+        .saturating_sub(has_connection_header as usize)
+        .saturating_add((!has_host_header) as usize)
         .saturating_add(1)
-        .saturating_add(usize::from(request.has_body() && !has_content_length_header));
+        .saturating_add((request.has_body() && !has_content_length_header) as usize);
     if serialized_header_count > MAX_REQUEST_HEADER_COUNT {
         return Err(TransportError::InvalidRequest);
     }
