@@ -183,3 +183,48 @@ fn transport_accepts_connection_naming_an_absent_header_end_to_end() {
     assert_eq!(response.body, b"OK");
     worker.join().expect("test server thread");
 }
+
+
+#[test]
+fn transport_accepts_early_hints_before_final_response_end_to_end() {
+    let (url, worker) = serve_once(
+        b"HTTP/1.1 103 Early Hints\r\nLink: </style.css>; rel=preload\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK",
+    );
+    let request = Request::new(Url::parse(&url).unwrap());
+
+    let response = HttpTransport::new()
+        .send(&request)
+        .expect("a valid informational response must not hide the final response");
+    assert_eq!(response.status, 200);
+    assert_eq!(response.body, b"OK");
+    assert!(response.header("link").is_none());
+    worker.join().expect("test server thread");
+}
+
+#[test]
+fn transport_rejects_case_insensitive_duplicate_content_length_end_to_end() {
+    let (url, worker) = serve_once(
+        b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\ncontent-length: 2\r\nConnection: close\r\n\r\nOK",
+    );
+    let request = Request::new(Url::parse(&url).unwrap());
+
+    assert_eq!(
+        HttpTransport::new().send(&request),
+        Err(TransportError::ConnectionFailed)
+    );
+    worker.join().expect("test server thread");
+}
+
+#[test]
+fn transport_rejects_non_ascii_whitespace_in_content_length_end_to_end() {
+    let (url, worker) = serve_once(
+        b"HTTP/1.1 200 OK\r\nContent-Length: \xc2\xa02\r\nConnection: close\r\n\r\nOK",
+    );
+    let request = Request::new(Url::parse(&url).unwrap());
+
+    assert_eq!(
+        HttpTransport::new().send(&request),
+        Err(TransportError::ConnectionFailed)
+    );
+    worker.join().expect("test server thread");
+}
