@@ -518,7 +518,7 @@ mod tests {
             CssTokenizer::tokenize("1-2 1..2"),
             vec![
                 CssToken::Number("1".into()),
-                CssToken::Ident("-2".into()),
+                CssToken::Number("-2".into()),
                 CssToken::Whitespace,
                 CssToken::Number("1".into()),
                 CssToken::Delim('.'),
