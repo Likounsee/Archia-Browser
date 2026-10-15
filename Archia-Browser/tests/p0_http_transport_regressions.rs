@@ -30,13 +30,14 @@ fn serve_once(response: &'static [u8]) -> (String, thread::JoinHandle<()>) {
 
 #[test]
 fn transport_enforces_total_response_limit_at_the_read_boundary() {
-    const RESPONSE: &[u8] =
-        b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK";
+    const RESPONSE: &[u8] = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK";
     let (url, worker) = serve_once(RESPONSE);
     let request = Request::new(Url::parse(&url).unwrap());
 
     assert_eq!(
-        HttpTransport::new().with_limits(RESPONSE.len() - 1, 1024).send(&request),
+        HttpTransport::new()
+            .with_limits(RESPONSE.len() - 1, 1024)
+            .send(&request),
         Err(TransportError::ResponseTooLarge)
     );
     worker.join().expect("test server thread");
