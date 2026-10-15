@@ -993,7 +993,6 @@ mod character_reference_tests {
     }
 }
 
-
 #[cfg(test)]
 mod eof_regression_tests {
     use super::{HtmlToken, HtmlTokenizer};
@@ -1028,6 +1027,7 @@ mod eof_regression_tests {
             Some(HtmlToken::Text(value)) if value == "<🧪 attribute='value"
         ));
     }
+
     #[test]
     fn tokenization_stops_at_the_document_input_limit() {
         let input = "x".repeat(4 * 1024 * 1024 + 32);
