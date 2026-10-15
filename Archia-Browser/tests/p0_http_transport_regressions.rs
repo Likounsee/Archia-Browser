@@ -227,7 +227,6 @@ fn transport_rejects_non_ascii_whitespace_in_content_length_end_to_end() {
     worker.join().expect("test server thread");
 }
 
-
 #[test]
 fn transport_rejects_unsupported_protocol_upgrade_end_to_end() {
     let (url, worker) = serve_once(
