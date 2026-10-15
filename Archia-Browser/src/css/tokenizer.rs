@@ -122,13 +122,15 @@ impl CssTokenizer {
                                 }
                                 Some(_) => {
                                     if let Some(escaped) = consume_escape(&mut chars) {
-                                        value.push(escaped);
+                                        if !append_token_char(&mut value, escaped) {
+                                            return tokens;
+                                        }
                                     }
                                 }
                                 None => break,
                             }
-                        } else {
-                            value.push(next);
+                        } else if !append_token_char(&mut value, next) {
+                            return tokens;
                         }
                     }
                     if value.len() > MAX_CSS_TOKEN_TEXT_BYTES {
@@ -149,8 +151,14 @@ impl CssTokenizer {
                     push_token!(CssToken::Number(value));
                 }
                 c if is_ident_start(c) => {
-                    let mut value = String::from(c);
-                    value.push_str(&consume_ident(&mut chars));
+                    let mut value = String::new();
+                    if !append_token_char(&mut value, c) {
+                        return tokens;
+                    }
+                    let rest = consume_ident(&mut chars);
+                    if !append_token_str(&mut value, &rest) {
+                        return tokens;
+                    }
                     if value.len() > MAX_CSS_TOKEN_TEXT_BYTES {
                         return tokens;
                     }
@@ -159,8 +167,13 @@ impl CssTokenizer {
                 '\\' if chars.peek().is_some_and(|next| !is_css_newline(*next)) => {
                     if let Some(escaped) = consume_escape(&mut chars) {
                         let mut value = String::new();
-                        value.push(escaped);
-                        value.push_str(&consume_ident(&mut chars));
+                        if !append_token_char(&mut value, escaped) {
+                            return tokens;
+                        }
+                        let rest = consume_ident(&mut chars);
+                        if !append_token_str(&mut value, &rest) {
+                            return tokens;
+                        }
                         if value.len() > MAX_CSS_TOKEN_TEXT_BYTES {
                             return tokens;
                         }
@@ -312,12 +325,18 @@ fn consume_ident(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String
     let mut value = String::new();
     while let Some(next) = chars.peek().copied() {
         if is_name_code_point(next) {
-            value.push(next);
+            if !append_token_char(&mut value, next) {
+                value.push('\0');
+                return value;
+            }
             chars.next();
         } else if next == '\\' && starts_valid_escape(chars) {
             chars.next();
             if let Some(escaped) = consume_escape(chars) {
-                value.push(escaped);
+                if !append_token_char(&mut value, escaped) {
+                    value.push('\0');
+                    return value;
+                }
             }
         } else {
             break;
