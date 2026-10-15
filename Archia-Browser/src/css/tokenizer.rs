@@ -98,8 +98,20 @@ impl CssTokenizer {
                 '"' | '\'' => {
                     let quote = ch;
                     let mut value = String::new();
+                    let mut terminated = false;
+                    let mut ended_on_newline = false;
                     while let Some(next) = chars.next() {
                         if next == quote {
+                            terminated = true;
+                            break;
+                        }
+                        if is_css_newline(next) {
+                            // An unescaped newline ends a CSS string token. Do not
+                            // swallow the rest of the stylesheet looking for a quote.
+                            ended_on_newline = true;
+                            if next == '\r' && chars.peek() == Some(&'\n') {
+                                chars.next();
+                            }
                             break;
                         }
                         if next == '\\' {
@@ -124,7 +136,15 @@ impl CssTokenizer {
                     if value.len() > MAX_CSS_TOKEN_TEXT_BYTES {
                         return tokens;
                     }
+                    // Keep the prefix as a string token for the current tokenizer
+                    // API, then reintroduce the consumed newline as CSS whitespace.
                     push_token!(CssToken::String(value));
+                    if ended_on_newline {
+                        if !matches!(tokens.last(), Some(CssToken::Whitespace)) {
+                            push_token!(CssToken::Whitespace);
+                        }
+                    }
+                    let _ = terminated;
                 }
                 c if c.is_ascii_digit()
                     || c == '.' && chars.peek().is_some_and(|n| n.is_ascii_digit()) =>
@@ -398,6 +418,48 @@ mod tests {
         assert_eq!(
             CssTokenizer::tokenize("foo\\26\u{00A0}bar"),
             vec![CssToken::Ident("foo&\u{00A0}bar".into())]
+        );
+    }
+
+
+    #[test]
+    fn unescaped_newline_terminates_a_string_without_swallowing_following_rules() {
+        assert_eq!(
+            CssTokenizer::tokenize("\"broken\ncolor: red;"),
+            vec![
+                CssToken::String("broken".into()),
+                CssToken::Whitespace,
+                CssToken::Ident("color".into()),
+                CssToken::Colon,
+                CssToken::Whitespace,
+                CssToken::Ident("red".into()),
+                CssToken::Semicolon,
+            ]
+        );
+    }
+
+    #[test]
+    fn carriage_return_line_feed_terminates_a_string_as_one_whitespace_token() {
+        assert_eq!(
+            CssTokenizer::tokenize("\"broken\r\nwidth: 10px;"),
+            vec![
+                CssToken::String("broken".into()),
+                CssToken::Whitespace,
+                CssToken::Ident("width".into()),
+                CssToken::Colon,
+                CssToken::Whitespace,
+                CssToken::Number("10".into()),
+                CssToken::Ident("px".into()),
+                CssToken::Semicolon,
+            ]
+        );
+    }
+
+    #[test]
+    fn escaped_newline_remains_a_string_line_continuation() {
+        assert_eq!(
+            CssTokenizer::tokenize("\"left\\\nright\""),
+            vec![CssToken::String("leftright".into())]
         );
     }
 
