@@ -938,9 +938,8 @@ mod tests {
 
     #[test]
     fn unescaped_newline_in_string_does_not_hide_following_stylesheet_rules() {
-        let sheet = StyleSheet::parse(
-            ".broken { content: \"bad\n; color: red; } .valid { color: blue; }",
-        );
+        let sheet =
+            StyleSheet::parse(".broken { content: \"bad\\n; color: red; } .valid { color: blue; }");
 
         assert_eq!(sheet.rules.len(), 2);
         assert_eq!(
