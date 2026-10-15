@@ -98,11 +98,9 @@ impl CssTokenizer {
                 '"' | '\'' => {
                     let quote = ch;
                     let mut value = String::new();
-                    let mut terminated = false;
                     let mut ended_on_newline = false;
                     while let Some(next) = chars.next() {
                         if next == quote {
-                            terminated = true;
                             break;
                         }
                         if is_css_newline(next) {
@@ -144,7 +142,6 @@ impl CssTokenizer {
                             push_token!(CssToken::Whitespace);
                         }
                     }
-                    let _ = terminated;
                 }
                 c if c.is_ascii_digit()
                     || c == '.' && chars.peek().is_some_and(|n| n.is_ascii_digit()) =>
