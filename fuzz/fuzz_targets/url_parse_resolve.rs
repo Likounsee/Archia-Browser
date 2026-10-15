@@ -15,6 +15,9 @@ fuzz_target!(|data: &[u8]| {
     if let Ok(base) = Url::parse("https://example.invalid/a/b/index.html?old=1#fragment") {
         let _ = base.resolve(input);
     }
+    if let Ok(base) = Url::parse("file:///safe/index.html") {
+        let _ = base.resolve(input);
+    }
     if let Ok(base) = Url::parse("file:///C:/Users/example/index.html") {
         let _ = base.resolve(input);
     }
