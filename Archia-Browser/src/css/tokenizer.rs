@@ -189,7 +189,6 @@ fn try_push_css_token(tokens: &mut Vec<CssToken>, token: CssToken) -> bool {
     true
 }
 
-
 /// Whether the current character starts a CSS number, including an optional sign.
 fn starts_number(first: char, chars: &std::iter::Peekable<std::str::Chars<'_>>) -> bool {
     if first.is_ascii_digit() {
@@ -223,7 +222,9 @@ fn consume_number(first: char, chars: &mut std::iter::Peekable<std::str::Chars<'
 
     let mut decimal_lookahead = chars.clone();
     let has_fraction = decimal_lookahead.next() == Some('.')
-        && decimal_lookahead.peek().is_some_and(|ch| ch.is_ascii_digit());
+        && decimal_lookahead
+            .peek()
+            .is_some_and(|ch| ch.is_ascii_digit());
     if first != '.' && has_fraction {
         value.push(chars.next().expect("peeked decimal point must exist"));
         while chars.peek().is_some_and(|ch| ch.is_ascii_digit()) {
@@ -470,7 +471,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn unescaped_newline_terminates_a_string_without_swallowing_following_rules() {
         assert_eq!(
@@ -511,7 +511,6 @@ mod tests {
             vec![CssToken::String("leftright".into())]
         );
     }
-
 
     #[test]
     fn number_tokens_stop_before_adjacent_signs_and_extra_decimal_points() {
