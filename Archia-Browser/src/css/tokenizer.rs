@@ -207,26 +207,40 @@ fn starts_number(first: char, chars: &std::iter::Peekable<std::str::Chars<'_>>) 
 
 /// Consume the CSS number grammar without swallowing adjacent delimiters or signs.
 fn consume_number(first: char, chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String {
-    let mut value = String::from(first);
+    let mut value = String::new();
+    if !append_token_char(&mut value, first) {
+        value.push('\0');
+        return value;
+    }
     if matches!(first, '+' | '-') {
         if let Some(next) = chars.next() {
-            value.push(next);
+            if !append_token_char(&mut value, next) {
+                value.push('\0');
+                return value;
+            }
         }
     }
 
     while chars.peek().is_some_and(|ch| ch.is_ascii_digit()) {
-        value.push(chars.next().expect("peeked digit must exist"));
+        if !append_token_char(&mut value, chars.next().expect("peeked digit must exist")) {
+            value.push('\0');
+            return value;
+        }
     }
 
     let mut decimal_lookahead = chars.clone();
     let has_fraction = decimal_lookahead.next() == Some('.')
-        && decimal_lookahead
-            .peek()
-            .is_some_and(|ch| ch.is_ascii_digit());
+        && decimal_lookahead.peek().is_some_and(|ch| ch.is_ascii_digit());
     if first != '.' && has_fraction {
-        value.push(chars.next().expect("peeked decimal point must exist"));
+        if !append_token_char(&mut value, chars.next().expect("peeked decimal point must exist")) {
+            value.push('\0');
+            return value;
+        }
         while chars.peek().is_some_and(|ch| ch.is_ascii_digit()) {
-            value.push(chars.next().expect("peeked digit must exist"));
+            if !append_token_char(&mut value, chars.next().expect("peeked digit must exist")) {
+                value.push('\0');
+                return value;
+            }
         }
     }
 
@@ -237,12 +251,21 @@ fn consume_number(first: char, chars: &mut std::iter::Peekable<std::str::Chars<'
             lookahead.next();
         }
         if lookahead.peek().is_some_and(|ch| ch.is_ascii_digit()) {
-            value.push(chars.next().expect("peeked exponent must exist"));
-            if chars.peek().is_some_and(|ch| matches!(ch, '+' | '-')) {
-                value.push(chars.next().expect("peeked exponent sign must exist"));
+            if !append_token_char(&mut value, chars.next().expect("peeked exponent must exist")) {
+                value.push('\0');
+                return value;
+            }
+            if chars.peek().is_some_and(|ch| matches!(ch, '+' | '-'))
+                && !append_token_char(&mut value, chars.next().expect("peeked exponent sign must exist"))
+            {
+                value.push('\0');
+                return value;
             }
             while chars.peek().is_some_and(|ch| ch.is_ascii_digit()) {
-                value.push(chars.next().expect("peeked exponent digit must exist"));
+                if !append_token_char(&mut value, chars.next().expect("peeked exponent digit must exist")) {
+                    value.push('\0');
+                    return value;
+                }
             }
         }
     }
