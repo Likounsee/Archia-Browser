@@ -7,6 +7,10 @@ use archia_browser::net::{
 };
 
 fn serve_once(response: &'static [u8]) -> (String, thread::JoinHandle<()>) {
+    serve_once_owned(response.to_vec())
+}
+
+fn serve_once_owned(response: Vec<u8>) -> (String, thread::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
     let address = listener.local_addr().expect("listener address");
     let worker = thread::spawn(move || {
@@ -22,7 +26,7 @@ fn serve_once(response: &'static [u8]) -> (String, thread::JoinHandle<()>) {
                 return;
             }
         }
-        stream.write_all(response).expect("write test response");
+        stream.write_all(&response).expect("write test response");
         stream.flush().expect("flush test response");
     });
     (format!("http://{address}/"), worker)
@@ -353,10 +357,7 @@ fn transport_rejects_response_with_too_many_headers_end_to_end() {
     }
     response.extend_from_slice(b"Content-Length: 0\r\nConnection: close\r\n\r\n");
 
-    // The existing one-shot server helper accepts a static response. Leak only
-    // this small test fixture so the spawned server can own a stable slice.
-    let response: &'static [u8] = Box::leak(response.into_boxed_slice());
-    let (url, worker) = serve_once(response);
+    let (url, worker) = serve_once_owned(response);
     let request = Request::new(Url::parse(&url).expect("valid test URL"));
 
     assert_eq!(

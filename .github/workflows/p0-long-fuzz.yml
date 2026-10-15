@@ -12,6 +12,11 @@ on:
     branches: ["Archia-Browser"]
     paths:
       - ".github/workflows/p0-long-fuzz.yml"
+      - "Archia-Browser/src/**"
+      - "Archia-Browser/tests/**"
+      - "fuzz/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
   workflow_dispatch:
 
 permissions:
