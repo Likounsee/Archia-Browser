@@ -31,7 +31,7 @@ fn serve_once(response: &'static [u8]) -> (String, thread::JoinHandle<()>) {
 #[test]
 fn transport_enforces_total_response_limit_at_the_read_boundary() {
     const RESPONSE: &[u8] =
-        b"HTTP/1.1 200 OK\\r\\nContent-Length: 2\\r\\nConnection: close\\r\\n\\r\\nOK";
+        b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK";
     let (url, worker) = serve_once(RESPONSE);
     let request = Request::new(Url::parse(&url).unwrap());
 
@@ -45,10 +45,10 @@ fn transport_enforces_total_response_limit_at_the_read_boundary() {
 #[test]
 fn transport_enforces_header_limit_when_delimiter_arrives_in_same_read() {
     const RESPONSE: &[u8] =
-        b"HTTP/1.1 200 OK\\r\\nContent-Length: 2\\r\\nConnection: close\\r\\n\\r\\nOK";
+        b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK";
     let header_bytes = RESPONSE
         .windows(4)
-        .position(|window| window == b"\\r\\n\\r\\n")
+        .position(|window| window == b"\r\n\r\n")
         .expect("fixture has a complete header delimiter");
     let (url, worker) = serve_once(RESPONSE);
     let request = Request::new(Url::parse(&url).unwrap());
