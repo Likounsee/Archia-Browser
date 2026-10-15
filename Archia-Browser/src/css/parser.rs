@@ -5,8 +5,12 @@ const MAX_CSS_DECLARATIONS: usize = 4_096;
 const MAX_CSS_DECLARATION_VALUE_BYTES: usize = 64 * 1024;
 
 fn append_bounded(value: &mut String, part: &str) -> bool {
-    let Some(next_len) = value.len().checked_add(part.len()) else { return false; };
-    if next_len > MAX_CSS_DECLARATION_VALUE_BYTES || value.try_reserve(part.len()).is_err() { return false; }
+    let Some(next_len) = value.len().checked_add(part.len()) else {
+        return false;
+    };
+    if next_len > MAX_CSS_DECLARATION_VALUE_BYTES || value.try_reserve(part.len()).is_err() {
+        return false;
+    }
     value.push_str(part);
     true
 }
@@ -46,9 +50,15 @@ pub fn parse_declarations(tokens: &[CssToken]) -> Vec<Property> {
         let mut value = String::new();
         while index < tokens.len() && !matches!(tokens.get(index), Some(CssToken::Semicolon)) {
             let appended = match &tokens[index] {
-                CssToken::Whitespace => value.ends_with(' ') || append_char_bounded(&mut value, ' '),
-                CssToken::Hash(v) => append_char_bounded(&mut value, '#') && append_bounded(&mut value, v),
-                CssToken::Ident(v) | CssToken::Number(v) | CssToken::String(v) => append_bounded(&mut value, v),
+                CssToken::Whitespace => {
+                    value.ends_with(' ') || append_char_bounded(&mut value, ' ')
+                }
+                CssToken::Hash(v) => {
+                    append_char_bounded(&mut value, '#') && append_bounded(&mut value, v)
+                }
+                CssToken::Ident(v) | CssToken::Number(v) | CssToken::String(v) => {
+                    append_bounded(&mut value, v)
+                }
                 CssToken::Delim(c) => append_char_bounded(&mut value, *c),
                 CssToken::Colon => append_char_bounded(&mut value, ':'),
                 CssToken::LeftParen => append_char_bounded(&mut value, '('),
@@ -92,11 +102,15 @@ mod tests {
     #[test]
     fn oversized_declaration_value_stops_before_unbounded_concatenation() {
         let tokens = vec![
-            CssToken::Ident("color".into()), CssToken::Colon,
+            CssToken::Ident("color".into()),
+            CssToken::Colon,
             CssToken::Ident("a".repeat(MAX_CSS_DECLARATION_VALUE_BYTES / 2)),
             CssToken::Ident("b".repeat(MAX_CSS_DECLARATION_VALUE_BYTES / 2 + 1)),
-            CssToken::Semicolon, CssToken::Ident("margin".into()), CssToken::Colon,
-            CssToken::Number("0".into()), CssToken::Semicolon,
+            CssToken::Semicolon,
+            CssToken::Ident("margin".into()),
+            CssToken::Colon,
+            CssToken::Number("0".into()),
+            CssToken::Semicolon,
         ];
         assert!(parse_declarations(&tokens).is_empty());
     }

@@ -187,6 +187,23 @@ fn try_push_css_token(tokens: &mut Vec<CssToken>, token: CssToken) -> bool {
     true
 }
 
+/// Append token text without exceeding the per-token budget.
+fn append_token_str(value: &mut String, part: &str) -> bool {
+    let Some(next_len) = value.len().checked_add(part.len()) else {
+        return false;
+    };
+    if next_len > MAX_CSS_TOKEN_TEXT_BYTES || value.try_reserve(part.len()).is_err() {
+        return false;
+    }
+    value.push_str(part);
+    true
+}
+
+fn append_token_char(value: &mut String, character: char) -> bool {
+    let mut encoded = [0; 4];
+    append_token_str(value, character.encode_utf8(&mut encoded))
+}
+
 /// Whether the current character starts a CSS number, including an optional sign.
 fn starts_number(first: char, chars: &std::iter::Peekable<std::str::Chars<'_>>) -> bool {
     if first.is_ascii_digit() {
@@ -232,7 +249,10 @@ fn consume_number(first: char, chars: &mut std::iter::Peekable<std::str::Chars<'
     let has_fraction = decimal_lookahead.next() == Some('.')
         && decimal_lookahead.peek().is_some_and(|ch| ch.is_ascii_digit());
     if first != '.' && has_fraction {
-        if !append_token_char(&mut value, chars.next().expect("peeked decimal point must exist")) {
+        if !append_token_char(
+            &mut value,
+            chars.next().expect("peeked decimal point must exist"),
+        ) {
             value.push('\0');
             return value;
         }
@@ -256,13 +276,19 @@ fn consume_number(first: char, chars: &mut std::iter::Peekable<std::str::Chars<'
                 return value;
             }
             if chars.peek().is_some_and(|ch| matches!(ch, '+' | '-'))
-                && !append_token_char(&mut value, chars.next().expect("peeked exponent sign must exist"))
+                && !append_token_char(
+                    &mut value,
+                    chars.next().expect("peeked exponent sign must exist"),
+                )
             {
                 value.push('\0');
                 return value;
             }
             while chars.peek().is_some_and(|ch| ch.is_ascii_digit()) {
-                if !append_token_char(&mut value, chars.next().expect("peeked exponent digit must exist")) {
+                if !append_token_char(
+                    &mut value,
+                    chars.next().expect("peeked exponent digit must exist"),
+                ) {
                     value.push('\0');
                     return value;
                 }
