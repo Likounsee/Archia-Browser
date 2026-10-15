@@ -67,6 +67,17 @@ fn transport_enforces_header_limit_when_delimiter_arrives_in_same_read() {
 }
 
 #[test]
+fn mismatched_host_header_is_rejected_before_opening_a_connection() {
+    let request = Request::new(Url::parse("http://127.0.0.1:1/").unwrap())
+        .with_header("Host", "attacker.example");
+
+    assert_eq!(
+        HttpTransport::new().send(&request),
+        Err(TransportError::InvalidRequest)
+    );
+}
+
+#[test]
 fn connect_method_is_rejected_before_opening_a_connection() {
     let request = Request::new(Url::parse("http://127.0.0.1:1/").unwrap())
         .with_method(archia_browser::net::HttpMethod::Connect);
