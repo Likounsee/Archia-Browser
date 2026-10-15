@@ -401,6 +401,15 @@ mod tests {
     }
 
     #[test]
+    fn direct_tokenizer_rejects_number_text_over_the_token_limit() {
+        let input = "7".repeat(MAX_CSS_TOKEN_TEXT_BYTES + 1);
+        let tokens = CssTokenizer::tokenize(&input);
+
+        // Oversized numeric tokens must be rejected during construction.
+        assert!(tokens.is_empty());
+    }
+
+    #[test]
     fn token_count_is_bounded_for_many_small_tokens() {
         let input = ":".repeat(MAX_CSS_TOKENS + 1);
         let tokens = CssTokenizer::tokenize(&input);
