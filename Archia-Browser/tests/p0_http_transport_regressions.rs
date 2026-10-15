@@ -464,4 +464,3 @@ fn connection_cannot_nominate_synthesized_content_length() {
         Err(TransportError::InvalidRequest)
     );
 }
-
