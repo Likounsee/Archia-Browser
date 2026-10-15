@@ -440,3 +440,28 @@ fn oversized_request_header_block_is_rejected_before_opening_a_connection() {
         Err(TransportError::InvalidRequest)
     );
 }
+
+#[test]
+fn connection_cannot_nominate_synthesized_host_header() {
+    let request = Request::new(Url::parse("http://127.0.0.1:1/").unwrap())
+        .with_header("Connection", "Host");
+
+    assert_eq!(
+        HttpTransport::new().send(&request),
+        Err(TransportError::InvalidRequest)
+    );
+}
+
+#[test]
+fn connection_cannot_nominate_synthesized_content_length() {
+    let request = Request::new(Url::parse("http://127.0.0.1:1/upload").unwrap())
+        .with_method(archia_browser::net::HttpMethod::Post)
+        .with_body(b"payload".to_vec())
+        .with_header("Connection", "Content-Length");
+
+    assert_eq!(
+        HttpTransport::new().send(&request),
+        Err(TransportError::InvalidRequest)
+    );
+}
+
