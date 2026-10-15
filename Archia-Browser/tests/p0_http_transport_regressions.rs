@@ -97,9 +97,8 @@ fn transport_rejects_connection_nominated_representation_header_end_to_end() {
 
 #[test]
 fn transport_rejects_connection_nominated_framing_header_end_to_end() {
-    let (url, worker) = serve_once(
-        b"HTTP/1.1 200 OK\r\nConnection: Content-Length\r\nContent-Length: 0\r\n\r\n",
-    );
+    let (url, worker) =
+        serve_once(b"HTTP/1.1 200 OK\r\nConnection: Content-Length\r\nContent-Length: 0\r\n\r\n");
     let request = Request::new(Url::parse(&url).unwrap());
 
     assert_eq!(
@@ -184,4 +183,3 @@ fn transport_accepts_connection_naming_an_absent_header_end_to_end() {
     assert_eq!(response.body, b"OK");
     worker.join().expect("test server thread");
 }
-
