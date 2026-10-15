@@ -139,9 +139,8 @@ fn transport_rejects_malformed_connection_tokens_end_to_end() {
 
 #[test]
 fn transport_accepts_connection_close_with_valid_framing_end_to_end() {
-    let (url, worker) = serve_once(
-        b"HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nOK",
-    );
+    let (url, worker) =
+        serve_once(b"HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nOK");
     let request = Request::new(Url::parse(&url).unwrap());
 
     let response = HttpTransport::new()
@@ -175,9 +174,8 @@ fn transport_preserves_multiple_set_cookie_headers_end_to_end() {
 
 #[test]
 fn transport_accepts_connection_naming_an_absent_header_end_to_end() {
-    let (url, worker) = serve_once(
-        b"HTTP/1.1 200 OK\r\nConnection: x-hop-by-hop\r\nContent-Length: 2\r\n\r\nOK",
-    );
+    let (url, worker) =
+        serve_once(b"HTTP/1.1 200 OK\r\nConnection: x-hop-by-hop\r\nContent-Length: 2\r\n\r\nOK");
     let request = Request::new(Url::parse(&url).unwrap());
 
     let response = HttpTransport::new()
