@@ -1022,13 +1022,12 @@ mod eof_regression_tests {
 
     #[test]
     fn malformed_tag_with_multibyte_prefix_does_not_panic() {
-        let tokens = HtmlTokenizer::tokenize("<🧪 attribute='value'>after");
+        let tokens = HtmlTokenizer::tokenize("<🧪 attribute='value");
         assert!(matches!(
             tokens.first(),
-            Some(HtmlToken::Text(value)) if value == "<🧪 attribute='value'>after"
+            Some(HtmlToken::Text(value)) if value == "<🧪 attribute='value"
         ));
     }
-
     #[test]
     fn tokenization_stops_at_the_document_input_limit() {
         let input = "x".repeat(4 * 1024 * 1024 + 32);
