@@ -82,3 +82,8 @@ These are code-presence observations, not a claim that all cases are complete:
 ## DOM lookup API note (2026-10-14)
 
 Attribute/class/name lookup helpers and combined tag filters improve DOM traversal ergonomics but are not security boundaries. They must not be used to authorize navigation, resource access or privileged operations. Collection queries allocate result vectors; large-document and allocation-failure cases remain covered by the parser/DOM input bounds and ongoing memory-accounting work, not by the lookup API itself.
+
+
+## Local-file allowlist availability note (2026-10-15)
+
+`LocalFileTransport` treats each configured root as an independent grant. If a root disappears or fails revalidation, that root is skipped and remaining grants are still checked; it must not turn a stale entry into a denial of access to unrelated authorized roots. The regression test `unavailable_allowed_root_does_not_disable_other_valid_roots` covers the availability invariant. This does not weaken the handle-relative open or symlink/reparse-point checks. Validation remains pending until CI passes on the exact commit SHA.
