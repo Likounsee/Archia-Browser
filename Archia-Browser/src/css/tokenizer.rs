@@ -228,7 +228,11 @@ fn consume_escape(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Optio
         while digits.len() < 6 && chars.peek().is_some_and(|next| next.is_ascii_hexdigit()) {
             digits.push(chars.next()?);
         }
-        if let Some(whitespace) = chars.peek().copied().filter(|next| is_css_whitespace(*next)) {
+        if let Some(whitespace) = chars
+            .peek()
+            .copied()
+            .filter(|next| is_css_whitespace(*next))
+        {
             chars.next();
             if whitespace == '\r' && chars.peek() == Some(&'\n') {
                 chars.next();
