@@ -300,7 +300,7 @@ fn parse_rule_blocks(input: &str, max_blocks: usize) -> Vec<(String, String)> {
                 escaped = false;
             } else if ch == '\\' {
                 escaped = true;
-            } else if ch == active_quote || is_css_newline(ch) {
+            } else if ch == active_quote || matches!(ch, '\n' | '\r' | '\u{000C}') {
                 // CSS strings cannot contain an unescaped newline. End the
                 // quoted region so a malformed value cannot hide later rules.
                 quote = None;
