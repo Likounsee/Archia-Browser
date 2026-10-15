@@ -226,3 +226,85 @@ fn transport_rejects_non_ascii_whitespace_in_content_length_end_to_end() {
     );
     worker.join().expect("test server thread");
 }
+
+
+#[test]
+fn transport_rejects_unsupported_protocol_upgrade_end_to_end() {
+    let (url, worker) = serve_once(
+        concat!(
+            "HTTP/1.1 101 Switching Protocols\r\n",
+            "Connection: Upgrade\r\n",
+            "Upgrade: websocket\r\n",
+            "\r\n"
+        )
+        .as_bytes(),
+    );
+    let request = Request::new(Url::parse(&url).unwrap());
+
+    assert_eq!(
+        HttpTransport::new().send(&request),
+        Err(TransportError::ConnectionFailed)
+    );
+    worker.join().expect("test server thread");
+}
+
+#[test]
+fn transport_rejects_invalid_http_header_field_name_end_to_end() {
+    let (url, worker) = serve_once(
+        concat!(
+            "HTTP/1.1 200 OK\r\n",
+            "Bad Header: value\r\n",
+            "Content-Length: 0\r\n",
+            "\r\n"
+        )
+        .as_bytes(),
+    );
+    let request = Request::new(Url::parse(&url).unwrap());
+
+    assert_eq!(
+        HttpTransport::new().send(&request),
+        Err(TransportError::ConnectionFailed)
+    );
+    worker.join().expect("test server thread");
+}
+
+#[test]
+fn transport_rejects_content_length_with_trailing_junk_end_to_end() {
+    let (url, worker) = serve_once(
+        concat!(
+            "HTTP/1.1 200 OK\r\n",
+            "Content-Length: 2x\r\n",
+            "Connection: close\r\n",
+            "\r\nOK"
+        )
+        .as_bytes(),
+    );
+    let request = Request::new(Url::parse(&url).unwrap());
+
+    assert_eq!(
+        HttpTransport::new().send(&request),
+        Err(TransportError::ConnectionFailed)
+    );
+    worker.join().expect("test server thread");
+}
+
+#[test]
+fn transport_rejects_transfer_encoding_and_content_length_together_end_to_end() {
+    let (url, worker) = serve_once(
+        concat!(
+            "HTTP/1.1 200 OK\r\n",
+            "Transfer-Encoding: chunked\r\n",
+            "Content-Length: 2\r\n",
+            "Connection: close\r\n",
+            "\r\n2\r\nOK\r\n0\r\n\r\n"
+        )
+        .as_bytes(),
+    );
+    let request = Request::new(Url::parse(&url).unwrap());
+
+    assert_eq!(
+        HttpTransport::new().send(&request),
+        Err(TransportError::ConnectionFailed)
+    );
+    worker.join().expect("test server thread");
+}
