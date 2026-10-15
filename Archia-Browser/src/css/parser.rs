@@ -4,6 +4,18 @@ use super::tokenizer::CssToken;
 const MAX_CSS_DECLARATIONS: usize = 4_096;
 const MAX_CSS_DECLARATION_VALUE_BYTES: usize = 64 * 1024;
 
+fn append_bounded(value: &mut String, part: &str) -> bool {
+    let Some(next_len) = value.len().checked_add(part.len()) else { return false; };
+    if next_len > MAX_CSS_DECLARATION_VALUE_BYTES || value.try_reserve(part.len()).is_err() { return false; }
+    value.push_str(part);
+    true
+}
+
+fn append_char_bounded(value: &mut String, character: char) -> bool {
+    let mut encoded = [0; 4];
+    append_bounded(value, character.encode_utf8(&mut encoded))
+}
+
 pub fn parse_declarations(tokens: &[CssToken]) -> Vec<Property> {
     let mut properties = Vec::new();
     let mut index = 0;
@@ -33,22 +45,19 @@ pub fn parse_declarations(tokens: &[CssToken]) -> Vec<Property> {
 
         let mut value = String::new();
         while index < tokens.len() && !matches!(tokens.get(index), Some(CssToken::Semicolon)) {
-            match &tokens[index] {
-                CssToken::Whitespace => {
-                    if !value.ends_with(' ') {
-                        value.push(' ');
-                    }
-                }
-                CssToken::Hash(v) => {
-                    value.push('#');
-                    value.push_str(v);
-                }
-                CssToken::Ident(v) | CssToken::Number(v) | CssToken::String(v) => value.push_str(v),
-                CssToken::Delim(c) => value.push(*c),
-                CssToken::Colon => value.push(':'),
-                CssToken::LeftParen => value.push('('),
-                CssToken::RightParen => value.push(')'),
-                CssToken::LeftBrace | CssToken::RightBrace | CssToken::Semicolon => {}
+            let appended = match &tokens[index] {
+                CssToken::Whitespace => value.ends_with(' ') || append_char_bounded(&mut value, ' '),
+                CssToken::Hash(v) => append_char_bounded(&mut value, '#') && append_bounded(&mut value, v),
+                CssToken::Ident(v) | CssToken::Number(v) | CssToken::String(v) => append_bounded(&mut value, v),
+                CssToken::Delim(c) => append_char_bounded(&mut value, *c),
+                CssToken::Colon => append_char_bounded(&mut value, ':'),
+                CssToken::LeftParen => append_char_bounded(&mut value, '('),
+                CssToken::RightParen => append_char_bounded(&mut value, ')'),
+                CssToken::LeftBrace | CssToken::RightBrace | CssToken::Semicolon => true,
+            };
+            if !appended {
+                // Stop before copying attacker-controlled token text beyond the declaration budget.
+                return properties;
             }
             index += 1;
         }
@@ -78,6 +87,18 @@ mod tests {
         let tokens = CssTokenizer::tokenize("background-color: #102030;");
         let properties = parse_declarations(&tokens);
         assert_eq!(properties[0].value, "#102030");
+    }
+
+    #[test]
+    fn oversized_declaration_value_stops_before_unbounded_concatenation() {
+        let tokens = vec![
+            CssToken::Ident("color".into()), CssToken::Colon,
+            CssToken::Ident("a".repeat(MAX_CSS_DECLARATION_VALUE_BYTES / 2)),
+            CssToken::Ident("b".repeat(MAX_CSS_DECLARATION_VALUE_BYTES / 2 + 1)),
+            CssToken::Semicolon, CssToken::Ident("margin".into()), CssToken::Colon,
+            CssToken::Number("0".into()), CssToken::Semicolon,
+        ];
+        assert!(parse_declarations(&tokens).is_empty());
     }
 
     #[test]
