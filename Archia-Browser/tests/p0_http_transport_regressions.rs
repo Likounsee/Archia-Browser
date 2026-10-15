@@ -184,7 +184,6 @@ fn transport_accepts_connection_naming_an_absent_header_end_to_end() {
     worker.join().expect("test server thread");
 }
 
-
 #[test]
 fn transport_accepts_early_hints_before_final_response_end_to_end() {
     let (url, worker) = serve_once(
