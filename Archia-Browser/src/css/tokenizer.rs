@@ -19,7 +19,7 @@ const MAX_CSS_TOKENS: usize = 100_000;
 const MAX_CSS_TOKEN_TEXT_BYTES: usize = 64 * 1024;
 
 fn is_css_whitespace(character: char) -> bool {
-    matches!(character, '\\t' | '\\n' | '\\u{000C}' | '\\r' | ' ')
+    matches!(character, '\t' | '\n' | '\u{000C}' | '\r' | ' ')
 }
 
 #[derive(Debug, Default)]
@@ -384,16 +384,16 @@ mod tests {
     #[test]
     fn unicode_space_characters_are_not_css_whitespace_tokens() {
         assert_eq!(
-            CssTokenizer::tokenize("\\u{00A0}\\u{2003}"),
-            vec![CssToken::Ident("\\u{00A0}\\u{2003}".into())]
+            CssTokenizer::tokenize("\u{00A0}\u{2003}"),
+            vec![CssToken::Ident("\u{00A0}\u{2003}".into())]
         );
     }
 
     #[test]
     fn unicode_space_does_not_terminate_a_css_hex_escape() {
         assert_eq!(
-            CssTokenizer::tokenize("foo\\\\26\\u{00A0}bar"),
-            vec![CssToken::Ident("foo&\\u{00A0}bar".into())]
+            CssTokenizer::tokenize("foo\\26\u{00A0}bar"),
+            vec![CssToken::Ident("foo&\u{00A0}bar".into())]
         );
     }
 
