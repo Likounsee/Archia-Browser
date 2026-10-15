@@ -261,7 +261,17 @@ impl Url {
                 .map_or("/", |(directory, _)| directory);
             normalize_path_for_scheme(&format!("{base}/{path}"), &self.scheme)
         };
-        if self.scheme == "file" && resolved_path.starts_with("//") {
+        // Match the checks performed by parse(): the local-file transport
+        // percent-decodes paths before filesystem access, so encoded separators
+        // and dot segments must be rejected after relative resolution as well.
+        // Otherwise a harmless-looking link can become traversal/UNC syntax only
+        // after the URL policy layer has normalized it.
+        if self.scheme == "file"
+            && (resolved_path.starts_with("//")
+                || contains_encoded_path_separator(&resolved_path)
+                || contains_encoded_windows_drive_colon(&resolved_path)
+                || contains_encoded_dot_segment(&resolved_path))
+        {
             return Err(UrlError::InvalidCharacter);
         }
 
@@ -891,6 +901,23 @@ mod tests {
             base.resolve("/D%3A/Windows/system.ini").unwrap_err(),
             UrlError::InvalidCharacter
         );
+    }
+
+    #[test]
+    fn resolving_file_urls_rejects_encoded_traversal_and_separators() {
+        let base = Url::parse("file:///safe/index.html").unwrap();
+        for reference in [
+            "%2e%2e/secret.txt",
+            ".%2e/secret.txt",
+            "%2f%2fserver/share",
+            "sub%5c..%5csecret.txt",
+        ] {
+            assert_eq!(
+                base.resolve(reference).unwrap_err(),
+                UrlError::InvalidCharacter,
+                "encoded file path syntax must be rejected: {reference}"
+            );
+        }
     }
 
     #[test]
