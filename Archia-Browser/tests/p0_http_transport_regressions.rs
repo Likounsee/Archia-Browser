@@ -80,3 +80,17 @@ fn transport_rejects_invalid_chunk_terminator_end_to_end() {
     );
     worker.join().expect("test server thread");
 }
+
+#[test]
+fn transport_rejects_connection_nominated_representation_header_end_to_end() {
+    let (url, worker) = serve_once(
+        b"HTTP/1.1 200 OK\r\nConnection: content-type\r\nContent-Type: text/html\r\nContent-Length: 0\r\n\r\n",
+    );
+    let request = Request::new(Url::parse(&url).unwrap());
+
+    assert_eq!(
+        HttpTransport::new().send(&request),
+        Err(TransportError::ConnectionFailed)
+    );
+    worker.join().expect("test server thread");
+}
