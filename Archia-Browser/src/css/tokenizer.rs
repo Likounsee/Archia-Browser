@@ -144,10 +144,9 @@ impl CssTokenizer {
                     }
                 }
                 c if starts_number(c, &chars) => {
-                    let value = consume_number(c, &mut chars);
-                    if value.len() > MAX_CSS_TOKEN_TEXT_BYTES {
+                    let Some(value) = consume_number(c, &mut chars) else {
                         return tokens;
-                    }
+                    };
                     push_token!(CssToken::Number(value));
                 }
                 c if is_ident_start(c) => {
@@ -236,25 +235,25 @@ fn starts_number(first: char, chars: &std::iter::Peekable<std::str::Chars<'_>>) 
 }
 
 /// Consume the CSS number grammar without swallowing adjacent delimiters or signs.
-fn consume_number(first: char, chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String {
+fn consume_number(
+    first: char,
+    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
+) -> Option<String> {
     let mut value = String::new();
     if !append_token_char(&mut value, first) {
-        value.resize(MAX_CSS_TOKEN_TEXT_BYTES + 1, '\0');
-        return value;
+        return None;
     }
     if matches!(first, '+' | '-') {
         if let Some(next) = chars.next() {
             if !append_token_char(&mut value, next) {
-                value.push('\0');
-                return value;
+                return None;
             }
         }
     }
 
     while chars.peek().is_some_and(|ch| ch.is_ascii_digit()) {
-        if !append_token_char(&mut value, chars.next().expect("peeked digit must exist")) {
-            value.push('\0');
-            return value;
+        if !append_token_char(&mut value, chars.next()?) {
+            return None;
         }
     }
 
@@ -264,17 +263,12 @@ fn consume_number(first: char, chars: &mut std::iter::Peekable<std::str::Chars<'
             .peek()
             .is_some_and(|ch| ch.is_ascii_digit());
     if first != '.' && has_fraction {
-        if !append_token_char(
-            &mut value,
-            chars.next().expect("peeked decimal point must exist"),
-        ) {
-            value.push('\0');
-            return value;
+        if !append_token_char(&mut value, chars.next()?) {
+            return None;
         }
         while chars.peek().is_some_and(|ch| ch.is_ascii_digit()) {
-            if !append_token_char(&mut value, chars.next().expect("peeked digit must exist")) {
-                value.push('\0');
-                return value;
+            if !append_token_char(&mut value, chars.next()?) {
+                return None;
             }
         }
     }
@@ -286,35 +280,23 @@ fn consume_number(first: char, chars: &mut std::iter::Peekable<std::str::Chars<'
             lookahead.next();
         }
         if lookahead.peek().is_some_and(|ch| ch.is_ascii_digit()) {
-            if !append_token_char(
-                &mut value,
-                chars.next().expect("peeked exponent must exist"),
-            ) {
-                value.push('\0');
-                return value;
+            if !append_token_char(&mut value, chars.next()?) {
+                return None;
             }
             if chars.peek().is_some_and(|ch| matches!(ch, '+' | '-'))
-                && !append_token_char(
-                    &mut value,
-                    chars.next().expect("peeked exponent sign must exist"),
-                )
+                && !append_token_char(&mut value, chars.next()?)
             {
-                value.push('\0');
-                return value;
+                return None;
             }
             while chars.peek().is_some_and(|ch| ch.is_ascii_digit()) {
-                if !append_token_char(
-                    &mut value,
-                    chars.next().expect("peeked exponent digit must exist"),
-                ) {
-                    value.push('\0');
-                    return value;
+                if !append_token_char(&mut value, chars.next()?) {
+                    return None;
                 }
             }
         }
     }
 
-    value
+    Some(value)
 }
 
 fn is_ident_start(c: char) -> bool {
