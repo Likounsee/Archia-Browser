@@ -152,3 +152,38 @@ fn transport_accepts_connection_close_with_valid_framing_end_to_end() {
     worker.join().expect("test server thread");
 }
 
+#[test]
+fn transport_preserves_multiple_set_cookie_headers_end_to_end() {
+    let (url, worker) = serve_once(
+        b"HTTP/1.1 200 OK\r\nSet-Cookie: first=one; Path=/\r\nSet-Cookie: second=two; Path=/\r\nContent-Length: 2\r\n\r\nOK",
+    );
+    let request = Request::new(Url::parse(&url).unwrap());
+
+    let response = HttpTransport::new()
+        .send(&request)
+        .expect("valid response with multiple cookies");
+    assert_eq!(
+        response
+            .set_cookie_headers()
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["first=one; Path=/", "second=two; Path=/"]
+    );
+    worker.join().expect("test server thread");
+}
+
+#[test]
+fn transport_accepts_connection_naming_an_absent_header_end_to_end() {
+    let (url, worker) = serve_once(
+        b"HTTP/1.1 200 OK\r\nConnection: x-hop-by-hop\r\nContent-Length: 2\r\n\r\nOK",
+    );
+    let request = Request::new(Url::parse(&url).unwrap());
+
+    let response = HttpTransport::new()
+        .send(&request)
+        .expect("a nominated but absent header does not make framing ambiguous");
+    assert_eq!(response.body, b"OK");
+    worker.join().expect("test server thread");
+}
+
