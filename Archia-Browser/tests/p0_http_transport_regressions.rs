@@ -29,6 +29,40 @@ fn serve_once(response: &'static [u8]) -> (String, thread::JoinHandle<()>) {
 }
 
 #[test]
+fn transport_enforces_total_response_limit_at_the_read_boundary() {
+    const RESPONSE: &[u8] =
+        b"HTTP/1.1 200 OK\\r\\nContent-Length: 2\\r\\nConnection: close\\r\\n\\r\\nOK";
+    let (url, worker) = serve_once(RESPONSE);
+    let request = Request::new(Url::parse(&url).unwrap());
+
+    assert_eq!(
+        HttpTransport::new().with_limits(RESPONSE.len() - 1, 1024).send(&request),
+        Err(TransportError::ResponseTooLarge)
+    );
+    worker.join().expect("test server thread");
+}
+
+#[test]
+fn transport_enforces_header_limit_when_delimiter_arrives_in_same_read() {
+    const RESPONSE: &[u8] =
+        b"HTTP/1.1 200 OK\\r\\nContent-Length: 2\\r\\nConnection: close\\r\\n\\r\\nOK";
+    let header_bytes = RESPONSE
+        .windows(4)
+        .position(|window| window == b"\\r\\n\\r\\n")
+        .expect("fixture has a complete header delimiter");
+    let (url, worker) = serve_once(RESPONSE);
+    let request = Request::new(Url::parse(&url).unwrap());
+
+    assert_eq!(
+        HttpTransport::new()
+            .with_limits(1024, header_bytes - 1)
+            .send(&request),
+        Err(TransportError::ResponseTooLarge)
+    );
+    worker.join().expect("test server thread");
+}
+
+#[test]
 fn cancelled_request_fails_before_opening_a_connection() {
     let request = Request::new(Url::parse("http://127.0.0.1:1/").unwrap());
     let cancellation = CancellationToken::new();
