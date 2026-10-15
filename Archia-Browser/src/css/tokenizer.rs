@@ -226,7 +226,7 @@ fn starts_number(first: char, chars: &std::iter::Peekable<std::str::Chars<'_>>) 
 fn consume_number(first: char, chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String {
     let mut value = String::new();
     if !append_token_char(&mut value, first) {
-        value.push('\0');
+        value.resize(MAX_CSS_TOKEN_TEXT_BYTES + 1, '\0');
         return value;
     }
     if matches!(first, '+' | '-') {
