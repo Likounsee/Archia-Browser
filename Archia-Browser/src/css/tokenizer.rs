@@ -143,18 +143,8 @@ impl CssTokenizer {
                         }
                     }
                 }
-                c if c.is_ascii_digit()
-                    || c == '.' && chars.peek().is_some_and(|n| n.is_ascii_digit()) =>
-                {
-                    let mut value = String::from(c);
-                    while let Some(next) = chars.peek().copied() {
-                        if next.is_ascii_digit() || next == '.' || next == '-' {
-                            value.push(next);
-                            chars.next();
-                        } else {
-                            break;
-                        }
-                    }
+                c if starts_number(c, &chars) => {
+                    let value = consume_number(c, &mut chars);
                     if value.len() > MAX_CSS_TOKEN_TEXT_BYTES {
                         return tokens;
                     }
@@ -197,6 +187,65 @@ fn try_push_css_token(tokens: &mut Vec<CssToken>, token: CssToken) -> bool {
     }
     tokens.push(token);
     true
+}
+
+
+/// Whether the current character starts a CSS number, including an optional sign.
+fn starts_number(first: char, chars: &std::iter::Peekable<std::str::Chars<'_>>) -> bool {
+    if first.is_ascii_digit() {
+        return true;
+    }
+    let mut lookahead = chars.clone();
+    let next = lookahead.next();
+    match first {
+        '.' => next.is_some_and(|ch| ch.is_ascii_digit()),
+        '+' | '-' => match next {
+            Some(ch) if ch.is_ascii_digit() => true,
+            Some('.') => lookahead.peek().is_some_and(|ch| ch.is_ascii_digit()),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+/// Consume the CSS number grammar without swallowing adjacent delimiters or signs.
+fn consume_number(first: char, chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String {
+    let mut value = String::from(first);
+    if matches!(first, '+' | '-') {
+        if let Some(next) = chars.next() {
+            value.push(next);
+        }
+    }
+
+    while chars.peek().is_some_and(|ch| ch.is_ascii_digit()) {
+        value.push(chars.next().expect("peeked digit must exist"));
+    }
+
+    if first != '.' && chars.peek() == Some(&'.') {
+        value.push(chars.next().expect("peeked decimal point must exist"));
+        while chars.peek().is_some_and(|ch| ch.is_ascii_digit()) {
+            value.push(chars.next().expect("peeked digit must exist"));
+        }
+    }
+
+    if chars.peek().is_some_and(|ch| matches!(ch, 'e' | 'E')) {
+        let mut lookahead = chars.clone();
+        lookahead.next();
+        if matches!(lookahead.peek(), Some('+' | '-')) {
+            lookahead.next();
+        }
+        if lookahead.peek().is_some_and(|ch| ch.is_ascii_digit()) {
+            value.push(chars.next().expect("peeked exponent must exist"));
+            if chars.peek().is_some_and(|ch| matches!(ch, '+' | '-')) {
+                value.push(chars.next().expect("peeked exponent sign must exist"));
+            }
+            while chars.peek().is_some_and(|ch| ch.is_ascii_digit()) {
+                value.push(chars.next().expect("peeked exponent digit must exist"));
+            }
+        }
+    }
+
+    value
 }
 
 fn is_ident_start(c: char) -> bool {
@@ -457,6 +506,42 @@ mod tests {
         assert_eq!(
             CssTokenizer::tokenize("\"left\\\nright\""),
             vec![CssToken::String("leftright".into())]
+        );
+    }
+
+
+    #[test]
+    fn number_tokens_stop_before_adjacent_signs_and_extra_decimal_points() {
+        assert_eq!(
+            CssTokenizer::tokenize("1-2 1..2"),
+            vec![
+                CssToken::Number("1".into()),
+                CssToken::Ident("-2".into()),
+                CssToken::Whitespace,
+                CssToken::Number("1.".into()),
+                CssToken::Delim('.'),
+                CssToken::Number(".2".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn parses_signed_decimal_and_exponent_number_tokens() {
+        assert_eq!(
+            CssTokenizer::tokenize("-1.25 +.5 2e3 4.2E-2 3e+"),
+            vec![
+                CssToken::Number("-1.25".into()),
+                CssToken::Whitespace,
+                CssToken::Number("+.5".into()),
+                CssToken::Whitespace,
+                CssToken::Number("2e3".into()),
+                CssToken::Whitespace,
+                CssToken::Number("4.2E-2".into()),
+                CssToken::Whitespace,
+                CssToken::Number("3".into()),
+                CssToken::Ident("e".into()),
+                CssToken::Delim('+'),
+            ]
         );
     }
 
