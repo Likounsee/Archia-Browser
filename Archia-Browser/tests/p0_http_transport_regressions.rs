@@ -98,7 +98,7 @@ fn transport_rejects_connection_nominated_representation_header_end_to_end() {
 #[test]
 fn transport_rejects_connection_nominated_framing_header_end_to_end() {
     let (url, worker) = serve_once(
-        b"HTTP/1.1 200 OK\\r\\nConnection: Content-Length\\r\\nContent-Length: 0\\r\\n\\r\\n",
+        b"HTTP/1.1 200 OK\r\\nConnection: Content-Length\r\\nContent-Length: 0\r\\n\r\\n",
     );
     let request = Request::new(Url::parse(&url).unwrap());
 
@@ -112,7 +112,7 @@ fn transport_rejects_connection_nominated_framing_header_end_to_end() {
 #[test]
 fn transport_rejects_connection_nominated_cookie_metadata_end_to_end() {
     let (url, worker) = serve_once(
-        b"HTTP/1.1 200 OK\\r\\nConnection: Set-Cookie\\r\\nSet-Cookie: sid=secret\\r\\nContent-Length: 0\\r\\n\\r\\n",
+        b"HTTP/1.1 200 OK\r\\nConnection: Set-Cookie\r\\nSet-Cookie: sid=secret\r\\nContent-Length: 0\r\\n\r\\n",
     );
     let request = Request::new(Url::parse(&url).unwrap());
 
@@ -126,7 +126,7 @@ fn transport_rejects_connection_nominated_cookie_metadata_end_to_end() {
 #[test]
 fn transport_rejects_malformed_connection_tokens_end_to_end() {
     let (url, worker) = serve_once(
-        b"HTTP/1.1 200 OK\\r\\nConnection: close,,keep-alive\\r\\nContent-Length: 0\\r\\n\\r\\n",
+        b"HTTP/1.1 200 OK\r\\nConnection: close,,keep-alive\r\\nContent-Length: 0\r\\n\r\\n",
     );
     let request = Request::new(Url::parse(&url).unwrap());
 
@@ -140,7 +140,7 @@ fn transport_rejects_malformed_connection_tokens_end_to_end() {
 #[test]
 fn transport_accepts_connection_close_with_valid_framing_end_to_end() {
     let (url, worker) = serve_once(
-        b"HTTP/1.1 200 OK\\r\\nConnection: close\\r\\nContent-Length: 2\\r\\n\\r\\nOK",
+        b"HTTP/1.1 200 OK\r\\nConnection: close\r\\nContent-Length: 2\r\\n\r\\nOK",
     );
     let request = Request::new(Url::parse(&url).unwrap());
 
@@ -151,4 +151,4 @@ fn transport_accepts_connection_close_with_valid_framing_end_to_end() {
     assert_eq!(response.body, b"OK");
     worker.join().expect("test server thread");
 }
-\n
+
