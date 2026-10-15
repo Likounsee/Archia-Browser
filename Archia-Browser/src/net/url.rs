@@ -914,7 +914,7 @@ mod tests {
             // Dot-segment normalization can create a UNC-like leading // even
             // when the reference itself does not begin with two slashes.
             "..//server/share",
-            "sub/../../ //server/share",
+            "/..//server/share",
         ] {
             assert_eq!(
                 base.resolve(reference).unwrap_err(),
