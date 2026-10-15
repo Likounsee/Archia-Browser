@@ -137,9 +137,7 @@ impl CssTokenizer {
                     // Keep the prefix as a string token for the current tokenizer
                     // API, then reintroduce the consumed newline as CSS whitespace.
                     push_token!(CssToken::String(value));
-                    if ended_on_newline
-                        && !matches!(tokens.last(), Some(CssToken::Whitespace))
-                    {
+                    if ended_on_newline && !matches!(tokens.last(), Some(CssToken::Whitespace)) {
                         push_token!(CssToken::Whitespace);
                     }
                 }
