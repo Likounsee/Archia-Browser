@@ -247,7 +247,9 @@ fn consume_number(first: char, chars: &mut std::iter::Peekable<std::str::Chars<'
 
     let mut decimal_lookahead = chars.clone();
     let has_fraction = decimal_lookahead.next() == Some('.')
-        && decimal_lookahead.peek().is_some_and(|ch| ch.is_ascii_digit());
+        && decimal_lookahead
+            .peek()
+            .is_some_and(|ch| ch.is_ascii_digit());
     if first != '.' && has_fraction {
         if !append_token_char(
             &mut value,
@@ -271,7 +273,10 @@ fn consume_number(first: char, chars: &mut std::iter::Peekable<std::str::Chars<'
             lookahead.next();
         }
         if lookahead.peek().is_some_and(|ch| ch.is_ascii_digit()) {
-            if !append_token_char(&mut value, chars.next().expect("peeked exponent must exist")) {
+            if !append_token_char(
+                &mut value,
+                chars.next().expect("peeked exponent must exist"),
+            ) {
                 value.push('\0');
                 return value;
             }
