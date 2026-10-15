@@ -300,7 +300,9 @@ fn parse_rule_blocks(input: &str, max_blocks: usize) -> Vec<(String, String)> {
                 escaped = false;
             } else if ch == '\\' {
                 escaped = true;
-            } else if ch == active_quote {
+            } else if ch == active_quote || is_css_newline(ch) {
+                // CSS strings cannot contain an unescaped newline. End the
+                // quoted region so a malformed value cannot hide later rules.
                 quote = None;
             }
             continue;
@@ -932,6 +934,24 @@ mod tests {
     fn ignores_unclosed_rules_instead_of_merging_them_into_following_rules() {
         let sheet = StyleSheet::parse(".broken { color: red; .valid { color: blue; }");
         assert!(sheet.rules.is_empty());
+    }
+
+
+    #[test]
+    fn unescaped_newline_in_string_does_not_hide_following_stylesheet_rules() {
+        let sheet = StyleSheet::parse(
+            ".broken { content: \"bad\n; color: red; } .valid { color: blue; }",
+        );
+
+        assert_eq!(sheet.rules.len(), 2);
+        assert_eq!(
+            sheet.rules[1]
+                .declarations
+                .iter()
+                .find(|declaration| declaration.name == "color")
+                .map(|declaration| declaration.value.as_str()),
+            Some("blue")
+        );
     }
 
     #[test]
