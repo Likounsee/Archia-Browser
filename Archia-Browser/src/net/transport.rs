@@ -1446,6 +1446,14 @@ fn content_type_for_path(path: &std::path::Path) -> &'static str {
 }
 
 fn validate_request(request: &Request) -> Result<(), TransportError> {
+    // CONNECT switches HTTP into tunnel mode and requires authority-form targets.
+    // This transport only implements ordinary request/response exchanges; sending
+    // CONNECT with the normal origin-form target would be malformed and could
+    // accidentally expose tunnel semantics to callers.
+    if request.method == super::HttpMethod::Connect {
+        return Err(TransportError::InvalidRequest);
+    }
+
     // Bound caller-supplied uploads before DNS lookup or socket creation.
     if request.body.len() > MAX_REQUEST_BODY_BYTES {
         return Err(TransportError::InvalidRequest);
