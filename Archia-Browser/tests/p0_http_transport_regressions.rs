@@ -443,8 +443,8 @@ fn oversized_request_header_block_is_rejected_before_opening_a_connection() {
 
 #[test]
 fn connection_cannot_nominate_synthesized_host_header() {
-    let request = Request::new(Url::parse("http://127.0.0.1:1/").unwrap())
-        .with_header("Connection", "Host");
+    let request =
+        Request::new(Url::parse("http://127.0.0.1:1/").unwrap()).with_header("Connection", "Host");
 
     assert_eq!(
         HttpTransport::new().send(&request),
