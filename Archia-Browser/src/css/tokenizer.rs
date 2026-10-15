@@ -18,6 +18,10 @@ const MAX_CSS_INPUT_BYTES: usize = 1024 * 1024;
 const MAX_CSS_TOKENS: usize = 100_000;
 const MAX_CSS_TOKEN_TEXT_BYTES: usize = 64 * 1024;
 
+fn is_css_whitespace(character: char) -> bool {
+    matches!(character, '\\t' | '\\n' | '\\u{000C}' | '\\r' | ' ')
+}
+
 #[derive(Debug, Default)]
 pub struct CssTokenizer;
 
@@ -66,7 +70,7 @@ impl CssTokenizer {
             }
 
             match ch {
-                c if c.is_whitespace() => {
+                c if is_css_whitespace(c) => {
                     if !matches!(tokens.last(), Some(CssToken::Whitespace)) {
                         push_token!(CssToken::Whitespace);
                     }
@@ -224,7 +228,7 @@ fn consume_escape(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Optio
         while digits.len() < 6 && chars.peek().is_some_and(|next| next.is_ascii_hexdigit()) {
             digits.push(chars.next()?);
         }
-        if let Some(whitespace) = chars.peek().copied().filter(|next| next.is_whitespace()) {
+        if let Some(whitespace) = chars.peek().copied().filter(|next| is_css_whitespace(*next)) {
             chars.next();
             if whitespace == '\r' && chars.peek() == Some(&'\n') {
                 chars.next();
@@ -374,6 +378,22 @@ mod tests {
                 CssToken::Semicolon,
                 CssToken::Whitespace,
             ]
+        );
+    }
+
+    #[test]
+    fn unicode_space_characters_are_not_css_whitespace_tokens() {
+        assert_eq!(
+            CssTokenizer::tokenize("\\u{00A0}\\u{2003}"),
+            vec![CssToken::Ident("\\u{00A0}\\u{2003}".into())]
+        );
+    }
+
+    #[test]
+    fn unicode_space_does_not_terminate_a_css_hex_escape() {
+        assert_eq!(
+            CssTokenizer::tokenize("foo\\\\26\\u{00A0}bar"),
+            vec![CssToken::Ident("foo&\\u{00A0}bar".into())]
         );
     }
 
