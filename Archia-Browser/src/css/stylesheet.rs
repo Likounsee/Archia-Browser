@@ -936,7 +936,6 @@ mod tests {
         assert!(sheet.rules.is_empty());
     }
 
-
     #[test]
     fn unescaped_newline_in_string_does_not_hide_following_stylesheet_rules() {
         let sheet = StyleSheet::parse(
