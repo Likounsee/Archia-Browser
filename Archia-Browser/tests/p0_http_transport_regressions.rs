@@ -341,3 +341,27 @@ fn transport_rejects_transfer_encoding_and_content_length_together_end_to_end() 
     );
     worker.join().expect("test server thread");
 }
+
+#[test]
+fn transport_rejects_response_with_too_many_headers_end_to_end() {
+    let mut response = b"HTTP/1.1 200 OK\r\n".to_vec();
+    // The transport's response-header count cap is 256. Include two standard
+    // headers as well, so the response crosses the cap without approaching the
+    // independent byte-size limit.
+    for index in 0..255 {
+        response.extend_from_slice(format!("X-Test-{index}: value\r\n").as_bytes());
+    }
+    response.extend_from_slice(b"Content-Length: 0\r\nConnection: close\r\n\r\n");
+
+    // The existing one-shot server helper accepts a static response. Leak only
+    // this small test fixture so the spawned server can own a stable slice.
+    let response: &'static [u8] = Box::leak(response.into_boxed_slice());
+    let (url, worker) = serve_once(response);
+    let request = Request::new(Url::parse(&url).expect("valid test URL"));
+
+    assert!(matches!(
+        HttpTransport::new().send(&request),
+        Err(TransportError::ResponseTooLarge | TransportError::ConnectionFailed)
+    ));
+    worker.join().expect("test server thread should finish");
+}
