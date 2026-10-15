@@ -217,7 +217,7 @@ fn transport_rejects_case_insensitive_duplicate_content_length_end_to_end() {
 #[test]
 fn transport_rejects_non_ascii_whitespace_in_content_length_end_to_end() {
     let (url, worker) =
-        serve_once(b"HTTP/1.1 200 OK\r\nContent-Length: \\xc2\\xa02\r\nConnection: close\r\n\r\nOK");
+        serve_once(b"HTTP/1.1 200 OK\r\nContent-Length: \xc2\xa02\r\nConnection: close\r\n\r\nOK");
     let request = Request::new(Url::parse(&url).unwrap());
 
     assert_eq!(
