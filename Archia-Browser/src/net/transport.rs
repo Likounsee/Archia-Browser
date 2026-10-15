@@ -1491,7 +1491,29 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
         }
     }
 
-    if request.headers.len() > MAX_REQUEST_HEADER_COUNT {
+    // Bound the headers actually serialized on the wire, including the
+    // synthesized Host/Connection/Content-Length fields. The caller-supplied
+    // Connection field is replaced with our own "Connection: close" field.
+    let has_host = request
+        .headers
+        .keys()
+        .any(|name| name.eq_ignore_ascii_case("host"));
+    let has_connection = request
+        .headers
+        .keys()
+        .any(|name| name.eq_ignore_ascii_case("connection"));
+    let has_content_length = request
+        .headers
+        .keys()
+        .any(|name| name.eq_ignore_ascii_case("content-length"));
+    let serialized_header_count = request
+        .headers
+        .len()
+        .saturating_sub(usize::from(has_connection))
+        .saturating_add(usize::from(!has_host))
+        .saturating_add(1)
+        .saturating_add(usize::from(request.has_body() && !has_content_length));
+    if serialized_header_count > MAX_REQUEST_HEADER_COUNT {
         return Err(TransportError::InvalidRequest);
     }
 

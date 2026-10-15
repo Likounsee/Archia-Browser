@@ -359,9 +359,24 @@ fn transport_rejects_response_with_too_many_headers_end_to_end() {
     let (url, worker) = serve_once(response);
     let request = Request::new(Url::parse(&url).expect("valid test URL"));
 
-    assert!(matches!(
+    assert_eq!(
         HttpTransport::new().send(&request),
-        Err(TransportError::ResponseTooLarge | TransportError::ConnectionFailed)
-    ));
+        Err(TransportError::ResponseTooLarge)
+    );
     worker.join().expect("test server thread should finish");
+}
+
+#[test]
+fn transport_rejects_synthesized_headers_that_exceed_request_header_count() {
+    let mut request = Request::new(Url::parse("http://127.0.0.1:1/").expect("valid test URL"));
+    for index in 0..255 {
+        request = request.with_header(format!("X-Test-{index}"), "value");
+    }
+
+    // 255 caller headers plus synthesized Host and Connection fields exceed
+    // the 256-field wire limit. Validation must fail before opening a socket.
+    assert_eq!(
+        HttpTransport::new().send(&request),
+        Err(TransportError::InvalidRequest)
+    );
 }
