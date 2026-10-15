@@ -992,3 +992,51 @@ mod character_reference_tests {
         ));
     }
 }
+
+
+#[cfg(test)]
+mod eof_regression_tests {
+    use super::{HtmlToken, HtmlTokenizer};
+
+    #[test]
+    fn unterminated_comment_is_preserved_as_a_comment_at_eof() {
+        assert_eq!(
+            HtmlTokenizer::tokenize("before<!-- unfinished"),
+            [
+                HtmlToken::Text("before".to_owned()),
+                HtmlToken::Comment(" unfinished".to_owned())
+            ]
+        );
+    }
+
+    #[test]
+    fn unterminated_tag_is_recovered_as_text_at_eof() {
+        assert_eq!(
+            HtmlTokenizer::tokenize("before <div class='unfinished"),
+            [
+                HtmlToken::Text("before ".to_owned()),
+                HtmlToken::Text("<div class='unfinished".to_owned())
+            ]
+        );
+    }
+
+    #[test]
+    fn malformed_tag_with_multibyte_prefix_does_not_panic() {
+        let tokens = HtmlTokenizer::tokenize("<🧪 attribute='value'>after");
+        assert!(matches!(
+            tokens.first(),
+            Some(HtmlToken::Text(value)) if value == "<🧪 attribute='value'>after"
+        ));
+    }
+
+    #[test]
+    fn tokenization_stops_at_the_document_input_limit() {
+        let input = "x".repeat(4 * 1024 * 1024 + 32);
+        let tokens = HtmlTokenizer::tokenize(&input);
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(
+            tokens.first(),
+            Some(HtmlToken::Text(value)) if value.len() == 4 * 1024 * 1024
+        ));
+    }
+}
