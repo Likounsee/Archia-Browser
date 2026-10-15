@@ -2994,8 +2994,10 @@ mod tests {
     #[test]
     fn request_header_count_limit_covers_n_minus_one_n_and_n_plus_one() {
         let url = Url::parse("https://example.org/").unwrap();
+        // With no caller-supplied Host or Connection, the transport adds
+        // those two fields itself. Count the actual serialized header block.
         let mut under = Request::new(url.clone());
-        for index in 0..MAX_REQUEST_HEADER_COUNT - 1 {
+        for index in 0..MAX_REQUEST_HEADER_COUNT - 3 {
             under
                 .headers
                 .insert(format!("x-test-{index}"), "v".to_owned());
@@ -3003,19 +3005,23 @@ mod tests {
         assert_eq!(
             validate_request(&under),
             Ok(()),
-            "N-1 request headers must fit"
+            "N-1 serialized request headers must fit"
         );
 
         let mut exact = Request::new(url.clone());
-        for index in 0..MAX_REQUEST_HEADER_COUNT {
+        for index in 0..MAX_REQUEST_HEADER_COUNT - 2 {
             exact
                 .headers
                 .insert(format!("x-test-{index}"), "v".to_owned());
         }
-        assert_eq!(validate_request(&exact), Ok(()));
+        assert_eq!(
+            validate_request(&exact),
+            Ok(()),
+            "N serialized request headers must fit"
+        );
 
         let mut oversized = Request::new(url);
-        for index in 0..=MAX_REQUEST_HEADER_COUNT {
+        for index in 0..=MAX_REQUEST_HEADER_COUNT - 2 {
             oversized
                 .headers
                 .insert(format!("x-test-{index}"), "v".to_owned());
