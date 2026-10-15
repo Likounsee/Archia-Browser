@@ -440,4 +440,3 @@ fn oversized_request_header_block_is_rejected_before_opening_a_connection() {
         Err(TransportError::InvalidRequest)
     );
 }
-
