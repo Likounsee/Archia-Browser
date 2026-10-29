@@ -73,7 +73,7 @@ impl Url {
         if normalized_scheme == "file"
             && (normalized_path.starts_with("//")
                 || contains_encoded_path_separator(path)
-                || contains_encoded_windows_drive_colon(path)
+                || contains_unsafe_file_path_colon(path)
                 || contains_encoded_dot_segment(path))
         {
             return Err(UrlError::InvalidCharacter);
@@ -226,7 +226,7 @@ impl Url {
         // percent decoding in LocalFileTransport could change path boundaries.
         if self.scheme == "file"
             && (contains_encoded_path_separator(path)
-                || contains_encoded_windows_drive_colon(path)
+                || contains_unsafe_file_path_colon(path)
                 || contains_encoded_dot_segment(path))
         {
             return Err(UrlError::InvalidCharacter);
@@ -269,7 +269,7 @@ impl Url {
         if self.scheme == "file"
             && (resolved_path.starts_with("//")
                 || contains_encoded_path_separator(&resolved_path)
-                || contains_encoded_windows_drive_colon(&resolved_path)
+                || contains_unsafe_file_path_colon(&resolved_path)
                 || contains_encoded_dot_segment(&resolved_path))
         {
             return Err(UrlError::InvalidCharacter);
@@ -501,17 +501,37 @@ fn has_valid_percent_encoding(value: &str) -> bool {
     true
 }
 
-fn contains_encoded_windows_drive_colon(path: &str) -> bool {
+fn contains_unsafe_file_path_colon(path: &str) -> bool {
     let bytes = path.as_bytes();
-    // Reject the encoded colon even without a following slash: on Windows,
-    // "C:relative" is drive-relative rather than rooted and has different
-    // semantics from the URL path the policy layer normalized.
-    bytes.len() >= 5
-        && bytes[0] == b'/'
-        && bytes[1].is_ascii_alphabetic()
-        && bytes[2] == b'%'
-        && bytes[3] == b'3'
-        && bytes[4].eq_ignore_ascii_case(&b'a')
+    let mut index = 0;
+
+    while index < bytes.len() {
+        if bytes[index] == b'%' && index + 2 < bytes.len() {
+            // The local-file transport percent-decodes before filesystem access.
+            // A decoded colon can select an NTFS alternate data stream, not just
+            // a drive separator, so reject encoded colons in every path segment.
+            if bytes[index + 1] == b'3' && bytes[index + 2].eq_ignore_ascii_case(&b'a') {
+                return true;
+            }
+            index += 3;
+            continue;
+        }
+
+        if bytes[index] == b':' {
+            // The only literal colon allowed is the drive separator in a
+            // rooted Windows file URL (/C:/...). Colons elsewhere can select
+            // NTFS alternate data streams or have platform-dependent meaning.
+            let is_drive_separator = index == 2
+                && bytes.first() == Some(&b'/')
+                && bytes[1].is_ascii_alphabetic()
+                && bytes.get(3) == Some(&b'/');
+            if !is_drive_separator {
+                return true;
+            }
+        }
+        index += 1;
+    }
+    false
 }
 
 fn contains_encoded_dot_segment(path: &str) -> bool {
@@ -888,17 +908,59 @@ mod tests {
             "file:///d%3a/Users/example/index.html",
             "file:///C%3A",
             "file:///C%3Arelative/path",
+            "file:///safe/file%3Asecret.txt",
+            "file:///safe/nested%3astream/data.txt",
         ] {
             assert_eq!(
                 Url::parse(input).unwrap_err(),
                 UrlError::InvalidCharacter,
-                "encoded drive colon must not change path normalization: {input}"
+                "encoded colons must not change filesystem semantics: {input}"
             );
         }
 
         let base = Url::parse("file:///C:/Users/example/index.html").unwrap();
+        for reference in [
+            "/D%3A/Windows/system.ini",
+            "secret%3Astream.txt",
+            "nested/file%3Astream",
+        ] {
+            assert_eq!(
+                base.resolve(reference).unwrap_err(),
+                UrlError::InvalidCharacter,
+                "encoded colon must not become filesystem syntax: {reference}"
+            );
+        }
+    }
+
+    #[test]
+    fn file_urls_reject_literal_colons_outside_a_windows_drive_prefix() {
+        for input in [
+            "file:///safe/file:secret.txt",
+            "file:///safe/nested:stream/data.txt",
+            "file:///C:/safe/file:secret.txt",
+            "file:///C:relative/path",
+        ] {
+            assert_eq!(
+                Url::parse(input).unwrap_err(),
+                UrlError::InvalidCharacter,
+                "non-drive colon must not reach platform filesystem APIs: {input}"
+            );
+        }
+
+        for input in ["file:///C:/", "file:///d:/Users/example/index.html"] {
+            assert!(
+                Url::parse(input).is_ok(),
+                "a valid rooted drive prefix must remain supported: {input}"
+            );
+        }
+
+        let base = Url::parse("file:///safe/index.html").unwrap();
         assert_eq!(
-            base.resolve("/D%3A/Windows/system.ini").unwrap_err(),
+            base.resolve("file:secret.txt").unwrap_err(),
+            UrlError::UnsupportedReferenceScheme
+        );
+        assert_eq!(
+            base.resolve("sub/file:secret.txt").unwrap_err(),
             UrlError::InvalidCharacter
         );
     }
