@@ -2056,15 +2056,14 @@ fn parse_http_response_head(
     // This client does not tunnel or forward hop-by-hop response metadata.
     // Reject unsupported fields rather than exposing connection-scoped behavior
     // to higher layers that treat the response as a standalone representation.
-    if [
-        "keep-alive",
-        "proxy-connection",
-        "te",
-        "trailer",
-        "upgrade",
-    ]
-    .iter()
-    .any(|unsupported| response.headers.keys().any(|name| name.eq_ignore_ascii_case(unsupported)))
+    if ["keep-alive", "proxy-connection", "te", "trailer", "upgrade"]
+        .iter()
+        .any(|unsupported| {
+            response
+                .headers
+                .keys()
+                .any(|name| name.eq_ignore_ascii_case(unsupported))
+        })
     {
         return Err(TransportError::ConnectionFailed);
     }
@@ -2589,7 +2588,8 @@ mod tests {
             "upgrade",
             "Upgrade",
         ] {
-            let response = format!("HTTP/1.1 200 OK\r\n{name}: anything\r\nContent-Length: 0\r\n\r\n");
+            let response =
+                format!("HTTP/1.1 200 OK\r\n{name}: anything\r\nContent-Length: 0\r\n\r\n");
             assert_eq!(
                 parse_http_response(response.as_bytes(), 1024, 1024),
                 Err(TransportError::ConnectionFailed),
