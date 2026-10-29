@@ -1582,9 +1582,16 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
     // (trailers/upgrades) that the direct origin transport does not implement.
     // Do not forward them as ordinary end-to-end headers.
     if request.headers.keys().any(|name| {
-        ["expect", "keep-alive", "proxy-connection", "te", "trailer", "upgrade"]
-            .iter()
-            .any(|unsupported| name.eq_ignore_ascii_case(unsupported))
+        [
+            "expect",
+            "keep-alive",
+            "proxy-connection",
+            "te",
+            "trailer",
+            "upgrade",
+        ]
+        .iter()
+        .any(|unsupported| name.eq_ignore_ascii_case(unsupported))
     }) {
         return Err(TransportError::InvalidRequest);
     }
@@ -2044,6 +2051,22 @@ fn parse_http_response_head(
                 return Err(TransportError::ConnectionFailed);
             }
         }
+    }
+
+    // This client does not tunnel or forward hop-by-hop response metadata.
+    // Reject unsupported fields rather than exposing connection-scoped behavior
+    // to higher layers that treat the response as a standalone representation.
+    if [
+        "keep-alive",
+        "proxy-connection",
+        "te",
+        "trailer",
+        "upgrade",
+    ]
+    .iter()
+    .any(|unsupported| response.headers.keys().any(|name| name.eq_ignore_ascii_case(unsupported)))
+    {
+        return Err(TransportError::ConnectionFailed);
     }
 
     // Transfer-Encoding is an HTTP/1.1 framing mechanism. Accepting it on an
@@ -2550,6 +2573,36 @@ mod tests {
                 Err(TransportError::ConnectionFailed)
             );
         }
+    }
+
+    #[test]
+    fn rejects_unsupported_hop_by_hop_response_headers_case_insensitively() {
+        for name in [
+            "keep-alive",
+            "Keep-Alive",
+            "proxy-connection",
+            "Proxy-Connection",
+            "te",
+            "TE",
+            "trailer",
+            "Trailer",
+            "upgrade",
+            "Upgrade",
+        ] {
+            let response = format!("HTTP/1.1 200 OK\\r\\n{name}: anything\\r\\nContent-Length: 0\\r\\n\\r\\n");
+            assert_eq!(
+                parse_http_response(response.as_bytes(), 1024, 1024),
+                Err(TransportError::ConnectionFailed),
+                "unsupported hop-by-hop response header must be rejected: {name}"
+            );
+        }
+
+        let ordinary = parse_http_response(
+            b"HTTP/1.1 200 OK\\r\\nContent-Type: text/html\\r\\nContent-Length: 0\\r\\n\\r\\n",
+            1024,
+            1024,
+        );
+        assert!(ordinary.is_ok());
     }
 
     #[test]
