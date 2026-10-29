@@ -2589,7 +2589,7 @@ mod tests {
             "upgrade",
             "Upgrade",
         ] {
-            let response = format!("HTTP/1.1 200 OK\\r\\n{name}: anything\\r\\nContent-Length: 0\\r\\n\\r\\n");
+            let response = format!("HTTP/1.1 200 OK\r\n{name}: anything\r\nContent-Length: 0\r\n\r\n");
             assert_eq!(
                 parse_http_response(response.as_bytes(), 1024, 1024),
                 Err(TransportError::ConnectionFailed),
@@ -2598,7 +2598,7 @@ mod tests {
         }
 
         let ordinary = parse_http_response(
-            b"HTTP/1.1 200 OK\\r\\nContent-Type: text/html\\r\\nContent-Length: 0\\r\\n\\r\\n",
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 0\r\n\r\n",
             1024,
             1024,
         );
@@ -4857,7 +4857,7 @@ mod limit_tests {
         let mut unsupported = Request::new(Url::parse("http://127.0.0.1/upload").unwrap())
             .with_method(super::super::HttpMethod::Post)
             .with_header("Transfer-Encoding", "chunked");
-        unsupported.body = b"3\\r\\nabc\\r\\n0\\r\\n\\r\\n".to_vec();
+        unsupported.body = b"3\r\nabc\r\n0\r\n\r\n".to_vec();
         assert_eq!(
             validate_request(&unsupported),
             Err(TransportError::InvalidRequest)
@@ -4915,7 +4915,7 @@ mod limit_tests {
             }
         }
 
-        let mut wire = b"HTTP/1.1 200 OK\\r\\nContent-Length: 100\\r\\n\\r\\n".to_vec();
+        let mut wire = b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n".to_vec();
         wire.extend(std::iter::repeat_n(b'x', 100));
         let mut stream = CountingStream {
             bytes: wire,
