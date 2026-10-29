@@ -13,7 +13,9 @@ Archia Browser is a lightweight browser-engine project built from scratch. The e
 
 ## Current progress
 
-These percentages are engineering estimates of **functional coverage**, not lines of code. They measure the current implementation against the scope required for a serious browser engine.
+**README last reviewed: 2026-10-29.** Current development focus: P0 hardening of the browser-engine foundation and security boundaries. P0 is estimated at **~62% complete**; this is an engineering estimate, not a test-coverage or standards-compliance score. Remaining work includes broader shared memory-budget integration, stronger local-file confinement guarantees, and deeper network/security regression coverage.
+
+These subsystem percentages are engineering estimates of **functional coverage**, not lines of code. They measure the current implementation against the scope required for a serious browser engine.
 
 | Subsystem | Progress | Current state |
 |---|---:|---|
@@ -37,7 +39,7 @@ These percentages are engineering estimates of **functional coverage**, not line
 | JavaScript | ~0% | Runtime not started |
 | Browser UI | ~5% | Browser/tab APIs exist; full window UI remains |
 | ArchiaOS integration | ~5% | Platform abstraction exists |
-| Tests / CI | — | Latest verified green commit: `62ca1e7265f0fa99b95005da763b4ee1d342b00a`, run `38690858866` on Ubuntu, Windows and macOS; formatting, locked workspace tests, build and Clippy passed on all three, and Ubuntu RustSec/license audits passed. The extended seven-target fuzz campaign is still running separately on `0de484e16319f2a63c401d51f520381591b91a43`; results and evolved corpora still need review. Unsupported platforms and broader standards-conformance coverage remain unverified. |
+| Tests / CI | — | On the current branch head (`0defd0ea7c49b6d64b31a5549cea08ab174dd4b7`), the main CI passed on Linux, Windows and macOS; the P0 extended fuzz workflow also completed successfully on this commit. These results validate the current automated checks, not complete browser security or standards conformance. Unsupported platforms and broader real-world compatibility remain unverified. |
 
 **Overall engine foundation:** roughly **40–45%** as a non-reproducible engineering estimate, not a measured compatibility score. It is not test coverage or standards conformance. TLS is implemented at the transport layer, but that does not mean the whole network stack is production-ready.
 
@@ -236,7 +238,7 @@ The implementation structure may evolve as the engine grows, but renderer and pl
 2. Implement flexbox and additional layout modes.
 3. Replace bootstrap text with real font loading and shaping.
 4. Add scrolling, stacking contexts and richer painting.
-5. Implement HTTPS/TLS without bypassing request policy.
+5. Harden HTTPS/TLS end-to-end integration and verify request-policy enforcement across redirects and failure paths.
 6. Continue HTML/CSS standards compliance.
 7. Start the JavaScript runtime and DOM integration.
 8. Expand security isolation before exposing untrusted active content.
@@ -267,4 +269,4 @@ License to be defined.
 
 ## DOM query API update — 2026-10-14
 
-The DOM now exposes collection and first-match queries for attribute presence/value, class tokens and the `name` attribute, plus combined tag-and-attribute and tag-and-class searches. Queries traverse descendants in document order; attribute names are case-insensitive, attribute values and class tokens are exact, and class splitting follows HTML whitespace. These are convenience APIs over the existing DOM, not a complete implementation of the WHATWG DOM standard. The current branch's CI status must be checked on the exact latest commit before describing this change as validated.
+The DOM now exposes collection and first-match queries for attribute presence/value, class tokens and the `name` attribute, plus combined tag-and-attribute and tag-and-class searches. Queries traverse descendants in document order; attribute names are case-insensitive, attribute values and class tokens are exact, and class splitting follows HTML whitespace. These are convenience APIs over the existing DOM, not a complete implementation of the WHATWG DOM standard. The current branch's CI and fuzz status must be checked on the exact latest commit before describing a change as validated.
