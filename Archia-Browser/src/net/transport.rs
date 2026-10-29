@@ -1582,15 +1582,9 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
     // (trailers/upgrades) that the direct origin transport does not implement.
     // Do not forward them as ordinary end-to-end headers.
     if request.headers.keys().any(|name| {
-        [
-            "keep-alive",
-            "proxy-connection",
-            "te",
-            "trailer",
-            "upgrade",
-        ]
-        .iter()
-        .any(|unsupported| name.eq_ignore_ascii_case(unsupported))
+        ["keep-alive", "proxy-connection", "te", "trailer", "upgrade"]
+            .iter()
+            .any(|unsupported| name.eq_ignore_ascii_case(unsupported))
     }) {
         return Err(TransportError::InvalidRequest);
     }
