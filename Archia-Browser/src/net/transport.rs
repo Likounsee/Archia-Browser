@@ -1582,7 +1582,7 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
     // (trailers/upgrades) that the direct origin transport does not implement.
     // Do not forward them as ordinary end-to-end headers.
     if request.headers.keys().any(|name| {
-        ["keep-alive", "proxy-connection", "te", "trailer", "upgrade"]
+        ["expect", "keep-alive", "proxy-connection", "te", "trailer", "upgrade"]
             .iter()
             .any(|unsupported| name.eq_ignore_ascii_case(unsupported))
     }) {
@@ -4095,6 +4095,8 @@ mod tests {
     fn rejects_unsupported_hop_by_hop_request_headers_case_insensitively() {
         let url = Url::parse("http://example.org/").unwrap();
         for name in [
+            "expect",
+            "Expect",
             "keep-alive",
             "Keep-Alive",
             "proxy-connection",
