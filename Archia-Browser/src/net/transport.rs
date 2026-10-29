@@ -1323,6 +1323,31 @@ fn file_url_path(url_path: &str) -> Result<std::path::PathBuf, TransportError> {
     }
 
     let decoded = percent_decode(url_path)?;
+    #[cfg(windows)]
+    {
+        // NTFS alternate data streams use a colon after the drive prefix
+        // (for example, C:\\page.html:secret). The URL parser rejects these
+        // paths too, but enforce the rule here as well because this function is
+        // the filesystem boundary and must remain safe for direct callers.
+        let bytes = decoded.as_bytes();
+        for (index, byte) in bytes.iter().enumerate() {
+            if *byte != b':' {
+                continue;
+            }
+            let drive_colon = if bytes.first() == Some(&b'/') {
+                index == 2
+                    && bytes.get(1).is_some_and(u8::is_ascii_alphabetic)
+                    && bytes.get(3) == Some(&b'/')
+            } else {
+                index == 1
+                    && bytes.first().is_some_and(u8::is_ascii_alphabetic)
+                    && bytes.get(2) == Some(&b'/')
+            };
+            if !drive_colon {
+                return Err(TransportError::InvalidRequest);
+            }
+        }
+    }
     if decoded.as_bytes().contains(&0) {
         return Err(TransportError::InvalidUrl(
             super::UrlError::InvalidCharacter,
@@ -3815,6 +3840,9 @@ mod tests {
             "//server/share/secret.txt",
             "C:secret.txt",
             "/C:secret.txt",
+            "/C:/safe/file:secret.txt",
+            "/C:/safe/file%3Asecret.txt",
+            "C:/safe/file:secret.txt",
             "relative.txt",
         ] {
             assert!(
