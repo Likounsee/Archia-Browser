@@ -1577,6 +1577,24 @@ fn validate_request(request: &Request) -> Result<(), TransportError> {
         return Err(TransportError::InvalidRequest);
     }
 
+    // This transport speaks a deliberately bounded HTTP/1.1 subset.
+    // These fields are hop-by-hop, proxy-specific, or imply protocol features
+    // (trailers/upgrades) that the direct origin transport does not implement.
+    // Do not forward them as ordinary end-to-end headers.
+    if request.headers.keys().any(|name| {
+        [
+            "keep-alive",
+            "proxy-connection",
+            "te",
+            "trailer",
+            "upgrade",
+        ]
+        .iter()
+        .any(|unsupported| name.eq_ignore_ascii_case(unsupported))
+    }) {
+        return Err(TransportError::InvalidRequest);
+    }
+
     // Connection-nominated fields are hop-by-hop. Since this transport
     // does not forward a proxy hop, accepting both fields would serialize a
     // header that Connection explicitly says must be removed.
@@ -4077,6 +4095,34 @@ mod tests {
                 "proxy credentials must never be sent to an origin"
             );
         }
+    }
+
+    #[test]
+    fn rejects_unsupported_hop_by_hop_request_headers_case_insensitively() {
+        let url = Url::parse("http://example.org/").unwrap();
+        for name in [
+            "keep-alive",
+            "Keep-Alive",
+            "proxy-connection",
+            "Proxy-Connection",
+            "te",
+            "TE",
+            "trailer",
+            "Trailer",
+            "upgrade",
+            "Upgrade",
+        ] {
+            let request = Request::new(url.clone()).with_header(name, "anything");
+            assert_eq!(
+                validate_request(&request),
+                Err(TransportError::InvalidRequest),
+                "unsupported hop-by-hop request header must be rejected: {name}"
+            );
+        }
+
+        // Ordinary representation headers remain available.
+        let valid = Request::new(url).with_header("accept", "text/html");
+        assert_eq!(validate_request(&valid), Ok(()));
     }
 
     #[test]
