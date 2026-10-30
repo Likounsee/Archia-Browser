@@ -18,7 +18,7 @@ pub mod url;
 pub use cache::HttpCache;
 pub use cookies::{Cookie, CookieJar};
 pub use loader::{DocumentLoadError, DocumentLoader};
-pub use transport::{HttpTransport, LocalFileTransport};
+pub use transport::{validate_http_request, HttpTransport, LocalFileTransport};
 pub use url::{Url, UrlError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -23,6 +23,7 @@ jobs:
       matrix:
         target:
           - http_response
+          - http_request
           - url_parse_resolve
           - html_tokenize_parse
           - css_tokenize
