@@ -13,7 +13,7 @@ Archia Browser is a lightweight browser-engine project built from scratch. The e
 
 ## Current progress
 
-**README last reviewed: 2026-10-29.** Current development focus: P0 hardening of the browser-engine foundation and security boundaries. P0 is estimated at **~62% complete**; this is an engineering estimate, not a test-coverage or standards-compliance score. Remaining work includes broader shared memory-budget integration, stronger local-file confinement guarantees, and deeper network/security regression coverage.
+**README last reviewed: 2026-10-30.** Current development focus: P0 hardening of the browser-engine foundation and security boundaries. P0 is estimated at **~62% complete**; this is an engineering estimate, not a test-coverage or standards-compliance score. Remaining work includes broader shared memory-budget integration, stronger local-file confinement guarantees, and deeper network/security regression coverage.
 
 These subsystem percentages are engineering estimates of **functional coverage**, not lines of code. They measure the current implementation against the scope required for a serious browser engine.
 
@@ -39,7 +39,7 @@ These subsystem percentages are engineering estimates of **functional coverage**
 | JavaScript | ~0% | Runtime not started |
 | Browser UI | ~5% | Browser/tab APIs exist; full window UI remains |
 | ArchiaOS integration | ~5% | Platform abstraction exists |
-| Tests / CI | — | On the current branch head (`0defd0ea7c49b6d64b31a5549cea08ab174dd4b7`), the main CI passed on Linux, Windows and macOS; the P0 extended fuzz workflow also completed successfully on this commit. These results validate the current automated checks, not complete browser security or standards conformance. Unsupported platforms and broader real-world compatibility remain unverified. |
+| Tests / CI | — | Last fully green baseline: `ef662f332f04d743f6175b17d6084ccaed3b8412` (standard CI on Linux/Windows/macOS and seven 3.5-hour fuzz targets all succeeded). Candidate `409c9ce1d726e568627aaaff97458f55c28333d9` adds offline HTTP request validation and an eighth fuzz target; its standard CI and extended campaign are pending. Do not treat the candidate as validated until those runs finish. These checks are not a browser security certification or standards-conformance score. Unsupported platforms and broader real-world compatibility remain unverified. |
 
 **Overall engine foundation:** roughly **40–45%** as a non-reproducible engineering estimate, not a measured compatibility score. It is not test coverage or standards conformance. TLS is implemented at the transport layer, but that does not mean the whole network stack is production-ready.
 
@@ -147,7 +147,7 @@ The implementation structure may evolve as the engine grows, but renderer and pl
 ### Networking / browser state
 - Structured URL parsing.
 - Local file transport.
-- HTTP/1.1 transport with bounded response/header memory.
+- HTTP/1.1 transport with bounded request/response headers and bodies, plus a public offline request validator that rejects unsupported framing and proxy-hop metadata before DNS or socket creation.
 - Request filtering before transport.
 - Redirect handling with bounded redirect count and method semantics.
 - Cookie persistence, Domain validation, Secure delivery and Max-Age deletion.
