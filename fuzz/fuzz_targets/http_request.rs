@@ -26,14 +26,14 @@ fuzz_target!(|data: &[u8]| {
 
     // Use a deterministic selector bit to exercise body/method and framing
     // interactions. The fuzzer controls every byte but cannot trigger I/O.
-    if selector & 0x80 != 0 {
+    if selector & 0x08 != 0 {
         request.body = raw.to_vec();
     }
 
     // Request.headers is public; retain differently-cased duplicate names so
     // the validator is fuzzed against the same adversarial states callers can
     // construct without the normalizing builder API.
-    for line in raw.split(|byte| *byte == b'\\n').take(300) {
+    for line in raw.split(|byte| *byte == b'\n').take(300) {
         let Some(separator) = line.iter().position(|byte| *byte == b':') else {
             continue;
         };
