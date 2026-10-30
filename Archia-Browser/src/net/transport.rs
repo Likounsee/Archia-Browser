@@ -3050,7 +3050,7 @@ mod tests {
             .with_method(super::super::HttpMethod::Post)
             .with_body(vec![b'x'; MAX_REQUEST_BODY_BYTES - 1]);
         assert_eq!(
-            validate_request(&under),
+            validate_http_request(&under),
             Ok(()),
             "N-1 request body bytes must fit"
         );
@@ -3059,7 +3059,7 @@ mod tests {
             .with_method(super::super::HttpMethod::Post)
             .with_body(vec![b'x'; MAX_REQUEST_BODY_BYTES]);
         assert_eq!(
-            validate_request(&exact),
+            validate_http_request(&exact),
             Ok(()),
             "N request body bytes must fit"
         );
@@ -3068,7 +3068,7 @@ mod tests {
             .with_method(super::super::HttpMethod::Post)
             .with_body(vec![b'x'; MAX_REQUEST_BODY_BYTES + 1]);
         assert_eq!(
-            validate_request(&oversized),
+            validate_http_request(&oversized),
             Err(TransportError::InvalidRequest)
         );
     }
@@ -3081,13 +3081,13 @@ mod tests {
                 .with_method(method)
                 .with_body(b"ambiguous request body".to_vec());
             assert_eq!(
-                validate_request(&request),
+                validate_http_request(&request),
                 Err(TransportError::InvalidRequest),
                 "{method:?} requests must not carry a body"
             );
         }
         assert_eq!(
-            validate_request(&Request::new(url)),
+            validate_http_request(&Request::new(url)),
             Ok(()),
             "bodyless GET remains valid"
         );
@@ -3105,7 +3105,7 @@ mod tests {
                 .insert(format!("x-test-{index}"), "v".to_owned());
         }
         assert_eq!(
-            validate_request(&under),
+            validate_http_request(&under),
             Ok(()),
             "N-1 serialized request headers must fit"
         );
@@ -3117,7 +3117,7 @@ mod tests {
                 .insert(format!("x-test-{index}"), "v".to_owned());
         }
         assert_eq!(
-            validate_request(&exact),
+            validate_http_request(&exact),
             Ok(()),
             "N serialized request headers must fit"
         );
@@ -3129,7 +3129,7 @@ mod tests {
                 .insert(format!("x-test-{index}"), "v".to_owned());
         }
         assert_eq!(
-            validate_request(&oversized),
+            validate_http_request(&oversized),
             Err(TransportError::InvalidRequest)
         );
     }
@@ -4040,7 +4040,7 @@ mod tests {
     #[test]
     fn accepts_absolute_dns_hostnames_with_one_trailing_dot() {
         let request = Request::new(Url::parse("http://example.org./").unwrap());
-        assert_eq!(validate_request(&request), Ok(()));
+        assert_eq!(validate_http_request(&request), Ok(()));
         assert_eq!(host_header(&request), "example.org.");
     }
 
@@ -4061,7 +4061,7 @@ mod tests {
     #[test]
     fn accepts_valid_ipv6_authorities() {
         let request = Request::new(Url::parse("http://[::1]:8080/").unwrap());
-        assert_eq!(validate_request(&request), Ok(()));
+        assert_eq!(validate_http_request(&request), Ok(()));
     }
 
     #[test]
@@ -4074,7 +4074,7 @@ mod tests {
         let request = Request::new(Url::parse("http://example.org/").unwrap())
             .with_header("Host", "example.org evil");
         assert_eq!(
-            validate_request(&request),
+            validate_http_request(&request),
             Err(TransportError::InvalidRequest)
         );
     }
@@ -4141,7 +4141,7 @@ mod tests {
                 .headers
                 .insert(name.to_owned(), "Basic secret".to_owned());
             assert_eq!(
-                validate_request(&request),
+                validate_http_request(&request),
                 Err(TransportError::InvalidRequest),
                 "proxy credentials must never be sent to an origin"
             );
@@ -4167,7 +4167,7 @@ mod tests {
         ] {
             let request = Request::new(url.clone()).with_header(name, "anything");
             assert_eq!(
-                validate_request(&request),
+                validate_http_request(&request),
                 Err(TransportError::InvalidRequest),
                 "unsupported hop-by-hop request header must be rejected: {name}"
             );
@@ -4175,7 +4175,7 @@ mod tests {
 
         // Ordinary representation headers remain available.
         let valid = Request::new(url).with_header("accept", "text/html");
-        assert_eq!(validate_request(&valid), Ok(()));
+        assert_eq!(validate_http_request(&valid), Ok(()));
     }
 
     #[test]
@@ -4189,26 +4189,26 @@ mod tests {
             Request::new(url.clone()).with_header("connection", "bad token"),
         ] {
             assert_eq!(
-                validate_request(&request),
+                validate_http_request(&request),
                 Err(TransportError::InvalidRequest)
             );
         }
 
         let generated_host = Request::new(url.clone()).with_header("connection", "host");
         assert_eq!(
-            validate_request(&generated_host),
+            validate_http_request(&generated_host),
             Err(TransportError::InvalidRequest)
         );
         let generated_length = Request::new(url.clone())
             .with_header("connection", "content-length")
             .with_body(b"payload".to_vec());
         assert_eq!(
-            validate_request(&generated_length),
+            validate_http_request(&generated_length),
             Err(TransportError::InvalidRequest)
         );
 
         let valid = Request::new(url).with_header("connection", "close");
-        assert_eq!(validate_request(&valid), Ok(()));
+        assert_eq!(validate_http_request(&valid), Ok(()));
     }
 
     #[test]
@@ -4216,14 +4216,14 @@ mod tests {
         let invalid_name = Request::new(Url::parse("http://example.org/").unwrap())
             .with_header("Bad Header", "value");
         assert_eq!(
-            validate_request(&invalid_name),
+            validate_http_request(&invalid_name),
             Err(TransportError::InvalidRequest)
         );
 
         let mismatched_host = Request::new(Url::parse("http://example.org/").unwrap())
             .with_header("host", "attacker.example");
         assert_eq!(
-            validate_request(&mismatched_host),
+            validate_http_request(&mismatched_host),
             Err(TransportError::InvalidRequest)
         );
     }
@@ -4237,7 +4237,7 @@ mod tests {
             .with_body(b"Hello".to_vec())
             .with_header("content-length", "4");
         assert_eq!(
-            validate_request(&short_length),
+            validate_http_request(&short_length),
             Err(TransportError::InvalidRequest)
         );
 
@@ -4245,7 +4245,7 @@ mod tests {
             .with_body(b"Hello".to_vec())
             .with_header("content-length", "five");
         assert_eq!(
-            validate_request(&invalid_length),
+            validate_http_request(&invalid_length),
             Err(TransportError::InvalidRequest)
         );
 
@@ -4254,7 +4254,7 @@ mod tests {
                 .with_body(b"Hello".to_vec())
                 .with_header("content-length", invalid);
             assert_eq!(
-                validate_request(&request),
+                validate_http_request(&request),
                 Err(TransportError::InvalidRequest),
                 "invalid Content-Length syntax must be rejected: {invalid:?}"
             );
@@ -4264,7 +4264,7 @@ mod tests {
             .with_body(b"Hello".to_vec())
             .with_header("transfer-encoding", "chunked");
         assert_eq!(
-            validate_request(&transfer_encoded),
+            validate_http_request(&transfer_encoded),
             Err(TransportError::InvalidRequest)
         );
 
@@ -4277,7 +4277,7 @@ mod tests {
             .headers
             .insert("Content-Length".into(), "5".into());
         assert_eq!(
-            validate_request(&duplicate_length),
+            validate_http_request(&duplicate_length),
             Err(TransportError::InvalidRequest)
         );
     }
@@ -4289,12 +4289,12 @@ mod tests {
             .headers
             .insert("Host".into(), "attacker.example".into());
         assert_eq!(
-            validate_request(&request),
+            validate_http_request(&request),
             Err(TransportError::InvalidRequest)
         );
 
         request.headers.insert("Host".into(), "example.org".into());
-        assert_eq!(validate_request(&request), Ok(()));
+        assert_eq!(validate_http_request(&request), Ok(()));
     }
 
     #[test]
@@ -4353,7 +4353,7 @@ mod tests {
             .headers
             .insert("Content-Length".into(), "\u{00a0}5\u{00a0}".into());
         assert_eq!(
-            validate_request(&request),
+            validate_http_request(&request),
             Err(TransportError::InvalidRequest),
             "non-ASCII whitespace must not be silently stripped from wire framing"
         );
@@ -4362,7 +4362,7 @@ mod tests {
             .with_method(super::super::HttpMethod::Post)
             .with_body(b"Hello".to_vec())
             .with_header("content-length", "\t5 \t");
-        assert_eq!(validate_request(&valid_ows), Ok(()));
+        assert_eq!(validate_http_request(&valid_ows), Ok(()));
 
         let response = b"HTTP/1.1 200 OK\r\nContent-Length: \xC2\xA05\xC2\xA0\r\n\r\nHello";
         assert_eq!(
@@ -4381,7 +4381,7 @@ mod tests {
             .headers
             .insert("Transfer-Encoding".into(), "chunked".into());
         assert_eq!(
-            validate_request(&transfer_encoded),
+            validate_http_request(&transfer_encoded),
             Err(TransportError::InvalidRequest)
         );
 
@@ -4390,7 +4390,7 @@ mod tests {
             .headers
             .insert("Content-Length".into(), "4".into());
         assert_eq!(
-            validate_request(&invalid_length),
+            validate_http_request(&invalid_length),
             Err(TransportError::InvalidRequest)
         );
 
@@ -4402,7 +4402,7 @@ mod tests {
             .headers
             .insert("Content-Length".into(), "5".into());
         assert_eq!(
-            validate_request(&duplicate_length),
+            validate_http_request(&duplicate_length),
             Err(TransportError::InvalidRequest)
         );
     }
@@ -4423,7 +4423,7 @@ mod tests {
         ] {
             let request = Request::new(url.clone()).with_header("x-large", "a".repeat(value_len));
             assert_eq!(
-                validate_request(&request),
+                validate_http_request(&request),
                 expected,
                 "unexpected validation result for serialized header size {}",
                 fixed_bytes + value_len
@@ -4436,7 +4436,7 @@ mod tests {
         let request = Request::new(Url::parse("http://example.org/").unwrap())
             .with_header("x-large", "a".repeat(MAX_REQUEST_HEADER_BYTES));
         assert_eq!(
-            validate_request(&request),
+            validate_http_request(&request),
             Err(TransportError::InvalidRequest)
         );
 
@@ -4854,7 +4854,7 @@ mod limit_tests {
             .with_header("Content-Length", "2");
         mismatched.body = b"abc".to_vec();
         assert_eq!(
-            validate_request(&mismatched),
+            validate_http_request(&mismatched),
             Err(TransportError::InvalidRequest)
         );
 
@@ -4863,7 +4863,7 @@ mod limit_tests {
             .with_header("Transfer-Encoding", "chunked");
         unsupported.body = b"3\r\nabc\r\n0\r\n\r\n".to_vec();
         assert_eq!(
-            validate_request(&unsupported),
+            validate_http_request(&unsupported),
             Err(TransportError::InvalidRequest)
         );
     }
