@@ -59,3 +59,11 @@ path = "fuzz_targets/url_parse_resolve.rs"
 test = false
 doc = false
 bench = false
+
+
+[[bin]]
+name = "http_request"
+path = "fuzz_targets/http_request.rs"
+test = false
+doc = false
+bench = false

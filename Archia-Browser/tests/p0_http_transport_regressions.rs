@@ -3,7 +3,7 @@ use std::net::TcpListener;
 use std::thread;
 
 use archia_browser::net::{
-    CancellationToken, HttpTransport, Request, Transport, TransportError, Url,
+    validate_http_request, CancellationToken, HttpMethod, HttpTransport, Request, Transport, TransportError, Url,
 };
 
 fn serve_once(response: &'static [u8]) -> (String, thread::JoinHandle<()>) {
@@ -463,4 +463,48 @@ fn connection_cannot_nominate_synthesized_content_length() {
         HttpTransport::new().send(&request),
         Err(TransportError::InvalidRequest)
     );
+}
+
+
+#[test]
+fn public_request_validator_rejects_case_insensitive_duplicate_headers() {
+    let mut request = Request::new(Url::parse("http://example.test/").unwrap());
+    request.headers.insert("Content-Length".into(), "0".into());
+    request.headers.insert("content-length".into(), "0".into());
+
+    assert_eq!(validate_http_request(&request), Err(TransportError::InvalidRequest));
+}
+
+#[test]
+fn public_request_validator_rejects_unsupported_transfer_encoding() {
+    let request = Request::new(Url::parse("http://example.test/").unwrap())
+        .with_header("Transfer-Encoding", "chunked");
+
+    assert_eq!(validate_http_request(&request), Err(TransportError::InvalidRequest));
+}
+
+#[test]
+fn public_request_validator_rejects_mismatched_content_length() {
+    let request = Request::new(Url::parse("http://example.test/").unwrap())
+        .with_method(HttpMethod::Post)
+        .with_header("Content-Length", "4")
+        .with_body(b"abc".to_vec());
+
+    assert_eq!(validate_http_request(&request), Err(TransportError::InvalidRequest));
+}
+
+#[test]
+fn public_request_validator_rejects_proxy_credentials_on_direct_origin_transport() {
+    let request = Request::new(Url::parse("http://example.test/").unwrap())
+        .with_header("Proxy-Authorization", "Basic dXNlcjpwYXNz");
+
+    assert_eq!(validate_http_request(&request), Err(TransportError::InvalidRequest));
+}
+
+#[test]
+fn public_request_validator_rejects_get_bodies_before_network_access() {
+    let request = Request::new(Url::parse("http://example.test/").unwrap())
+        .with_body(b"ambiguous cache input".to_vec());
+
+    assert_eq!(validate_http_request(&request), Err(TransportError::InvalidRequest));
 }

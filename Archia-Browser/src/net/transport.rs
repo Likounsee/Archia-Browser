@@ -124,7 +124,7 @@ impl HttpTransport {
         stream: &mut dyn ReadWrite,
         request: &Request,
     ) -> Result<(), TransportError> {
-        validate_request(request)?;
+        validate_http_request(request)?;
         let mut head = String::new();
         head.push_str(request.method.as_str());
         head.push(' ');
@@ -305,7 +305,7 @@ impl Transport for HttpTransport {
         cancellation: &CancellationToken,
     ) -> Result<Response, TransportError> {
         cancellation.check()?;
-        validate_request(request)?;
+        validate_http_request(request)?;
         let mut stream = self.connect(request, cancellation)?;
         cancellation.check()?;
         self.write_request(&mut stream, request)?;
@@ -1470,7 +1470,11 @@ fn content_type_for_path(path: &std::path::Path) -> &'static str {
     }
 }
 
-fn validate_request(request: &Request) -> Result<(), TransportError> {
+/// Validate a request against the bounded HTTP/1.1 subset supported by this transport.
+///
+/// This performs no DNS lookup or network I/O, so embedders can validate
+/// caller-constructed requests before scheduling a navigation or upload.
+pub fn validate_http_request(request: &Request) -> Result<(), TransportError> {
     // CONNECT switches HTTP into tunnel mode and requires authority-form targets.
     // This transport only implements ordinary request/response exchanges; sending
     // CONNECT with the normal origin-form target would be malformed and could

@@ -1,6 +1,6 @@
 name: Archia Browser P0 extended fuzz campaign
 
-# This dedicated run accumulates 7 × 3.5 hours of target fuzzing (24.5
+# This dedicated run accumulates 8 × 3.5 hours of target fuzzing (28
 # target-hours) in parallel. It is intentionally separate from the short
 # per-push smoke fuzz workflow. Keep this campaign on Archia-Browser only.
 concurrency:
@@ -32,6 +32,7 @@ jobs:
       matrix:
         target:
           - http_response
+          - http_request
           - url_parse_resolve
           - html_tokenize_parse
           - css_tokenize
