@@ -705,7 +705,9 @@ mod tests {
             LayoutViewport::new(320, 200),
         );
 
-        let link = page.link_at(2, 2).expect("anchor text should be hit-testable");
+        let link = page
+            .link_at(2, 2)
+            .expect("anchor text should be hit-testable");
         assert_eq!(link.link_href(), Some("/target"));
         assert!(page.link_at(300, 180).is_none());
     }
