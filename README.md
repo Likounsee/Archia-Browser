@@ -26,10 +26,22 @@ ArchiaOS is currently at a very early development stage. Its browser port is the
 
 The current runnable application is an **experimental text-mode browser**, not yet a graphical desktop browser.
 
-From the repository root:
+On Windows, from the repository root, run:
 
 ```powershell
-cargo run -p archia-browser -- https://example.org
+.\scripts\run-windows.ps1 https://example.org
+```
+
+Or start without an address:
+
+```powershell
+.\scripts\run-windows.ps1
+```
+
+The launcher checks that Cargo is installed and runs the workspace with the locked dependency versions. The direct equivalent is:
+
+```powershell
+cargo run --locked -p archia-browser -- https://example.org
 ```
 
 Commands:
@@ -49,6 +61,7 @@ The CLI uses Archia's own URL, HTTP/HTTPS transport, document loader, HTML/DOM, 
 - [x] Back, forward and reload.
 - [x] Extract and list document links.
 - [x] Open a listed link.
+- [x] PowerShell launcher.
 - [ ] Native Windows window and message loop.
 - [ ] Address bar and navigation controls.
 - [ ] Display Archia's software-rendered page surface.
