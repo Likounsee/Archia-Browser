@@ -446,14 +446,10 @@ fn save_bookmarks(state: &AppState) {
                 "{}\t{}",
                 bookmark
                     .url
-                    .replace('\t', " ")
-                    .replace('\r', " ")
-                    .replace('\n', " "),
+                    .replace(['\t', '\r', '\n'], " "),
                 bookmark
                     .title
-                    .replace('\t', " ")
-                    .replace('\r', " ")
-                    .replace('\n', " ")
+                    .replace(['\t', '\r', '\n'], " ")
             )
         })
         .collect::<Vec<_>>()
@@ -985,7 +981,7 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             return true;
         }
         if (VK_1..=VK_9).contains(&key) && !state.tabs.is_empty() {
-            let requested = (key - VK_1) as usize;
+            let requested = key - VK_1;
             let index = if requested == 8 {
                 state.tabs.len() - 1
             } else {
