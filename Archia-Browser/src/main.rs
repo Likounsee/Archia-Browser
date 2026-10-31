@@ -239,6 +239,8 @@ fn print_help() {
     println!("  :title          Afficher le titre de la page");
     println!("  :themes         Lister les themes disponibles");
     println!("  :theme ID       Selectionner un theme");
+    println!("  :theme install PATH  Installer un manifeste de theme");
+    println!("  :theme remove ID     Desinstaller un theme personnalise");
     println!("  :help           Afficher cette aide");
     println!("  :quit           Quitter Archia Browser");
 }
@@ -313,6 +315,35 @@ fn main() {
             }
             continue;
         }
+        if let Some(path) = command.strip_prefix(":theme install ") {
+            let result = match (theme_manager.as_mut(), std::fs::read_to_string(path.trim())) {
+                (Some(themes), Ok(manifest)) => themes.install_manifest(&manifest),
+                (Some(_), Err(error)) => {
+                    eprintln!("Lecture du manifeste impossible: {error}");
+                    continue;
+                }
+                (None, _) => {
+                    eprintln!("Gestion des themes indisponible.");
+                    continue;
+                }
+            };
+            match result {
+                Ok(()) => println!("Theme installe."),
+                Err(error) => eprintln!("Installation impossible: {error}"),
+            }
+            continue;
+        }
+        if let Some(id) = command.strip_prefix(":theme remove ") {
+            match theme_manager.as_mut() {
+                Some(themes) => match themes.uninstall(id.trim()) {
+                    Ok(()) => println!("Theme desinstalle."),
+                    Err(error) => eprintln!("Desinstallation impossible: {error}"),
+                },
+                None => eprintln!("Gestion des themes indisponible."),
+            }
+            continue;
+        }
+
         if let Some(id) = command.strip_prefix(":theme ") {
             match theme_manager.as_mut() {
                 Some(themes) => match themes.select(id.trim()) {
