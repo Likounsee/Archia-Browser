@@ -7,11 +7,11 @@ use std::{ffi::c_void, mem, ptr};
 
 use archia_browser::{
     layout::LayoutViewport,
-    surface::SoftwareSurface,
     net::{
         pipeline::{NetworkPipeline, PolicyDecision, RequestPolicyEngine, ResourceKind},
         DocumentLoader, HttpTransport, Request, Url,
     },
+    surface::SoftwareSurface,
     Browser,
 };
 
