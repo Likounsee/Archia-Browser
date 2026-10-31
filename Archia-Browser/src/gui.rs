@@ -120,6 +120,7 @@ const ID_HOME_SEARCH: usize = 1201;
 const ID_HOME_GO: usize = 1202;
 const ID_TAB_BASE: usize = 2000;
 const MAX_GUI_TABS: usize = 100;
+const DARK_ON_ACCENT: u32 = 0x000A1311;
 
 #[repr(C)]
 struct Rect {
@@ -1356,27 +1357,21 @@ fn chrome_color(state: &AppState, select: fn(&ThemeColors) -> &str, fallback: u3
 }
 
 unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
-    // A deliberately restrained dark browser frame: separate tab strip,
-    // navigation row, active-tab accent, and a quiet address-field surround.
-    let toolbar = chrome_color(state, |colors| &colors.toolbar_background, 0x00211D1B);
-    let window = chrome_color(state, |colors| &colors.window_background, 0x00181513);
-    let active_tab = chrome_color(state, |colors| &colors.tab_active_background, 0x00443B36);
-    let inactive_tab = chrome_color(state, |colors| &colors.tab_inactive_background, 0x002B2623);
-    let accent = chrome_color(state, |colors| &colors.accent, 0x00D78B55);
-    let text = chrome_color(state, |colors| &colors.text, 0x00F1EDE9);
-    let muted = chrome_color(state, |colors| &colors.muted_text, 0x00B8AEA6);
-    let address = chrome_color(state, |colors| &colors.address_background, 0x00F5F3F1);
-    let address_text = chrome_color(state, |colors| &colors.address_text, 0x00211D1B);
-    paint_fill(hdc, 0, 0, width, 88, toolbar);
-    paint_fill(hdc, 0, 39, width, 88, window);
-    paint_fill(
-        hdc,
-        0,
-        86,
-        width,
-        89,
-        chrome_color(state, |colors| &colors.border, 0x00443B36),
-    );
+    // Cadre technique : bande d'onglets sombre, onglet actif fondu dans la barre
+    // d'outils avec un filet d'accent, onglets numérotés, angles vifs.
+    let strip = chrome_color(state, |colors| &colors.toolbar_background, 0x000F0D0C);
+    let window = chrome_color(state, |colors| &colors.window_background, 0x00221D1B);
+    let active_tab = chrome_color(state, |colors| &colors.tab_active_background, 0x00221D1B);
+    let inactive_tab = chrome_color(state, |colors| &colors.tab_inactive_background, 0x00302926);
+    let accent = chrome_color(state, |colors| &colors.accent, 0x004EF2C6);
+    let text = chrome_color(state, |colors| &colors.text, 0x00F4F2F1);
+    let muted = chrome_color(state, |colors| &colors.muted_text, 0x00B5ABA7);
+    let address = chrome_color(state, |colors| &colors.address_background, 0x000F0D0C);
+    let border = chrome_color(state, |colors| &colors.border, 0x00423835);
+
+    paint_fill(hdc, 0, 0, width, 88, strip);
+    paint_fill(hdc, 0, 39, width, 90, window);
+    paint_fill(hdc, 0, 86, width, 89, border);
 
     let tab_area = (width - 134).max(0);
     let tab_width = (tab_area / state.tabs.len().max(1) as i32).clamp(120, 220);
@@ -1388,17 +1383,12 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
             continue;
         }
         let selected = Some(*id) == active;
-        paint_round_fill(
-            hdc,
-            left,
-            7,
-            right,
-            36,
-            if selected { active_tab } else { inactive_tab },
-            10,
-        );
         if selected {
-            paint_fill(hdc, left + 8, 33, right - 8, 36, accent);
+            // Fondu avec la barre d'outils (même couleur) jusqu'à y = 39.
+            paint_fill(hdc, left, 7, right, 39, active_tab);
+            paint_fill(hdc, left, 7, right, 9, accent);
+        } else {
+            paint_fill(hdc, left, 11, right, 36, inactive_tab);
         }
         let title = state
             .browser
@@ -1406,25 +1396,36 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
             .tab(*id)
             .and_then(|tab| tab.page())
             .and_then(|page| page.title())
-            .unwrap_or_else(|| format!("Nouvel onglet {}", index + 1));
-        let label = title.chars().take(24).collect::<String>();
+            .unwrap_or_else(|| "Nouvel onglet".to_owned());
+        let label = title.chars().take(22).collect::<String>();
+        let number = format!("{:02}", index + 1);
+        paint_label(
+            hdc,
+            &number,
+            left + 10,
+            9,
+            left + 30,
+            36,
+            if selected { accent } else { muted },
+            0,
+        );
         paint_label(
             hdc,
             &label,
-            left + 10,
-            7,
+            left + 32,
+            9,
             right - if state.tabs.len() > 1 { 34 } else { 10 },
             36,
-            text,
+            if selected { text } else { muted },
             0,
         );
         if state.tabs.len() > 1 {
-            paint_label(hdc, "×", right - 30, 7, right - 6, 36, muted, DT_CENTER);
+            paint_label(hdc, "×", right - 30, 9, right - 6, 36, muted, DT_CENTER);
         }
     }
-    paint_round_fill(hdc, width - 108, 7, width - 62, 36, inactive_tab, 10);
+    paint_round_fill(hdc, width - 108, 7, width - 62, 36, inactive_tab, 3);
     paint_label(hdc, "⋯", width - 108, 7, width - 62, 36, text, DT_CENTER);
-    paint_round_fill(hdc, width - 58, 7, width - 10, 36, inactive_tab, 10);
+    paint_round_fill(hdc, width - 58, 7, width - 10, 36, inactive_tab, 3);
     paint_label(hdc, "+", width - 58, 7, width - 10, 36, text, DT_CENTER);
 
     let can_go_back = state.browser.history().can_go_back();
@@ -1441,7 +1442,7 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
             right,
             80,
             if enabled { inactive_tab } else { window },
-            16,
+            3,
         );
         paint_label(
             hdc,
@@ -1454,14 +1455,17 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
             DT_CENTER,
         );
     }
-    let address_right = width - 170;
-    paint_round_fill(hdc, 132, 48, address_right.max(240), 80, address, 16);
-    paint_round_fill(hdc, width - 122, 48, width - 10, 80, accent, 16);
+
+    // Champ d'adresse : liseré 1 px puis fond.
+    let address_right = (width - 170).max(240);
+    paint_round_fill(hdc, 132, 48, address_right, 80, border, 3);
+    paint_round_fill(hdc, 133, 49, address_right - 1, 79, address, 3);
+
     let current_url = state.browser.current_url().map(ToString::to_string);
     let bookmarked = current_url
         .as_ref()
         .is_some_and(|url| state.bookmarks.iter().any(|bookmark| &bookmark.url == url));
-    paint_round_fill(hdc, width - 166, 48, width - 132, 80, inactive_tab, 14);
+    paint_round_fill(hdc, width - 166, 48, width - 132, 80, inactive_tab, 3);
     paint_label(
         hdc,
         if bookmarked { "★" } else { "☆" },
@@ -1472,6 +1476,7 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
         if bookmarked { accent } else { text },
         DT_CENTER,
     );
+    paint_round_fill(hdc, width - 122, 48, width - 10, 80, accent, 3);
     paint_label(
         hdc,
         "Aller",
@@ -1479,20 +1484,13 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
         48,
         width - 10,
         80,
-        address_text,
+        DARK_ON_ACCENT,
         DT_CENTER,
     );
 
-    let bookmark_bar = chrome_color(state, |colors| &colors.toolbar_background, 0x00211D1B);
-    paint_fill(hdc, 0, 90, width, 119, bookmark_bar);
-    paint_fill(
-        hdc,
-        0,
-        118,
-        width,
-        119,
-        chrome_color(state, |colors| &colors.border, 0x00443B36),
-    );
+    // Barre de favoris, de la même couleur que la barre d'outils.
+    paint_fill(hdc, 0, 90, width, 119, window);
+    paint_fill(hdc, 0, 118, width, 119, border);
     if state.bookmarks.is_empty() {
         paint_label(
             hdc,
@@ -1509,7 +1507,7 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
         let visible = ((width - 24).max(0) / (item_width + 8)) as usize;
         for (index, bookmark) in state.bookmarks.iter().take(visible).enumerate() {
             let left = 12 + index as i32 * (item_width + 8);
-            paint_round_fill(hdc, left, 93, left + item_width, 115, inactive_tab, 8);
+            paint_round_fill(hdc, left, 93, left + item_width, 115, inactive_tab, 3);
             let label = bookmark.title.chars().take(20).collect::<String>();
             paint_label(
                 hdc,
@@ -1726,7 +1724,7 @@ unsafe fn layout_controls(state: &AppState, width: i32, height: i32) {
         button_h - 4,
         1,
     );
-    let address_region = CreateRoundRectRgn(0, 0, address_width, button_h - 4, 18, 18);
+    let address_region = CreateRoundRectRgn(0, 0, address_width, button_h - 4, 6, 6);
     if !address_region.is_null() && SetWindowRgn(state.address, address_region, 1) == 0 {
         let _ = DeleteObject(address_region);
     }
