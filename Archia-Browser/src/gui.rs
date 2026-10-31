@@ -2788,7 +2788,7 @@ mod gui_address_tests {
         };
         settings.save(&path).unwrap();
         assert_eq!(BrowserSettings::load(&path), settings);
-        std::fs::write(&path, "search_provider=unknown\\nhomepage=file:///etc/passwd\\nrestore_session=maybe\\n").unwrap();
+        std::fs::write(&path, "search_provider=unknown\nhomepage=file:///etc/passwd\nrestore_session=maybe\n").unwrap();
         assert_eq!(BrowserSettings::load(&path), BrowserSettings::default());
         let _ = std::fs::remove_file(path);
     }
