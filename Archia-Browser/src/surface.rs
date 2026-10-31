@@ -755,8 +755,18 @@ mod tests {
         // accented French letters must not disappear as unsupported glyphs.
         assert_eq!(surface.pixel(1, 2), Some(Color::BLACK));
         assert_eq!(surface.pixel(1, 0), Some(Color(0, 0, 0, 0)));
-        assert!(surface.pixels().chunks_exact(4).any(|pixel| pixel == [0, 0, 0, 255]));
-        assert!(surface.pixels().chunks_exact(4).filter(|pixel| *pixel == [0, 0, 0, 255]).count() > 20);
+        assert!(surface
+            .pixels()
+            .chunks_exact(4)
+            .any(|pixel| pixel == [0, 0, 0, 255]));
+        assert!(
+            surface
+                .pixels()
+                .chunks_exact(4)
+                .filter(|pixel| *pixel == [0, 0, 0, 255])
+                .count()
+                > 20
+        );
     }
 
     #[test]
