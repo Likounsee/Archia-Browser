@@ -8,6 +8,7 @@ use std::{
 
 pub mod cache;
 pub mod cookies;
+pub mod download;
 pub mod filter;
 pub mod loader;
 pub mod pipeline;
@@ -17,6 +18,7 @@ pub mod url;
 
 pub use cache::HttpCache;
 pub use cookies::{Cookie, CookieJar};
+pub use download::{download_to_path, download_to_path_with_limit, DownloadError, DownloadResult};
 pub use loader::{DocumentLoadError, DocumentLoader};
 pub use transport::{validate_http_request, HttpTransport, LocalFileTransport};
 pub use url::{Url, UrlError};
