@@ -659,6 +659,9 @@ unsafe fn refresh_page(state: &mut AppState) {
 }
 
 unsafe fn navigate(state: &mut AppState, address: &str) {
+    if address.trim().is_empty() {
+        return;
+    }
     let url = match parse_address(address) {
         Ok(url) if matches!(url.scheme(), "http" | "https") => url,
         Ok(_) => {
@@ -1268,7 +1271,7 @@ unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i
     paint_fill(hdc, 0, top, width, height, background);
     let content_width = width.min(980);
     let left = (width - content_width) / 2;
-    paint_fill(hdc, left, 150, left + content_width, height.min(560), card);
+    paint_fill(hdc, left, 150, left + content_width, height.min(690), card);
     paint_label(
         hdc,
         "ARCHIA",
@@ -1296,6 +1299,16 @@ unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i
         304,
         left + content_width - 30,
         340,
+        muted,
+        DT_CENTER,
+    );
+    paint_label(
+        hdc,
+        "Rechercher sur le Web ou saisir une adresse",
+        left + 30,
+        344,
+        left + content_width - 30,
+        370,
         muted,
         DT_CENTER,
     );
