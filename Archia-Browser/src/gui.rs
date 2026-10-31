@@ -211,6 +211,7 @@ unsafe extern "system" {
     fn GetWindowTextLengthW(hwnd: Hwnd) -> i32;
     fn GetWindowTextW(hwnd: Hwnd, text: *mut u16, max: i32) -> i32;
     fn MoveWindow(hwnd: Hwnd, x: i32, y: i32, width: i32, height: i32, repaint: i32) -> i32;
+    fn DestroyWindow(hwnd: Hwnd) -> i32;
     fn SendMessageW(hwnd: Hwnd, message: u32, w_param: Wparam, l_param: Lparam) -> Lresult;
     fn ShowWindow(hwnd: Hwnd, command: i32) -> i32;
     fn InvalidateRect(hwnd: Hwnd, rect: *const Rect, erase: i32) -> i32;
@@ -718,13 +719,16 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
         paint_label(
             hdc,
             &label,
-            left + 12,
+            left + 10,
             7,
-            right - 10,
+            right - if state.tabs.len() > 1 { 34 } else { 10 },
             36,
             0x00F1EDE9,
-            DT_CENTER,
+            0,
         );
+        if state.tabs.len() > 1 {
+            paint_label(hdc, "×", right - 30, 7, right - 6, 36, 0x00B8AEA6, DT_CENTER);
+        }
     }
     paint_fill(hdc, width - 58, 7, width - 10, 36, 0x003B3430);
     paint_label(
@@ -1118,9 +1122,20 @@ unsafe extern "system" fn window_proc(
                         }
                     } else if client_x >= 10 {
                         let index = ((client_x - 10) / tab_width.max(1)) as usize;
-                        if let Some((id, _)) = state.tabs.get(index) {
-                            state.browser.select_tab(*id);
-                            refresh_page(state);
+                        if let Some((id, handle)) = state.tabs.get(index).copied() {
+                            let tab_left = 10 + index as i32 * tab_width;
+                            let close_clicked = state.tabs.len() > 1
+                                && client_x >= tab_left + tab_width - 36;
+                            if close_clicked {
+                                if state.browser.close_tab(id) {
+                                    let _ = DestroyWindow(handle);
+                                    state.tabs.remove(index);
+                                    refresh_page(state);
+                                }
+                            } else {
+                                state.browser.select_tab(id);
+                                refresh_page(state);
+                            }
                         }
                     }
                 } else if (48..=82).contains(&client_x) && (45..=84).contains(&client_y) {
