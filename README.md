@@ -38,7 +38,7 @@ Or start with a blank tab:
 .\scripts\run-windows.ps1
 ```
 
-The GUI currently provides a native window, selectable tabs, an address bar, Go, Back, Forward, Reload and a scrollable document-text area. Navigation uses Archia's own HTTP/HTTPS transport, document loader, HTML/DOM and navigation state. The page area currently displays extracted document text rather than the engine's software-rendered CSS surface. Mouse-driven page links, full layout painting, JavaScript, forms and modern-site compatibility are still under development.
+The GUI currently provides a native window, selectable tabs, an address bar, Go, Back, Forward and Reload. Navigation uses Archia's own HTTP/HTTPS transport, document loader, HTML/DOM and navigation state. The page viewport now presents Archia's own software-rendered display list through a native Win32 DIB; no embedded browser engine or WebView is used. Resizing the window recalculates layout from the existing styled DOM instead of refetching or reparsing the page. This is an early renderer: text rasterization, image decoding/painting, scrolling, mouse-driven links, JavaScript, forms and modern-site compatibility remain incomplete.
 
 On non-Windows systems the executable remains a terminal-based development client. It supports entering addresses and the commands `:links`, `:open NUMERO`, `:back`, `:forward`, `:reload`, `:history`, `:url`, `:title`, `:help` and `:quit`.
 
@@ -55,9 +55,9 @@ Theme manifests and selection are available in the engine, but the current Win32
 - [x] PowerShell launcher.
 - [x] Native Windows window and message loop.
 - [x] Address bar and navigation controls.
-- [ ] Display Archia's software-rendered page surface.
+- [x] Display Archia's software-rendered page surface through native Win32 presentation.
 - [ ] Mouse hit-testing and clickable links.
-- [ ] Resize handling and viewport re-layout.
+- [x] Resize handling and viewport re-layout without reparsing the document.
 - [ ] Windows packaging and a repeatable install/run workflow.
 
 ### W1 — Usable browser essentials
