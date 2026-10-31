@@ -250,10 +250,18 @@ fn clear_terminal() {
     type Handle = *mut c_void;
     #[repr(C)]
     #[derive(Clone, Copy)]
-    struct Coord { x: i16, y: i16 }
+    struct Coord {
+        x: i16,
+        y: i16,
+    }
     #[repr(C)]
     #[derive(Clone, Copy)]
-    struct SmallRect { left: i16, top: i16, right: i16, bottom: i16 }
+    struct SmallRect {
+        left: i16,
+        top: i16,
+        right: i16,
+        bottom: i16,
+    }
     #[repr(C)]
     struct ConsoleScreenBufferInfo {
         size: Coord,
@@ -266,9 +274,24 @@ fn clear_terminal() {
     #[link(name = "kernel32")]
     unsafe extern "system" {
         fn GetStdHandle(kind: u32) -> Handle;
-        fn GetConsoleScreenBufferInfo(console: Handle, info: *mut ConsoleScreenBufferInfo) -> i32;
-        fn FillConsoleOutputCharacterW(console: Handle, character: u16, length: u32, position: Coord, written: *mut u32) -> i32;
-        fn FillConsoleOutputAttribute(console: Handle, attribute: u16, length: u32, position: Coord, written: *mut u32) -> i32;
+        fn GetConsoleScreenBufferInfo(
+            console: Handle,
+            info: *mut ConsoleScreenBufferInfo,
+        ) -> i32;
+        fn FillConsoleOutputCharacterW(
+            console: Handle,
+            character: u16,
+            length: u32,
+            position: Coord,
+            written: *mut u32,
+        ) -> i32;
+        fn FillConsoleOutputAttribute(
+            console: Handle,
+            attribute: u16,
+            length: u32,
+            position: Coord,
+            written: *mut u32,
+        ) -> i32;
         fn SetConsoleCursorPosition(console: Handle, position: Coord) -> i32;
     }
 
@@ -283,11 +306,20 @@ fn clear_terminal() {
                 false
             } else {
                 let info = info.assume_init();
-                let cells = (info.size.x.max(0) as u32).saturating_mul(info.size.y.max(0) as u32);
+                let cells = (info.size.x.max(0) as u32)
+                    .saturating_mul(info.size.y.max(0) as u32);
                 let origin = Coord { x: 0, y: 0 };
                 let mut written = 0;
-                let chars_ok = FillConsoleOutputCharacterW(console, b' ' as u16, cells, origin, &mut written) != 0;
-                let attrs_ok = FillConsoleOutputAttribute(console, info.attributes, cells, origin, &mut written) != 0;
+                let chars_ok =
+                    FillConsoleOutputCharacterW(console, b' ' as u16, cells, origin, &mut written)
+                        != 0;
+                let attrs_ok = FillConsoleOutputAttribute(
+                    console,
+                    info.attributes,
+                    cells,
+                    origin,
+                    &mut written,
+                ) != 0;
                 let cursor_ok = SetConsoleCursorPosition(console, origin) != 0;
                 chars_ok && attrs_ok && cursor_ok
             }
