@@ -12,6 +12,7 @@ use archia_browser::{
         DocumentLoader, HttpTransport, Request, Url,
     },
     surface::SoftwareSurface,
+    theme::{ThemeColors, ThemeManager},
     Browser,
 };
 
@@ -33,12 +34,22 @@ const WM_NCCREATE: u32 = 0x0081;
 const WM_DESTROY: u32 = 0x0002;
 const WM_KEYDOWN: u32 = 0x0100;
 const VK_RETURN: usize = 0x0D;
+const VK_L: usize = 0x4C;
+const VK_T: usize = 0x54;
+const VK_W: usize = 0x57;
+const VK_R: usize = 0x52;
+const VK_F5: usize = 0x74;
+const VK_CONTROL: i32 = 0x11;
 const MF_STRING: u32 = 0x0000;
 const TPM_RETURNCMD: u32 = 0x0100;
 const ID_MENU_RELOAD: u32 = 3001;
 const ID_MENU_NEW_TAB: u32 = 3002;
 const ID_MENU_CLOSE_TAB: u32 = 3003;
 const ID_MENU_QUIT: u32 = 3004;
+const ID_MENU_THEME_ARCHIA: u32 = 3010;
+const ID_MENU_THEME_CHROME: u32 = 3011;
+const ID_MENU_THEME_FIREFOX: u32 = 3012;
+const ID_MENU_THEME_EDGE: u32 = 3013;
 const GWLP_WNDPROC: i32 = -4;
 const WM_CTLCOLOREDIT: u32 = 0x0133;
 const DT_SINGLELINE: u32 = 0x0020;
@@ -206,6 +217,8 @@ unsafe extern "system" {
     fn SetWindowLongPtrW(hwnd: Hwnd, index: i32, value: isize) -> isize;
     fn GetWindowLongPtrW(hwnd: Hwnd, index: i32) -> isize;
     fn GetParent(hwnd: Hwnd) -> Hwnd;
+    fn GetKeyState(key: i32) -> i16;
+    fn SetFocus(hwnd: Hwnd) -> Hwnd;
     fn CreatePopupMenu() -> Handle;
     fn AppendMenuW(menu: Handle, flags: u32, item_id: usize, text: *const u16) -> i32;
     fn TrackPopupMenu(
@@ -321,6 +334,7 @@ struct AppState {
     scroll_y: u32,
     dib_pixels: Vec<u8>,
     tabs: Vec<(archia_browser::core::tabs::TabId, Hwnd)>,
+    themes: Option<ThemeManager>,
 }
 
 fn wide(value: &str) -> Vec<u16> {
@@ -474,11 +488,7 @@ unsafe fn scroll_to(state: &mut AppState, requested: i64) {
 unsafe fn refresh_page(state: &mut AppState) {
     state.surface_dirty = true;
     state.scroll_y = 0;
-    if state.browser.current_page().is_some() {
-        set_control_text(state.page, "");
-    } else {
-        set_control_text(state.page, "");
-    }
+    set_control_text(state.page, "");
     let _ = ShowWindow(state.page, SW_HIDE);
     let title = state
         .browser
@@ -778,12 +788,40 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
     }
 }
 
+fn parse_theme_color(value: &str) -> Option<u32> {
+    let value = value.strip_prefix('#')?;
+    if value.len() != 6 {
+        return None;
+    }
+    let red = u32::from_str_radix(&value[0..2], 16).ok()?;
+    let green = u32::from_str_radix(&value[2..4], 16).ok()?;
+    let blue = u32::from_str_radix(&value[4..6], 16).ok()?;
+    Some((blue << 16) | (green << 8) | red)
+}
+
+fn chrome_color(state: &AppState, select: fn(&ThemeColors) -> &str, fallback: u32) -> u32 {
+    state
+        .themes
+        .as_ref()
+        .and_then(|manager| parse_theme_color(select(&manager.active_theme().manifest.colors)))
+        .unwrap_or(fallback)
+}
+
 unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
     // A deliberately restrained dark browser frame: separate tab strip,
     // navigation row, active-tab accent, and a quiet address-field surround.
-    paint_fill(hdc, 0, 0, width, 88, 0x00211D1B);
-    paint_fill(hdc, 0, 39, width, 88, 0x002B2623);
-    paint_fill(hdc, 0, 86, width, 89, 0x00443B36);
+    let toolbar = chrome_color(state, |colors| &colors.toolbar_background, 0x00211D1B);
+    let window = chrome_color(state, |colors| &colors.window_background, 0x00181513);
+    let active_tab = chrome_color(state, |colors| &colors.tab_active_background, 0x00443B36);
+    let inactive_tab = chrome_color(state, |colors| &colors.tab_inactive_background, 0x002B2623);
+    let accent = chrome_color(state, |colors| &colors.accent, 0x00D78B55);
+    let text = chrome_color(state, |colors| &colors.text, 0x00F1EDE9);
+    let muted = chrome_color(state, |colors| &colors.muted_text, 0x00B8AEA6);
+    let address = chrome_color(state, |colors| &colors.address_background, 0x00F5F3F1);
+    let address_text = chrome_color(state, |colors| &colors.address_text, 0x00211D1B);
+    paint_fill(hdc, 0, 0, width, 88, toolbar);
+    paint_fill(hdc, 0, 39, width, 88, window);
+    paint_fill(hdc, 0, 86, width, 89, chrome_color(state, |colors| &colors.border, 0x00443B36));
 
     let tab_area = (width - 134).max(0);
     let tab_width = (tab_area / state.tabs.len().max(1) as i32).clamp(120, 220);
@@ -801,10 +839,10 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
             7,
             right,
             36,
-            if selected { 0x00443B36 } else { 0x002B2623 },
+            if selected { active_tab } else { inactive_tab },
         );
         if selected {
-            paint_fill(hdc, left + 8, 33, right - 8, 36, 0x00D78B55);
+            paint_fill(hdc, left + 8, 33, right - 8, 36, accent);
         }
         let title = state
             .browser
@@ -823,7 +861,7 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
             7,
             right - if state.tabs.len() > 1 { 34 } else { 10 },
             36,
-            0x00F1EDE9,
+            text,
             0,
         );
         if state.tabs.len() > 1 {
@@ -834,12 +872,12 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
                 7,
                 right - 6,
                 36,
-                0x00B8AEA6,
+                muted,
                 DT_CENTER,
             );
         }
     }
-    paint_fill(hdc, width - 108, 7, width - 62, 36, 0x003B3430);
+    paint_fill(hdc, width - 108, 7, width - 62, 36, inactive_tab);
     paint_label(
         hdc,
         "⋯",
@@ -847,10 +885,10 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
         7,
         width - 62,
         36,
-        0x00F1EDE9,
+        text,
         DT_CENTER,
     );
-    paint_fill(hdc, width - 58, 7, width - 10, 36, 0x003B3430);
+    paint_fill(hdc, width - 58, 7, width - 10, 36, inactive_tab);
     paint_label(
         hdc,
         "+",
@@ -858,17 +896,17 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
         7,
         width - 10,
         36,
-        0x00F1EDE9,
+        text,
         DT_CENTER,
     );
 
     for (label, left, right) in [("‹", 10, 44), ("›", 48, 82), ("⟳", 86, 122)] {
-        paint_fill(hdc, left, 48, right, 80, 0x003B3430);
-        paint_label(hdc, label, left, 48, right, 80, 0x00F1EDE9, DT_CENTER);
+        paint_fill(hdc, left, 48, right, 80, inactive_tab);
+        paint_label(hdc, label, left, 48, right, 80, text, DT_CENTER);
     }
     let address_right = width - 132;
-    paint_fill(hdc, 132, 48, address_right.max(240), 80, 0x00F5F3F1);
-    paint_fill(hdc, width - 122, 48, width - 10, 80, 0x00D78B55);
+    paint_fill(hdc, 132, 48, address_right.max(240), 80, address);
+    paint_fill(hdc, width - 122, 48, width - 10, 80, accent);
     paint_label(
         hdc,
         "Aller",
@@ -876,14 +914,19 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
         48,
         width - 10,
         80,
-        0x00211D1B,
+        address_text,
         DT_CENTER,
     );
 }
 
-unsafe fn paint_home_screen(hdc: Handle, width: i32, height: i32) {
+unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i32) {
     let top = 90;
-    paint_fill(hdc, 0, top, width, height, 0x00181513);
+    let background = chrome_color(state, |colors| &colors.window_background, 0x00181513);
+    let card = chrome_color(state, |colors| &colors.tab_inactive_background, 0x00312B27);
+    let accent = chrome_color(state, |colors| &colors.accent, 0x00D78B55);
+    let text = chrome_color(state, |colors| &colors.text, 0x00F5F1ED);
+    let muted = chrome_color(state, |colors| &colors.muted_text, 0x00B8AEA6);
+    paint_fill(hdc, 0, top, width, height, background);
     let content_width = width.min(980);
     let left = (width - content_width) / 2;
     paint_fill(
@@ -892,7 +935,7 @@ unsafe fn paint_home_screen(hdc: Handle, width: i32, height: i32) {
         150,
         left + content_width,
         height.min(560),
-        0x001F1B18,
+        card,
     );
     paint_label(
         hdc,
@@ -901,7 +944,7 @@ unsafe fn paint_home_screen(hdc: Handle, width: i32, height: i32) {
         190,
         left + content_width - 30,
         232,
-        0x00D78B55,
+        accent,
         DT_CENTER,
     );
     paint_label(
@@ -911,7 +954,7 @@ unsafe fn paint_home_screen(hdc: Handle, width: i32, height: i32) {
         240,
         left + content_width - 30,
         300,
-        0x00F5F1ED,
+        text,
         DT_CENTER,
     );
     paint_label(
@@ -921,7 +964,7 @@ unsafe fn paint_home_screen(hdc: Handle, width: i32, height: i32) {
         304,
         left + content_width - 30,
         340,
-        0x00B8AEA6,
+        muted,
         DT_CENTER,
     );
 
@@ -937,8 +980,8 @@ unsafe fn paint_home_screen(hdc: Handle, width: i32, height: i32) {
     .enumerate()
     {
         let x = left + 40 + index as i32 * (card_width + gap);
-        paint_fill(hdc, x, card_top, x + card_width, card_top + 112, 0x00312B27);
-        paint_fill(hdc, x, card_top, x + card_width, card_top + 3, 0x00D78B55);
+        paint_fill(hdc, x, card_top, x + card_width, card_top + 112, card);
+        paint_fill(hdc, x, card_top, x + card_width, card_top + 3, accent);
         paint_label(
             hdc,
             title,
@@ -946,7 +989,7 @@ unsafe fn paint_home_screen(hdc: Handle, width: i32, height: i32) {
             card_top + 18,
             x + card_width - 10,
             card_top + 54,
-            0x00F5F1ED,
+            text,
             DT_CENTER,
         );
         paint_label(
@@ -956,7 +999,7 @@ unsafe fn paint_home_screen(hdc: Handle, width: i32, height: i32) {
             card_top + 55,
             x + card_width - 12,
             card_top + 94,
-            0x00B8AEA6,
+            muted,
             DT_CENTER,
         );
     }
@@ -967,7 +1010,7 @@ unsafe fn paint_home_screen(hdc: Handle, width: i32, height: i32) {
         535,
         left + content_width - 20,
         575,
-        0x00B8AEA6,
+        muted,
         DT_CENTER,
     );
 }
@@ -1096,7 +1139,7 @@ unsafe extern "system" fn window_proc(
                         let height = client.bottom.saturating_sub(client.top);
                         paint_browser_chrome(state, hdc, width);
                         if state.browser.current_page().is_none() {
-                            paint_home_screen(hdc, width, height);
+                            paint_home_screen(state, hdc, width, height);
                         }
                     }
                     if GetClientRect(hwnd, &mut client) != 0
@@ -1478,6 +1521,10 @@ pub fn run() {
             scroll_y: 0,
             dib_pixels: Vec::new(),
             tabs: Vec::new(),
+            themes: std::env::var_os("APPDATA")
+                .map(|base| std::path::PathBuf::from(base).join("ArchiaBrowser").join("themes"))
+                .or_else(|| std::env::current_dir().ok().map(|base| base.join(".archia-browser").join("themes")))
+                .and_then(|directory| ThemeManager::load(directory).ok()),
         });
         let state_ptr = &mut *state as *mut AppState;
         let hwnd = CreateWindowExW(
