@@ -727,7 +727,16 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
             0,
         );
         if state.tabs.len() > 1 {
-            paint_label(hdc, "×", right - 30, 7, right - 6, 36, 0x00B8AEA6, DT_CENTER);
+            paint_label(
+                hdc,
+                "×",
+                right - 30,
+                7,
+                right - 6,
+                36,
+                0x00B8AEA6,
+                DT_CENTER,
+            );
         }
     }
     paint_fill(hdc, width - 58, 7, width - 10, 36, 0x003B3430);
@@ -1121,8 +1130,8 @@ unsafe extern "system" fn window_proc(
                         let index = ((client_x - 10) / tab_width.max(1)) as usize;
                         if let Some((id, handle)) = state.tabs.get(index).copied() {
                             let tab_left = 10 + index as i32 * tab_width;
-                            let close_clicked = state.tabs.len() > 1
-                                && client_x >= tab_left + tab_width - 36;
+                            let close_clicked =
+                                state.tabs.len() > 1 && client_x >= tab_left + tab_width - 36;
                             if close_clicked {
                                 if state.browser.close_tab(id) {
                                     let _ = DestroyWindow(handle);
