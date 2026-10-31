@@ -30,6 +30,7 @@ const WM_VSCROLL: u32 = 0x0115;
 const WM_MOUSEWHEEL: u32 = 0x020A;
 const WM_LBUTTONDOWN: u32 = 0x0201;
 const WM_RBUTTONDOWN: u32 = 0x0204;
+const WM_MBUTTONDOWN: u32 = 0x0207;
 const WM_COMMAND: u32 = 0x0111;
 const WM_NCCREATE: u32 = 0x0081;
 const WM_DESTROY: u32 = 0x0002;
@@ -40,6 +41,7 @@ const VK_T: usize = 0x54;
 const VK_W: usize = 0x57;
 const VK_R: usize = 0x52;
 const VK_D: usize = 0x44;
+const VK_H: usize = 0x48;
 const VK_F5: usize = 0x74;
 const VK_CONTROL: i32 = 0x11;
 const VK_MENU: i32 = 0x12;
@@ -910,6 +912,7 @@ unsafe fn create_new_tab(state: &mut AppState, hwnd: Hwnd) {
     state.tabs.push((tab_id, button));
     set_control_text(state.address, "");
     refresh_page(state);
+    let _ = SetFocus(state.address);
 }
 
 unsafe fn close_tab_at(state: &mut AppState, index: usize) {
@@ -1024,6 +1027,10 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             }
             VK_D => {
                 toggle_current_bookmark(state);
+                return true;
+            }
+            VK_H => {
+                show_browser_menu(state, hwnd);
                 return true;
             }
             _ => {}
@@ -2001,6 +2008,30 @@ unsafe extern "system" fn window_proc(
                 if (90..=118).contains(&client_y) && client_x >= 12 {
                     let index = ((client_x - 12) / 162) as usize;
                     show_bookmark_context_menu(state, hwnd, index);
+                }
+            }
+            0
+        }
+        WM_MBUTTONDOWN => {
+            if let Some(state) = app_state(hwnd) {
+                let client_x = (l_param as u32 & 0xffff) as u16 as i16 as i32;
+                let client_y = ((l_param as u32 >> 16) & 0xffff) as u16 as i16 as i32;
+                let mut client = Rect {
+                    left: 0,
+                    top: 0,
+                    right: 1180,
+                    bottom: 820,
+                };
+                if GetClientRect(hwnd, &mut client) != 0
+                    && (0..=42).contains(&client_y)
+                    && client_x >= 10
+                    && client_x < client.right - 108
+                {
+                    let width = client.right.saturating_sub(client.left);
+                    let tab_width =
+                        ((width - 134).max(0) / state.tabs.len().max(1) as i32).clamp(86, 220);
+                    let index = ((client_x - 10) / tab_width.max(1)) as usize;
+                    close_tab_at(state, index);
                 }
             }
             0
