@@ -318,7 +318,14 @@ unsafe fn layout_controls(state: &AppState, width: i32, height: i32) {
     let tab_area_width = (width - 2 * margin - 70).max(100);
     let tab_width = (tab_area_width / state.tabs.len().max(1) as i32).clamp(90, 180);
     for (index, (_, handle)) in state.tabs.iter().enumerate() {
-        let _ = MoveWindow(*handle, margin + index as i32 * tab_width, 8, tab_width - 4, 30, 1);
+        let _ = MoveWindow(
+            *handle,
+            margin + index as i32 * tab_width,
+            8,
+            tab_width - 4,
+            30,
+            1,
+        );
     }
     let _ = MoveWindow(state.new_tab, width - 62, 8, 52, 30, 1);
     let _ = MoveWindow(state.back, margin, button_y, 38, button_h, 1);
@@ -374,7 +381,10 @@ unsafe extern "system" fn window_proc(
             );
             state.go = create_control(hwnd, instance, "BUTTON", "Aller", 0, ID_GO);
             state.new_tab = create_control(hwnd, instance, "BUTTON", "+", 0, ID_NEW_TAB);
-            let initial_tab = state.browser.active_tab_id().expect("browser starts with one tab");
+            let initial_tab = state
+                .browser
+                .active_tab_id()
+                .expect("browser starts with one tab");
             let initial_button = create_control(
                 hwnd,
                 instance,
