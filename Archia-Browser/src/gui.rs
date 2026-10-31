@@ -416,8 +416,8 @@ fn save_bookmarks(state: &AppState) {
         .map(|bookmark| {
             format!(
                 "{}\t{}",
-                bookmark.url.replace(['\\r', '\\n', '\\t'], " "),
-                bookmark.title.replace(['\\r', '\\n', '\\t'], " ")
+                bookmark.url.replace(['\r', '\n', '\t'], " "),
+                bookmark.title.replace(['\r', '\n', '\t'], " ")
             )
         })
         .collect::<Vec<_>>()
@@ -1115,7 +1115,7 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
 }
 
 unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i32) {
-    let top = 90;
+    let top = 120;
     let background = chrome_color(state, |colors| &colors.window_background, 0x00181513);
     let card = chrome_color(state, |colors| &colors.tab_inactive_background, 0x00312B27);
     let accent = chrome_color(state, |colors| &colors.accent, 0x00D78B55);
