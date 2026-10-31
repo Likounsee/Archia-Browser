@@ -1,0 +1,21 @@
+id = "edge"
+name = "Edge-inspired"
+description = "A clean Edge-inspired browser frame with cool blue-green accents and rounded controls."
+version = "1.0.0"
+author = "Archia Browser"
+layout = "edge"
+tab_position = "top"
+sidebar = true
+
+[colors]
+window_background = "#E9EEF4"
+toolbar_background = "#F7F9FC"
+tab_active_background = "#FFFFFF"
+tab_inactive_background = "#E8EDF3"
+address_background = "#EEF3F8"
+address_text = "#202B36"
+text = "#202B36"
+muted_text = "#596B7A"
+accent = "#087E8B"
+border = "#CDD7E1"
+page_background = "#FFFFFF"
