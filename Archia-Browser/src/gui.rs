@@ -1634,7 +1634,6 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         (ID_MENU_RELOAD, "Recharger"),
         (ID_MENU_NEW_TAB, "Nouvel onglet"),
         (ID_MENU_CLOSE_TAB, "Fermer l'onglet"),
-        (ID_MENU_REOPEN_CLOSED_TAB, "Rouvrir le dernier onglet fermé"),
         (ID_MENU_CLEAR_HISTORY, "Effacer l'historique"),
         (ID_MENU_OPEN_ALL_BOOKMARKS, "Ouvrir tous les favoris"),
         (ID_MENU_SEARCH_GOOGLE, "Recherche : Google"),
