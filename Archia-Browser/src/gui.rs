@@ -289,6 +289,22 @@ fn welcome_text() -> &'static str {
     "Bienvenue dans Archia Browser\n\nSaisissez une adresse dans la barre ci-dessus puis cliquez sur Aller.\n\nLe moteur de rendu natif affiche ici les pages HTML/CSS."
 }
 
+unsafe fn current_viewport(state: &AppState) -> LayoutViewport {
+    let mut client = Rect {
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+    };
+    if GetClientRect(state.window, &mut client) == 0 {
+        return LayoutViewport::new(1200, 760);
+    }
+    LayoutViewport::new(
+        client.right.saturating_sub(client.left).saturating_sub(20).max(1) as u32,
+        client.bottom.saturating_sub(client.top).saturating_sub(102).max(1) as u32,
+    )
+}
+
 unsafe fn refresh_page(state: &mut AppState) {
     if state.browser.current_page().is_some() {
         set_control_text(state.page, "");
@@ -363,7 +379,7 @@ unsafe fn navigate(state: &mut AppState, address: &str) {
     set_control_text(state.page, "Chargement de la page…");
     let _ = ShowWindow(state.page, SW_SHOW);
     let _ = SendMessageW(state.page, EM_SETLIMITTEXT, 2 * 1024 * 1024, 0);
-    let viewport = LayoutViewport::new(1200, 760);
+    let viewport = current_viewport(state);
     match state
         .browser
         .load_request(&state.loader, &request, viewport)
@@ -563,6 +579,13 @@ unsafe extern "system" fn window_proc(
                 let width = (l_param as u32 & 0xffff) as i32;
                 let height = ((l_param as u32 >> 16) & 0xffff) as i32;
                 layout_controls(state, width, height);
+                let viewport = LayoutViewport::new(
+                    width.saturating_sub(20).max(1) as u32,
+                    height.saturating_sub(102).max(1) as u32,
+                );
+                if state.browser.relayout_current_page(viewport) {
+                    let _ = InvalidateRect(hwnd, ptr::null(), 1);
+                }
             }
             0
         }
@@ -577,7 +600,7 @@ unsafe extern "system" fn window_proc(
                     ID_BACK => {
                         if state
                             .browser
-                            .go_back(&state.loader, LayoutViewport::new(1200, 760))
+                            .go_back(&state.loader, current_viewport(state))
                             .is_ok()
                         {
                             refresh_page(state);
@@ -586,7 +609,7 @@ unsafe extern "system" fn window_proc(
                     ID_FORWARD => {
                         if state
                             .browser
-                            .go_forward(&state.loader, LayoutViewport::new(1200, 760))
+                            .go_forward(&state.loader, current_viewport(state))
                             .is_ok()
                         {
                             refresh_page(state);
@@ -595,7 +618,7 @@ unsafe extern "system" fn window_proc(
                     ID_RELOAD => {
                         if state
                             .browser
-                            .reload(&state.loader, LayoutViewport::new(1200, 760))
+                            .reload(&state.loader, current_viewport(state))
                             .is_ok()
                         {
                             refresh_page(state);
@@ -617,7 +640,14 @@ unsafe extern "system" fn window_proc(
                             state.tabs.push((tab_id, button));
                             set_control_text(state.address, "");
                             refresh_page(state);
-                            layout_controls(state, 1180, 820);
+                            let mut client = Rect { left: 0, top: 0, right: 1180, bottom: 820 };
+                            if GetClientRect(hwnd, &mut client) != 0 {
+                                layout_controls(
+                                    state,
+                                    client.right.saturating_sub(client.left),
+                                    client.bottom.saturating_sub(client.top),
+                                );
+                            }
                         }
                     }
                     tab_id if (ID_TAB_BASE..ID_TAB_BASE + MAX_GUI_TABS).contains(&tab_id) => {
