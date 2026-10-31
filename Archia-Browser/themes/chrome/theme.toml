@@ -1,0 +1,21 @@
+id = "chrome"
+name = "Chrome-inspired"
+description = "A familiar compact top tab strip and rounded omnibox inspired by Chrome's browser chrome."
+version = "1.0.0"
+author = "Archia Browser"
+layout = "chrome"
+tab_position = "top"
+sidebar = false
+
+[colors]
+window_background = "#DEE3EB"
+toolbar_background = "#F1F3F4"
+tab_active_background = "#FFFFFF"
+tab_inactive_background = "#DCE1E8"
+address_background = "#E8EAED"
+address_text = "#202124"
+text = "#202124"
+muted_text = "#5F6368"
+accent = "#1A73E8"
+border = "#C6CBD2"
+page_background = "#FFFFFF"
