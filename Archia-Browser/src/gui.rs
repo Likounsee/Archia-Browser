@@ -851,17 +851,27 @@ unsafe fn show_recent_downloads(state: &mut AppState, hwnd: Hwnd) {
         .filter_map(Result::ok)
         .filter_map(|entry| {
             let metadata = entry.metadata().ok()?;
-            if !metadata.is_file() || entry.file_name().to_string_lossy().starts_with(".archia-pending-") {
+            if !metadata.is_file()
+                || entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".archia-pending-")
+            {
                 return None;
             }
-            Some((metadata.modified().unwrap_or(std::time::UNIX_EPOCH), entry.path()))
+            Some((
+                metadata.modified().unwrap_or(std::time::UNIX_EPOCH),
+                entry.path(),
+            ))
         })
         .collect::<Vec<_>>();
     files.sort_by(|left, right| right.0.cmp(&left.0));
     files.truncate(MAX_RECENT_DOWNLOADS);
 
     let menu = CreatePopupMenu();
-    if menu.is_null() { return; }
+    if menu.is_null() {
+        return;
+    }
     let heading = wide(&format!("Téléchargements récents ({})", files.len()));
     let _ = AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, heading.as_ptr());
     if files.is_empty() {
@@ -871,15 +881,33 @@ unsafe fn show_recent_downloads(state: &mut AppState, hwnd: Hwnd) {
         for (index, (_, path)) in files.iter().enumerate() {
             let name = path.file_name().unwrap_or_default().to_string_lossy();
             let label = wide(&format!("{}", name.chars().take(58).collect::<String>()));
-            let _ = AppendMenuW(menu, MF_STRING, (ID_RECENT_DOWNLOAD_BASE + index as u32) as usize, label.as_ptr());
+            let _ = AppendMenuW(
+                menu,
+                MF_STRING,
+                (ID_RECENT_DOWNLOAD_BASE + index as u32) as usize,
+                label.as_ptr(),
+            );
         }
     }
     let _ = AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
     let folder = wide("Ouvrir le dossier Téléchargements");
-    let _ = AppendMenuW(menu, MF_STRING, ID_MENU_OPEN_DOWNLOADS as usize, folder.as_ptr());
+    let _ = AppendMenuW(
+        menu,
+        MF_STRING,
+        ID_MENU_OPEN_DOWNLOADS as usize,
+        folder.as_ptr(),
+    );
     let mut cursor = Point { x: 0, y: 0 };
     let _ = GetCursorPos(&mut cursor);
-    let selected = TrackPopupMenu(menu, TPM_RETURNCMD, cursor.x, cursor.y, 0, hwnd, ptr::null());
+    let selected = TrackPopupMenu(
+        menu,
+        TPM_RETURNCMD,
+        cursor.x,
+        cursor.y,
+        0,
+        hwnd,
+        ptr::null(),
+    );
     let _ = DestroyMenu(menu);
     if selected == ID_MENU_OPEN_DOWNLOADS as usize {
         open_downloads_folder(state);
@@ -890,7 +918,14 @@ unsafe fn show_recent_downloads(state: &mut AppState, hwnd: Hwnd) {
         if let Some((_, path)) = files.get(index) {
             let operation = wide("open");
             let target = wide(&path.to_string_lossy());
-            let _ = ShellExecuteW(hwnd, operation.as_ptr(), target.as_ptr(), ptr::null(), ptr::null(), SW_SHOW);
+            let _ = ShellExecuteW(
+                hwnd,
+                operation.as_ptr(),
+                target.as_ptr(),
+                ptr::null(),
+                ptr::null(),
+                SW_SHOW,
+            );
         }
     }
 }
@@ -1719,7 +1754,8 @@ unsafe fn link_url_at(state: &AppState, client_x: i32, client_y: i32) -> Option<
     let viewport = current_viewport(state);
     let content_x = client_x.saturating_sub(10);
     let content_y = client_y.saturating_sub(120);
-    if content_x < 0 || content_y < 0
+    if content_x < 0
+        || content_y < 0
         || content_x as u32 >= viewport.width
         || content_y as u32 >= viewport.height
     {
@@ -1757,9 +1793,13 @@ unsafe fn show_link_context_menu(state: &mut AppState, hwnd: Hwnd, url: String) 
             create_new_tab(state, hwnd);
             navigate(state, &url);
         }
-        ID_LINK_COPY_URL => { let _ = copy_text_to_clipboard(hwnd, &url); }
+        ID_LINK_COPY_URL => {
+            let _ = copy_text_to_clipboard(hwnd, &url);
+        }
         ID_LINK_DOWNLOAD => {
-            if let Ok(parsed) = Url::parse(&url) { download_url(state, parsed); }
+            if let Ok(parsed) = Url::parse(&url) {
+                download_url(state, parsed);
+            }
         }
         _ => {}
     }
