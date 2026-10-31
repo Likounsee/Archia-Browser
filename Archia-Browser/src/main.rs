@@ -1,4 +1,7 @@
-use std::{io::{self, Write}, path::PathBuf};
+use std::{
+    io::{self, Write},
+    path::PathBuf,
+};
 
 use archia_browser::{
     html::Node,
@@ -29,7 +32,6 @@ fn viewport() -> archia_browser::layout::LayoutViewport {
     archia_browser::layout::LayoutViewport::new(VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
 }
 
-
 #[cfg(windows)]
 fn theme_directory() -> PathBuf {
     std::env::var_os("APPDATA")
@@ -52,8 +54,15 @@ fn theme_directory() -> PathBuf {
 fn print_themes(themes: &ThemeManager) {
     println!("Themes disponibles :");
     for theme in themes.themes() {
-        let active = if theme.manifest.id == themes.active_id() { " [actif]" } else { "" };
-        println!("  {} — {}{}", theme.manifest.id, theme.manifest.name, active);
+        let active = if theme.manifest.id == themes.active_id() {
+            " [actif]"
+        } else {
+            ""
+        };
+        println!(
+            "  {} — {}{}",
+            theme.manifest.id, theme.manifest.name, active
+        );
     }
     println!("Changer de theme : :theme ID");
 }
