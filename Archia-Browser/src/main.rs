@@ -160,7 +160,10 @@ fn load_url(
         .insert("accept-language".into(), "fr-FR,fr;q=0.9,en;q=0.8".into());
     request.headers.insert(
         "user-agent".into(),
-        format!("Mozilla/5.0 (Windows NT 10.0; Win64; x64) ArchiaBrowser/{}", browser.version()),
+        format!(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ArchiaBrowser/{}",
+            browser.version()
+        ),
     );
     request.policy.resource_kind = ResourceKind::Document;
     request.policy.top_level_navigation = true;
