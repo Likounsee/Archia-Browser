@@ -726,7 +726,11 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
 
     match selected {
         ID_MENU_RELOAD => {
-            if state.browser.reload(&state.loader, current_viewport(state)).is_ok() {
+            if state
+                .browser
+                .reload(&state.loader, current_viewport(state))
+                .is_ok()
+            {
                 refresh_page(state);
             }
         }
@@ -834,7 +838,16 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
         }
     }
     paint_fill(hdc, width - 108, 7, width - 62, 36, 0x003B3430);
-    paint_label(hdc, "⋯", width - 108, 7, width - 62, 36, 0x00F1EDE9, DT_CENTER);
+    paint_label(
+        hdc,
+        "⋯",
+        width - 108,
+        7,
+        width - 62,
+        36,
+        0x00F1EDE9,
+        DT_CENTER,
+    );
     paint_fill(hdc, width - 58, 7, width - 10, 36, 0x003B3430);
     paint_label(
         hdc,
