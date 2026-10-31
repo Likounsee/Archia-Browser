@@ -478,6 +478,18 @@ impl Browser {
         true
     }
 
+    pub fn render_current_page_at(
+        &self,
+        surface: &mut crate::surface::SoftwareSurface,
+        scroll_y: u32,
+    ) -> bool {
+        let Some(page) = self.current_page() else {
+            return false;
+        };
+        page.render_into_with_vertical_offset(surface, scroll_y);
+        true
+    }
+
     /// Render into a surface created from this browser's shared memory budget.
     pub fn render_current_page_budgeted(
         &self,
