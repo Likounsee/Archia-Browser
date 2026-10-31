@@ -316,7 +316,10 @@ fn main() {
         if let Some(id) = command.strip_prefix(":theme ") {
             match theme_manager.as_mut() {
                 Some(themes) => match themes.select(id.trim()) {
-                    Ok(()) => println!("Theme selectionne : {}", themes.active_theme().manifest.name),
+                    Ok(()) => println!(
+                        "Theme selectionne : {}",
+                        themes.active_theme().manifest.name
+                    ),
                     Err(error) => eprintln!("Selection du theme impossible: {error}"),
                 },
                 None => eprintln!("Gestion des themes indisponible."),
