@@ -7,6 +7,7 @@ use std::{ffi::c_void, mem, ptr};
 
 use archia_browser::{
     layout::LayoutViewport,
+    surface::SoftwareSurface,
     net::{
         pipeline::{NetworkPipeline, PolicyDecision, RequestPolicyEngine, ResourceKind},
         DocumentLoader, HttpTransport, Request, Url,
@@ -23,6 +24,7 @@ type Lresult = isize;
 
 const WM_CREATE: u32 = 0x0001;
 const WM_SIZE: u32 = 0x0005;
+const WM_PAINT: u32 = 0x000F;
 const WM_COMMAND: u32 = 0x0111;
 const WM_NCCREATE: u32 = 0x0081;
 const WM_DESTROY: u32 = 0x0002;
@@ -39,6 +41,7 @@ const ES_AUTOVSCROLL: u32 = 0x0040;
 const ES_READONLY: u32 = 0x0800;
 const EM_SETLIMITTEXT: u32 = 0x00C5;
 const SW_SHOW: i32 = 5;
+const SW_HIDE: i32 = 0;
 const COLOR_WINDOW: usize = 5;
 
 const ID_BACK: usize = 1001;
@@ -50,6 +53,45 @@ const ID_ADDRESS: usize = 1100;
 const ID_PAGE: usize = 1200;
 const ID_TAB_BASE: usize = 2000;
 const MAX_GUI_TABS: usize = 100;
+
+#[repr(C)]
+struct Rect {
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+}
+
+#[repr(C)]
+struct PaintStruct {
+    hdc: Handle,
+    erase: i32,
+    paint: Rect,
+    restore: i32,
+    inc_update: i32,
+    reserved: [u8; 32],
+}
+
+#[repr(C)]
+struct BitmapInfoHeader {
+    size: u32,
+    width: i32,
+    height: i32,
+    planes: u16,
+    bit_count: u16,
+    compression: u32,
+    size_image: u32,
+    x_pixels_per_meter: i32,
+    y_pixels_per_meter: i32,
+    colors_used: u32,
+    colors_important: u32,
+}
+
+#[repr(C)]
+struct BitmapInfo {
+    header: BitmapInfoHeader,
+    colors: [u32; 1],
+}
 
 #[repr(C)]
 struct Point {
@@ -127,6 +169,29 @@ unsafe extern "system" {
     fn GetWindowTextW(hwnd: Hwnd, text: *mut u16, max: i32) -> i32;
     fn MoveWindow(hwnd: Hwnd, x: i32, y: i32, width: i32, height: i32, repaint: i32) -> i32;
     fn SendMessageW(hwnd: Hwnd, message: u32, w_param: Wparam, l_param: Lparam) -> Lresult;
+    fn ShowWindow(hwnd: Hwnd, command: i32) -> i32;
+    fn InvalidateRect(hwnd: Hwnd, rect: *const Rect, erase: i32) -> i32;
+    fn GetClientRect(hwnd: Hwnd, rect: *mut Rect) -> i32;
+    fn BeginPaint(hwnd: Hwnd, paint: *mut PaintStruct) -> Handle;
+    fn EndPaint(hwnd: Hwnd, paint: *const PaintStruct) -> i32;
+}
+
+#[link(name = "gdi32")]
+unsafe extern "system" {
+    fn SetDIBitsToDevice(
+        hdc: Handle,
+        x_dest: i32,
+        y_dest: i32,
+        width: u32,
+        height: u32,
+        x_src: i32,
+        y_src: i32,
+        start_scan: u32,
+        scan_lines: u32,
+        bits: *const c_void,
+        info: *const BitmapInfo,
+        usage: u32,
+    ) -> i32;
 }
 
 #[link(name = "kernel32")]
@@ -158,6 +223,8 @@ struct AppState {
     go: Hwnd,
     new_tab: Hwnd,
     page: Hwnd,
+    surface: Option<SoftwareSurface>,
+    dib_pixels: Vec<u8>,
     tabs: Vec<(archia_browser::core::tabs::TabId, Hwnd)>,
 }
 
@@ -218,20 +285,18 @@ unsafe fn set_control_text(hwnd: Hwnd, value: &str) {
     let _ = SetWindowTextW(hwnd, value.as_ptr());
 }
 
-fn page_text(state: &AppState) -> String {
-    let Some(page) = state.browser.current_page() else {
-        return "Bienvenue dans Archia Browser\n\nSaisissez une adresse dans la barre ci-dessus puis cliquez sur Aller.\n\nLe moteur HTML/CSS natif d'Archia Browser est en cours de développement.".to_owned();
-    };
-    let mut output = page.document.visible_text_content();
-    if output.len() > 2 * 1024 * 1024 {
-        output.truncate(2 * 1024 * 1024);
-        output.push_str("\n\n[Contenu tronqué : limite d'affichage atteinte]");
-    }
-    output
+fn welcome_text() -> &'static str {
+    "Bienvenue dans Archia Browser\n\nSaisissez une adresse dans la barre ci-dessus puis cliquez sur Aller.\n\nLe moteur de rendu natif affiche ici les pages HTML/CSS."
 }
 
 unsafe fn refresh_page(state: &mut AppState) {
-    set_control_text(state.page, &page_text(state));
+    if state.browser.current_page().is_some() {
+        set_control_text(state.page, "");
+        let _ = ShowWindow(state.page, SW_HIDE);
+    } else {
+        set_control_text(state.page, welcome_text());
+        let _ = ShowWindow(state.page, SW_SHOW);
+    }
     let title = state
         .browser
         .current_page()
@@ -246,6 +311,7 @@ unsafe fn refresh_page(state: &mut AppState) {
     let caption = format!("{title} — Archia Browser");
     let caption = wide(&caption);
     let _ = SetWindowTextW(state.window, caption.as_ptr());
+    let _ = InvalidateRect(state.window, ptr::null(), 1);
     if let Some(active_id) = state.browser.active_tab_id() {
         if let Some((index, (_, handle))) = state
             .tabs
@@ -295,6 +361,7 @@ unsafe fn navigate(state: &mut AppState, address: &str) {
     request.policy.top_level_navigation = true;
 
     set_control_text(state.page, "Chargement de la page…");
+    let _ = ShowWindow(state.page, SW_SHOW);
     let _ = SendMessageW(state.page, EM_SETLIMITTEXT, 2 * 1024 * 1024, 0);
     let viewport = LayoutViewport::new(1200, 760);
     match state
@@ -307,6 +374,7 @@ unsafe fn navigate(state: &mut AppState, address: &str) {
                 "Impossible de charger cette page.\n\n{error:?}\n\nVérifiez l'adresse et votre connexion Internet."
             );
             set_control_text(state.page, &message);
+            let _ = ShowWindow(state.page, SW_SHOW);
         }
     }
 }
@@ -406,6 +474,54 @@ unsafe extern "system" fn window_proc(
             let _ = SendMessageW(state.address, 0x0030, 1, 0); // WM_SETFONT
             let _ = SendMessageW(state.page, 0x0030, 1, 0);
             refresh_page(state);
+            0
+        }
+        WM_PAINT => {
+            let mut paint: PaintStruct = mem::zeroed();
+            let hdc = BeginPaint(hwnd, &mut paint);
+            if !hdc.is_null() {
+                if let Some(state) = app_state(hwnd) {
+                    let mut client = Rect { left: 0, top: 0, right: 0, bottom: 0 };
+                    if GetClientRect(hwnd, &mut client) != 0 && state.browser.current_page().is_some() {
+                        let width = client.right.saturating_sub(client.left).saturating_sub(20).max(1) as u32;
+                        let height = client.bottom.saturating_sub(client.top).saturating_sub(102).max(1) as u32;
+                        let needs_surface = state.surface.as_ref().is_none_or(|surface| surface.width() != width || surface.height() != height);
+                        if needs_surface {
+                            state.surface = SoftwareSurface::try_new(width, height);
+                            state.dib_pixels.clear();
+                        }
+                        if let Some(surface) = state.surface.as_mut() {
+                            if state.browser.render_current_page(surface) {
+                                let required = (width as usize).saturating_mul(height as usize).saturating_mul(4);
+                                if state.dib_pixels.len() != required {
+                                    state.dib_pixels.resize(required, 0);
+                                }
+                                for (source, target) in surface.pixels().chunks_exact(4).zip(state.dib_pixels.chunks_exact_mut(4)) {
+                                    target.copy_from_slice(&[source[2], source[1], source[0], 0]);
+                                }
+                                let info = BitmapInfo {
+                                    header: BitmapInfoHeader {
+                                        size: mem::size_of::<BitmapInfoHeader>() as u32,
+                                        width: width as i32,
+                                        height: -(height as i32),
+                                        planes: 1,
+                                        bit_count: 32,
+                                        compression: 0,
+                                        size_image: required as u32,
+                                        x_pixels_per_meter: 0,
+                                        y_pixels_per_meter: 0,
+                                        colors_used: 0,
+                                        colors_important: 0,
+                                    },
+                                    colors: [0],
+                                };
+                                let _ = SetDIBitsToDevice(hdc, 10, 90, width, height, 0, 0, 0, height, state.dib_pixels.as_ptr().cast(), &info, 0);
+                            }
+                        }
+                    }
+                }
+            }
+            let _ = EndPaint(hwnd, &paint);
             0
         }
         WM_SIZE => {
@@ -526,6 +642,8 @@ pub fn run() {
             go: ptr::null_mut(),
             new_tab: ptr::null_mut(),
             page: ptr::null_mut(),
+            surface: None,
+            dib_pixels: Vec::new(),
             tabs: Vec::new(),
         });
         let state_ptr = &mut *state as *mut AppState;
