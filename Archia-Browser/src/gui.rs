@@ -75,6 +75,8 @@ const ID_MENU_TOGGLE_SESSION: u32 = 3016;
 const ID_MENU_DOWNLOAD_PAGE: u32 = 3017;
 const ID_MENU_OPEN_DOWNLOADS: u32 = 3018;
 const ID_MENU_REOPEN_CLOSED_TAB: u32 = 3019;
+const ID_MENU_COPY_PAGE_URL: u32 = 3020;
+const ID_MENU_BOOKMARK_PAGE: u32 = 3021;
 const ID_MENU_THEME_ARCHIA: u32 = 3010;
 const ID_MENU_THEME_CHROME: u32 = 3011;
 const ID_MENU_THEME_FIREFOX: u32 = 3012;
@@ -299,6 +301,10 @@ unsafe extern "system" {
     fn GetScrollInfo(hwnd: Hwnd, bar: i32, info: *mut ScrollInfo) -> i32;
     fn ShowScrollBar(hwnd: Hwnd, bar: i32, show: i32) -> i32;
     fn DrawTextW(hdc: Handle, text: *const u16, count: i32, rect: *mut Rect, format: u32) -> i32;
+    fn OpenClipboard(owner: Hwnd) -> i32;
+    fn EmptyClipboard() -> i32;
+    fn SetClipboardData(format: u32, memory: Handle) -> Handle;
+    fn CloseClipboard() -> i32;
 }
 
 #[link(name = "gdi32")]
@@ -367,6 +373,10 @@ unsafe extern "system" {
 #[link(name = "kernel32")]
 unsafe extern "system" {
     fn GetModuleHandleW(module_name: *const u16) -> Hinstance;
+    fn GlobalAlloc(flags: u32, bytes: usize) -> Handle;
+    fn GlobalLock(memory: Handle) -> *mut c_void;
+    fn GlobalUnlock(memory: Handle) -> i32;
+    fn GlobalFree(memory: Handle) -> Handle;
 }
 
 struct BrowserPolicy;
@@ -1596,6 +1606,57 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
     }
 }
 
+unsafe fn current_page_url(state: &AppState) -> Option<String> {
+    state.browser.active_tab_id()
+        .and_then(|id| state.browser.tabs().tab(id))
+        .and_then(|tab| tab.page())
+        .and_then(|page| page.url())
+        .map(ToString::to_string)
+}
+
+unsafe fn copy_text_to_clipboard(hwnd: Hwnd, value: &str) -> bool {
+    const GMEM_MOVEABLE: u32 = 0x0002;
+    const CF_UNICODETEXT: u32 = 13;
+    let text = wide(value);
+    let memory = GlobalAlloc(GMEM_MOVEABLE, text.len().saturating_mul(std::mem::size_of::<u16>()));
+    if memory.is_null() { return false; }
+    let destination = GlobalLock(memory) as *mut u16;
+    if destination.is_null() { let _ = GlobalFree(memory); return false; }
+    ptr::copy_nonoverlapping(text.as_ptr(), destination, text.len());
+    let _ = GlobalUnlock(memory);
+    if OpenClipboard(hwnd) == 0 { let _ = GlobalFree(memory); return false; }
+    let success = EmptyClipboard() != 0 && !SetClipboardData(CF_UNICODETEXT, memory).is_null();
+    let _ = CloseClipboard();
+    if !success { let _ = GlobalFree(memory); }
+    success
+}
+
+unsafe fn show_page_context_menu(state: &mut AppState, hwnd: Hwnd) {
+    let Some(url) = current_page_url(state) else { return; };
+    let menu = CreatePopupMenu();
+    if menu.is_null() { return; }
+    for (id, label) in [
+        (ID_MENU_COPY_PAGE_URL, "Copier l’adresse de la page"),
+        (ID_MENU_BOOKMARK_PAGE, "Ajouter aux favoris"),
+        (ID_MENU_RELOAD, "Recharger la page"),
+        (ID_MENU_DOWNLOAD_PAGE, "Télécharger la page"),
+    ] {
+        let label = wide(label);
+        let _ = AppendMenuW(menu, MF_STRING, id as usize, label.as_ptr());
+    }
+    let mut cursor = Point { x: 0, y: 0 };
+    let _ = GetCursorPos(&mut cursor);
+    let selected = TrackPopupMenu(menu, TPM_RETURNCMD, cursor.x, cursor.y, 0, hwnd, ptr::null());
+    let _ = DestroyMenu(menu);
+    match selected {
+        ID_MENU_COPY_PAGE_URL => { let _ = copy_text_to_clipboard(hwnd, &url); }
+        ID_MENU_BOOKMARK_PAGE => toggle_current_bookmark(state),
+        ID_MENU_RELOAD => navigate(state, &url),
+        ID_MENU_DOWNLOAD_PAGE => download_current_page(state),
+        _ => {}
+    }
+}
+
 unsafe fn show_bookmark_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) {
     let Some(bookmark) = state.bookmarks.get(index) else {
         return;
@@ -2666,6 +2727,8 @@ unsafe extern "system" fn window_proc(
                 if (90..=118).contains(&client_y) && client_x >= 12 {
                     let index = ((client_x - 12) / 162) as usize;
                     show_bookmark_context_menu(state, hwnd, index);
+                } else if client_y > 120 {
+                    show_page_context_menu(state, hwnd);
                 } else if (0..=42).contains(&client_y) && client_x >= 10 {
                     let mut client = Rect {
                         left: 0,
