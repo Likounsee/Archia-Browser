@@ -1061,9 +1061,24 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
         paint_fill(hdc, left, 48, right, 80, inactive_tab);
         paint_label(hdc, label, left, 48, right, 80, text, DT_CENTER);
     }
-    let address_right = width - 132;
+    let address_right = width - 170;
     paint_fill(hdc, 132, 48, address_right.max(240), 80, address);
     paint_fill(hdc, width - 122, 48, width - 10, 80, accent);
+    let current_url = state.browser.current_url().map(ToString::to_string);
+    let bookmarked = current_url
+        .as_ref()
+        .is_some_and(|url| state.bookmarks.iter().any(|bookmark| &bookmark.url == url));
+    paint_fill(hdc, width - 166, 48, width - 132, 80, inactive_tab);
+    paint_label(
+        hdc,
+        if bookmarked { "★" } else { "☆" },
+        width - 166,
+        48,
+        width - 132,
+        80,
+        if bookmarked { accent } else { text },
+        DT_CENTER,
+    );
     paint_label(
         hdc,
         "Aller",
@@ -1074,6 +1089,29 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
         address_text,
         DT_CENTER,
     );
+
+    let bookmark_bar = chrome_color(state, |colors| &colors.toolbar_background, 0x00211D1B);
+    paint_fill(hdc, 0, 90, width, 119, bookmark_bar);
+    paint_fill(
+        hdc,
+        0,
+        118,
+        width,
+        119,
+        chrome_color(state, |colors| &colors.border, 0x00443B36),
+    );
+    if state.bookmarks.is_empty() {
+        paint_label(hdc, "Ajoutez vos pages favorites avec ☆", 14, 91, width - 14, 117, muted, 0);
+    } else {
+        let item_width = 154;
+        let visible = ((width - 24).max(0) / (item_width + 8)) as usize;
+        for (index, bookmark) in state.bookmarks.iter().take(visible).enumerate() {
+            let left = 12 + index as i32 * (item_width + 8);
+            paint_fill(hdc, left, 93, left + item_width, 115, inactive_tab);
+            let label = bookmark.title.chars().take(20).collect::<String>();
+            paint_label(hdc, &label, left + 8, 93, left + item_width - 8, 115, text, 0);
+        }
+    }
 }
 
 unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i32) {
@@ -1469,6 +1507,11 @@ unsafe extern "system" fn window_proc(
                     {
                         refresh_page(state);
                     }
+                } else if client_x >= width - 166
+                    && client_x <= width - 132
+                    && (45..=84).contains(&client_y)
+                {
+                    toggle_current_bookmark(state);
                 } else if client_x >= width - 122 && (45..=84).contains(&client_y) {
                     let address = read_control_text(state.address);
                     navigate(state, &address);
@@ -1479,6 +1522,12 @@ unsafe extern "system" fn window_proc(
                         .is_ok()
                     {
                         refresh_page(state);
+                    }
+                } else if (90..=118).contains(&client_y) && client_x >= 12 {
+                    let index = ((client_x - 12) / 162) as usize;
+                    if let Some(bookmark) = state.bookmarks.get(index) {
+                        let url = bookmark.url.clone();
+                        navigate(state, &url);
                     }
                 } else {
                     activate_link_at(state, hwnd, client_x, client_y);
