@@ -813,13 +813,17 @@ mod tests {
         assert_eq!(surface.pixel(1, 0), Some(Color(0, 0, 0, 0)));
         assert!(surface
             .pixels()
-            .chunks_exact(4)
-            .any(|pixel| pixel == [0, 0, 0, 255]));
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .any(|pixel| pixel == &[0, 0, 0, 255]));
         assert!(
             surface
                 .pixels()
-                .chunks_exact(4)
-                .filter(|pixel| *pixel == [0, 0, 0, 255])
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .filter(|pixel| **pixel == [0, 0, 0, 255])
                 .count()
                 > 20
         );
