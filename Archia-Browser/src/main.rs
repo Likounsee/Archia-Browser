@@ -1,3 +1,12 @@
+#[cfg(windows)]
+mod gui;
+
+#[cfg(windows)]
+#[cfg(not(windows))]
+fn main() {
+    gui::run();
+}
+
 use std::{
     io::{self, Write},
     path::PathBuf,
