@@ -24,7 +24,7 @@ ArchiaOS is currently at a very early development stage. Its browser port is the
 
 ## Current application status
 
-The current Windows application now starts in an **experimental native desktop GUI**. It uses Win32 windowing and controls directly; it does not embed WebView2, Edge, Chromium or another browser engine.
+The current Windows application now starts in an **experimental native desktop GUI**. It uses Win32 windowing and controls directly; it does not embed WebView2, Edge, Chromium or another browser engine. The custom browser chrome includes a distinct HTTPS/HTTP indicator and a monospaced address field; local hostnames, IPv4 addresses and bracketed IPv6 addresses can be entered directly.
 
 On Windows, from the repository root, run:
 
@@ -42,7 +42,7 @@ The GUI currently provides a native window, a custom-painted browser toolbar and
 
 On non-Windows systems the executable remains a terminal-based development client. It supports entering addresses and the commands `:links`, `:open NUMERO`, `:back`, `:forward`, `:reload`, `:history`, `:url`, `:title`, `:help` and `:quit`.
 
-Theme manifests and selection are available in the engine, but the current Win32 frontend does not yet apply the theme palette to its controls. On Windows, theme data is stored under `%APPDATA%\\ArchiaBrowser\\themes`.
+Theme manifests and selection are available in the engine. The Win32 frontend applies the active theme palette to its custom-painted browser chrome and address/search fields; some native control details and theme-specific layouts are not yet fully customized. On Windows, theme data is stored under `%APPDATA%\\ArchiaBrowser\\themes`.
 
 ## Immediate Windows product roadmap
 
@@ -63,7 +63,8 @@ Theme manifests and selection are available in the engine, but the current Win32
 ### W1 — Usable browser essentials
 - [x] Multiple tabs and tab strip (create and switch).
 - [x] Scrollable rendered page viewport (native vertical scrollbar and mouse-wheel scrolling).
-- [x] Local persistent bookmarks and bookmark-bar interaction.\n- [ ] Persistent browsing history.
+- [x] Local persistent bookmarks and bookmark-bar interaction.
+- [ ] Persistent browsing history.
 - [ ] Download handling and download destination controls.
 - [ ] Better error pages and loading feedback.
 - [ ] Basic settings and user-agent controls.
@@ -74,7 +75,8 @@ Theme manifests and selection are available in the engine, but the current Win32
 - [x] Built-in Archia, Chrome-inspired, Firefox-inspired and Edge-inspired themes.
 - [x] Persistent theme selection per user.
 - [x] Install and uninstall custom data-only theme manifests through the engine API.
-- [x] Native GUI applies built-in theme colors to browser chrome.\n- [ ] Tab placement and sidebar layout follow the selected theme.
+- [x] Native GUI applies built-in theme colors to browser chrome.
+- [ ] Tab placement and sidebar layout follow the selected theme.
 - [ ] Theme preview and settings screen.
 - [ ] Downloadable theme gallery with source/signature verification and update flow.
 - [ ] Export and import complete theme packages, including assets.
