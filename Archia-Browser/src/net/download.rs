@@ -90,7 +90,7 @@ pub fn download_to_path_with_limit<T: Transport>(
             if current.url.is_secure() && next.scheme() == "http" {
                 return Err(DownloadError::SecureDowngradeBlocked);
             }
-            if current.url.scheme() != next.scheme() || current.url.host() != next.host() {
+            if !current.url.same_origin(&next) {
                 current.headers.retain(|name, _| {
                     !name.eq_ignore_ascii_case("authorization")
                         && !name.eq_ignore_ascii_case("cookie")
@@ -252,10 +252,15 @@ fn publish_atomically(destination: &Path, body: &[u8]) -> Result<(), DownloadErr
         let _ = fs::remove_file(&temporary_path);
         return Err(DownloadError::DestinationExists);
     }
-    if let Err(error) = fs::rename(&temporary_path, destination) {
+    if let Err(error) = fs::hard_link(&temporary_path, destination) {
         let _ = fs::remove_file(&temporary_path);
-        return Err(io_error(error));
+        return if error.kind() == std::io::ErrorKind::AlreadyExists {
+            Err(DownloadError::DestinationExists)
+        } else {
+            Err(io_error(error))
+        };
     }
+    fs::remove_file(&temporary_path).map_err(io_error)?;
     Ok(())
 }
 
@@ -341,6 +346,18 @@ mod tests {
             Err(DownloadError::ResponseTooLarge)
         );
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn refuses_to_overwrite_an_existing_destination() {
+        let path = destination("existing");
+        let _ = fs::remove_file(&path);
+        fs::write(&path, b"keep me").unwrap();
+        let transport = QueueTransport(Mutex::new(vec![Response::new(200).with_body(b"new data".to_vec())]));
+        let request = Request::new(Url::parse("https://example.org/file").unwrap());
+        assert_eq!(download_to_path(&transport, &request, &path), Err(DownloadError::DestinationExists));
+        assert_eq!(fs::read(&path).unwrap(), b"keep me");
+        let _ = fs::remove_file(path);
     }
 
     #[test]
