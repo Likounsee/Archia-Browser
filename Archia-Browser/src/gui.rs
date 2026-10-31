@@ -1118,7 +1118,11 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
         }
         ID_TAB_CONTEXT_CLOSE_OTHERS => {
             for other_index in (0..state.tabs.len()).rev() {
-                if state.tabs.get(other_index).is_some_and(|(id, _)| *id != tab_id) {
+                if state
+                    .tabs
+                    .get(other_index)
+                    .is_some_and(|(id, _)| *id != tab_id)
+                {
                     close_tab_at(state, other_index);
                 }
             }
@@ -2085,8 +2089,7 @@ unsafe extern "system" fn window_proc(
                     if GetClientRect(hwnd, &mut client) != 0 {
                         let width = client.right.saturating_sub(client.left);
                         if client_x < width - 108 {
-                            let tab_width = ((width - 134).max(0)
-                                / state.tabs.len().max(1) as i32)
+                            let tab_width = ((width - 134).max(0) / state.tabs.len().max(1) as i32)
                                 .clamp(86, 220);
                             let index = ((client_x - 10) / tab_width.max(1)) as usize;
                             show_tab_context_menu(state, hwnd, index);
