@@ -780,7 +780,11 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
                 return true;
             }
             VK_R => {
-                if state.browser.reload(&state.loader, current_viewport(state)).is_ok() {
+                if state
+                    .browser
+                    .reload(&state.loader, current_viewport(state))
+                    .is_ok()
+                {
                     refresh_page(state);
                 }
                 return true;
@@ -789,19 +793,31 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
         }
     }
     if key == VK_F5 {
-        if state.browser.reload(&state.loader, current_viewport(state)).is_ok() {
+        if state
+            .browser
+            .reload(&state.loader, current_viewport(state))
+            .is_ok()
+        {
             refresh_page(state);
         }
         return true;
     }
     if alt && key == VK_LEFT {
-        if state.browser.go_back(&state.loader, current_viewport(state)).is_ok() {
+        if state
+            .browser
+            .go_back(&state.loader, current_viewport(state))
+            .is_ok()
+        {
             refresh_page(state);
         }
         return true;
     }
     if alt && key == VK_RIGHT {
-        if state.browser.go_forward(&state.loader, current_viewport(state)).is_ok() {
+        if state
+            .browser
+            .go_forward(&state.loader, current_viewport(state))
+            .is_ok()
+        {
             refresh_page(state);
         }
         return true;
@@ -852,7 +868,10 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         }
         ID_MENU_NEW_TAB => create_new_tab(state, hwnd),
         ID_MENU_CLOSE_TAB => close_active_tab(state),
-        ID_MENU_THEME_ARCHIA | ID_MENU_THEME_CHROME | ID_MENU_THEME_FIREFOX | ID_MENU_THEME_EDGE => {
+        ID_MENU_THEME_ARCHIA
+        | ID_MENU_THEME_CHROME
+        | ID_MENU_THEME_FIREFOX
+        | ID_MENU_THEME_EDGE => {
             let theme_id = match selected {
                 ID_MENU_THEME_ARCHIA => "archia",
                 ID_MENU_THEME_CHROME => "chrome",
@@ -957,40 +976,13 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
             0,
         );
         if state.tabs.len() > 1 {
-            paint_label(
-                hdc,
-                "×",
-                right - 30,
-                7,
-                right - 6,
-                36,
-                muted,
-                DT_CENTER,
-            );
+            paint_label(hdc, "×", right - 30, 7, right - 6, 36, muted, DT_CENTER);
         }
     }
     paint_fill(hdc, width - 108, 7, width - 62, 36, inactive_tab);
-    paint_label(
-        hdc,
-        "⋯",
-        width - 108,
-        7,
-        width - 62,
-        36,
-        text,
-        DT_CENTER,
-    );
+    paint_label(hdc, "⋯", width - 108, 7, width - 62, 36, text, DT_CENTER);
     paint_fill(hdc, width - 58, 7, width - 10, 36, inactive_tab);
-    paint_label(
-        hdc,
-        "+",
-        width - 58,
-        7,
-        width - 10,
-        36,
-        text,
-        DT_CENTER,
-    );
+    paint_label(hdc, "+", width - 58, 7, width - 10, 36, text, DT_CENTER);
 
     for (label, left, right) in [("‹", 10, 44), ("›", 48, 82), ("⟳", 86, 122)] {
         paint_fill(hdc, left, 48, right, 80, inactive_tab);
@@ -1021,14 +1013,7 @@ unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i
     paint_fill(hdc, 0, top, width, height, background);
     let content_width = width.min(980);
     let left = (width - content_width) / 2;
-    paint_fill(
-        hdc,
-        left,
-        150,
-        left + content_width,
-        height.min(560),
-        card,
-    );
+    paint_fill(hdc, left, 150, left + content_width, height.min(560), card);
     paint_label(
         hdc,
         "ARCHIA",
@@ -1625,7 +1610,11 @@ pub fn run() {
             dib_pixels: Vec::new(),
             tabs: Vec::new(),
             themes: std::env::var_os("APPDATA")
-                .map(|base| std::path::PathBuf::from(base).join("ArchiaBrowser").join("themes"))
+                .map(|base| {
+                    std::path::PathBuf::from(base)
+                        .join("ArchiaBrowser")
+                        .join("themes")
+                })
                 .or_else(|| {
                     std::env::current_dir()
                         .ok()
