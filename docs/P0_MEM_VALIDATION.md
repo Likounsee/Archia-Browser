@@ -80,3 +80,10 @@ La CI précédente a confirmé 720 tests et la compilation réussis sur les troi
 ## Tranche DOM — API de recherche (14 octobre 2026)
 
 Les recherches DOM couvrent maintenant les attributs, valeurs exactes, classes, `name`, premier résultat et combinaisons tag+attribut/tag+classe. Les variantes qui renvoient une collection allouent un vecteur de résultats ; elles héritent des plafonds d'entrée/nœuds du document mais ne constituent pas, à elles seules, une allocation sous budget global partagé. Cette surface devra rester prise en compte dans l'audit mémoire P0-MEM-11. La validation CI du HEAD doit être vérifiée séparément avant de considérer la tranche comme validée.
+
+
+## Tranche CSS — copies de chaînes faillibles et valeur sans double allocation
+
+Le parseur de déclarations ne clone plus directement les noms de propriétés provenant des tokens : il réserve d'abord leur capacité avec `String::try_reserve` et abandonne proprement la suite si cette réservation échoue. La valeur de déclaration est désormais rognée en place, au lieu de créer une seconde chaîne via `trim().to_owned()`, ce qui évite un pic mémoire inutile pour les valeurs proches de la limite de 64 Kio. La réservation du vecteur de propriétés reste effectuée avant l'insertion.
+
+Tests ajoutés : rognage Unicode sans altération du texte et respect du plafond de 4 096 déclarations. Ces tests n'injectent pas artificiellement un échec d'allocateur ; la validation du comportement OOM reste donc indirecte. Statut du lot : implémenté sur le candidat, CI à vérifier sur le SHA exact. P0-MEM-11 reste partiel : les chaînes des tokens, maps d'attributs, valeurs CSS calculées et structures layout ne sont pas toutes imputées au budget mémoire partagé.

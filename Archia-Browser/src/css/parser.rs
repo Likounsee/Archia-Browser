@@ -20,6 +20,23 @@ fn append_char_bounded(value: &mut String, character: char) -> bool {
     append_bounded(value, character.encode_utf8(&mut encoded))
 }
 
+/// Copy attacker-controlled token text only after a fallible capacity reservation.
+fn try_copy_string(value: &str) -> Option<String> {
+    let mut copy = String::new();
+    copy.try_reserve(value.len()).ok()?;
+    copy.push_str(value);
+    Some(copy)
+}
+
+/// Trim in place so a parsed declaration does not temporarily retain two
+/// full-size copies of its value.
+fn trim_in_place(value: &mut String) {
+    let leading_bytes = value.len() - value.trim_start().len();
+    let trimmed_bytes = value.trim().len();
+    drop(value.drain(..leading_bytes));
+    value.truncate(trimmed_bytes);
+}
+
 pub fn parse_declarations(tokens: &[CssToken]) -> Vec<Property> {
     let mut properties = Vec::new();
     let mut index = 0;
@@ -36,7 +53,9 @@ pub fn parse_declarations(tokens: &[CssToken]) -> Vec<Property> {
             index += 1;
             continue;
         };
-        let name = name.clone();
+        let Some(name) = try_copy_string(name) else {
+            return properties;
+        };
         index += 1;
 
         while matches!(tokens.get(index), Some(CssToken::Whitespace)) {
@@ -72,13 +91,11 @@ pub fn parse_declarations(tokens: &[CssToken]) -> Vec<Property> {
             index += 1;
         }
 
-        if value.len() > MAX_CSS_DECLARATION_VALUE_BYTES || properties.try_reserve(1).is_err() {
+        if properties.try_reserve(1).is_err() {
             return properties;
         }
-        properties.push(Property {
-            name,
-            value: value.trim().to_owned(),
-        });
+        trim_in_place(&mut value);
+        properties.push(Property { name, value });
         if matches!(tokens.get(index), Some(CssToken::Semicolon)) {
             index += 1;
         }
@@ -113,6 +130,28 @@ mod tests {
             CssToken::Semicolon,
         ];
         assert!(parse_declarations(&tokens).is_empty());
+    }
+
+    #[test]
+    fn trims_declaration_values_in_place_without_corrupting_unicode() {
+        let mut value = "  café  ".to_owned();
+        trim_in_place(&mut value);
+        assert_eq!(value, "café");
+    }
+
+    #[test]
+    fn declaration_count_is_bounded_at_the_configured_limit() {
+        let mut tokens = Vec::new();
+        for index in 0..=MAX_CSS_DECLARATIONS {
+            tokens.extend([
+                CssToken::Ident(format!("property-{index}")),
+                CssToken::Colon,
+                CssToken::Number("1".into()),
+                CssToken::Semicolon,
+            ]);
+        }
+
+        assert_eq!(parse_declarations(&tokens).len(), MAX_CSS_DECLARATIONS);
     }
 
     #[test]
