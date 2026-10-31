@@ -43,6 +43,21 @@ These subsystem percentages are engineering estimates of **functional coverage**
 
 **Overall engine foundation:** roughly **40–45%** as a non-reproducible engineering estimate, not a measured compatibility score. It is not test coverage or standards conformance. TLS is implemented at the transport layer, but that does not mean the whole network stack is production-ready.
 
+
+## Early runnable application (experimental CLI)
+
+The binary now starts an interactive text-mode browsing session using Archia's own URL, HTTP/HTTPS transport, document loader, HTML/DOM, CSS, layout and software-rendering pipeline. It is an early bring-up target, not yet the planned graphical browser.
+
+From the repository root:
+
+```powershell
+cargo run -p archia-browser -- https://example.org
+```
+
+Or start without an address and enter one at the `archia>` prompt. Supported commands are `:back`, `:forward`, `:reload`, `:help` and `:quit`. An address without a scheme defaults to HTTPS.
+
+Current CLI limitations are explicit: it prints extracted document text rather than presenting the software-rendered surface, does not yet activate links or submit forms interactively, and has no JavaScript runtime. The next product milestone is a native graphical window that displays Archia's own software-rendered output and provides an address bar and clickable navigation. No third-party browser engine is embedded.
+
 ## Vision
 
 The long-term stack is:
