@@ -143,7 +143,9 @@ fn filename_from_content_disposition(value: &str) -> Option<String> {
             plain = Some(value.trim_matches('"').to_owned());
         }
     }
-    extended.or(plain).and_then(|value| sanitize_filename(&value))
+    extended
+        .or(plain)
+        .and_then(|value| sanitize_filename(&value))
 }
 
 fn decode_extended_filename(value: &str) -> Option<String> {
@@ -396,9 +398,14 @@ mod tests {
         let path = destination("existing");
         let _ = fs::remove_file(&path);
         fs::write(&path, b"keep me").unwrap();
-        let transport = QueueTransport(Mutex::new(vec![Response::new(200).with_body(b"new data".to_vec())]));
+        let transport = QueueTransport(Mutex::new(vec![
+            Response::new(200).with_body(b"new data".to_vec())
+        ]));
         let request = Request::new(Url::parse("https://example.org/file").unwrap());
-        assert_eq!(download_to_path(&transport, &request, &path), Err(DownloadError::DestinationExists));
+        assert_eq!(
+            download_to_path(&transport, &request, &path),
+            Err(DownloadError::DestinationExists)
+        );
         assert_eq!(fs::read(&path).unwrap(), b"keep me");
         let _ = fs::remove_file(path);
     }
