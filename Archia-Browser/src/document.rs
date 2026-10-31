@@ -171,8 +171,7 @@ impl Page {
     /// Recompute layout and paint commands for a resized viewport without reparsing HTML/CSS.
     pub fn relayout(&mut self, viewport: LayoutViewport) {
         self.layout = LayoutEngine::layout_styled(&self.styled, viewport);
-        self.display_list =
-            SoftwareRenderer::build_display_list_styled(&self.styled, &self.layout);
+        self.display_list = SoftwareRenderer::build_display_list_styled(&self.styled, &self.layout);
     }
 
     pub fn url(&self) -> Option<&Url> {
