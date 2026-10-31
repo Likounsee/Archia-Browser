@@ -1553,6 +1553,12 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             }
             return true;
         }
+        if key == VK_K && GetKeyState(VK_SHIFT) < 0 {
+            if let Some(url) = current_page_url(state) {
+                open_link_in_new_tab(state, hwnd, &url);
+            }
+            return true;
+        }
         match key {
             VK_L | VK_K => {
                 let _ = SetFocus(state.address);
@@ -1615,6 +1621,11 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
         {
             refresh_page(state);
         }
+        return true;
+    }
+    if alt && key == VK_HOME {
+        let homepage = state.settings.homepage.clone();
+        navigate(state, &homepage);
         return true;
     }
     if alt && key == VK_LEFT {
@@ -1773,6 +1784,14 @@ unsafe fn link_url_at(state: &AppState, client_x: i32, client_y: i32) -> Option<
     })
 }
 
+unsafe fn open_link_in_new_tab(state: &mut AppState, hwnd: Hwnd, url: &str) {
+    if state.tabs.len() >= MAX_GUI_TABS {
+        return;
+    }
+    create_new_tab(state, hwnd);
+    navigate(state, url);
+}
+
 unsafe fn show_link_context_menu(state: &mut AppState, hwnd: Hwnd, url: String) {
     let menu = CreatePopupMenu();
     if menu.is_null() {
@@ -1800,8 +1819,7 @@ unsafe fn show_link_context_menu(state: &mut AppState, hwnd: Hwnd, url: String) 
     let _ = DestroyMenu(menu);
     match selected {
         ID_LINK_OPEN_NEW_TAB if state.tabs.len() < MAX_GUI_TABS => {
-            create_new_tab(state, hwnd);
-            navigate(state, &url);
+            open_link_in_new_tab(state, hwnd, &url);
         }
         ID_LINK_COPY_URL => {
             let _ = copy_text_to_clipboard(hwnd, &url);
@@ -2913,6 +2931,12 @@ unsafe extern "system" fn window_proc(
                             navigate(state, &url);
                         }
                     }
+                } else if GetKeyState(VK_CONTROL) < 0 {
+                    if let Some(url) = link_url_at(state, client_x, client_y) {
+                        open_link_in_new_tab(state, hwnd, &url);
+                    } else {
+                        activate_link_at(state, hwnd, client_x, client_y);
+                    }
                 } else {
                     activate_link_at(state, hwnd, client_x, client_y);
                 }
@@ -2980,6 +3004,10 @@ unsafe extern "system" fn window_proc(
                         ((width - 134).max(0) / state.tabs.len().max(1) as i32).clamp(86, 220);
                     let index = ((client_x - 10) / tab_width.max(1)) as usize;
                     close_tab_at(state, index);
+                } else if client_y > 120 {
+                    if let Some(url) = link_url_at(state, client_x, client_y) {
+                        open_link_in_new_tab(state, hwnd, &url);
+                    }
                 }
             }
             0
