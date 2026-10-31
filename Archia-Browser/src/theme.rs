@@ -272,6 +272,9 @@ impl ThemeManager {
             }
             let text = fs::read_to_string(manifest_path)?;
             let manifest = ThemeManifest::parse(&text)?;
+            if entry.file_name().to_str() != Some(manifest.id.as_str()) {
+                return Err(ThemeError::InvalidValue("theme directory name"));
+            }
             if themes.iter().any(|theme| theme.manifest.id == manifest.id) {
                 return Err(ThemeError::DuplicateTheme(manifest.id));
             }
