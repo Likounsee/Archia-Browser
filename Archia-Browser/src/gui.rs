@@ -300,8 +300,16 @@ unsafe fn current_viewport(state: &AppState) -> LayoutViewport {
         return LayoutViewport::new(1200, 760);
     }
     LayoutViewport::new(
-        client.right.saturating_sub(client.left).saturating_sub(20).max(1) as u32,
-        client.bottom.saturating_sub(client.top).saturating_sub(102).max(1) as u32,
+        client
+            .right
+            .saturating_sub(client.left)
+            .saturating_sub(20)
+            .max(1) as u32,
+        client
+            .bottom
+            .saturating_sub(client.top)
+            .saturating_sub(102)
+            .max(1) as u32,
     )
 }
 
@@ -533,7 +541,9 @@ unsafe extern "system" fn window_proc(
                                 }
                                 let source_pixels = surface.pixels().as_chunks::<4>().0;
                                 let target_pixels = state.dib_pixels.as_chunks_mut::<4>().0;
-                                for (source, target) in source_pixels.iter().zip(target_pixels.iter_mut()) {
+                                for (source, target) in
+                                    source_pixels.iter().zip(target_pixels.iter_mut())
+                                {
                                     *target = [source[2], source[1], source[0], 0];
                                 }
                                 let info = BitmapInfo {
@@ -640,7 +650,12 @@ unsafe extern "system" fn window_proc(
                             state.tabs.push((tab_id, button));
                             set_control_text(state.address, "");
                             refresh_page(state);
-                            let mut client = Rect { left: 0, top: 0, right: 1180, bottom: 820 };
+                            let mut client = Rect {
+                                left: 0,
+                                top: 0,
+                                right: 1180,
+                                bottom: 820,
+                            };
                             if GetClientRect(hwnd, &mut client) != 0 {
                                 layout_controls(
                                     state,
