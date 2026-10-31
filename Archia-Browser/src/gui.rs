@@ -71,6 +71,9 @@ const MAX_MENU_BOOKMARK_ITEMS: usize = 16;
 const ID_BOOKMARK_OPEN: u32 = 3501;
 const ID_BOOKMARK_OPEN_NEW_TAB: u32 = 3502;
 const ID_BOOKMARK_REMOVE: u32 = 3503;
+const ID_TAB_CONTEXT_CLOSE: u32 = 3601;
+const ID_TAB_CONTEXT_DUPLICATE: u32 = 3602;
+const ID_TAB_CONTEXT_CLOSE_OTHERS: u32 = 3603;
 const GWLP_WNDPROC: i32 = -4;
 const WM_CTLCOLOREDIT: u32 = 0x0133;
 const DT_SINGLELINE: u32 = 0x0020;
@@ -1070,6 +1073,68 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
     false
 }
 
+unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) {
+    let Some((tab_id, _)) = state.tabs.get(index).copied() else {
+        return;
+    };
+    let duplicate_url = state
+        .browser
+        .tabs()
+        .tab(tab_id)
+        .and_then(|tab| tab.page())
+        .and_then(|page| page.url())
+        .map(ToString::to_string);
+    let menu = CreatePopupMenu();
+    if menu.is_null() {
+        return;
+    }
+    for (id, label) in [
+        (ID_TAB_CONTEXT_CLOSE, "Fermer l'onglet"),
+        (ID_TAB_CONTEXT_DUPLICATE, "Dupliquer l'onglet"),
+        (ID_TAB_CONTEXT_CLOSE_OTHERS, "Fermer les autres onglets"),
+    ] {
+        let label = wide(label);
+        let _ = AppendMenuW(menu, MF_STRING, id as usize, label.as_ptr());
+    }
+    let mut cursor = Point { x: 0, y: 0 };
+    let _ = GetCursorPos(&mut cursor);
+    let selected = TrackPopupMenu(
+        menu,
+        TPM_RETURNCMD,
+        cursor.x,
+        cursor.y,
+        0,
+        hwnd,
+        ptr::null(),
+    );
+    let _ = DestroyMenu(menu);
+    match selected {
+        ID_TAB_CONTEXT_CLOSE => close_tab_at(state, index),
+        ID_TAB_CONTEXT_DUPLICATE => {
+            if let Some(url) = duplicate_url {
+                create_new_tab(state, hwnd);
+                navigate(state, &url);
+            }
+        }
+        ID_TAB_CONTEXT_CLOSE_OTHERS => {
+            for other_index in (0..state.tabs.len()).rev() {
+                if state.tabs.get(other_index).is_some_and(|(id, _)| *id != tab_id) {
+                    close_tab_at(state, other_index);
+                }
+            }
+            if let Some((active_index, _)) = state
+                .tabs
+                .iter()
+                .enumerate()
+                .find(|(_, (id, _))| *id == tab_id)
+            {
+                select_tab_index(state, active_index);
+            }
+        }
+        _ => {}
+    }
+}
+
 unsafe fn show_bookmark_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) {
     let Some(bookmark) = state.bookmarks.get(index) else {
         return;
@@ -2022,6 +2087,23 @@ unsafe extern "system" fn window_proc(
                 if (90..=118).contains(&client_y) && client_x >= 12 {
                     let index = ((client_x - 12) / 162) as usize;
                     show_bookmark_context_menu(state, hwnd, index);
+                } else if (0..=42).contains(&client_y) && client_x >= 10 {
+                    let mut client = Rect {
+                        left: 0,
+                        top: 0,
+                        right: 1180,
+                        bottom: 820,
+                    };
+                    if GetClientRect(hwnd, &mut client) != 0 {
+                        let width = client.right.saturating_sub(client.left);
+                        if client_x < width - 108 {
+                            let tab_width = ((width - 134).max(0)
+                                / state.tabs.len().max(1) as i32)
+                                .clamp(86, 220);
+                            let index = ((client_x - 10) / tab_width.max(1)) as usize;
+                            show_tab_context_menu(state, hwnd, index);
+                        }
+                    }
                 }
             }
             0
