@@ -253,6 +253,7 @@ unsafe extern "system" {
     fn GetWindowTextW(hwnd: Hwnd, text: *mut u16, max: i32) -> i32;
     fn MoveWindow(hwnd: Hwnd, x: i32, y: i32, width: i32, height: i32, repaint: i32) -> i32;
     fn DestroyWindow(hwnd: Hwnd) -> i32;
+    fn SetWindowRgn(hwnd: Hwnd, region: Handle, redraw: i32) -> i32;
     fn SendMessageW(hwnd: Hwnd, message: u32, w_param: Wparam, l_param: Lparam) -> Lresult;
     fn ShowWindow(hwnd: Hwnd, command: i32) -> i32;
     fn InvalidateRect(hwnd: Hwnd, rect: *const Rect, erase: i32) -> i32;
@@ -270,6 +271,8 @@ unsafe extern "system" {
     fn FillRect(hdc: Handle, rect: *const Rect, brush: Handle) -> i32;
     fn CreateSolidBrush(color: u32) -> Handle;
     fn DeleteObject(object: Handle) -> i32;
+    fn CreateRoundRectRgn(left: i32, top: i32, right: i32, bottom: i32, width: i32, height: i32) -> Handle;
+    fn FillRgn(hdc: Handle, region: Handle, brush: Handle) -> i32;
     #[allow(clippy::too_many_arguments)]
     fn CreateFontW(
         height: i32,
@@ -774,6 +777,31 @@ unsafe fn activate_link_at(state: &mut AppState, hwnd: Hwnd, client_x: i32, clie
     }
 }
 
+unsafe fn paint_round_fill(
+    hdc: Handle,
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+    color: u32,
+    radius: i32,
+) {
+    if right <= left || bottom <= top {
+        return;
+    }
+    let region = CreateRoundRectRgn(left, top, right + 1, bottom + 1, radius * 2, radius * 2);
+    let brush = CreateSolidBrush(color);
+    if !region.is_null() && !brush.is_null() {
+        let _ = FillRgn(hdc, region, brush);
+    }
+    if !region.is_null() {
+        let _ = DeleteObject(region);
+    }
+    if !brush.is_null() {
+        let _ = DeleteObject(brush);
+    }
+}
+
 unsafe fn paint_fill(hdc: Handle, left: i32, top: i32, right: i32, bottom: i32, color: u32) {
     let rect = Rect {
         left,
@@ -1126,13 +1154,14 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
             continue;
         }
         let selected = Some(*id) == active;
-        paint_fill(
+        paint_round_fill(
             hdc,
             left,
             7,
             right,
             36,
             if selected { active_tab } else { inactive_tab },
+            10,
         );
         if selected {
             paint_fill(hdc, left + 8, 33, right - 8, 36, accent);
@@ -1159,9 +1188,9 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
             paint_label(hdc, "×", right - 30, 7, right - 6, 36, muted, DT_CENTER);
         }
     }
-    paint_fill(hdc, width - 108, 7, width - 62, 36, inactive_tab);
+    paint_round_fill(hdc, width - 108, 7, width - 62, 36, inactive_tab, 10);
     paint_label(hdc, "⋯", width - 108, 7, width - 62, 36, text, DT_CENTER);
-    paint_fill(hdc, width - 58, 7, width - 10, 36, inactive_tab);
+    paint_round_fill(hdc, width - 58, 7, width - 10, 36, inactive_tab, 10);
     paint_label(hdc, "+", width - 58, 7, width - 10, 36, text, DT_CENTER);
 
     let can_go_back = state.browser.history().can_go_back();
@@ -1171,13 +1200,14 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
         ("›", 48, 82, can_go_forward),
         ("⟳", 86, 122, true),
     ] {
-        paint_fill(
+        paint_round_fill(
             hdc,
             left,
             48,
             right,
             80,
             if enabled { inactive_tab } else { window },
+            16,
         );
         paint_label(
             hdc,
@@ -1191,13 +1221,13 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
         );
     }
     let address_right = width - 170;
-    paint_fill(hdc, 132, 48, address_right.max(240), 80, address);
-    paint_fill(hdc, width - 122, 48, width - 10, 80, accent);
+    paint_round_fill(hdc, 132, 48, address_right.max(240), 80, address, 16);
+    paint_round_fill(hdc, width - 122, 48, width - 10, 80, accent, 16);
     let current_url = state.browser.current_url().map(ToString::to_string);
     let bookmarked = current_url
         .as_ref()
         .is_some_and(|url| state.bookmarks.iter().any(|bookmark| &bookmark.url == url));
-    paint_fill(hdc, width - 166, 48, width - 132, 80, inactive_tab);
+    paint_round_fill(hdc, width - 166, 48, width - 132, 80, inactive_tab, 14);
     paint_label(
         hdc,
         if bookmarked { "★" } else { "☆" },
@@ -1245,7 +1275,7 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
         let visible = ((width - 24).max(0) / (item_width + 8)) as usize;
         for (index, bookmark) in state.bookmarks.iter().take(visible).enumerate() {
             let left = 12 + index as i32 * (item_width + 8);
-            paint_fill(hdc, left, 93, left + item_width, 115, inactive_tab);
+            paint_round_fill(hdc, left, 93, left + item_width, 115, inactive_tab, 8);
             let label = bookmark.title.chars().take(20).collect::<String>();
             paint_label(
                 hdc,
@@ -1271,7 +1301,7 @@ unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i
     paint_fill(hdc, 0, top, width, height, background);
     let content_width = width.min(980);
     let left = (width - content_width) / 2;
-    paint_fill(hdc, left, 150, left + content_width, height.min(690), card);
+    paint_round_fill(hdc, left, 150, left + content_width, height.min(690), card, 22);
     paint_label(
         hdc,
         "ARCHIA",
@@ -1325,7 +1355,7 @@ unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i
     .enumerate()
     {
         let x = left + 40 + index as i32 * (card_width + gap);
-        paint_fill(hdc, x, card_top, x + card_width, card_top + 112, card);
+        paint_round_fill(hdc, x, card_top, x + card_width, card_top + 112, card, 14);
         paint_fill(hdc, x, card_top, x + card_width, card_top + 3, accent);
         paint_label(
             hdc,
@@ -1388,19 +1418,32 @@ unsafe fn layout_controls(state: &AppState, width: i32, height: i32) {
     let _ = MoveWindow(state.back, margin, button_y, 38, button_h, 1);
     let _ = MoveWindow(state.forward, margin + 42, button_y, 38, button_h, 1);
     let _ = MoveWindow(state.reload, margin + 84, button_y, 38, button_h, 1);
+    let address_width = (width - 314).max(80);
     let _ = MoveWindow(
         state.address,
         margin + 122,
         button_y + 2,
-        (width - 314).max(80),
+        address_width,
         button_h - 4,
         1,
     );
+    let address_region = CreateRoundRectRgn(0, 0, address_width, button_h - 4, 18, 18);
+    if !address_region.is_null() && SetWindowRgn(state.address, address_region, 1) == 0 {
+        let _ = DeleteObject(address_region);
+    }
     let _ = MoveWindow(state.go, width - 118, button_y, 108, button_h, 1);
     let home_width = (width - 120).clamp(220, 620);
     let home_left = (width - home_width - 82).max(20) / 2;
     let _ = MoveWindow(state.home_search, home_left, 378, home_width, 42, 1);
+    let home_region = CreateRoundRectRgn(0, 0, home_width, 42, 20, 20);
+    if !home_region.is_null() && SetWindowRgn(state.home_search, home_region, 1) == 0 {
+        let _ = DeleteObject(home_region);
+    }
     let _ = MoveWindow(state.home_go, home_left + home_width + 10, 378, 72, 42, 1);
+    let go_region = CreateRoundRectRgn(0, 0, 72, 42, 20, 20);
+    if !go_region.is_null() && SetWindowRgn(state.home_go, go_region, 1) == 0 {
+        let _ = DeleteObject(go_region);
+    }
     let _ = MoveWindow(
         state.page,
         margin,
