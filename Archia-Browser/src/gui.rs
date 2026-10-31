@@ -31,6 +31,9 @@ const WM_LBUTTONDOWN: u32 = 0x0201;
 const WM_COMMAND: u32 = 0x0111;
 const WM_NCCREATE: u32 = 0x0081;
 const WM_DESTROY: u32 = 0x0002;
+const WM_KEYDOWN: u32 = 0x0100;
+const VK_RETURN: usize = 0x0D;
+const GWLP_WNDPROC: i32 = -4;
 const WM_CTLCOLOREDIT: u32 = 0x0133;
 const DT_SINGLELINE: u32 = 0x0020;
 const DT_CENTER: u32 = 0x0001;
@@ -196,6 +199,14 @@ unsafe extern "system" {
     fn PostQuitMessage(exit_code: i32);
     fn SetWindowLongPtrW(hwnd: Hwnd, index: i32, value: isize) -> isize;
     fn GetWindowLongPtrW(hwnd: Hwnd, index: i32) -> isize;
+    fn GetParent(hwnd: Hwnd) -> Hwnd;
+    fn CallWindowProcW(
+        previous: isize,
+        hwnd: Hwnd,
+        message: u32,
+        w_param: Wparam,
+        l_param: Lparam,
+    ) -> Lresult;
     fn SetWindowTextW(hwnd: Hwnd, text: *const u16) -> i32;
     fn GetWindowTextLengthW(hwnd: Hwnd) -> i32;
     fn GetWindowTextW(hwnd: Hwnd, text: *mut u16, max: i32) -> i32;
@@ -266,6 +277,7 @@ struct AppState {
     new_tab: Hwnd,
     page: Hwnd,
     address_brush: Handle,
+    address_proc: isize,
     surface: Option<SoftwareSurface>,
     surface_dirty: bool,
     scroll_y: u32,
@@ -328,6 +340,30 @@ unsafe fn read_control_text(hwnd: Hwnd) -> String {
 unsafe fn set_control_text(hwnd: Hwnd, value: &str) {
     let value = wide(value);
     let _ = SetWindowTextW(hwnd, value.as_ptr());
+}
+
+unsafe extern "system" fn address_edit_proc(
+    hwnd: Hwnd,
+    message: u32,
+    w_param: Wparam,
+    l_param: Lparam,
+) -> Lresult {
+    if message == WM_KEYDOWN && w_param == VK_RETURN {
+        let parent = GetParent(hwnd);
+        if let Some(state) = app_state(parent) {
+            let address = read_control_text(state.address);
+            navigate(state, &address);
+        }
+        return 0;
+    }
+
+    let parent = GetParent(hwnd);
+    if let Some(state) = app_state(parent) {
+        if state.address_proc != 0 {
+            return CallWindowProcW(state.address_proc, hwnd, message, w_param, l_param);
+        }
+    }
+    DefWindowProcW(hwnd, message, w_param, l_param)
 }
 
 fn welcome_text() -> &'static str {
@@ -830,6 +866,11 @@ unsafe extern "system" fn window_proc(
             state.reload = create_control(hwnd, instance, "BUTTON", "↻", 0, ID_RELOAD);
             state.address = create_control(hwnd, instance, "EDIT", "", ES_AUTOHSCROLL, ID_ADDRESS);
             state.address_brush = CreateSolidBrush(0x00F5F3F1);
+            state.address_proc = SetWindowLongPtrW(
+                state.address,
+                GWLP_WNDPROC,
+                address_edit_proc as isize,
+            );
             state.go = create_control(hwnd, instance, "BUTTON", "Aller", 0, ID_GO);
             state.new_tab = create_control(hwnd, instance, "BUTTON", "+", 0, ID_NEW_TAB);
             let initial_tab = state
@@ -1245,6 +1286,7 @@ pub fn run() {
             new_tab: ptr::null_mut(),
             page: ptr::null_mut(),
             address_brush: ptr::null_mut(),
+            address_proc: 0,
             surface: None,
             surface_dirty: true,
             scroll_y: 0,
