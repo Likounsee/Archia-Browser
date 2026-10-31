@@ -44,6 +44,8 @@ const VK_MENU: i32 = 0x12;
 const VK_LEFT: usize = 0x25;
 const VK_RIGHT: usize = 0x27;
 const MF_STRING: u32 = 0x0000;
+const MF_GRAYED: u32 = 0x0001;
+const MF_SEPARATOR: u32 = 0x0800;
 const TPM_RETURNCMD: u32 = 0x0100;
 const ID_MENU_RELOAD: u32 = 3001;
 const ID_MENU_NEW_TAB: u32 = 3002;
@@ -53,6 +55,8 @@ const ID_MENU_THEME_ARCHIA: u32 = 3010;
 const ID_MENU_THEME_CHROME: u32 = 3011;
 const ID_MENU_THEME_FIREFOX: u32 = 3012;
 const ID_MENU_THEME_EDGE: u32 = 3013;
+const ID_MENU_HISTORY_BASE: u32 = 3200;
+const MAX_MENU_HISTORY_ITEMS: usize = 8;
 const GWLP_WNDPROC: i32 = -4;
 const WM_CTLCOLOREDIT: u32 = 0x0133;
 const DT_SINGLELINE: u32 = 0x0020;
@@ -932,6 +936,27 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         let label = wide(label);
         let _ = AppendMenuW(menu, MF_STRING, id as usize, label.as_ptr());
     }
+    let _ = AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
+    let history_heading = wide("Pages récemment visitées");
+    let _ = AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, history_heading.as_ptr());
+    for (index, entry) in state
+        .browser
+        .history()
+        .entries()
+        .rev()
+        .skip(1)
+        .take(MAX_MENU_HISTORY_ITEMS)
+        .enumerate()
+    {
+        let title = entry.title().unwrap_or("Page sans titre");
+        let label = wide(&format!("{} — {}", index + 1, title.chars().take(42).collect::<String>()));
+        let _ = AppendMenuW(
+            menu,
+            MF_STRING,
+            (ID_MENU_HISTORY_BASE as usize) + index,
+            label.as_ptr(),
+        );
+    }
     let mut cursor = Point { x: 0, y: 0 };
     let _ = GetCursorPos(&mut cursor);
     let selected = TrackPopupMenu(
@@ -980,6 +1005,23 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
                     ));
                     let _ = InvalidateRect(hwnd, ptr::null(), 1);
                 }
+            }
+        }
+        history_id
+            if (ID_MENU_HISTORY_BASE..ID_MENU_HISTORY_BASE + MAX_MENU_HISTORY_ITEMS as u32)
+                .contains(&history_id) =>
+        {
+            let index = (history_id - ID_MENU_HISTORY_BASE) as usize;
+            if let Some(url) = state
+                .browser
+                .history()
+                .entries()
+                .rev()
+                .skip(1)
+                .nth(index)
+                .map(|entry| entry.url().to_string())
+            {
+                navigate(state, &url);
             }
         }
         ID_MENU_QUIT => {
@@ -1054,14 +1096,12 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
         }
         let title = state
             .browser
-            .current_page()
+            .tabs()
+            .tab(*id)
+            .and_then(|tab| tab.page())
             .and_then(|page| page.title())
-            .unwrap_or_else(|| "Nouvel onglet".to_owned());
-        let label = if Some(*id) == active {
-            title.chars().take(24).collect::<String>()
-        } else {
-            format!("Onglet {}", index + 1)
-        };
+            .unwrap_or_else(|| format!("Nouvel onglet {}", index + 1));
+        let label = title.chars().take(24).collect::<String>();
         paint_label(
             hdc,
             &label,
@@ -1081,9 +1121,31 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
     paint_fill(hdc, width - 58, 7, width - 10, 36, inactive_tab);
     paint_label(hdc, "+", width - 58, 7, width - 10, 36, text, DT_CENTER);
 
-    for (label, left, right) in [("‹", 10, 44), ("›", 48, 82), ("⟳", 86, 122)] {
-        paint_fill(hdc, left, 48, right, 80, inactive_tab);
-        paint_label(hdc, label, left, 48, right, 80, text, DT_CENTER);
+    let can_go_back = state.browser.history().can_go_back();
+    let can_go_forward = state.browser.history().can_go_forward();
+    for (label, left, right, enabled) in [
+        ("‹", 10, 44, can_go_back),
+        ("›", 48, 82, can_go_forward),
+        ("⟳", 86, 122, true),
+    ] {
+        paint_fill(
+            hdc,
+            left,
+            48,
+            right,
+            80,
+            if enabled { inactive_tab } else { window },
+        );
+        paint_label(
+            hdc,
+            label,
+            left,
+            48,
+            right,
+            80,
+            if enabled { text } else { muted },
+            DT_CENTER,
+        );
     }
     let address_right = width - 170;
     paint_fill(hdc, 132, 48, address_right.max(240), 80, address);
