@@ -60,6 +60,8 @@ const ID_MENU_RELOAD: u32 = 3001;
 const ID_MENU_NEW_TAB: u32 = 3002;
 const ID_MENU_CLOSE_TAB: u32 = 3003;
 const ID_MENU_QUIT: u32 = 3004;
+const ID_MENU_CLEAR_HISTORY: u32 = 3005;
+const ID_MENU_OPEN_ALL_BOOKMARKS: u32 = 3006;
 const ID_MENU_THEME_ARCHIA: u32 = 3010;
 const ID_MENU_THEME_CHROME: u32 = 3011;
 const ID_MENU_THEME_FIREFOX: u32 = 3012;
@@ -458,7 +460,11 @@ fn load_bookmarks(path: &std::path::Path) -> Vec<Bookmark> {
 fn browser_data_directory() -> std::path::PathBuf {
     std::env::var_os("APPDATA")
         .map(std::path::PathBuf::from)
-        .or_else(|| std::env::current_dir().ok().map(|path| path.join(".archia-browser")))
+        .or_else(|| {
+            std::env::current_dir()
+                .ok()
+                .map(|path| path.join(".archia-browser"))
+        })
         .unwrap_or_else(std::env::temp_dir)
         .join("ArchiaBrowser")
 }
@@ -864,7 +870,7 @@ unsafe fn navigate(state: &mut AppState, address: &str) {
             record_history(state);
             save_session(state);
             refresh_page(state);
-        },
+        }
         Err(error) => {
             let message = format!(
                 "Impossible de charger cette page.\n\n{error:?}\n\nVérifiez l'adresse et votre connexion Internet."
@@ -1178,6 +1184,11 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
                 show_browser_menu(state, hwnd);
                 return true;
             }
+            0x08 if GetKeyState(VK_SHIFT) < 0 => {
+                state.persistent_history.clear();
+                save_persistent_history(state);
+                return true;
+            }
             _ => {}
         }
     }
@@ -1334,6 +1345,8 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         (ID_MENU_RELOAD, "Recharger"),
         (ID_MENU_NEW_TAB, "Nouvel onglet"),
         (ID_MENU_CLOSE_TAB, "Fermer l'onglet"),
+        (ID_MENU_CLEAR_HISTORY, "Effacer l'historique"),
+        (ID_MENU_OPEN_ALL_BOOKMARKS, "Ouvrir tous les favoris"),
         (ID_MENU_THEME_ARCHIA, "Theme : Archia"),
         (ID_MENU_THEME_CHROME, "Theme : Chrome"),
         (ID_MENU_THEME_FIREFOX, "Theme : Firefox"),
@@ -1412,6 +1425,24 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         }
         ID_MENU_NEW_TAB => create_new_tab(state, hwnd),
         ID_MENU_CLOSE_TAB => close_active_tab(state),
+        ID_MENU_CLEAR_HISTORY => {
+            state.persistent_history.clear();
+            save_persistent_history(state);
+        }
+        ID_MENU_OPEN_ALL_BOOKMARKS => {
+            let urls = state
+                .bookmarks
+                .iter()
+                .take(MAX_RESTORED_TABS)
+                .map(|bookmark| bookmark.url.clone())
+                .collect::<Vec<_>>();
+            for (index, url) in urls.iter().enumerate() {
+                if index > 0 {
+                    create_new_tab(state, hwnd);
+                }
+                navigate(state, url);
+            }
+        }
         ID_MENU_THEME_ARCHIA
         | ID_MENU_THEME_CHROME
         | ID_MENU_THEME_FIREFOX
@@ -2376,6 +2407,8 @@ unsafe extern "system" fn window_proc(
                             .go_back(&state.loader, current_viewport(state))
                             .is_ok()
                         {
+                            record_history(state);
+                            save_session(state);
                             refresh_page(state);
                         }
                     }
@@ -2385,6 +2418,8 @@ unsafe extern "system" fn window_proc(
                             .go_forward(&state.loader, current_viewport(state))
                             .is_ok()
                         {
+                            record_history(state);
+                            save_session(state);
                             refresh_page(state);
                         }
                     }
