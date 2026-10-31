@@ -967,7 +967,11 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         .enumerate()
     {
         let title = entry.title().unwrap_or("Page sans titre");
-        let label = wide(&format!("{} — {}", index + 1, title.chars().take(42).collect::<String>()));
+        let label = wide(&format!(
+            "{} — {}",
+            index + 1,
+            title.chars().take(42).collect::<String>()
+        ));
         let _ = AppendMenuW(
             menu,
             MF_STRING,
