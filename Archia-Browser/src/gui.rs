@@ -468,10 +468,28 @@ unsafe fn app_state(hwnd: Hwnd) -> Option<&'static mut AppState> {
     pointer.as_mut()
 }
 
+fn encode_search_query(input: &str) -> String {
+    let mut encoded = String::with_capacity(input.len());
+    for byte in input.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
+            encoded.push(char::from(byte));
+        } else {
+            encoded.push('%');
+            encoded.push(char::from(b"0123456789ABCDEF"[(byte >> 4) as usize]));
+            encoded.push(char::from(b"0123456789ABCDEF"[(byte & 0x0f) as usize]));
+        }
+    }
+    encoded
+}
+
 fn parse_address(input: &str) -> Result<Url, archia_browser::net::UrlError> {
     let input = input.trim();
     let address = if input.contains("://") {
         input.to_owned()
+    } else if input.chars().any(char::is_whitespace)
+        || (!input.contains('.') && !input.starts_with("localhost") && !input.starts_with("127."))
+    {
+        format!("https://www.google.com/search?q={}", encode_search_query(input))
     } else {
         format!("https://{input}")
     };
@@ -1886,4 +1904,33 @@ pub fn run() {
             let _ = DispatchMessageW(&message);
         }
     }
+
+#[cfg(test)]
+mod gui_address_tests {
+    use super::*;
+
+    #[test]
+    fn plain_words_use_the_search_provider() {
+        assert_eq!(
+            parse_address("cats").unwrap().to_string(),
+            "https://www.google.com/search?q=cats"
+        );
+    }
+
+    #[test]
+    fn multi_word_queries_are_percent_encoded() {
+        assert_eq!(
+            parse_address("rust browser engine").unwrap().to_string(),
+            "https://www.google.com/search?q=rust%20browser%20engine"
+        );
+    }
+
+    #[test]
+    fn dotted_hosts_still_open_directly() {
+        assert_eq!(
+            parse_address("example.org/path").unwrap().to_string(),
+            "https://example.org/path"
+        );
+    }
+}
 }
