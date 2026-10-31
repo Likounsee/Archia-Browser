@@ -228,6 +228,23 @@ unsafe extern "system" {
     fn FillRect(hdc: Handle, rect: *const Rect, brush: Handle) -> i32;
     fn CreateSolidBrush(color: u32) -> Handle;
     fn DeleteObject(object: Handle) -> i32;
+    fn CreateFontW(
+        height: i32,
+        width: i32,
+        escapement: i32,
+        orientation: i32,
+        weight: i32,
+        italic: u32,
+        underline: u32,
+        strike_out: u32,
+        char_set: u32,
+        output_precision: u32,
+        clip_precision: u32,
+        quality: u32,
+        pitch_and_family: u32,
+        face: *const u16,
+    ) -> Handle;
+    fn SelectObject(hdc: Handle, object: Handle) -> Handle;
     fn SetTextColor(hdc: Handle, color: u32) -> u32;
     fn SetBkColor(hdc: Handle, color: u32) -> u32;
     fn SetBkMode(hdc: Handle, mode: i32) -> i32;
@@ -608,11 +625,42 @@ unsafe fn paint_label(
     align: u32,
 ) {
     let text = wide(label);
+    let face = wide("Segoe UI");
     let mut rect = Rect {
         left,
         top,
         right,
         bottom,
+    };
+    let label_height = bottom.saturating_sub(top);
+    let font_height = if label_height >= 56 {
+        28
+    } else if label_height >= 40 {
+        20
+    } else {
+        14
+    };
+    let weight = if label_height >= 56 { 600 } else { 400 };
+    let font = CreateFontW(
+        -font_height,
+        0,
+        0,
+        0,
+        weight,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        5,
+        0,
+        face.as_ptr(),
+    );
+    let previous_font = if font.is_null() {
+        ptr::null_mut()
+    } else {
+        SelectObject(hdc, font)
     };
     let _ = SetTextColor(hdc, color);
     let _ = SetBkMode(hdc, 1);
@@ -623,6 +671,10 @@ unsafe fn paint_label(
         &mut rect,
         DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | align,
     );
+    if !font.is_null() {
+        let _ = SelectObject(hdc, previous_font);
+        let _ = DeleteObject(font);
+    }
 }
 
 unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
