@@ -51,7 +51,7 @@ Commands:
 - `:back`, `:forward` and `:reload` control navigation.
 - `:url`, `:title`, `:help` and `:quit` provide session information and controls.
 
-The CLI uses Archia's own URL, HTTP/HTTPS transport, document loader, HTML/DOM, CSS, layout, page and navigation code. It prints extracted text; it does **not** yet display the software-rendered surface in a native window. Interactive forms, JavaScript and full standards-compliant web compatibility are not available yet.
+The CLI uses Archia's own URL, HTTP/HTTPS transport, document loader, HTML/DOM, CSS, layout, page and navigation code. It prints extracted text; it does **not** yet display the software-rendered surface in a native window. Interactive forms, JavaScript and full standards-compliant web compatibility are not available yet.\n\nTheme commands are available in the CLI: `:themes` lists themes, `:theme` displays the active theme and `:theme ID` persists a selection. The CLI reports the selected theme but cannot visually apply browser-chrome styling until the native GUI exists.
 
 ## Immediate Windows product roadmap
 
@@ -77,7 +77,20 @@ The CLI uses Archia's own URL, HTTP/HTTPS transport, document loader, HTML/DOM, 
 - [ ] Better error pages and loading feedback.
 - [ ] Basic settings and user-agent controls.
 
-### W2 — Web compatibility and safety
+
+### W2 — Theme system
+- [x] Platform-independent theme manifest and palette model.
+- [x] Built-in Archia, Chrome-inspired, Firefox-inspired and Edge-inspired themes.
+- [x] Persistent theme selection per user.
+- [x] Install and uninstall custom data-only theme manifests through the engine API.
+- [ ] Native GUI applies theme colors, tab placement and sidebar layout.
+- [ ] Theme preview and settings screen.
+- [ ] Downloadable theme gallery with source/signature verification and update flow.
+- [ ] Export and import complete theme packages, including assets.
+
+Theme packages are data-only. The first manifest format defines browser-chrome colors, layout preset, tab placement and sidebar preference. It does not execute scripts, load native code or alter the page's own CSS. The built-in Chrome/Firefox/Edge options are interface inspirations, not official products or endorsements; their trademarks remain the property of their owners.
+
+### W3 — Web compatibility and safety
 - [ ] JavaScript runtime and DOM bindings.
 - [ ] Forms and common Web APIs.
 - [ ] Real font loading and shaping.
