@@ -112,7 +112,7 @@ fn print_page(browser: &Browser) {
         page.url().map(ToString::to_string).unwrap_or_default()
     );
 
-    let text = page.document.text_content();
+    let text = page.document.visible_text_content();
     let mut line_length = 0usize;
     for word in text.split_whitespace() {
         let word_length = word.chars().count();
@@ -149,6 +149,19 @@ fn load_url(
     }
 
     let mut request = Request::new(url);
+    // Send browser-like navigation metadata. In particular, Wikipedia and
+    // other public sites reject requests that omit a meaningful User-Agent.
+    request.headers.insert(
+        "accept".into(),
+        "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8".into(),
+    );
+    request
+        .headers
+        .insert("accept-language".into(), "fr-FR,fr;q=0.9,en;q=0.8".into());
+    request.headers.insert(
+        "user-agent".into(),
+        format!("Mozilla/5.0 (Windows NT 10.0; Win64; x64) ArchiaBrowser/{}", browser.version()),
+    );
     request.policy.resource_kind = ResourceKind::Document;
     request.policy.top_level_navigation = true;
 
