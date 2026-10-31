@@ -3,11 +3,7 @@
 //! This first GUI milestone deliberately uses Win32 controls and the existing
 //! Rust document engine. It does not embed Edge/WebView2 or another browser.
 
-use std::{
-    ffi::c_void,
-    mem,
-    ptr,
-};
+use std::{ffi::c_void, mem, ptr};
 
 use archia_browser::{
     layout::LayoutViewport,
@@ -268,7 +264,10 @@ unsafe fn navigate(state: &mut AppState, address: &str) {
     let url = match parse_address(address) {
         Ok(url) if matches!(url.scheme(), "http" | "https") => url,
         Ok(_) => {
-            set_control_text(state.page, "Archia Browser n'autorise pour le moment que HTTP et HTTPS.");
+            set_control_text(
+                state.page,
+                "Archia Browser n'autorise pour le moment que HTTP et HTTPS.",
+            );
             return;
         }
         Err(error) => {
@@ -298,7 +297,10 @@ unsafe fn navigate(state: &mut AppState, address: &str) {
     set_control_text(state.page, "Chargement de la page…");
     let _ = SendMessageW(state.page, EM_SETLIMITTEXT, 2 * 1024 * 1024, 0);
     let viewport = LayoutViewport::new(1200, 760);
-    match state.browser.load_request(&state.loader, &request, viewport) {
+    match state
+        .browser
+        .load_request(&state.loader, &request, viewport)
+    {
         Ok(_) => refresh_page(state),
         Err(error) => {
             let message = format!(
@@ -318,7 +320,14 @@ unsafe fn layout_controls(state: &AppState, width: i32, height: i32) {
     let _ = MoveWindow(state.back, margin, button_y, 38, button_h, 1);
     let _ = MoveWindow(state.forward, margin + 42, button_y, 38, button_h, 1);
     let _ = MoveWindow(state.reload, margin + 84, button_y, 38, button_h, 1);
-    let _ = MoveWindow(state.address, margin + 128, button_y, (width - 260).max(100), button_h, 1);
+    let _ = MoveWindow(
+        state.address,
+        margin + 128,
+        button_y,
+        (width - 260).max(100),
+        button_h,
+        1,
+    );
     let _ = MoveWindow(state.go, width - 118, button_y, 108, button_h, 1);
     let _ = MoveWindow(
         state.page,
@@ -361,8 +370,7 @@ unsafe extern "system" fn window_proc(
             );
             state.go = create_control(hwnd, instance, "BUTTON", "Aller", 0, ID_GO);
             state.new_tab = create_control(hwnd, instance, "BUTTON", "+", 0, ID_NEW_TAB);
-            state.tab_label =
-                create_control(hwnd, instance, "STATIC", "Onglet 1", 0, ID_TAB_LABEL);
+            state.tab_label = create_control(hwnd, instance, "STATIC", "Onglet 1", 0, ID_TAB_LABEL);
             state.page = create_control(
                 hwnd,
                 instance,
@@ -394,17 +402,29 @@ unsafe extern "system" fn window_proc(
                         navigate(state, &address);
                     }
                     ID_BACK => {
-                        if state.browser.go_back(&state.loader, LayoutViewport::new(1200, 760)).is_ok() {
+                        if state
+                            .browser
+                            .go_back(&state.loader, LayoutViewport::new(1200, 760))
+                            .is_ok()
+                        {
                             refresh_page(state);
                         }
                     }
                     ID_FORWARD => {
-                        if state.browser.go_forward(&state.loader, LayoutViewport::new(1200, 760)).is_ok() {
+                        if state
+                            .browser
+                            .go_forward(&state.loader, LayoutViewport::new(1200, 760))
+                            .is_ok()
+                        {
                             refresh_page(state);
                         }
                     }
                     ID_RELOAD => {
-                        if state.browser.reload(&state.loader, LayoutViewport::new(1200, 760)).is_ok() {
+                        if state
+                            .browser
+                            .reload(&state.loader, LayoutViewport::new(1200, 760))
+                            .is_ok()
+                        {
                             refresh_page(state);
                         }
                     }
