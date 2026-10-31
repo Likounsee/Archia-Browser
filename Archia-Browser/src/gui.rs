@@ -607,7 +607,10 @@ unsafe extern "system" fn window_proc(
                         }
                         if state.surface_dirty {
                             if let Some(surface) = state.surface.as_mut() {
-                                if state.browser.render_current_page_at(surface, state.scroll_y) {
+                                if state
+                                    .browser
+                                    .render_current_page_at(surface, state.scroll_y)
+                                {
                                     let required = (width as usize)
                                         .saturating_mul(height as usize)
                                         .saturating_mul(4);
