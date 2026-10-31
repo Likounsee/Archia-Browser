@@ -41,7 +41,11 @@ const VK_R: usize = 0x52;
 const VK_F5: usize = 0x74;
 const VK_CONTROL: i32 = 0x11;
 const VK_MENU: i32 = 0x12;
+const VK_SHIFT: i32 = 0x10;
 const VK_LEFT: usize = 0x25;
+const VK_TAB: usize = 0x09;
+const VK_1: usize = 0x31;
+const VK_9: usize = 0x39;
 const VK_RIGHT: usize = 0x27;
 const MF_STRING: u32 = 0x0000;
 const MF_GRAYED: u32 = 0x0001;
@@ -365,6 +369,7 @@ struct AppState {
     themes: Option<ThemeManager>,
     bookmarks: Vec<Bookmark>,
     bookmarks_path: std::path::PathBuf,
+    closed_tabs: Vec<Option<String>>,
 }
 
 fn wide(value: &str) -> Vec<u16> {
@@ -908,10 +913,32 @@ unsafe fn create_new_tab(state: &mut AppState, hwnd: Hwnd) {
     refresh_page(state);
 }
 
-unsafe fn close_active_tab(state: &mut AppState) {
+unsafe fn close_tab_at(state: &mut AppState, index: usize) {
     if state.tabs.len() <= 1 {
         return;
     }
+    let Some((id, handle)) = state.tabs.get(index).copied() else {
+        return;
+    };
+    let closed_url = state
+        .browser
+        .tabs()
+        .tab(id)
+        .and_then(|tab| tab.page())
+        .and_then(|page| page.url())
+        .map(ToString::to_string);
+    if state.browser.close_tab(id) {
+        if state.closed_tabs.len() == 20 {
+            state.closed_tabs.remove(0);
+        }
+        state.closed_tabs.push(closed_url);
+        let _ = DestroyWindow(handle);
+        state.tabs.remove(index);
+        refresh_page(state);
+    }
+}
+
+unsafe fn close_active_tab(state: &mut AppState) {
     let Some(index) = state
         .browser
         .active_tab_id()
@@ -919,10 +946,22 @@ unsafe fn close_active_tab(state: &mut AppState) {
     else {
         return;
     };
-    let (id, handle) = state.tabs[index];
-    if state.browser.close_tab(id) {
-        let _ = DestroyWindow(handle);
-        state.tabs.remove(index);
+    close_tab_at(state, index);
+}
+
+unsafe fn reopen_closed_tab(state: &mut AppState, hwnd: Hwnd) {
+    let Some(closed_url) = state.closed_tabs.pop() else {
+        return;
+    };
+    create_new_tab(state, hwnd);
+    if let Some(url) = closed_url {
+        navigate(state, &url);
+    }
+}
+
+unsafe fn select_tab_index(state: &mut AppState, index: usize) {
+    if let Some((id, _)) = state.tabs.get(index) {
+        state.browser.select_tab(*id);
         refresh_page(state);
     }
 }
@@ -931,6 +970,30 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
     let control = GetKeyState(VK_CONTROL) < 0;
     let alt = GetKeyState(VK_MENU) < 0;
     if control {
+        if key == VK_TAB && !state.tabs.is_empty() {
+            let active_index = state
+                .browser
+                .active_tab_id()
+                .and_then(|id| state.tabs.iter().position(|(tab_id, _)| *tab_id == id))
+                .unwrap_or(0);
+            let next_index = if GetKeyState(VK_SHIFT) < 0 {
+                (active_index + state.tabs.len() - 1) % state.tabs.len()
+            } else {
+                (active_index + 1) % state.tabs.len()
+            };
+            select_tab_index(state, next_index);
+            return true;
+        }
+        if (VK_1..=VK_9).contains(&key) && !state.tabs.is_empty() {
+            let requested = (key - VK_1) as usize;
+            let index = if requested == 8 {
+                state.tabs.len() - 1
+            } else {
+                requested
+            };
+            select_tab_index(state, index);
+            return true;
+        }
         match key {
             VK_L => {
                 let _ = SetFocus(state.address);
@@ -938,7 +1001,11 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
                 return true;
             }
             VK_T => {
-                create_new_tab(state, hwnd);
+                if GetKeyState(VK_SHIFT) < 0 {
+                    reopen_closed_tab(state, hwnd);
+                } else {
+                    create_new_tab(state, hwnd);
+                }
                 let _ = SetFocus(state.address);
                 return true;
             }
@@ -1714,11 +1781,7 @@ unsafe extern "system" fn window_proc(
                             let close_clicked =
                                 state.tabs.len() > 1 && client_x >= tab_left + tab_width - 36;
                             if close_clicked {
-                                if state.browser.close_tab(id) {
-                                    let _ = DestroyWindow(handle);
-                                    state.tabs.remove(index);
-                                    refresh_page(state);
-                                }
+                                close_tab_at(state, index);
                             } else {
                                 state.browser.select_tab(id);
                                 refresh_page(state);
@@ -1982,6 +2045,7 @@ pub fn run() {
             tabs: Vec::new(),
             bookmarks: load_bookmarks(&bookmark_storage_path()),
             bookmarks_path: bookmark_storage_path(),
+            closed_tabs: Vec::new(),
             themes: std::env::var_os("APPDATA")
                 .map(|base| {
                     std::path::PathBuf::from(base)
