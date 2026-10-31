@@ -340,6 +340,36 @@ impl Node {
 
         output
     }
+
+    /// Collect text intended for a basic visual page view.
+    ///
+    /// Unlike DOM textContent, this omits metadata and non-rendered source
+    /// containers. It deliberately does not attempt CSS layout or visibility
+    /// computation; the renderer can replace this approximation later.
+    pub fn visible_text_content(&self) -> String {
+        const NON_VISIBLE: &[&str] = &["head", "script", "style", "template", "noscript"];
+
+        let mut output = String::new();
+        let mut stack = vec![self];
+
+        while let Some(node) = stack.pop() {
+            if let Some(tag) = node.tag_name() {
+                if NON_VISIBLE.contains(&tag)
+                    || node.attribute("hidden").is_some()
+                    || node.attribute("aria-hidden") == Some("true")
+                {
+                    continue;
+                }
+            }
+
+            if let NodeKind::Text(text) = &node.kind {
+                output.push_str(text);
+            }
+            stack.extend(node.children.iter().rev());
+        }
+
+        output
+    }
 }
 
 /// Explicit-stack preorder traversal over a DOM subtree.
@@ -372,6 +402,16 @@ mod tests {
         root.append(first);
         root.append(Node::text("three"));
         assert_eq!(root.text_content(), "onetwothree");
+    }
+
+    #[test]
+    fn visible_text_omits_metadata_scripts_styles_and_hidden_subtrees() {
+        let root = crate::html::parser::parse(&crate::html::tokenizer::HtmlTokenizer::tokenize(
+            "<head><title>Page title</title><style>body { color: red }</style></head><body>before<script>alert(1)</script><span hidden>secret</span><span aria-hidden='true'>also secret</span><p>visible</p><template>template text</template><noscript>fallback</noscript>after</body>",
+        ));
+
+        assert_eq!(root.text_content(), "Page titlebody { color: red }beforealert(1)secretalso secretvisibletemplate textfallbackafter");
+        assert_eq!(root.visible_text_content(), "beforevisibleafter");
     }
 
     #[test]
