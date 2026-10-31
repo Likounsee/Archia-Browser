@@ -598,26 +598,54 @@ fn downloads_directory() -> std::path::PathBuf {
 }
 
 fn safe_download_filename(value: &str) -> String {
-    let mut name = value.trim().chars().map(|character| {
-        if character.is_control() || matches!(character, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') { '_' } else { character }
-    }).collect::<String>();
-    while name.ends_with([' ', '.']) { name.pop(); }
-    if name.is_empty() || matches!(name.split('.').next().unwrap_or_default().to_ascii_uppercase().as_str(), "CON" | "PRN" | "AUX" | "NUL") {
+    let mut name = value
+        .trim()
+        .chars()
+        .map(|character| {
+            if character.is_control()
+                || matches!(character, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
+            {
+                '_'
+            } else {
+                character
+            }
+        })
+        .collect::<String>();
+    while name.ends_with([' ', '.']) {
+        name.pop();
+    }
+    if name.is_empty()
+        || matches!(
+            name.split('.').next().unwrap_or_default().to_ascii_uppercase().as_str(),
+            "CON" | "PRN" | "AUX" | "NUL"
+        )
+    {
         name.insert(0, '_');
     }
     name.chars().take(180).collect()
 }
 
-fn unique_download_destination(directory: &std::path::Path, filename: &str) -> std::path::PathBuf {
+fn unique_download_destination(
+    directory: &std::path::Path,
+    filename: &str,
+) -> std::path::PathBuf {
     let original = std::path::Path::new(filename);
     let stem = original.file_stem().unwrap_or_default().to_string_lossy();
-    let extension = original.extension().map(|value| value.to_string_lossy().to_string());
+    let extension = original
+        .extension()
+        .map(|value| value.to_string_lossy().to_string());
     for index in 0..10_000_u32 {
-        let candidate_name = if index == 0 { filename.to_owned() }
-            else if let Some(extension) = &extension { format!("{stem} ({index}).{extension}") }
-            else { format!("{stem} ({index})") };
+        let candidate_name = if index == 0 {
+            filename.to_owned()
+        } else if let Some(extension) = &extension {
+            format!("{stem} ({index}).{extension}")
+        } else {
+            format!("{stem} ({index})")
+        };
         let candidate = directory.join(candidate_name);
-        if !candidate.exists() { return candidate; }
+        if !candidate.exists() {
+            return candidate;
+        }
     }
     directory.join(format!("{filename}.download"))
 }
@@ -754,8 +782,12 @@ fn save_bookmarks(state: &AppState) {
 }
 
 unsafe fn download_current_page(state: &mut AppState) {
-    let Some(url) = state.browser.current_url().cloned() else { return; };
-    if !matches!(url.scheme(), "http" | "https") { return; }
+    let Some(url) = state.browser.current_url().cloned() else {
+        return;
+    };
+    if !matches!(url.scheme(), "http" | "https") {
+        return;
+    }
     let directory = downloads_directory();
     if let Err(error) = std::fs::create_dir_all(&directory) {
         let caption = wide(&format!("Échec du téléchargement : {error}"));
@@ -766,7 +798,10 @@ unsafe fn download_current_page(state: &mut AppState) {
     let _ = std::fs::remove_file(&pending);
     let mut request = Request::new(url);
     request.headers.insert("accept".into(), "*/*".into());
-    request.headers.insert("user-agent".into(), format!("ArchiaBrowser/{}", state.browser.version()));
+    request.headers.insert(
+        "user-agent".into(),
+        format!("ArchiaBrowser/{}", state.browser.version()),
+    );
     let transport = HttpTransport::new().with_limits(64 * 1024 * 1024, 64 * 1024);
     match download_to_path(&transport, &request, &pending) {
         Ok(result) => {
@@ -774,19 +809,26 @@ unsafe fn download_current_page(state: &mut AppState) {
             let destination = unique_download_destination(&directory, &filename);
             match std::fs::rename(&pending, &destination) {
                 Ok(()) => {
-                    let caption = wide(&format!("Téléchargement terminé : {} — Archia Browser", destination.display()));
+                    let caption = wide(&format!(
+                        "Téléchargement terminé : {} — Archia Browser",
+                        destination.display()
+                    ));
                     let _ = SetWindowTextW(state.window, caption.as_ptr());
                 }
                 Err(error) => {
                     let _ = std::fs::remove_file(&pending);
-                    let caption = wide(&format!("Échec de l'enregistrement : {error} — Archia Browser"));
+                    let caption = wide(&format!(
+                        "Échec de l'enregistrement : {error} — Archia Browser"
+                    ));
                     let _ = SetWindowTextW(state.window, caption.as_ptr());
                 }
             }
         }
         Err(error) => {
             let _ = std::fs::remove_file(&pending);
-            let caption = wide(&format!("Téléchargement impossible : {error:?} — Archia Browser"));
+            let caption = wide(&format!(
+                "Téléchargement impossible : {error:?} — Archia Browser"
+            ));
             let _ = SetWindowTextW(state.window, caption.as_ptr());
         }
     }
