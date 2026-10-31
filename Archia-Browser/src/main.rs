@@ -284,6 +284,37 @@ fn main() {
             continue;
         }
 
+        if command == ":themes" {
+            if let Some(themes) = theme_manager.as_ref() {
+                print_themes(themes);
+            } else {
+                eprintln!("Gestion des themes indisponible.");
+            }
+            continue;
+        }
+        if command == ":theme" {
+            if let Some(themes) = theme_manager.as_ref() {
+                println!(
+                    "Theme actif : {} ({})",
+                    themes.active_theme().manifest.name,
+                    themes.active_id()
+                );
+            } else {
+                eprintln!("Gestion des themes indisponible.");
+            }
+            continue;
+        }
+        if let Some(id) = command.strip_prefix(":theme ") {
+            match theme_manager.as_mut() {
+                Some(themes) => match themes.select(id.trim()) {
+                    Ok(()) => println!("Theme selectionne : {}", themes.active_theme().manifest.name),
+                    Err(error) => eprintln!("Selection du theme impossible: {error}"),
+                },
+                None => eprintln!("Gestion des themes indisponible."),
+            }
+            continue;
+        }
+
         match command {
             ":quit" | ":q" | "quit" | "exit" => break,
             ":help" | ":h" => print_help(),
