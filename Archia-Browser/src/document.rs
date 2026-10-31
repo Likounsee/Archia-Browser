@@ -178,6 +178,43 @@ impl Page {
         self.url.as_ref()
     }
 
+    /// Find the anchor covering a point in document coordinates.
+    /// Coordinates are in the same space as the layout tree (before viewport scrolling).
+    pub fn link_at(&self, x: i32, y: i32) -> Option<Node> {
+        fn contains(rect: crate::layout::Rect, x: i32, y: i32) -> bool {
+            let left = i64::from(rect.x);
+            let top = i64::from(rect.y);
+            let right = left.saturating_add(i64::from(rect.width));
+            let bottom = top.saturating_add(i64::from(rect.height));
+            let x = i64::from(x);
+            let y = i64::from(y);
+            x >= left && x < right && y >= top && y < bottom
+        }
+
+        let mut pending = vec![(&self.document, &self.layout, None)];
+        while let Some((node, layout, inherited_link)) = pending.pop() {
+            if layout.display == crate::layout::Display::None {
+                continue;
+            }
+            let link = if node.tag_name() == Some("a") && node.link_href().is_some() {
+                Some(node)
+            } else {
+                inherited_link
+            };
+
+            if let Some(anchor) = link {
+                if contains(layout.rect, x, y) {
+                    return Some(anchor.clone());
+                }
+            }
+
+            for (child, child_layout) in node.children.iter().zip(&layout.children).rev() {
+                pending.push((child, child_layout, link));
+            }
+        }
+        None
+    }
+
     /// Retain the memory reservation for this page's document representation.
     pub(crate) fn attach_memory_reservation(&mut self, reservation: Arc<MemoryReservation>) {
         self._memory_reservation = Some(reservation);
@@ -657,6 +694,20 @@ mod tests {
         assert_eq!(page.document.text_content(), "Hello");
         assert!(!page.display_list.commands().is_empty());
         assert_eq!(page.layout.rect.width, 320);
+    }
+
+    #[test]
+    fn link_hit_testing_returns_only_the_anchor_at_the_point() {
+        let page = Page::from_html_at(
+            Some(Url::parse("https://example.org/").unwrap()),
+            "<body><a href='/target'>Click me</a><p>Not a link</p></body>",
+            "",
+            LayoutViewport::new(320, 200),
+        );
+
+        let link = page.link_at(2, 2).expect("anchor text should be hit-testable");
+        assert_eq!(link.link_href(), Some("/target"));
+        assert!(page.link_at(300, 180).is_none());
     }
 
     #[test]
