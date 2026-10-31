@@ -52,6 +52,8 @@ const VK_MENU: i32 = 0x12;
 const VK_SHIFT: i32 = 0x10;
 const VK_LEFT: usize = 0x25;
 const VK_TAB: usize = 0x09;
+const VK_PRIOR: usize = 0x21;
+const VK_NEXT: usize = 0x22;
 const VK_1: usize = 0x31;
 const VK_9: usize = 0x39;
 const VK_DELETE: usize = 0x2E;
@@ -100,6 +102,9 @@ const ID_BOOKMARK_REMOVE: u32 = 3503;
 const ID_TAB_CONTEXT_CLOSE: u32 = 3601;
 const ID_TAB_CONTEXT_DUPLICATE: u32 = 3602;
 const ID_TAB_CONTEXT_CLOSE_OTHERS: u32 = 3603;
+const ID_TAB_CONTEXT_CLOSE_RIGHT: u32 = 3604;
+const ID_TAB_CONTEXT_COPY_URL: u32 = 3605;
+const ID_TAB_CONTEXT_RELOAD: u32 = 3606;
 const GWLP_WNDPROC: i32 = -4;
 const WM_CTLCOLOREDIT: u32 = 0x0133;
 const DT_SINGLELINE: u32 = 0x0020;
@@ -1523,13 +1528,14 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
     let control = GetKeyState(VK_CONTROL) < 0;
     let alt = GetKeyState(VK_MENU) < 0;
     if control {
-        if key == VK_TAB && !state.tabs.is_empty() {
+        if (key == VK_TAB || key == VK_PRIOR || key == VK_NEXT) && !state.tabs.is_empty() {
             let active_index = state
                 .browser
                 .active_tab_id()
                 .and_then(|id| state.tabs.iter().position(|(tab_id, _)| *tab_id == id))
                 .unwrap_or(0);
-            let next_index = if GetKeyState(VK_SHIFT) < 0 {
+            let previous = GetKeyState(VK_SHIFT) < 0 || key == VK_PRIOR;
+            let next_index = if previous {
                 (active_index + state.tabs.len() - 1) % state.tabs.len()
             } else {
                 (active_index + 1) % state.tabs.len()
@@ -1673,7 +1679,10 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
     for (id, label) in [
         (ID_TAB_CONTEXT_CLOSE, "Fermer l'onglet"),
         (ID_TAB_CONTEXT_DUPLICATE, "Dupliquer l'onglet"),
+        (ID_TAB_CONTEXT_RELOAD, "Recharger cet onglet"),
+        (ID_TAB_CONTEXT_COPY_URL, "Copier l'adresse de l'onglet"),
         (ID_TAB_CONTEXT_CLOSE_OTHERS, "Fermer les autres onglets"),
+        (ID_TAB_CONTEXT_CLOSE_RIGHT, "Fermer les onglets à droite"),
     ] {
         let label = wide(label);
         let _ = AppendMenuW(menu, MF_STRING, id as usize, label.as_ptr());
@@ -1692,6 +1701,25 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
     let _ = DestroyMenu(menu);
     match selected {
         ID_TAB_CONTEXT_CLOSE => close_tab_at(state, index),
+        ID_TAB_CONTEXT_RELOAD => {
+            state.browser.select_tab(tab_id);
+            if state.browser.reload(&state.loader, current_viewport(state)).is_ok() {
+                refresh_page(state);
+            }
+        }
+        ID_TAB_CONTEXT_COPY_URL => {
+            if let Some(url) = duplicate_url.as_deref() {
+                let _ = copy_text_to_clipboard(hwnd, url);
+            }
+        }
+        ID_TAB_CONTEXT_CLOSE_RIGHT => {
+            for other_index in (index + 1..state.tabs.len()).rev() {
+                close_tab_at(state, other_index);
+            }
+            if let Some(active_index) = state.tabs.iter().position(|(id, _)| *id == tab_id) {
+                select_tab_index(state, active_index);
+            }
+        }
         ID_TAB_CONTEXT_DUPLICATE => {
             if let Some(url) = duplicate_url {
                 create_new_tab(state, hwnd);
