@@ -490,7 +490,9 @@ fn parse_functional_color(value: &str) -> Option<Color> {
     let parse_alpha = |part: &str| -> Option<u8> {
         if let Some(percent) = part.strip_suffix('%') {
             let value = percent.trim().parse::<f32>().ok()?;
-            if !(0.0..=100.0).contains(&value) {\n                return None;\n            }
+            if !(0.0..=100.0).contains(&value) {
+                return None;
+            }
             Some((value * 2.55).round() as u8)
         } else {
             let value = part.parse::<f32>().ok()?;
