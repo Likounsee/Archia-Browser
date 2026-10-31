@@ -363,7 +363,7 @@ unsafe fn update_scrollbar(state: &mut AppState) {
         track_pos: 0,
     };
     let _ = SetScrollInfo(state.window, SB_VERT, &info, 1);
-    let _ = ShowScrollBar(state.window, SB_VERT, i32::from(max_scroll > 0));
+    let _ = ShowScrollBar(state.window, SB_VERT, if max_scroll > 0 { 1 } else { 0 });
 }
 
 unsafe fn scroll_to(state: &mut AppState, requested: i64) {
@@ -857,7 +857,7 @@ pub fn run() {
             0,
             class_name.as_ptr(),
             window_title.as_ptr(),
-            WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+            WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_VSCROLL,
             100,
             100,
             1180,
