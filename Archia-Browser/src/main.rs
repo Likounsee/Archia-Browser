@@ -35,7 +35,7 @@ fn print_page(browser: &Browser) {
         return;
     };
 
-    let title = page.title().unwrap_or("Archia Browser");
+    let title = page.title().unwrap_or_else(|| "Archia Browser".to_owned());
     println!("\n{title}");
     println!("{}", "=".repeat(title.chars().count().min(72)));
     println!("URL: {}\n", page.url().map(ToString::to_string).unwrap_or_default());
