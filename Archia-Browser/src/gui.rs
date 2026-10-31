@@ -74,6 +74,7 @@ const ID_MENU_RESET_HOMEPAGE: u32 = 3015;
 const ID_MENU_TOGGLE_SESSION: u32 = 3016;
 const ID_MENU_DOWNLOAD_PAGE: u32 = 3017;
 const ID_MENU_OPEN_DOWNLOADS: u32 = 3018;
+const ID_MENU_REOPEN_CLOSED_TAB: u32 = 3019;
 const ID_MENU_THEME_ARCHIA: u32 = 3010;
 const ID_MENU_THEME_CHROME: u32 = 3011;
 const ID_MENU_THEME_FIREFOX: u32 = 3012;
@@ -1633,6 +1634,7 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         (ID_MENU_RELOAD, "Recharger"),
         (ID_MENU_NEW_TAB, "Nouvel onglet"),
         (ID_MENU_CLOSE_TAB, "Fermer l'onglet"),
+        (ID_MENU_REOPEN_CLOSED_TAB, "Rouvrir le dernier onglet fermé"),
         (ID_MENU_CLEAR_HISTORY, "Effacer l'historique"),
         (ID_MENU_OPEN_ALL_BOOKMARKS, "Ouvrir tous les favoris"),
         (ID_MENU_SEARCH_GOOGLE, "Recherche : Google"),
@@ -1662,6 +1664,9 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         let label = wide(label);
         let _ = AppendMenuW(menu, MF_STRING, id as usize, label.as_ptr());
     }
+    let reopen_label = wide("Rouvrir le dernier onglet fermé");
+    let reopen_flags = MF_STRING | if state.closed_tabs.is_empty() { MF_GRAYED } else { 0 };
+    let _ = AppendMenuW(menu, reopen_flags, ID_MENU_REOPEN_CLOSED_TAB as usize, reopen_label.as_ptr());
     let _ = AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
     let history_heading = wide("Pages récemment visitées");
     let _ = AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, history_heading.as_ptr());
@@ -1731,6 +1736,7 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         }
         ID_MENU_NEW_TAB => create_new_tab(state, hwnd),
         ID_MENU_CLOSE_TAB => close_active_tab(state),
+        ID_MENU_REOPEN_CLOSED_TAB => reopen_closed_tab(state, hwnd),
         ID_MENU_CLEAR_HISTORY => {
             state.persistent_history.clear();
             save_persistent_history(state);
