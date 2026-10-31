@@ -1209,6 +1209,8 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             .go_back(&state.loader, current_viewport(state))
             .is_ok()
         {
+            record_history(state);
+            save_session(state);
             refresh_page(state);
         }
         return true;
@@ -1219,6 +1221,8 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             .go_forward(&state.loader, current_viewport(state))
             .is_ok()
         {
+            record_history(state);
+            save_session(state);
             refresh_page(state);
         }
         return true;
@@ -2228,6 +2232,8 @@ unsafe extern "system" fn window_proc(
                         .go_forward(&state.loader, current_viewport(state))
                         .is_ok()
                     {
+                        record_history(state);
+                        save_session(state);
                         refresh_page(state);
                     }
                 } else if (86..=122).contains(&client_x) && (45..=84).contains(&client_y) {
@@ -2252,6 +2258,8 @@ unsafe extern "system" fn window_proc(
                         .go_back(&state.loader, current_viewport(state))
                         .is_ok()
                     {
+                        record_history(state);
+                        save_session(state);
                         refresh_page(state);
                     }
                 } else if (90..=118).contains(&client_y) && client_x >= 12 {
