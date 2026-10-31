@@ -31,6 +31,10 @@ const WM_LBUTTONDOWN: u32 = 0x0201;
 const WM_COMMAND: u32 = 0x0111;
 const WM_NCCREATE: u32 = 0x0081;
 const WM_DESTROY: u32 = 0x0002;
+const DT_SINGLELINE: u32 = 0x0020;
+const DT_CENTER: u32 = 0x0001;
+const DT_VCENTER: u32 = 0x0004;
+const DT_END_ELLIPSIS: u32 = 0x8000;
 const GWLP_USERDATA: i32 = -21;
 const WS_OVERLAPPEDWINDOW: u32 = 0x00CF0000;
 const WS_VISIBLE: u32 = 0x10000000;
@@ -204,10 +208,16 @@ unsafe extern "system" {
     fn SetScrollInfo(hwnd: Hwnd, bar: i32, info: *const ScrollInfo, redraw: i32) -> i32;
     fn GetScrollInfo(hwnd: Hwnd, bar: i32, info: *mut ScrollInfo) -> i32;
     fn ShowScrollBar(hwnd: Hwnd, bar: i32, show: i32) -> i32;
+    fn DrawTextW(hdc: Handle, text: *const u16, count: i32, rect: *mut Rect, format: u32) -> i32;
 }
 
 #[link(name = "gdi32")]
 unsafe extern "system" {
+    fn FillRect(hdc: Handle, rect: *const Rect, brush: Handle) -> i32;
+    fn CreateSolidBrush(color: u32) -> Handle;
+    fn DeleteObject(object: Handle) -> i32;
+    fn SetTextColor(hdc: Handle, color: u32) -> u32;
+    fn SetBkMode(hdc: Handle, mode: i32) -> i32;
     fn SetDIBitsToDevice(
         hdc: Handle,
         x_dest: i32,
@@ -535,10 +545,101 @@ unsafe fn activate_link_at(state: &mut AppState, hwnd: Hwnd, client_x: i32, clie
     }
 }
 
+unsafe fn paint_fill(hdc: Handle, left: i32, top: i32, right: i32, bottom: i32, color: u32) {
+    let rect = Rect { left, top, right, bottom };
+    let brush = CreateSolidBrush(color);
+    if !brush.is_null() {
+        let _ = FillRect(hdc, &rect, brush);
+        let _ = DeleteObject(brush);
+    }
+}
+
+unsafe fn paint_label(
+    hdc: Handle,
+    label: &str,
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+    color: u32,
+    align: u32,
+) {
+    let text = wide(label);
+    let mut rect = Rect { left, top, right, bottom };
+    let _ = SetTextColor(hdc, color);
+    let _ = SetBkMode(hdc, 1);
+    let _ = DrawTextW(
+        hdc,
+        text.as_ptr(),
+        text.len().saturating_sub(1) as i32,
+        &mut rect,
+        DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | align,
+    );
+}
+
+unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
+    // A deliberately restrained dark browser frame: separate tab strip,
+    // navigation row, active-tab accent, and a quiet address-field surround.
+    paint_fill(hdc, 0, 0, width, 88, 0x00211D1B);
+    paint_fill(hdc, 0, 39, width, 88, 0x002B2623);
+    paint_fill(hdc, 0, 86, width, 89, 0x00443B36);
+
+    let tab_area = (width - 82).max(0);
+    let tab_width = (tab_area / state.tabs.len().max(1) as i32).clamp(120, 220);
+    let active = state.browser.active_tab_id();
+    for (index, (id, _)) in state.tabs.iter().enumerate() {
+        let left = 10 + index as i32 * tab_width;
+        let right = (left + tab_width - 6).min(width - 68);
+        if right <= left { continue; }
+        let selected = Some(*id) == active;
+        paint_fill(
+            hdc,
+            left,
+            7,
+            right,
+            36,
+            if selected { 0x00443B36 } else { 0x002B2623 },
+        );
+        if selected {
+            paint_fill(hdc, left + 8, 33, right - 8, 36, 0x00D78B55);
+        }
+        let title = state.browser.current_page()
+            .and_then(|page| page.title())
+            .unwrap_or_else(|| "Nouvel onglet".to_owned());
+        let label = if Some(*id) == active {
+            title.chars().take(24).collect::<String>()
+        } else {
+            format!("Onglet {}", index + 1)
+        };
+        paint_label(hdc, &label, left + 12, 7, right - 10, 36, 0x00F1EDE9, DT_CENTER);
+    }
+    paint_fill(hdc, width - 58, 7, width - 10, 36, 0x003B3430);
+    paint_label(hdc, "+", width - 58, 7, width - 10, 36, 0x00F1EDE9, DT_CENTER);
+
+    for (label, left, right) in [
+        ("‹", 10, 44), ("›", 48, 82), ("⟳", 86, 122),
+    ] {
+        paint_fill(hdc, left, 48, right, 80, 0x003B3430);
+        paint_label(hdc, label, left, 48, right, 80, 0x00F1EDE9, DT_CENTER);
+    }
+    let address_right = width - 132;
+    paint_fill(hdc, 132, 48, address_right.max(240), 80, 0x00F5F3F1);
+    paint_fill(hdc, width - 122, 48, width - 10, 80, 0x00D78B55);
+    paint_label(hdc, "Aller", width - 122, 48, width - 10, 80, 0x00211D1B, DT_CENTER);
+}
+
 unsafe fn layout_controls(state: &AppState, width: i32, height: i32) {
     let margin = 10;
     let button_y = 48;
     let button_h = 30;
+    let _ = ShowWindow(state.back, SW_HIDE);
+    let _ = ShowWindow(state.forward, SW_HIDE);
+    let _ = ShowWindow(state.reload, SW_HIDE);
+    let _ = ShowWindow(state.go, SW_HIDE);
+    let _ = ShowWindow(state.new_tab, SW_HIDE);
+    for (_, tab) in &state.tabs {
+        let _ = ShowWindow(*tab, SW_HIDE);
+    }
     let tab_area_width = (width - 2 * margin - 70).max(100);
     let tab_width = (tab_area_width / state.tabs.len().max(1) as i32).clamp(90, 180);
     for (index, (_, handle)) in state.tabs.iter().enumerate() {
@@ -557,10 +658,10 @@ unsafe fn layout_controls(state: &AppState, width: i32, height: i32) {
     let _ = MoveWindow(state.reload, margin + 84, button_y, 38, button_h, 1);
     let _ = MoveWindow(
         state.address,
-        margin + 128,
-        button_y,
-        (width - 260).max(100),
-        button_h,
+        margin + 122,
+        button_y + 2,
+        (width - 274).max(100),
+        button_h - 4,
         1,
     );
     let _ = MoveWindow(state.go, width - 118, button_y, 108, button_h, 1);
@@ -618,6 +719,12 @@ unsafe extern "system" fn window_proc(
                 ID_TAB_BASE,
             );
             state.tabs.push((initial_tab, initial_button));
+            let _ = ShowWindow(initial_button, SW_HIDE);
+            let _ = ShowWindow(state.back, SW_HIDE);
+            let _ = ShowWindow(state.forward, SW_HIDE);
+            let _ = ShowWindow(state.reload, SW_HIDE);
+            let _ = ShowWindow(state.go, SW_HIDE);
+            let _ = ShowWindow(state.new_tab, SW_HIDE);
             state.page = create_control(
                 hwnd,
                 instance,
@@ -643,6 +750,13 @@ unsafe extern "system" fn window_proc(
                         right: 0,
                         bottom: 0,
                     };
+                    if GetClientRect(hwnd, &mut client) != 0 {
+                        paint_browser_chrome(
+                            state,
+                            hdc,
+                            client.right.saturating_sub(client.left),
+                        );
+                    }
                     if GetClientRect(hwnd, &mut client) != 0
                         && state.browser.current_page().is_some()
                     {
@@ -747,7 +861,51 @@ unsafe extern "system" fn window_proc(
             if let Some(state) = app_state(hwnd) {
                 let client_x = (l_param as u32 & 0xffff) as u16 as i16 as i32;
                 let client_y = ((l_param as u32 >> 16) & 0xffff) as u16 as i16 as i32;
-                activate_link_at(state, hwnd, client_x, client_y);
+                let width = {
+                    let mut client = Rect { left: 0, top: 0, right: 0, bottom: 0 };
+                    if GetClientRect(hwnd, &mut client) != 0 {
+                        client.right.saturating_sub(client.left)
+                    } else { 1180 }
+                };
+                if client_y < 42 {
+                    let tab_area = (width - 82).max(0);
+                    let tab_width = (tab_area / state.tabs.len().max(1) as i32).clamp(120, 220);
+                    if client_x >= width - 58 && client_x <= width - 10 {
+                        if state.tabs.len() < MAX_GUI_TABS {
+                            let tab_id = state.browser.new_tab();
+                            let index = state.tabs.len();
+                            let caption = format!("{} · Nouvel onglet", index + 1);
+                            let button = create_control(hwnd, GetModuleHandleW(ptr::null()), "BUTTON", &caption, 0, ID_TAB_BASE + index);
+                            let _ = ShowWindow(button, SW_HIDE);
+                            state.tabs.push((tab_id, button));
+                            set_control_text(state.address, "");
+                            refresh_page(state);
+                        }
+                    } else if client_x >= 10 {
+                        let index = ((client_x - 10) / tab_width.max(1)) as usize;
+                        if let Some((id, _)) = state.tabs.get(index) {
+                            state.browser.select_tab(*id);
+                            refresh_page(state);
+                        }
+                    }
+                } else if (48..=82).contains(&client_x) && (45..=84).contains(&client_y) {
+                    if state.browser.go_back(&state.loader, current_viewport(state)).is_ok() {
+                        refresh_page(state);
+                    }
+                } else if (86..=122).contains(&client_x) && (45..=84).contains(&client_y) {
+                    if state.browser.reload(&state.loader, current_viewport(state)).is_ok() {
+                        refresh_page(state);
+                    }
+                } else if client_x >= width - 122 && (45..=84).contains(&client_y) {
+                    let address = read_control_text(state.address);
+                    navigate(state, &address);
+                } else if (10..=44).contains(&client_x) && (45..=84).contains(&client_y) {
+                    if state.browser.go_back(&state.loader, current_viewport(state)).is_ok() {
+                        refresh_page(state);
+                    }
+                } else {
+                    activate_link_at(state, hwnd, client_x, client_y);
+                }
             }
             0
         }
