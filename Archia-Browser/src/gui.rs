@@ -922,11 +922,8 @@ unsafe extern "system" fn window_proc(
             state.reload = create_control(hwnd, instance, "BUTTON", "↻", 0, ID_RELOAD);
             state.address = create_control(hwnd, instance, "EDIT", "", ES_AUTOHSCROLL, ID_ADDRESS);
             state.address_brush = CreateSolidBrush(0x00F5F3F1);
-            state.address_proc = SetWindowLongPtrW(
-                state.address,
-                GWLP_WNDPROC,
-                address_edit_proc as isize,
-            );
+            state.address_proc =
+                SetWindowLongPtrW(state.address, GWLP_WNDPROC, address_edit_proc as isize);
             state.go = create_control(hwnd, instance, "BUTTON", "Aller", 0, ID_GO);
             state.new_tab = create_control(hwnd, instance, "BUTTON", "+", 0, ID_NEW_TAB);
             let initial_tab = state
