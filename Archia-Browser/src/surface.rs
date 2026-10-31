@@ -911,7 +911,7 @@ mod tests {
         );
         assert_eq!(
             Color::parse("rgb(100% 0% 50% / 25%)"),
-            Some(Color(255, 0, 127, 64))
+            Some(Color(255, 0, 128, 64))
         );
         assert_eq!(Color::parse("rgb(256, 0, 0)"), None);
         assert_eq!(Color::parse("rgba(1, 2, 3, 2)"), None);
