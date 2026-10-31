@@ -248,6 +248,7 @@ unsafe extern "system" {
     fn FillRect(hdc: Handle, rect: *const Rect, brush: Handle) -> i32;
     fn CreateSolidBrush(color: u32) -> Handle;
     fn DeleteObject(object: Handle) -> i32;
+    #[allow(clippy::too_many_arguments)]
     fn CreateFontW(
         height: i32,
         width: i32,
@@ -634,6 +635,7 @@ unsafe fn paint_fill(hdc: Handle, left: i32, top: i32, right: i32, bottom: i32, 
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 unsafe fn paint_label(
     hdc: Handle,
     label: &str,
