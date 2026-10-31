@@ -509,13 +509,20 @@ fn encode_search_query(input: &str) -> String {
     encoded
 }
 
+fn looks_like_host(input: &str) -> bool {
+    let authority = input.split(['/', '?', '#']).next().unwrap_or(input);
+    authority.starts_with('[') && authority.contains(']')
+        || authority == "localhost"
+        || authority.starts_with("localhost:")
+        || authority.parse::<std::net::IpAddr>().is_ok()
+        || authority.contains('.')
+}
+
 fn parse_address(input: &str) -> Result<Url, archia_browser::net::UrlError> {
     let input = input.trim();
     let address = if input.contains("://") {
         input.to_owned()
-    } else if input.chars().any(char::is_whitespace)
-        || (!input.contains('.') && !input.starts_with("localhost") && !input.starts_with("127."))
-    {
+    } else if input.chars().any(char::is_whitespace) || !looks_like_host(input) {
         format!(
             "https://www.google.com/search?q={}",
             encode_search_query(input)
@@ -524,6 +531,14 @@ fn parse_address(input: &str) -> Result<Url, archia_browser::net::UrlError> {
         format!("https://{input}")
     };
     Url::parse(&address)
+}
+
+fn security_badge_label(url: Option<&Url>) -> &'static str {
+    match url.map(Url::scheme) {
+        Some("https") => "HTTPS",
+        Some("http") => "HTTP",
+        _ => "WEB",
+    }
 }
 
 unsafe fn read_control_text(hwnd: Hwnd) -> String {
@@ -1464,10 +1479,11 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
     let bookmarked = current_url
         .as_ref()
         .is_some_and(|url| state.bookmarks.iter().any(|bookmark| &bookmark.url == url));
-    let (security_label, security_color) = match state.browser.current_url().map(Url::scheme) {
-        Some("https") => ("HTTPS", accent),
-        Some("http") => ("HTTP", muted),
-        _ => ("WEB", muted),
+    let security_label = security_badge_label(state.browser.current_url());
+    let security_color = if security_label == "HTTPS" {
+        accent
+    } else {
+        muted
     };
     paint_round_fill(hdc, 140, 52, 186, 76, inactive_tab, 3);
     paint_label(
@@ -2437,28 +2453,31 @@ mod gui_address_tests {
     }
 
     #[test]
-    fn security_badge_distinguishes_https_and_http() {
+    fn localhost_with_port_opens_as_a_host() {
         assert_eq!(
-            match parse_address("https://example.org").as_ref() {
-                Ok(url) => match url.scheme() {
-                    "https" => "HTTPS",
-                    "http" => "HTTP",
-                    _ => "WEB",
-                },
-                Err(_) => "WEB",
-            },
-            "HTTPS"
+            parse_address("localhost:8080").unwrap().to_string(),
+            "https://localhost:8080/"
+        );
+    }
+
+    #[test]
+    fn ipv4_and_bracketed_ipv6_hosts_open_directly() {
+        assert_eq!(
+            parse_address("192.168.1.20:3000").unwrap().to_string(),
+            "https://192.168.1.20:3000/"
         );
         assert_eq!(
-            match parse_address("http://example.org").as_ref() {
-                Ok(url) => match url.scheme() {
-                    "https" => "HTTPS",
-                    "http" => "HTTP",
-                    _ => "WEB",
-                },
-                Err(_) => "WEB",
-            },
-            "HTTP"
+            parse_address("[::1]:8080").unwrap().to_string(),
+            "https://[::1]:8080/"
         );
+    }
+
+    #[test]
+    fn security_badge_distinguishes_https_http_and_empty_tabs() {
+        let https = parse_address("https://example.org").unwrap();
+        let http = parse_address("http://example.org").unwrap();
+        assert_eq!(security_badge_label(Some(&https)), "HTTPS");
+        assert_eq!(security_badge_label(Some(&http)), "HTTP");
+        assert_eq!(security_badge_label(None), "WEB");
     }
 }
