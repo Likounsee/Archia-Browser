@@ -48,7 +48,8 @@ const ID_GO: usize = 1004;
 const ID_NEW_TAB: usize = 1005;
 const ID_ADDRESS: usize = 1100;
 const ID_PAGE: usize = 1200;
-const ID_TAB_LABEL: usize = 1300;
+const ID_TAB_BASE: usize = 2000;
+const MAX_GUI_TABS: usize = 100;
 
 #[repr(C)]
 struct Point {
@@ -164,9 +165,8 @@ struct AppState {
     address: Hwnd,
     go: Hwnd,
     new_tab: Hwnd,
-    tab_label: Hwnd,
     page: Hwnd,
-    tab_count: usize,
+    tabs: Vec<(archia_browser::core::tabs::TabId, Hwnd)>,
 }
 
 fn wide(value: &str) -> Vec<u16> {
@@ -254,8 +254,18 @@ unsafe fn refresh_page(state: &mut AppState) {
     let caption = format!("{title} — Archia Browser");
     let caption = wide(&caption);
     let _ = SetWindowTextW(state.window, caption.as_ptr());
-    let tab_caption = format!("Onglet {}  ·  {title}", state.tab_count);
-    set_control_text(state.tab_label, &tab_caption);
+    if let Some(active_id) = state.browser.active_tab_id() {
+        if let Some((index, (_, handle))) = state
+            .tabs
+            .iter()
+            .enumerate()
+            .find(|(_, (id, _))| *id == active_id)
+        {
+            let short_title = title.chars().take(18).collect::<String>();
+            let caption = format!("{} · {}", index + 1, short_title);
+            set_control_text(*handle, &caption);
+        }
+    }
 }
 
 unsafe fn navigate(state: &mut AppState, address: &str) {
@@ -313,7 +323,11 @@ unsafe fn layout_controls(state: &AppState, width: i32, height: i32) {
     let margin = 10;
     let button_y = 48;
     let button_h = 30;
-    let _ = MoveWindow(state.tab_label, margin, 10, width - 2 * margin - 70, 28, 1);
+    let tab_area_width = (width - 2 * margin - 70).max(100);
+    let tab_width = (tab_area_width / state.tabs.len().max(1) as i32).clamp(90, 180);
+    for (index, (_, handle)) in state.tabs.iter().enumerate() {
+        let _ = MoveWindow(*handle, margin + index as i32 * tab_width, 8, tab_width - 4, 30, 1);
+    }
     let _ = MoveWindow(state.new_tab, width - 62, 8, 52, 30, 1);
     let _ = MoveWindow(state.back, margin, button_y, 38, button_h, 1);
     let _ = MoveWindow(state.forward, margin + 42, button_y, 38, button_h, 1);
@@ -368,7 +382,16 @@ unsafe extern "system" fn window_proc(
             );
             state.go = create_control(hwnd, instance, "BUTTON", "Aller", 0, ID_GO);
             state.new_tab = create_control(hwnd, instance, "BUTTON", "+", 0, ID_NEW_TAB);
-            state.tab_label = create_control(hwnd, instance, "STATIC", "Onglet 1", 0, ID_TAB_LABEL);
+            let initial_tab = state.browser.active_tab_id().expect("browser starts with one tab");
+            let initial_button = create_control(
+                hwnd,
+                instance,
+                "BUTTON",
+                "1 · Nouvel onglet",
+                0,
+                ID_TAB_BASE,
+            );
+            state.tabs.push((initial_tab, initial_button));
             state.page = create_control(
                 hwnd,
                 instance,
@@ -427,10 +450,32 @@ unsafe extern "system" fn window_proc(
                         }
                     }
                     ID_NEW_TAB => {
-                        state.browser.new_tab();
-                        state.tab_count = state.tab_count.saturating_add(1);
-                        set_control_text(state.address, "");
-                        refresh_page(state);
+                        if state.tabs.len() < MAX_GUI_TABS {
+                            let tab_id = state.browser.new_tab();
+                            let index = state.tabs.len();
+                            let caption = format!("{} · Nouvel onglet", index + 1);
+                            let button = create_control(
+                                hwnd,
+                                GetModuleHandleW(ptr::null()),
+                                "BUTTON",
+                                &caption,
+                                0,
+                                ID_TAB_BASE + index,
+                            );
+                            state.tabs.push((tab_id, button));
+                            set_control_text(state.address, "");
+                            refresh_page(state);
+                            let mut rect = Rect { left: 0, top: 0, right: 1180, bottom: 820 };
+                            let _ = rect;
+                            layout_controls(state, 1180, 820);
+                        }
+                    }
+                    tab_id if (ID_TAB_BASE..ID_TAB_BASE + MAX_GUI_TABS).contains(&tab_id) => {
+                        let index = tab_id - ID_TAB_BASE;
+                        if let Some((id, _)) = state.tabs.get(index) {
+                            state.browser.select_tab(*id);
+                            refresh_page(state);
+                        }
                     }
                     _ => {}
                 }
@@ -480,9 +525,8 @@ pub fn run() {
             address: ptr::null_mut(),
             go: ptr::null_mut(),
             new_tab: ptr::null_mut(),
-            tab_label: ptr::null_mut(),
             page: ptr::null_mut(),
-            tab_count: 1,
+            tabs: Vec::new(),
         });
         let state_ptr = &mut *state as *mut AppState;
         let hwnd = CreateWindowExW(
