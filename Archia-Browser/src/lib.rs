@@ -461,6 +461,15 @@ impl Browser {
         self.tabs.active_tab().and_then(|tab| tab.page())
     }
 
+    /// Recalculate the active document's layout after the viewport changes.
+    pub fn relayout_current_page(&mut self, viewport: crate::layout::LayoutViewport) -> bool {
+        let Some(page) = self.tabs.active_tab_mut().and_then(|tab| tab.page_mut()) else {
+            return false;
+        };
+        page.relayout(viewport);
+        true
+    }
+
     pub fn render_current_page(&self, surface: &mut crate::surface::SoftwareSurface) -> bool {
         let Some(page) = self.current_page() else {
             return false;
