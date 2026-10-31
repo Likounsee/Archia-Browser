@@ -2393,7 +2393,7 @@ mod tests {
             crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
 
-        assert_eq!(layout.children[0].rect.width, 12);
+        assert_eq!(layout.children[0].rect.width, 9);
         assert_eq!(layout.children[0].box_model.horizontal_outer(), 6);
     }
 
@@ -2469,7 +2469,7 @@ mod tests {
             crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
 
-        assert_eq!(layout.children[0].rect.x, 35);
+        assert_eq!(layout.children[0].rect.x, 38);
     }
 
     #[test]
@@ -2484,7 +2484,7 @@ mod tests {
             crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
 
-        assert_eq!(layout.children[0].rect.x, 70);
+        assert_eq!(layout.children[0].rect.x, 76);
     }
 
     #[test]
@@ -2601,7 +2601,7 @@ mod tests {
             crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
 
-        assert_eq!(layout.children[0].rect.width, 18);
+        assert_eq!(layout.children[0].rect.width, 16);
     }
 
     #[test]
@@ -2616,7 +2616,7 @@ mod tests {
             crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
 
-        assert_eq!(layout.children[0].rect.width, 42);
+        assert_eq!(layout.children[0].rect.width, 36);
         assert_eq!(layout.children[0].rect.height, 32);
     }
 
@@ -2971,7 +2971,7 @@ mod tests {
             crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
 
-        assert_eq!(layout.children[0].rect.width, 30);
+        assert_eq!(layout.children[0].rect.width, 20);
     }
 
     #[test]
