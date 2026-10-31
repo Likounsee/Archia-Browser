@@ -42,6 +42,7 @@ const VK_T: usize = 0x54;
 const VK_W: usize = 0x57;
 const VK_R: usize = 0x52;
 const VK_D: usize = 0x44;
+const VK_C: usize = 0x43;
 const VK_H: usize = 0x48;
 const VK_J: usize = 0x4A;
 const VK_K: usize = 0x4B;
@@ -1449,6 +1450,12 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             select_tab_index(state, index);
             return true;
         }
+        if key == VK_C && GetKeyState(VK_SHIFT) < 0 {
+            if let Some(url) = current_page_url(state) {
+                let _ = copy_text_to_clipboard(hwnd, &url);
+            }
+            return true;
+        }
         match key {
             VK_L | VK_K => {
                 let _ = SetFocus(state.address);
@@ -1656,7 +1663,14 @@ unsafe fn show_page_context_menu(state: &mut AppState, hwnd: Hwnd) {
     }
     for (id, label) in [
         (ID_MENU_COPY_PAGE_URL, "Copier l’adresse de la page"),
-        (ID_MENU_BOOKMARK_PAGE, "Ajouter aux favoris"),
+        (
+            ID_MENU_BOOKMARK_PAGE,
+            if state.bookmarks.iter().any(|bookmark| bookmark.url == url) {
+                "Retirer des favoris"
+            } else {
+                "Ajouter aux favoris"
+            },
+        ),
         (ID_MENU_RELOAD, "Recharger la page"),
         (ID_MENU_DOWNLOAD_PAGE, "Télécharger la page"),
     ] {
