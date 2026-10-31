@@ -5,8 +5,7 @@
 
 use std::{
     error::Error,
-    fmt,
-    fs,
+    fmt, fs,
     path::{Path, PathBuf},
 };
 
@@ -21,13 +20,25 @@ const BUILTIN_MANIFESTS: &[(&str, &str)] = &[
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ThemeSource { BuiltIn, Installed }
+pub enum ThemeSource {
+    BuiltIn,
+    Installed,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ThemeLayout { Archia, Chrome, Firefox, Edge, Custom }
+pub enum ThemeLayout {
+    Archia,
+    Chrome,
+    Firefox,
+    Edge,
+    Custom,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TabPosition { Top, Left }
+pub enum TabPosition {
+    Top,
+    Left,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ThemeColors {
@@ -85,7 +96,10 @@ impl fmt::Display for ThemeError {
             Self::InvalidLine(line) => write!(f, "invalid theme manifest line {line}"),
             Self::InvalidValue(key) => write!(f, "invalid value for theme field {key}"),
             Self::MissingField(key) => write!(f, "missing theme field {key}"),
-            Self::InvalidId => write!(f, "theme id must contain lowercase ASCII letters, digits and hyphens"),
+            Self::InvalidId => write!(
+                f,
+                "theme id must contain lowercase ASCII letters, digits and hyphens"
+            ),
             Self::InvalidColor(key) => write!(f, "theme color {key} must be #RRGGBB"),
             Self::DuplicateTheme(id) => write!(f, "theme {id} is already installed"),
             Self::ThemeNotFound(id) => write!(f, "theme {id} was not found"),
@@ -97,7 +111,9 @@ impl fmt::Display for ThemeError {
 impl Error for ThemeError {}
 
 impl From<std::io::Error> for ThemeError {
-    fn from(error: std::io::Error) -> Self { Self::Io(error.to_string()) }
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error.to_string())
+    }
 }
 
 fn parse_string(value: &str, key: &'static str) -> Result<String, ThemeError> {
@@ -115,7 +131,9 @@ fn parse_string(value: &str, key: &'static str) -> Result<String, ThemeError> {
 fn valid_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 48
-        && id.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
         && !id.starts_with('-')
         && !id.ends_with('-')
 }
@@ -149,7 +167,9 @@ impl ThemeManifest {
 
         for (index, raw_line) in input.lines().enumerate() {
             let line = raw_line.trim();
-            if line.is_empty() || line.starts_with('#') { continue; }
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
             if line == "[colors]" {
                 section = "colors";
                 continue;
@@ -175,7 +195,9 @@ impl ThemeManifest {
                     "page_background" => 10,
                     _ => return Err(ThemeError::InvalidValue("colors")),
                 };
-                if colors[slot].is_some() { return Err(ThemeError::InvalidValue("duplicate color")); }
+                if colors[slot].is_some() {
+                    return Err(ThemeError::InvalidValue("duplicate color"));
+                }
                 colors[slot] = Some(validate_color(parse_string(value, "colors")?, "colors")?);
                 continue;
             }
@@ -183,7 +205,9 @@ impl ThemeManifest {
             match key {
                 "id" if id.is_none() => id = Some(parse_string(value, "id")?),
                 "name" if name.is_none() => name = Some(parse_string(value, "name")?),
-                "description" if description.is_none() => description = Some(parse_string(value, "description")?),
+                "description" if description.is_none() => {
+                    description = Some(parse_string(value, "description")?)
+                }
                 "version" if version.is_none() => version = Some(parse_string(value, "version")?),
                 "author" if author.is_none() => author = Some(parse_string(value, "author")?),
                 "layout" if layout.is_none() => {
@@ -215,7 +239,9 @@ impl ThemeManifest {
         }
 
         let id = id.ok_or(ThemeError::MissingField("id"))?;
-        if !valid_id(&id) { return Err(ThemeError::InvalidId); }
+        if !valid_id(&id) {
+            return Err(ThemeError::InvalidId);
+        }
         let color = |index: usize, key| colors[index].clone().ok_or(ThemeError::MissingField(key));
         Ok(Self {
             id,
@@ -258,15 +284,24 @@ impl ThemeManager {
         let mut themes = Vec::new();
         for (expected_id, manifest_text) in BUILTIN_MANIFESTS {
             let manifest = ThemeManifest::parse(manifest_text)?;
-            if manifest.id != *expected_id { return Err(ThemeError::InvalidValue("built-in theme id")); }
-            themes.push(BrowserTheme { manifest, source: ThemeSource::BuiltIn });
+            if manifest.id != *expected_id {
+                return Err(ThemeError::InvalidValue("built-in theme id"));
+            }
+            themes.push(BrowserTheme {
+                manifest,
+                source: ThemeSource::BuiltIn,
+            });
         }
 
         for entry in fs::read_dir(&directory)? {
             let entry = entry?;
-            if !entry.file_type()?.is_dir() { continue; }
+            if !entry.file_type()?.is_dir() {
+                continue;
+            }
             let manifest_path = entry.path().join("theme.toml");
-            if !manifest_path.is_file() { continue; }
+            if !manifest_path.is_file() {
+                continue;
+            }
             if fs::metadata(&manifest_path)?.len() > MAX_MANIFEST_BYTES {
                 return Err(ThemeError::ManifestTooLarge);
             }
@@ -278,27 +313,50 @@ impl ThemeManager {
             if themes.iter().any(|theme| theme.manifest.id == manifest.id) {
                 return Err(ThemeError::DuplicateTheme(manifest.id));
             }
-            themes.push(BrowserTheme { manifest, source: ThemeSource::Installed });
+            themes.push(BrowserTheme {
+                manifest,
+                source: ThemeSource::Installed,
+            });
         }
 
-        themes.sort_by(|left, right| left.manifest.name.to_lowercase().cmp(&right.manifest.name.to_lowercase()));
+        themes.sort_by(|left, right| {
+            left.manifest
+                .name
+                .to_lowercase()
+                .cmp(&right.manifest.name.to_lowercase())
+        });
         let requested_active = fs::read_to_string(directory.join(ACTIVE_THEME_FILE))
             .unwrap_or_else(|_| "archia".to_owned());
-        let active_id = if themes.iter().any(|theme| theme.manifest.id == requested_active.trim()) {
+        let active_id = if themes
+            .iter()
+            .any(|theme| theme.manifest.id == requested_active.trim())
+        {
             requested_active.trim().to_owned()
-        } else { "archia".to_owned() };
+        } else {
+            "archia".to_owned()
+        };
 
-        Ok(Self { directory, themes, active_id })
+        Ok(Self {
+            directory,
+            themes,
+            active_id,
+        })
     }
 
-    pub fn themes(&self) -> &[BrowserTheme] { &self.themes }
+    pub fn themes(&self) -> &[BrowserTheme] {
+        &self.themes
+    }
 
     pub fn active_theme(&self) -> &BrowserTheme {
-        self.themes.iter().find(|theme| theme.manifest.id == self.active_id)
+        self.themes
+            .iter()
+            .find(|theme| theme.manifest.id == self.active_id)
             .expect("active theme is always present")
     }
 
-    pub fn active_id(&self) -> &str { &self.active_id }
+    pub fn active_id(&self) -> &str {
+        &self.active_id
+    }
 
     /// Select and persist a theme by id.
     pub fn select(&mut self, id: &str) -> Result<(), ThemeError> {
@@ -314,7 +372,11 @@ impl ThemeManager {
     /// no JavaScript, dynamic libraries, scripts or executable plugin hooks.
     pub fn install_manifest(&mut self, input: &str) -> Result<(), ThemeError> {
         let manifest = ThemeManifest::parse(input)?;
-        if self.themes.iter().any(|theme| theme.manifest.id == manifest.id) {
+        if self
+            .themes
+            .iter()
+            .any(|theme| theme.manifest.id == manifest.id)
+        {
             return Err(ThemeError::DuplicateTheme(manifest.id));
         }
         let destination = self.directory.join(&manifest.id);
@@ -323,8 +385,16 @@ impl ThemeManager {
             let _ = fs::remove_dir_all(&destination);
             return Err(error.into());
         }
-        self.themes.push(BrowserTheme { manifest, source: ThemeSource::Installed });
-        self.themes.sort_by(|left, right| left.manifest.name.to_lowercase().cmp(&right.manifest.name.to_lowercase()));
+        self.themes.push(BrowserTheme {
+            manifest,
+            source: ThemeSource::Installed,
+        });
+        self.themes.sort_by(|left, right| {
+            left.manifest
+                .name
+                .to_lowercase()
+                .cmp(&right.manifest.name.to_lowercase())
+        });
         Ok(())
     }
 
@@ -333,10 +403,14 @@ impl ThemeManager {
         let Some(index) = self.themes.iter().position(|theme| theme.manifest.id == id) else {
             return Err(ThemeError::ThemeNotFound(id.to_owned()));
         };
-        if self.themes[index].source == ThemeSource::BuiltIn { return Err(ThemeError::BuiltInTheme); }
+        if self.themes[index].source == ThemeSource::BuiltIn {
+            return Err(ThemeError::BuiltInTheme);
+        }
         fs::remove_dir_all(self.directory.join(id))?;
         self.themes.remove(index);
-        if self.active_id == id { self.select("archia")?; }
+        if self.active_id == id {
+            self.select("archia")?;
+        }
         Ok(())
     }
 }
@@ -400,13 +474,19 @@ page_background = "#FFFFFF"
     #[test]
     fn rejects_invalid_color_values() {
         let invalid = TEST_THEME.replace("#00AAFF", "blue");
-        assert_eq!(ThemeManifest::parse(&invalid), Err(ThemeError::InvalidColor("colors")));
+        assert_eq!(
+            ThemeManifest::parse(&invalid),
+            Err(ThemeError::InvalidColor("colors"))
+        );
     }
 
     #[test]
     fn rejects_unknown_manifest_fields() {
         let invalid = TEST_THEME.replace("sidebar = true", "sidebar = true\nrun = \"script.js\"");
-        assert_eq!(ThemeManifest::parse(&invalid), Err(ThemeError::InvalidValue("duplicate or unknown field")));
+        assert_eq!(
+            ThemeManifest::parse(&invalid),
+            Err(ThemeError::InvalidValue("duplicate or unknown field"))
+        );
     }
 
     #[test]
@@ -426,7 +506,10 @@ page_background = "#FFFFFF"
         let directory = temporary_directory();
         let mut manager = ThemeManager::load(&directory).unwrap();
         manager.install_manifest(TEST_THEME).unwrap();
-        assert!(manager.themes().iter().any(|theme| theme.manifest.id == "community-night"));
+        assert!(manager
+            .themes()
+            .iter()
+            .any(|theme| theme.manifest.id == "community-night"));
         manager.select("community-night").unwrap();
         manager.uninstall("community-night").unwrap();
         assert_eq!(manager.active_id(), "archia");
