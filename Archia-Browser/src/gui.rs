@@ -1995,12 +1995,11 @@ unsafe extern "system" fn window_proc(
                     let card_width = ((content_width - 80 - 32) / 3).max(120);
                     let column = ((client_x - left - 40) / (card_width + 16)).max(0) as usize;
                     let row = ((client_y - 470) / 82).max(0) as usize;
-                    if client_x >= left + 40
-                        && column < 3
-                        && let Some(bookmark) = state.bookmarks.get(row * 3 + column)
-                    {
-                        let url = bookmark.url.clone();
-                        navigate(state, &url);
+                    if client_x >= left + 40 && column < 3 {
+                        if let Some(bookmark) = state.bookmarks.get(row * 3 + column) {
+                            let url = bookmark.url.clone();
+                            navigate(state, &url);
+                        }
                     }
                 } else {
                     activate_link_at(state, hwnd, client_x, client_y);
