@@ -40,6 +40,9 @@ const VK_W: usize = 0x57;
 const VK_R: usize = 0x52;
 const VK_F5: usize = 0x74;
 const VK_CONTROL: i32 = 0x11;
+const VK_MENU: i32 = 0x12;
+const VK_LEFT: usize = 0x25;
+const VK_RIGHT: usize = 0x27;
 const MF_STRING: u32 = 0x0000;
 const TPM_RETURNCMD: u32 = 0x0100;
 const ID_MENU_RELOAD: u32 = 3001;
@@ -400,6 +403,14 @@ unsafe extern "system" fn address_edit_proc(
     w_param: Wparam,
     l_param: Lparam,
 ) -> Lresult {
+    if message == WM_KEYDOWN {
+        let parent = GetParent(hwnd);
+        if let Some(state) = app_state(parent) {
+            if handle_keyboard_shortcut(state, parent, w_param) {
+                return 0;
+            }
+        }
+    }
     if message == WM_KEYDOWN && w_param == VK_RETURN {
         let parent = GetParent(hwnd);
         if let Some(state) = app_state(parent) {
@@ -709,6 +720,95 @@ unsafe fn paint_label(
     }
 }
 
+unsafe fn create_new_tab(state: &mut AppState, hwnd: Hwnd) {
+    if state.tabs.len() >= MAX_GUI_TABS {
+        return;
+    }
+    let tab_id = state.browser.new_tab();
+    let index = state.tabs.len();
+    let caption = format!("{} · Nouvel onglet", index + 1);
+    let button = create_control(
+        hwnd,
+        GetModuleHandleW(ptr::null()),
+        "BUTTON",
+        &caption,
+        0,
+        ID_TAB_BASE + index,
+    );
+    let _ = ShowWindow(button, SW_HIDE);
+    state.tabs.push((tab_id, button));
+    set_control_text(state.address, "");
+    refresh_page(state);
+}
+
+unsafe fn close_active_tab(state: &mut AppState) {
+    if state.tabs.len() <= 1 {
+        return;
+    }
+    let Some(index) = state
+        .browser
+        .active_tab_id()
+        .and_then(|id| state.tabs.iter().position(|(tab_id, _)| *tab_id == id))
+    else {
+        return;
+    };
+    let (id, handle) = state.tabs[index];
+    if state.browser.close_tab(id) {
+        let _ = DestroyWindow(handle);
+        state.tabs.remove(index);
+        refresh_page(state);
+    }
+}
+
+unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam) -> bool {
+    let control = GetKeyState(VK_CONTROL) < 0;
+    let alt = GetKeyState(VK_MENU) < 0;
+    if control {
+        match key {
+            VK_L => {
+                let _ = SetFocus(state.address);
+                let _ = SendMessageW(state.address, 0x00B1, 0, -1); // EM_SETSEL
+                return true;
+            }
+            VK_T => {
+                create_new_tab(state, hwnd);
+                let _ = SetFocus(state.address);
+                return true;
+            }
+            VK_W => {
+                close_active_tab(state);
+                return true;
+            }
+            VK_R => {
+                if state.browser.reload(&state.loader, current_viewport(state)).is_ok() {
+                    refresh_page(state);
+                }
+                return true;
+            }
+            _ => {}
+        }
+    }
+    if key == VK_F5 {
+        if state.browser.reload(&state.loader, current_viewport(state)).is_ok() {
+            refresh_page(state);
+        }
+        return true;
+    }
+    if alt && key == VK_LEFT {
+        if state.browser.go_back(&state.loader, current_viewport(state)).is_ok() {
+            refresh_page(state);
+        }
+        return true;
+    }
+    if alt && key == VK_RIGHT {
+        if state.browser.go_forward(&state.loader, current_viewport(state)).is_ok() {
+            refresh_page(state);
+        }
+        return true;
+    }
+    false
+}
+
 unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
     let menu = CreatePopupMenu();
     if menu.is_null() {
@@ -718,6 +818,10 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         (ID_MENU_RELOAD, "Recharger"),
         (ID_MENU_NEW_TAB, "Nouvel onglet"),
         (ID_MENU_CLOSE_TAB, "Fermer l'onglet"),
+        (ID_MENU_THEME_ARCHIA, "Theme : Archia"),
+        (ID_MENU_THEME_CHROME, "Theme : Chrome"),
+        (ID_MENU_THEME_FIREFOX, "Theme : Firefox"),
+        (ID_MENU_THEME_EDGE, "Theme : Edge"),
         (ID_MENU_QUIT, "Quitter Archia Browser"),
     ] {
         let label = wide(label);
@@ -746,38 +850,19 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
                 refresh_page(state);
             }
         }
-        ID_MENU_NEW_TAB => {
-            if state.tabs.len() < MAX_GUI_TABS {
-                let tab_id = state.browser.new_tab();
-                let index = state.tabs.len();
-                let caption = format!("{} · Nouvel onglet", index + 1);
-                let button = create_control(
-                    hwnd,
-                    GetModuleHandleW(ptr::null()),
-                    "BUTTON",
-                    &caption,
-                    0,
-                    ID_TAB_BASE + index,
-                );
-                let _ = ShowWindow(button, SW_HIDE);
-                state.tabs.push((tab_id, button));
-                set_control_text(state.address, "");
-                refresh_page(state);
-            }
-        }
-        ID_MENU_CLOSE_TAB => {
-            if state.tabs.len() > 1 {
-                if let Some(index) = state
-                    .browser
-                    .active_tab_id()
-                    .and_then(|id| state.tabs.iter().position(|(tab_id, _)| *tab_id == id))
-                {
-                    let (id, handle) = state.tabs[index];
-                    if state.browser.close_tab(id) {
-                        let _ = DestroyWindow(handle);
-                        state.tabs.remove(index);
-                        refresh_page(state);
-                    }
+        ID_MENU_NEW_TAB => create_new_tab(state, hwnd),
+        ID_MENU_CLOSE_TAB => close_active_tab(state),
+        ID_MENU_THEME_ARCHIA | ID_MENU_THEME_CHROME | ID_MENU_THEME_FIREFOX | ID_MENU_THEME_EDGE => {
+            let theme_id = match selected {
+                ID_MENU_THEME_ARCHIA => "archia",
+                ID_MENU_THEME_CHROME => "chrome",
+                ID_MENU_THEME_FIREFOX => "firefox",
+                ID_MENU_THEME_EDGE => "edge",
+                _ => unreachable!(),
+            };
+            if let Some(themes) = state.themes.as_mut() {
+                if themes.select(theme_id).is_ok() {
+                    let _ = InvalidateRect(hwnd, ptr::null(), 1);
                 }
             }
         }
@@ -1085,8 +1170,11 @@ unsafe extern "system" fn window_proc(
             state.reload = create_control(hwnd, instance, "BUTTON", "↻", 0, ID_RELOAD);
             state.address = create_control(hwnd, instance, "EDIT", "", ES_AUTOHSCROLL, ID_ADDRESS);
             state.address_brush = CreateSolidBrush(0x00F5F3F1);
-            state.address_proc =
-                SetWindowLongPtrW(state.address, GWLP_WNDPROC, address_edit_proc as isize);
+            state.address_proc = SetWindowLongPtrW(
+                state.address,
+                GWLP_WNDPROC,
+                address_edit_proc as *const () as isize,
+            );
             state.go = create_control(hwnd, instance, "BUTTON", "Aller", 0, ID_GO);
             state.new_tab = create_control(hwnd, instance, "BUTTON", "+", 0, ID_NEW_TAB);
             let initial_tab = state
@@ -1333,6 +1421,14 @@ unsafe extern "system" fn window_proc(
             }
             0
         }
+        WM_KEYDOWN => {
+            if let Some(state) = app_state(hwnd) {
+                if handle_keyboard_shortcut(state, hwnd, w_param) {
+                    return 0;
+                }
+            }
+            DefWindowProcW(hwnd, message, w_param, l_param)
+        }
         WM_MOUSEWHEEL => {
             if let Some(state) = app_state(hwnd) {
                 let delta = ((w_param >> 16) as u16) as i16 as i64;
@@ -1523,7 +1619,11 @@ pub fn run() {
             tabs: Vec::new(),
             themes: std::env::var_os("APPDATA")
                 .map(|base| std::path::PathBuf::from(base).join("ArchiaBrowser").join("themes"))
-                .or_else(|| std::env::current_dir().ok().map(|base| base.join(".archia-browser").join("themes")))
+                .or_else(|| {
+                    std::env::current_dir()
+                        .ok()
+                        .map(|base| base.join(".archia-browser").join("themes"))
+                })
                 .and_then(|directory| ThemeManager::load(directory).ok()),
         });
         let state_ptr = &mut *state as *mut AppState;
