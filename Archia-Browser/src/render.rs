@@ -125,12 +125,23 @@ impl SoftwareRenderer {
     }
 
     pub fn rasterize(list: &DisplayList, surface: &mut SoftwareSurface) {
+        Self::rasterize_with_vertical_offset(list, surface, 0);
+    }
+
+    /// Rasterize a document as if its content were shifted upward by `scroll_y`.
+    pub fn rasterize_with_vertical_offset(
+        list: &DisplayList,
+        surface: &mut SoftwareSurface,
+        scroll_y: u32,
+    ) {
+        let scroll_offset = i32::try_from(scroll_y).unwrap_or(i32::MAX);
         let mut clip_stack = Vec::new();
         let mut clip = None;
 
         for command in list.commands() {
             match command {
                 PaintCommand::FillRect { rect, color } => {
+                    let rect = translated_rect(*rect, scroll_offset);
                     let color = Color(
                         ((color >> 24) & 0xff) as u8,
                         ((color >> 16) & 0xff) as u8,
@@ -140,6 +151,7 @@ impl SoftwareRenderer {
                     surface.fill_rect_clipped(rect.x, rect.y, rect.width, rect.height, color, clip);
                 }
                 PaintCommand::FillRoundedRect { rect, radii, color } => {
+                    let rect = translated_rect(*rect, scroll_offset);
                     let color = Color(
                         ((color >> 24) & 0xff) as u8,
                         ((color >> 16) & 0xff) as u8,
@@ -170,7 +182,7 @@ impl SoftwareRenderer {
                         ((color >> 8) & 0xff) as u8,
                         (color & 0xff) as u8,
                     );
-                    surface.draw_text_clipped(*x, *y, text, color, clip);
+                    surface.draw_text_clipped(*x, y.saturating_sub(scroll_offset), text, color, clip);
                 }
                 PaintCommand::PushClip { rect } => {
                     // Clip nesting comes from untrusted markup/CSS. Do not let the
@@ -180,7 +192,7 @@ impl SoftwareRenderer {
                         return;
                     }
                     clip_stack.push(clip);
-                    clip = intersect_clip(clip, Some(*rect));
+                    clip = intersect_clip(clip, Some(translated_rect(*rect, scroll_offset)));
                 }
                 PaintCommand::PopClip => {
                     clip = clip_stack.pop().flatten();
@@ -603,6 +615,11 @@ fn effective_opacity(parent: u8, value: Option<&str>) -> u8 {
 fn apply_opacity(color: u32, opacity: u8) -> u32 {
     let alpha = ((color & 0xff) as u16 * u16::from(opacity) + 127) / 255;
     (color & 0xffffff00) | u32::from(alpha as u8)
+}
+
+fn translated_rect(mut rect: Rect, scroll_offset: i32) -> Rect {
+    rect.y = rect.y.saturating_sub(scroll_offset);
+    rect
 }
 
 fn intersect_clip(current: Option<Rect>, next: Option<Rect>) -> Option<Rect> {
