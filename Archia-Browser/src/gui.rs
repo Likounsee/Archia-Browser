@@ -25,6 +25,8 @@ type Lresult = isize;
 const WM_CREATE: u32 = 0x0001;
 const WM_SIZE: u32 = 0x0005;
 const WM_PAINT: u32 = 0x000F;
+const WM_VSCROLL: u32 = 0x0115;
+const WM_MOUSEWHEEL: u32 = 0x020A;
 const WM_COMMAND: u32 = 0x0111;
 const WM_NCCREATE: u32 = 0x0081;
 const WM_DESTROY: u32 = 0x0002;
@@ -43,6 +45,19 @@ const EM_SETLIMITTEXT: u32 = 0x00C5;
 const SW_SHOW: i32 = 5;
 const SW_HIDE: i32 = 0;
 const COLOR_WINDOW: usize = 5;
+const SB_VERT: i32 = 1;
+const SIF_RANGE: u32 = 0x0001;
+const SIF_PAGE: u32 = 0x0002;
+const SIF_POS: u32 = 0x0004;
+const SIF_TRACKPOS: u32 = 0x0010;
+const SB_LINEUP: usize = 0;
+const SB_LINEDOWN: usize = 1;
+const SB_PAGEUP: usize = 2;
+const SB_PAGEDOWN: usize = 3;
+const SB_THUMBPOSITION: usize = 4;
+const SB_THUMBTRACK: usize = 5;
+const SB_TOP: usize = 6;
+const SB_BOTTOM: usize = 7;
 
 const ID_BACK: usize = 1001;
 const ID_FORWARD: usize = 1002;
@@ -70,6 +85,17 @@ struct PaintStruct {
     restore: i32,
     inc_update: i32,
     reserved: [u8; 32],
+}
+
+#[repr(C)]
+struct ScrollInfo {
+    size: u32,
+    mask: u32,
+    min: i32,
+    max: i32,
+    page: u32,
+    pos: i32,
+    track_pos: i32,
 }
 
 #[repr(C)]
@@ -174,6 +200,9 @@ unsafe extern "system" {
     fn GetClientRect(hwnd: Hwnd, rect: *mut Rect) -> i32;
     fn BeginPaint(hwnd: Hwnd, paint: *mut PaintStruct) -> Handle;
     fn EndPaint(hwnd: Hwnd, paint: *const PaintStruct) -> i32;
+    fn SetScrollInfo(hwnd: Hwnd, bar: i32, info: *const ScrollInfo, redraw: i32) -> i32;
+    fn GetScrollInfo(hwnd: Hwnd, bar: i32, info: *mut ScrollInfo) -> i32;
+    fn ShowScrollBar(hwnd: Hwnd, bar: i32, show: i32) -> i32;
 }
 
 #[link(name = "gdi32")]
@@ -225,6 +254,7 @@ struct AppState {
     page: Hwnd,
     surface: Option<SoftwareSurface>,
     surface_dirty: bool,
+    scroll_y: u32,
     dib_pixels: Vec<u8>,
     tabs: Vec<(archia_browser::core::tabs::TabId, Hwnd)>,
 }
@@ -314,8 +344,48 @@ unsafe fn current_viewport(state: &AppState) -> LayoutViewport {
     )
 }
 
+unsafe fn update_scrollbar(state: &mut AppState) {
+    let viewport = current_viewport(state);
+    let content_height = state
+        .browser
+        .current_page()
+        .map(|page| page.layout.rect.height)
+        .unwrap_or(viewport.height);
+    let max_scroll = content_height.saturating_sub(viewport.height);
+    state.scroll_y = state.scroll_y.min(max_scroll);
+    let info = ScrollInfo {
+        size: mem::size_of::<ScrollInfo>() as u32,
+        mask: SIF_RANGE | SIF_PAGE | SIF_POS,
+        min: 0,
+        max: content_height.saturating_sub(1).min(i32::MAX as u32) as i32,
+        page: viewport.height,
+        pos: state.scroll_y.min(i32::MAX as u32) as i32,
+        track_pos: 0,
+    };
+    let _ = SetScrollInfo(state.window, SB_VERT, &info, 1);
+    let _ = ShowScrollBar(state.window, SB_VERT, i32::from(max_scroll > 0));
+}
+
+unsafe fn scroll_to(state: &mut AppState, requested: i64) {
+    let viewport = current_viewport(state);
+    let content_height = state
+        .browser
+        .current_page()
+        .map(|page| page.layout.rect.height)
+        .unwrap_or(viewport.height);
+    let max_scroll = content_height.saturating_sub(viewport.height);
+    let next = requested.clamp(0, max_scroll as i64) as u32;
+    if next != state.scroll_y {
+        state.scroll_y = next;
+        state.surface_dirty = true;
+        update_scrollbar(state);
+        let _ = InvalidateRect(state.window, ptr::null(), 1);
+    }
+}
+
 unsafe fn refresh_page(state: &mut AppState) {
     state.surface_dirty = true;
+    state.scroll_y = 0;
     if state.browser.current_page().is_some() {
         set_control_text(state.page, "");
         let _ = ShowWindow(state.page, SW_HIDE);
@@ -338,6 +408,7 @@ unsafe fn refresh_page(state: &mut AppState) {
     let caption = wide(&caption);
     let _ = SetWindowTextW(state.window, caption.as_ptr());
     let _ = InvalidateRect(state.window, ptr::null(), 1);
+    update_scrollbar(state);
     if let Some(active_id) = state.browser.active_tab_id() {
         if let Some((index, (_, handle))) = state
             .tabs
@@ -536,7 +607,7 @@ unsafe extern "system" fn window_proc(
                         }
                         if state.surface_dirty {
                             if let Some(surface) = state.surface.as_mut() {
-                                if state.browser.render_current_page(surface) {
+                                if state.browser.render_current_page_at(surface, state.scroll_y) {
                                     let required = (width as usize)
                                         .saturating_mul(height as usize)
                                         .saturating_mul(4);
@@ -604,8 +675,52 @@ unsafe extern "system" fn window_proc(
                 );
                 if state.browser.relayout_current_page(viewport) {
                     state.surface_dirty = true;
+                    update_scrollbar(state);
                     let _ = InvalidateRect(hwnd, ptr::null(), 1);
                 }
+            }
+            0
+        }
+        WM_MOUSEWHEEL => {
+            if let Some(state) = app_state(hwnd) {
+                let delta = ((w_param >> 16) as u16) as i16 as i64;
+                let lines = (delta / 120).saturating_mul(3);
+                let distance = lines.saturating_mul(48);
+                scroll_to(state, state.scroll_y as i64 - distance);
+            }
+            0
+        }
+        WM_VSCROLL => {
+            if let Some(state) = app_state(hwnd) {
+                let command = w_param & 0xffff;
+                let current = state.scroll_y as i64;
+                let viewport = current_viewport(state);
+                let next = match command {
+                    SB_LINEUP => current - 48,
+                    SB_LINEDOWN => current + 48,
+                    SB_PAGEUP => current - viewport.height as i64,
+                    SB_PAGEDOWN => current + viewport.height as i64,
+                    SB_TOP => 0,
+                    SB_BOTTOM => i64::MAX,
+                    SB_THUMBPOSITION | SB_THUMBTRACK => {
+                        let mut info = ScrollInfo {
+                            size: mem::size_of::<ScrollInfo>() as u32,
+                            mask: SIF_TRACKPOS,
+                            min: 0,
+                            max: 0,
+                            page: 0,
+                            pos: 0,
+                            track_pos: 0,
+                        };
+                        if GetScrollInfo(hwnd, SB_VERT, &mut info) != 0 {
+                            info.track_pos as i64
+                        } else {
+                            current
+                        }
+                    }
+                    _ => current,
+                };
+                scroll_to(state, next);
             }
             0
         }
@@ -733,6 +848,7 @@ pub fn run() {
             page: ptr::null_mut(),
             surface: None,
             surface_dirty: true,
+            scroll_y: 0,
             dib_pixels: Vec::new(),
             tabs: Vec::new(),
         });
