@@ -131,17 +131,51 @@ fn is_redirect(status: u16) -> bool {
 }
 
 fn filename_from_content_disposition(value: &str) -> Option<String> {
-    let extended = value
-        .split(';')
-        .map(str::trim)
-        .find_map(|part| part.strip_prefix("filename*="))
-        .and_then(|value| value.split_once("''").map(|(_, value)| value));
-    let plain = value
-        .split(';')
-        .map(str::trim)
-        .find_map(|part| part.strip_prefix("filename="))
-        .map(|value| value.trim_matches('"'));
-    extended.or(plain).and_then(sanitize_filename)
+    let mut extended = None;
+    let mut plain = None;
+    for part in value.split(';').map(str::trim) {
+        let Some((name, value)) = part.split_once('=') else {
+            continue;
+        };
+        if name.eq_ignore_ascii_case("filename*") {
+            extended = decode_extended_filename(value.trim_matches('"'));
+        } else if name.eq_ignore_ascii_case("filename") {
+            plain = Some(value.trim_matches('"').to_owned());
+        }
+    }
+    extended.or(plain).and_then(|value| sanitize_filename(&value))
+}
+
+fn decode_extended_filename(value: &str) -> Option<String> {
+    let (charset, remainder) = value.split_once('\'')?;
+    let (_, encoded) = remainder.split_once('\'')?;
+    if !charset.eq_ignore_ascii_case("utf-8") {
+        return None;
+    }
+    let bytes = encoded.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            let high = *bytes.get(index + 1)?;
+            let low = *bytes.get(index + 2)?;
+            decoded.push((hex_value(high)? << 4) | hex_value(low)?);
+            index += 3;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8(decoded).ok()
+}
+
+fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
 }
 
 fn filename_from_url(url: &Url) -> Option<String> {
@@ -307,6 +341,15 @@ mod tests {
         assert_eq!(result.suggested_filename, "report.bin");
         assert_eq!(result.bytes_written, 16);
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn decodes_utf8_extended_content_disposition_names() {
+        assert_eq!(
+            filename_from_content_disposition("attachment; FILENAME*=UTF-8''caf%C3%A9.txt")
+                .as_deref(),
+            Some("café.txt")
+        );
     }
 
     #[test]
