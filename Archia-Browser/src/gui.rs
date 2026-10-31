@@ -111,6 +111,7 @@ struct WindowClassW {
 #[link(name = "user32")]
 unsafe extern "system" {
     fn RegisterClassW(class: *const WindowClassW) -> u16;
+    fn LoadCursorW(instance: Hinstance, name: *const u16) -> Handle;
     fn CreateWindowExW(
         ex_style: u32,
         class_name: *const u16,
@@ -438,7 +439,7 @@ pub fn run() {
             window_extra: 0,
             instance,
             icon: ptr::null_mut(),
-            cursor: 32512usize as Handle,
+            cursor: LoadCursorW(ptr::null_mut(), 32512usize as *const u16),
             background: (COLOR_WINDOW + 1) as Handle,
             menu_name: ptr::null(),
             class_name: class_name.as_ptr(),
