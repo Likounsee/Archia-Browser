@@ -66,6 +66,8 @@ const ID_MENU_THEME_FIREFOX: u32 = 3012;
 const ID_MENU_THEME_EDGE: u32 = 3013;
 const ID_MENU_HISTORY_BASE: u32 = 3200;
 const MAX_MENU_HISTORY_ITEMS: usize = 8;
+const MAX_PERSISTED_HISTORY_ITEMS: usize = 500;
+const MAX_RESTORED_TABS: usize = 20;
 const ID_MENU_BOOKMARK_BASE: u32 = 3300;
 const MAX_MENU_BOOKMARK_ITEMS: usize = 16;
 const ID_BOOKMARK_OPEN: u32 = 3501;
@@ -384,6 +386,10 @@ struct AppState {
     themes: Option<ThemeManager>,
     bookmarks: Vec<Bookmark>,
     bookmarks_path: std::path::PathBuf,
+    history_path: std::path::PathBuf,
+    session_path: std::path::PathBuf,
+    persistent_history: Vec<Bookmark>,
+    startup_session: Vec<String>,
     closed_tabs: Vec<Option<String>>,
 }
 
@@ -447,6 +453,64 @@ fn load_bookmarks(path: &std::path::Path) -> Vec<Bookmark> {
             })
         })
         .collect()
+}
+
+fn browser_data_directory() -> std::path::PathBuf {
+    std::env::var_os("APPDATA")
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::current_dir().ok().map(|path| path.join(".archia-browser")))
+        .unwrap_or_else(std::env::temp_dir)
+        .join("ArchiaBrowser")
+}
+
+fn history_storage_path() -> std::path::PathBuf {
+    browser_data_directory().join("history.tsv")
+}
+
+fn session_storage_path() -> std::path::PathBuf {
+    browser_data_directory().join("session.txt")
+}
+
+fn load_persistent_history(path: &std::path::Path) -> Vec<Bookmark> {
+    let Ok(contents) = std::fs::read_to_string(path) else { return Vec::new(); };
+    contents.lines().filter_map(|line| {
+        let (url, title) = line.split_once('\t')?;
+        let parsed = Url::parse(url).ok()?;
+        if !matches!(parsed.scheme(), "http" | "https") { return None; }
+        Some(Bookmark { title: title.trim().to_owned(), url: parsed.to_string() })
+    }).rev().take(MAX_PERSISTED_HISTORY_ITEMS).collect::<Vec<_>>().into_iter().rev().collect()
+}
+
+fn load_session(path: &std::path::Path) -> Vec<String> {
+    let Ok(contents) = std::fs::read_to_string(path) else { return Vec::new(); };
+    contents.lines().filter_map(|line| {
+        let url = Url::parse(line).ok()?;
+        matches!(url.scheme(), "http" | "https").then(|| url.to_string())
+    }).take(MAX_RESTORED_TABS).collect()
+}
+
+fn save_persistent_history(state: &AppState) {
+    if let Some(parent) = state.history_path.parent() { let _ = std::fs::create_dir_all(parent); }
+    let contents = state.persistent_history.iter().map(|entry| format!("{}\\t{}", entry.url.replace(['\\t','\\r','\\n'], " "), entry.title.replace(['\\t','\\r','\\n'], " "))).collect::<Vec<_>>().join("\\n");
+    let _ = std::fs::write(&state.history_path, contents);
+}
+
+fn record_history(state: &mut AppState) {
+    let Some(url) = state.browser.current_url().map(ToString::to_string) else { return; };
+    let title = state.browser.current_page().and_then(|page| page.title()).unwrap_or_else(|| url.clone());
+    state.persistent_history.retain(|entry| entry.url != url);
+    state.persistent_history.push(Bookmark { title, url });
+    if state.persistent_history.len() > MAX_PERSISTED_HISTORY_ITEMS {
+        let excess = state.persistent_history.len() - MAX_PERSISTED_HISTORY_ITEMS;
+        state.persistent_history.drain(..excess);
+    }
+    save_persistent_history(state);
+}
+
+fn save_session(state: &AppState) {
+    if let Some(parent) = state.session_path.parent() { let _ = std::fs::create_dir_all(parent); }
+    let urls = state.tabs.iter().filter_map(|(id, _)| state.browser.tabs().tab(*id).and_then(|tab| tab.page()).and_then(|page| page.url()).map(ToString::to_string)).collect::<Vec<_>>();
+    let _ = std::fs::write(&state.session_path, urls.join("\\n"));
 }
 
 fn save_bookmarks(state: &AppState) {
@@ -742,7 +806,11 @@ unsafe fn navigate(state: &mut AppState, address: &str) {
         .browser
         .load_request(&state.loader, &request, viewport)
     {
-        Ok(_) => refresh_page(state),
+        Ok(_) => {
+            record_history(state);
+            save_session(state);
+            refresh_page(state);
+        },
         Err(error) => {
             let message = format!(
                 "Impossible de charger cette page.\n\n{error:?}\n\nVérifiez l'adresse et votre connexion Internet."
@@ -931,6 +999,7 @@ unsafe fn create_new_tab(state: &mut AppState, hwnd: Hwnd) {
     );
     let _ = ShowWindow(button, SW_HIDE);
     state.tabs.push((tab_id, button));
+    save_session(state);
     set_control_text(state.address, "");
     refresh_page(state);
     let _ = SetFocus(state.address);
@@ -957,6 +1026,7 @@ unsafe fn close_tab_at(state: &mut AppState, index: usize) {
         state.closed_tabs.push(closed_url);
         let _ = DestroyWindow(handle);
         state.tabs.remove(index);
+        save_session(state);
         refresh_page(state);
     }
 }
@@ -1201,12 +1271,7 @@ unsafe fn show_bookmark_context_menu(state: &mut AppState, hwnd: Hwnd, index: us
 }
 
 unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
-    let history_entries = state
-        .browser
-        .history()
-        .entries()
-        .cloned()
-        .collect::<Vec<_>>();
+    let history_entries = state.persistent_history.clone();
     let menu = CreatePopupMenu();
     if menu.is_null() {
         return;
@@ -1230,11 +1295,10 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
     for (index, entry) in history_entries
         .iter()
         .rev()
-        .skip(1)
         .take(MAX_MENU_HISTORY_ITEMS)
         .enumerate()
     {
-        let title = entry.title().unwrap_or("Page sans titre");
+        let title = entry.title.as_str();
         let label = wide(&format!(
             "{} — {}",
             index + 1,
@@ -1327,9 +1391,8 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             if let Some(url) = history_entries
                 .iter()
                 .rev()
-                .skip(1)
                 .nth(index)
-                .map(|entry| entry.url().to_string())
+                .map(|entry| entry.url.clone())
             {
                 navigate(state, &url);
             }
@@ -1881,6 +1944,14 @@ unsafe extern "system" fn window_proc(
             let _ = ShowWindow(state.page, SW_HIDE);
             let _ = SendMessageW(state.page, 0x0030, 1, 0);
             refresh_page(state);
+            let restore = state.startup_session.clone();
+            if let Some(first_url) = restore.first() {
+                navigate(state, first_url);
+                for url in restore.iter().skip(1) {
+                    create_new_tab(state, hwnd);
+                    navigate(state, url);
+                }
+            }
             0
         }
         WM_PAINT => {
@@ -2317,6 +2388,8 @@ unsafe extern "system" fn window_proc(
         }
         WM_DESTROY => {
             if let Some(state) = app_state(hwnd) {
+                save_session(state);
+                save_persistent_history(state);
                 if !state.address_brush.is_null() {
                     let _ = DeleteObject(state.address_brush);
                     state.address_brush = ptr::null_mut();
@@ -2382,6 +2455,10 @@ pub fn run() {
             tabs: Vec::new(),
             bookmarks: load_bookmarks(&bookmark_storage_path()),
             bookmarks_path: bookmark_storage_path(),
+            history_path: history_storage_path(),
+            session_path: session_storage_path(),
+            persistent_history: load_persistent_history(&history_storage_path()),
+            startup_session: load_session(&session_storage_path()),
             closed_tabs: Vec::new(),
             themes: std::env::var_os("APPDATA")
                 .map(|base| {
