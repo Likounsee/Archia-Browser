@@ -34,7 +34,9 @@ impl Color {
             "teal" => Some(Self(0, 128, 128, 255)),
             "lime" => Some(Self(0, 255, 0, 255)),
             "maroon" => Some(Self(128, 0, 0, 255)),
-            value if value.starts_with("rgb(") || value.starts_with("rgba(") => {\n                parse_functional_color(value)\n            },
+            value if value.starts_with("rgb(") || value.starts_with("rgba(") => {
+                parse_functional_color(value)
+            },
             value if value.len() == 4 && value.starts_with('#') => {
                 let mut digits = value[1..].chars();
                 let r = u8::from_str_radix(&digits.next()?.to_string().repeat(2), 16).ok()?;
@@ -453,21 +455,33 @@ impl SoftwareSurface {
 
 fn parse_functional_color(value: &str) -> Option<Color> {
     let open = value.find('(')?;
-    if !value.ends_with(')') {\n        return None;\n    }
+    if !value.ends_with(')') {
+        return None;
+    }
     let name = &value[..open];
     let body = &value[open + 1..value.len() - 1];
     let (channels, alpha) = if let Some((channels, alpha)) = body.split_once('/') {
         (channels, Some(alpha.trim()))
-    } else {\n        (body, None)\n    };
+    } else {
+        (body, None)
+    };
     let normalized = channels.replace(',', " ");
     let parts: Vec<&str> = normalized.split_whitespace().collect();
-    if parts.len() != 3 && parts.len() != 4 {\n        return None;\n    }
-    if name == "rgb" && parts.len() == 4 && alpha.is_none() {\n        return None;\n    }
-    if name == "rgba" && parts.len() == 3 && alpha.is_none() {\n        return None;\n    }
+    if parts.len() != 3 && parts.len() != 4 {
+        return None;
+    }
+    if name == "rgb" && parts.len() == 4 && alpha.is_none() {
+        return None;
+    }
+    if name == "rgba" && parts.len() == 3 && alpha.is_none() {
+        return None;
+    }
     let parse_channel = |part: &str| -> Option<u8> {
         if let Some(percent) = part.strip_suffix('%') {
             let value = percent.trim().parse::<f32>().ok()?;
-            if !(0.0..=100.0).contains(&value) {\n                return None;\n            }
+            if !(0.0..=100.0).contains(&value) {
+                return None;
+            }
             Some((value * 2.55).round() as u8)
         } else {
             u8::try_from(part.parse::<u16>().ok()?).ok()
@@ -480,14 +494,20 @@ fn parse_functional_color(value: &str) -> Option<Color> {
             Some((value * 2.55).round() as u8)
         } else {
             let value = part.parse::<f32>().ok()?;
-            if !(0.0..=1.0).contains(&value) {\n                return None;\n            }
+            if !(0.0..=1.0).contains(&value) {
+                return None;
+            }
             Some((value * 255.0).round() as u8)
         }
     };
     let r = parse_channel(parts[0])?;
     let g = parse_channel(parts[1])?;
     let b = parse_channel(parts[2])?;
-    let inline_alpha = if parts.len() == 4 {\n        Some(parts[3])\n    } else {\n        None\n    };
+    let inline_alpha = if parts.len() == 4 {
+        Some(parts[3])
+    } else {
+        None
+    };
     let a = match (alpha, inline_alpha) {
         (Some(value), None) => parse_alpha(value)?,
         (None, Some(value)) => parse_alpha(value)?,
@@ -879,9 +899,15 @@ mod tests {
 
     #[test]
     fn parses_css_rgb_and_rgba_functional_colors() {
-        assert_eq!(\n            Color::parse("rgb(12, 34, 56)"),\n            Some(Color(12, 34, 56, 255))\n        );
-        assert_eq!(\n            Color::parse("rgba(12, 34, 56, 0.5)"),\n            Some(Color(12, 34, 56, 128))\n        );
-        assert_eq!(\n            Color::parse("rgb(100% 0% 50% / 25%)"),\n            Some(Color(255, 0, 127, 64))\n        );
+        assert_eq!(
+            Color::parse("rgb(12, 34, 56)"),\n            Some(Color(12, 34, 56, 255))
+        );
+        assert_eq!(
+            Color::parse("rgba(12, 34, 56, 0.5)"),\n            Some(Color(12, 34, 56, 128))
+        );
+        assert_eq!(
+            Color::parse("rgb(100% 0% 50% / 25%)"),\n            Some(Color(255, 0, 127, 64))
+        );
         assert_eq!(Color::parse("rgb(256, 0, 0)"), None);
         assert_eq!(Color::parse("rgba(1, 2, 3, 2)"), None);
     }
