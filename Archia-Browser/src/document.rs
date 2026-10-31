@@ -652,6 +652,31 @@ mod tests {
     }
 
     #[test]
+    fn relayout_updates_viewport_without_reparsing_document() {
+        let mut page = Page::from_html(
+            r#"<body><main style="background-color: #123456">Responsive content</main></body>"#,
+            "",
+            LayoutViewport::new(320, 200),
+        );
+        let original_document_text = page.document.text_content();
+        assert_eq!(page.layout.rect.width, 320);
+
+        page.relayout(LayoutViewport::new(960, 540));
+
+        assert_eq!(page.layout.rect.width, 960);
+        assert_eq!(page.document.text_content(), original_document_text);
+        assert!(page.display_list.commands().iter().any(|command| {
+            matches!(
+                command,
+                crate::render::PaintCommand::FillRect {
+                    color: 0x123456ff,
+                    ..
+                }
+            )
+        }));
+    }
+
+    #[test]
     fn applies_basic_user_agent_styles_to_local_document_markup() {
         let page = Page::from_html(
             "<html><body><h1>Title</h1><p>Text</p></body></html>",
