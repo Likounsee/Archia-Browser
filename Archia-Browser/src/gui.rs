@@ -548,7 +548,12 @@ unsafe fn activate_link_at(state: &mut AppState, hwnd: Hwnd, client_x: i32, clie
 }
 
 unsafe fn paint_fill(hdc: Handle, left: i32, top: i32, right: i32, bottom: i32, color: u32) {
-    let rect = Rect { left, top, right, bottom };
+    let rect = Rect {
+        left,
+        top,
+        right,
+        bottom,
+    };
     let brush = CreateSolidBrush(color);
     if !brush.is_null() {
         let _ = FillRect(hdc, &rect, brush);
@@ -567,7 +572,12 @@ unsafe fn paint_label(
     align: u32,
 ) {
     let text = wide(label);
-    let mut rect = Rect { left, top, right, bottom };
+    let mut rect = Rect {
+        left,
+        top,
+        right,
+        bottom,
+    };
     let _ = SetTextColor(hdc, color);
     let _ = SetBkMode(hdc, 1);
     let _ = DrawTextW(
@@ -592,7 +602,9 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
     for (index, (id, _)) in state.tabs.iter().enumerate() {
         let left = 10 + index as i32 * tab_width;
         let right = (left + tab_width - 6).min(width - 68);
-        if right <= left { continue; }
+        if right <= left {
+            continue;
+        }
         let selected = Some(*id) == active;
         paint_fill(
             hdc,
@@ -605,7 +617,9 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
         if selected {
             paint_fill(hdc, left + 8, 33, right - 8, 36, 0x00D78B55);
         }
-        let title = state.browser.current_page()
+        let title = state
+            .browser
+            .current_page()
             .and_then(|page| page.title())
             .unwrap_or_else(|| "Nouvel onglet".to_owned());
         let label = if Some(*id) == active {
@@ -613,21 +627,46 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
         } else {
             format!("Onglet {}", index + 1)
         };
-        paint_label(hdc, &label, left + 12, 7, right - 10, 36, 0x00F1EDE9, DT_CENTER);
+        paint_label(
+            hdc,
+            &label,
+            left + 12,
+            7,
+            right - 10,
+            36,
+            0x00F1EDE9,
+            DT_CENTER,
+        );
     }
     paint_fill(hdc, width - 58, 7, width - 10, 36, 0x003B3430);
-    paint_label(hdc, "+", width - 58, 7, width - 10, 36, 0x00F1EDE9, DT_CENTER);
+    paint_label(
+        hdc,
+        "+",
+        width - 58,
+        7,
+        width - 10,
+        36,
+        0x00F1EDE9,
+        DT_CENTER,
+    );
 
-    for (label, left, right) in [
-        ("‹", 10, 44), ("›", 48, 82), ("⟳", 86, 122),
-    ] {
+    for (label, left, right) in [("‹", 10, 44), ("›", 48, 82), ("⟳", 86, 122)] {
         paint_fill(hdc, left, 48, right, 80, 0x003B3430);
         paint_label(hdc, label, left, 48, right, 80, 0x00F1EDE9, DT_CENTER);
     }
     let address_right = width - 132;
     paint_fill(hdc, 132, 48, address_right.max(240), 80, 0x00F5F3F1);
     paint_fill(hdc, width - 122, 48, width - 10, 80, 0x00D78B55);
-    paint_label(hdc, "Aller", width - 122, 48, width - 10, 80, 0x00211D1B, DT_CENTER);
+    paint_label(
+        hdc,
+        "Aller",
+        width - 122,
+        48,
+        width - 10,
+        80,
+        0x00211D1B,
+        DT_CENTER,
+    );
 }
 
 unsafe fn paint_home_screen(hdc: Handle, width: i32, height: i32) {
@@ -635,10 +674,44 @@ unsafe fn paint_home_screen(hdc: Handle, width: i32, height: i32) {
     paint_fill(hdc, 0, top, width, height, 0x00181513);
     let content_width = width.min(980);
     let left = (width - content_width) / 2;
-    paint_fill(hdc, left, 150, left + content_width, height.min(560), 0x001F1B18);
-    paint_label(hdc, "ARCHIA", left + 30, 190, left + content_width - 30, 232, 0x00D78B55, DT_CENTER);
-    paint_label(hdc, "Le web, à votre façon.", left + 30, 240, left + content_width - 30, 300, 0x00F5F1ED, DT_CENTER);
-    paint_label(hdc, "Un navigateur indépendant, construit autour du moteur Archia.", left + 30, 304, left + content_width - 30, 340, 0x00B8AEA6, DT_CENTER);
+    paint_fill(
+        hdc,
+        left,
+        150,
+        left + content_width,
+        height.min(560),
+        0x001F1B18,
+    );
+    paint_label(
+        hdc,
+        "ARCHIA",
+        left + 30,
+        190,
+        left + content_width - 30,
+        232,
+        0x00D78B55,
+        DT_CENTER,
+    );
+    paint_label(
+        hdc,
+        "Le web, à votre façon.",
+        left + 30,
+        240,
+        left + content_width - 30,
+        300,
+        0x00F5F1ED,
+        DT_CENTER,
+    );
+    paint_label(
+        hdc,
+        "Un navigateur indépendant, construit autour du moteur Archia.",
+        left + 30,
+        304,
+        left + content_width - 30,
+        340,
+        0x00B8AEA6,
+        DT_CENTER,
+    );
 
     let gap = 16;
     let card_width = ((content_width - 80 - gap * 2) / 3).max(120);
@@ -647,14 +720,44 @@ unsafe fn paint_home_screen(hdc: Handle, width: i32, height: i32) {
         ("Navigation", "Une interface simple et directe"),
         ("Indépendance", "Un moteur développé par Archia"),
         ("Confidentialité", "Pas de moteur tiers embarqué"),
-    ].iter().enumerate() {
+    ]
+    .iter()
+    .enumerate()
+    {
         let x = left + 40 + index as i32 * (card_width + gap);
         paint_fill(hdc, x, card_top, x + card_width, card_top + 112, 0x00312B27);
         paint_fill(hdc, x, card_top, x + card_width, card_top + 3, 0x00D78B55);
-        paint_label(hdc, title, x + 10, card_top + 18, x + card_width - 10, card_top + 54, 0x00F5F1ED, DT_CENTER);
-        paint_label(hdc, detail, x + 12, card_top + 55, x + card_width - 12, card_top + 94, 0x00B8AEA6, DT_CENTER);
+        paint_label(
+            hdc,
+            title,
+            x + 10,
+            card_top + 18,
+            x + card_width - 10,
+            card_top + 54,
+            0x00F5F1ED,
+            DT_CENTER,
+        );
+        paint_label(
+            hdc,
+            detail,
+            x + 12,
+            card_top + 55,
+            x + card_width - 12,
+            card_top + 94,
+            0x00B8AEA6,
+            DT_CENTER,
+        );
     }
-    paint_label(hdc, "Saisissez une adresse dans la barre en haut pour commencer.", left + 20, 535, left + content_width - 20, 575, 0x00B8AEA6, DT_CENTER);
+    paint_label(
+        hdc,
+        "Saisissez une adresse dans la barre en haut pour commencer.",
+        left + 20,
+        535,
+        left + content_width - 20,
+        575,
+        0x00B8AEA6,
+        DT_CENTER,
+    );
 }
 
 unsafe fn layout_controls(state: &AppState, width: i32, height: i32) {
@@ -725,14 +828,7 @@ unsafe extern "system" fn window_proc(
             state.back = create_control(hwnd, instance, "BUTTON", "←", 0, ID_BACK);
             state.forward = create_control(hwnd, instance, "BUTTON", "→", 0, ID_FORWARD);
             state.reload = create_control(hwnd, instance, "BUTTON", "↻", 0, ID_RELOAD);
-            state.address = create_control(
-                hwnd,
-                instance,
-                "EDIT",
-                "",
-                ES_AUTOHSCROLL,
-                ID_ADDRESS,
-            );
+            state.address = create_control(hwnd, instance, "EDIT", "", ES_AUTOHSCROLL, ID_ADDRESS);
             state.address_brush = CreateSolidBrush(0x00F5F3F1);
             state.go = create_control(hwnd, instance, "BUTTON", "Aller", 0, ID_GO);
             state.new_tab = create_control(hwnd, instance, "BUTTON", "+", 0, ID_NEW_TAB);
@@ -894,10 +990,17 @@ unsafe extern "system" fn window_proc(
                 let client_x = (l_param as u32 & 0xffff) as u16 as i16 as i32;
                 let client_y = ((l_param as u32 >> 16) & 0xffff) as u16 as i16 as i32;
                 let width = {
-                    let mut client = Rect { left: 0, top: 0, right: 0, bottom: 0 };
+                    let mut client = Rect {
+                        left: 0,
+                        top: 0,
+                        right: 0,
+                        bottom: 0,
+                    };
                     if GetClientRect(hwnd, &mut client) != 0 {
                         client.right.saturating_sub(client.left)
-                    } else { 1180 }
+                    } else {
+                        1180
+                    }
                 };
                 if client_y < 42 {
                     let tab_area = (width - 82).max(0);
@@ -907,7 +1010,14 @@ unsafe extern "system" fn window_proc(
                             let tab_id = state.browser.new_tab();
                             let index = state.tabs.len();
                             let caption = format!("{} · Nouvel onglet", index + 1);
-                            let button = create_control(hwnd, GetModuleHandleW(ptr::null()), "BUTTON", &caption, 0, ID_TAB_BASE + index);
+                            let button = create_control(
+                                hwnd,
+                                GetModuleHandleW(ptr::null()),
+                                "BUTTON",
+                                &caption,
+                                0,
+                                ID_TAB_BASE + index,
+                            );
                             let _ = ShowWindow(button, SW_HIDE);
                             state.tabs.push((tab_id, button));
                             set_control_text(state.address, "");
@@ -921,18 +1031,30 @@ unsafe extern "system" fn window_proc(
                         }
                     }
                 } else if (48..=82).contains(&client_x) && (45..=84).contains(&client_y) {
-                    if state.browser.go_forward(&state.loader, current_viewport(state)).is_ok() {
+                    if state
+                        .browser
+                        .go_forward(&state.loader, current_viewport(state))
+                        .is_ok()
+                    {
                         refresh_page(state);
                     }
                 } else if (86..=122).contains(&client_x) && (45..=84).contains(&client_y) {
-                    if state.browser.reload(&state.loader, current_viewport(state)).is_ok() {
+                    if state
+                        .browser
+                        .reload(&state.loader, current_viewport(state))
+                        .is_ok()
+                    {
                         refresh_page(state);
                     }
                 } else if client_x >= width - 122 && (45..=84).contains(&client_y) {
                     let address = read_control_text(state.address);
                     navigate(state, &address);
                 } else if (10..=44).contains(&client_x) && (45..=84).contains(&client_y) {
-                    if state.browser.go_back(&state.loader, current_viewport(state)).is_ok() {
+                    if state
+                        .browser
+                        .go_back(&state.loader, current_viewport(state))
+                        .is_ok()
+                    {
                         refresh_page(state);
                     }
                 } else {
