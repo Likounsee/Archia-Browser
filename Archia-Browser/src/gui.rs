@@ -78,6 +78,9 @@ const ID_MENU_OPEN_DOWNLOADS: u32 = 3018;
 const ID_MENU_REOPEN_CLOSED_TAB: u32 = 3019;
 const ID_MENU_COPY_PAGE_URL: u32 = 3020;
 const ID_MENU_BOOKMARK_PAGE: u32 = 3021;
+const ID_LINK_OPEN_NEW_TAB: u32 = 3022;
+const ID_LINK_COPY_URL: u32 = 3023;
+const ID_LINK_DOWNLOAD: u32 = 3024;
 const ID_MENU_THEME_ARCHIA: u32 = 3010;
 const ID_MENU_THEME_CHROME: u32 = 3011;
 const ID_MENU_THEME_FIREFOX: u32 = 3012;
@@ -841,6 +844,10 @@ unsafe fn download_current_page(state: &mut AppState) {
     let Some(url) = state.browser.current_url().cloned() else {
         return;
     };
+    download_url(state, url);
+}
+
+unsafe fn download_url(state: &mut AppState, url: Url) {
     if !matches!(url.scheme(), "http" | "https") {
         return;
     }
@@ -1651,6 +1658,56 @@ unsafe fn copy_text_to_clipboard(hwnd: Hwnd, value: &str) -> bool {
         let _ = GlobalFree(memory);
     }
     success
+}
+
+unsafe fn link_url_at(state: &AppState, client_x: i32, client_y: i32) -> Option<String> {
+    let viewport = current_viewport(state);
+    let content_x = client_x.saturating_sub(10);
+    let content_y = client_y.saturating_sub(120);
+    if content_x < 0 || content_y < 0
+        || content_x as u32 >= viewport.width
+        || content_y as u32 >= viewport.height
+    {
+        return None;
+    }
+    let document_y = content_y.saturating_add(state.scroll_y.min(i32::MAX as u32) as i32);
+    state.browser.current_page().and_then(|page| {
+        let link = page.link_at(content_x, document_y)?;
+        let href = link.link_href()?.trim();
+        let url = page.resolve_reference(href).ok()?;
+        if !matches!(url.scheme(), "http" | "https") {
+            return None;
+        }
+        Some(url.to_string())
+    })
+}
+
+unsafe fn show_link_context_menu(state: &mut AppState, hwnd: Hwnd, url: String) {
+    let menu = CreatePopupMenu();
+    if menu.is_null() { return; }
+    for (id, label) in [
+        (ID_LINK_OPEN_NEW_TAB, "Ouvrir le lien dans un nouvel onglet"),
+        (ID_LINK_COPY_URL, "Copier l’adresse du lien"),
+        (ID_LINK_DOWNLOAD, "Télécharger le lien"),
+    ] {
+        let label = wide(label);
+        let _ = AppendMenuW(menu, MF_STRING, id as usize, label.as_ptr());
+    }
+    let mut cursor = Point { x: 0, y: 0 };
+    let _ = GetCursorPos(&mut cursor);
+    let selected = TrackPopupMenu(menu, TPM_RETURNCMD, cursor.x, cursor.y, 0, hwnd, ptr::null());
+    let _ = DestroyMenu(menu);
+    match selected {
+        ID_LINK_OPEN_NEW_TAB if state.tabs.len() < MAX_GUI_TABS => {
+            create_new_tab(state, hwnd);
+            navigate(state, &url);
+        }
+        ID_LINK_COPY_URL => { let _ = copy_text_to_clipboard(hwnd, &url); }
+        ID_LINK_DOWNLOAD => {
+            if let Ok(parsed) = Url::parse(&url) { download_url(state, parsed); }
+        }
+        _ => {}
+    }
 }
 
 unsafe fn show_page_context_menu(state: &mut AppState, hwnd: Hwnd) {
@@ -2771,7 +2828,11 @@ unsafe extern "system" fn window_proc(
                     let index = ((client_x - 12) / 162) as usize;
                     show_bookmark_context_menu(state, hwnd, index);
                 } else if client_y > 120 {
-                    show_page_context_menu(state, hwnd);
+                    if let Some(url) = link_url_at(state, client_x, client_y) {
+                        show_link_context_menu(state, hwnd, url);
+                    } else {
+                        show_page_context_menu(state, hwnd);
+                    }
                 } else if (0..=42).contains(&client_y) && client_x >= 10 {
                     let mut client = Rect {
                         left: 0,
