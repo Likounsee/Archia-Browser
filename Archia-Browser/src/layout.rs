@@ -1947,15 +1947,13 @@ fn intrinsic_inline_content_width(node: &crate::style_tree::StyledNode) -> u32 {
     }
 
     match &node.node.kind {
-        NodeKind::Text(text) => {
-            transform_text_for_layout(
-                &normalized_text(text, node.style.get("white-space")),
-                node.style.get("text-transform"),
-            )
-            .chars()
-            .map(glyph_advance)
-            .fold(0_u32, u32::saturating_add)
-        }
+        NodeKind::Text(text) => transform_text_for_layout(
+            &normalized_text(text, node.style.get("white-space")),
+            node.style.get("text-transform"),
+        )
+        .chars()
+        .map(glyph_advance)
+        .fold(0_u32, u32::saturating_add),
         _ => node
             .children
             .iter()
