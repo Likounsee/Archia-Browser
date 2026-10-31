@@ -2003,6 +2003,13 @@ mod whitespace_layout_tests {
     use crate::html::dom::Node;
 
     #[test]
+    fn proportional_text_metrics_give_narrow_and_wide_glyphs_different_advances() {
+        assert!(glyph_advance('i') < glyph_advance('a'));
+        assert!(glyph_advance('m') > glyph_advance('a'));
+        assert_eq!(glyph_advance(' '), 4);
+    }
+
+    #[test]
     fn length_percentages_accept_fractional_values() {
         assert_eq!(parse_length(Some("12.5%"), 200), Some(25));
         assert_eq!(parse_length(Some("12.5%"), 100), Some(12));
