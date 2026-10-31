@@ -373,6 +373,7 @@ struct AppState {
     home_search: Hwnd,
     home_go: Hwnd,
     address_brush: Handle,
+    address_font: Handle,
     address_proc: isize,
     home_search_proc: isize,
     surface: Option<SoftwareSurface>,
@@ -1175,12 +1176,10 @@ unsafe fn show_bookmark_context_menu(state: &mut AppState, hwnd: Hwnd, index: us
             create_new_tab(state, hwnd);
             navigate(state, &url);
         }
-        ID_BOOKMARK_REMOVE => {
-            if index < state.bookmarks.len() {
-                state.bookmarks.remove(index);
-                save_bookmarks(state);
-                let _ = InvalidateRect(hwnd, ptr::null(), 1);
-            }
+        ID_BOOKMARK_REMOVE if index < state.bookmarks.len() => {
+            state.bookmarks.remove(index);
+            save_bookmarks(state);
+            let _ = InvalidateRect(hwnd, ptr::null(), 1);
         }
         _ => {}
     }
@@ -1465,6 +1464,22 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
     let bookmarked = current_url
         .as_ref()
         .is_some_and(|url| state.bookmarks.iter().any(|bookmark| &bookmark.url == url));
+    let (security_label, security_color) = match state.browser.current_url().map(Url::scheme) {
+        Some("https") => ("HTTPS", accent),
+        Some("http") => ("HTTP", muted),
+        _ => ("WEB", muted),
+    };
+    paint_round_fill(hdc, 140, 52, 186, 76, inactive_tab, 3);
+    paint_label(
+        hdc,
+        security_label,
+        140,
+        52,
+        186,
+        76,
+        security_color,
+        DT_CENTER,
+    );
     paint_round_fill(hdc, width - 166, 48, width - 132, 80, inactive_tab, 3);
     paint_label(
         hdc,
@@ -1715,10 +1730,10 @@ unsafe fn layout_controls(state: &AppState, width: i32, height: i32) {
     let _ = MoveWindow(state.back, margin, button_y, 38, button_h, 1);
     let _ = MoveWindow(state.forward, margin + 42, button_y, 38, button_h, 1);
     let _ = MoveWindow(state.reload, margin + 84, button_y, 38, button_h, 1);
-    let address_width = (width - 314).max(80);
+    let address_width = (width - 380).max(40);
     let _ = MoveWindow(
         state.address,
-        margin + 122,
+        margin + 180,
         button_y + 2,
         address_width,
         button_h - 4,
@@ -1781,6 +1796,26 @@ unsafe extern "system" fn window_proc(
                 |colors| &colors.address_background,
                 0x00F5F3F1,
             ));
+            let address_face = wide("Consolas");
+            state.address_font = CreateFontW(
+                -13,
+                0,
+                0,
+                0,
+                500,
+                0,
+                0,
+                0,
+                1,
+                0,
+                0,
+                5,
+                0,
+                address_face.as_ptr(),
+            );
+            if !state.address_font.is_null() {
+                let _ = SendMessageW(state.address, 0x0030, state.address_font as usize, 1);
+            }
             state.address_proc = SetWindowLongPtrW(
                 state.address,
                 GWLP_WNDPROC,
@@ -2270,6 +2305,10 @@ unsafe extern "system" fn window_proc(
                     let _ = DeleteObject(state.address_brush);
                     state.address_brush = ptr::null_mut();
                 }
+                if !state.address_font.is_null() {
+                    let _ = DeleteObject(state.address_font);
+                    state.address_font = ptr::null_mut();
+                }
             }
             PostQuitMessage(0);
             0
@@ -2317,6 +2356,7 @@ pub fn run() {
             home_search: ptr::null_mut(),
             home_go: ptr::null_mut(),
             address_brush: ptr::null_mut(),
+            address_font: ptr::null_mut(),
             address_proc: 0,
             home_search_proc: 0,
             surface: None,
@@ -2393,6 +2433,32 @@ mod gui_address_tests {
         assert_eq!(
             parse_address("example.org/path").unwrap().to_string(),
             "https://example.org/path"
+        );
+    }
+
+    #[test]
+    fn security_badge_distinguishes_https_and_http() {
+        assert_eq!(
+            match parse_address("https://example.org").as_ref() {
+                Ok(url) => match url.scheme() {
+                    "https" => "HTTPS",
+                    "http" => "HTTP",
+                    _ => "WEB",
+                },
+                Err(_) => "WEB",
+            },
+            "HTTPS"
+        );
+        assert_eq!(
+            match parse_address("http://example.org").as_ref() {
+                Ok(url) => match url.scheme() {
+                    "https" => "HTTPS",
+                    "http" => "HTTP",
+                    _ => "WEB",
+                },
+                Err(_) => "WEB",
+            },
+            "HTTP"
         );
     }
 }
