@@ -444,12 +444,8 @@ fn save_bookmarks(state: &AppState) {
         .map(|bookmark| {
             format!(
                 "{}\t{}",
-                bookmark
-                    .url
-                    .replace(['\t', '\r', '\n'], " "),
-                bookmark
-                    .title
-                    .replace(['\t', '\r', '\n'], " ")
+                bookmark.url.replace(['\t', '\r', '\n'], " "),
+                bookmark.title.replace(['\t', '\r', '\n'], " ")
             )
         })
         .collect::<Vec<_>>()
