@@ -38,7 +38,7 @@ Or start with a blank tab:
 .\scripts\run-windows.ps1
 ```
 
-The GUI currently provides a native window, selectable tabs, an address bar, Go, Back, Forward and Reload. Navigation uses Archia's own HTTP/HTTPS transport, document loader, HTML/DOM and navigation state. The page viewport now presents Archia's own software-rendered display list through a native Win32 DIB; no embedded browser engine or WebView is used. Resizing the window recalculates layout from the existing styled DOM instead of refetching or reparsing the page. This is an early renderer: text rasterization, image decoding/painting, scrolling, mouse-driven links, JavaScript, forms and modern-site compatibility remain incomplete.
+The GUI currently provides a native window, a custom-painted browser toolbar and tab strip, address/search fields, Back, Forward and Reload, a new-tab home screen, and a software-rendered page viewport. Bookmarks are saved locally and can be opened from the toolbar, the browser menu or quick-access tiles on the new-tab page. Right-click a bookmark to open it, open it in a new tab or remove it. The browser menu exposes recent in-memory history and built-in interface themes. Tabs support middle-click closing and a context menu for closing, duplicating or closing other tabs. Keyboard shortcuts include Ctrl+L/Ctrl+K (focus address), Ctrl+T (new tab), Ctrl+W (close tab), Ctrl+Shift+T (reopen closed tab), Ctrl+Tab/Ctrl+Shift+Tab (cycle tabs), Ctrl+1…Ctrl+9 (select tab), Ctrl+D (bookmark), Ctrl+H (history menu), Ctrl+R and F5 (reload), and Alt+Left/Right (history navigation). Navigation uses Archia's own HTTP/HTTPS transport, document loader, HTML/DOM and navigation state. The page viewport presents Archia's own software-rendered display list through a native Win32 DIB; no embedded browser engine or WebView is used. Resizing the window recalculates layout from the existing styled DOM instead of refetching or reparsing the page. This remains an early browser UI and renderer: modern CSS coverage, text shaping, image decoding/painting, JavaScript, forms, downloads, persistent browsing history and modern-site compatibility remain incomplete.
 
 On non-Windows systems the executable remains a terminal-based development client. It supports entering addresses and the commands `:links`, `:open NUMERO`, `:back`, `:forward`, `:reload`, `:history`, `:url`, `:title`, `:help` and `:quit`.
 
@@ -56,14 +56,14 @@ Theme manifests and selection are available in the engine, but the current Win32
 - [x] Native Windows window and message loop.
 - [x] Address bar and navigation controls.
 - [x] Display Archia's software-rendered page surface through native Win32 presentation.
-- [ ] Mouse hit-testing and clickable links.
+- [x] Mouse hit-testing and clickable links.
 - [x] Resize handling and viewport re-layout without reparsing the document.
 - [ ] Windows packaging and a repeatable install/run workflow.
 
 ### W1 — Usable browser essentials
 - [x] Multiple tabs and tab strip (create and switch).
 - [x] Scrollable rendered page viewport (native vertical scrollbar and mouse-wheel scrolling).
-- [ ] Bookmarks and persistent history.
+- [x] Local persistent bookmarks and bookmark-bar interaction.\n- [ ] Persistent browsing history.
 - [ ] Download handling and download destination controls.
 - [ ] Better error pages and loading feedback.
 - [ ] Basic settings and user-agent controls.
@@ -74,7 +74,7 @@ Theme manifests and selection are available in the engine, but the current Win32
 - [x] Built-in Archia, Chrome-inspired, Firefox-inspired and Edge-inspired themes.
 - [x] Persistent theme selection per user.
 - [x] Install and uninstall custom data-only theme manifests through the engine API.
-- [ ] Native GUI applies theme colors, tab placement and sidebar layout.
+- [x] Native GUI applies built-in theme colors to browser chrome.\n- [ ] Tab placement and sidebar layout follow the selected theme.
 - [ ] Theme preview and settings screen.
 - [ ] Downloadable theme gallery with source/signature verification and update flow.
 - [ ] Export and import complete theme packages, including assets.
