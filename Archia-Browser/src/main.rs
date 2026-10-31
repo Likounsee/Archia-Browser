@@ -366,7 +366,7 @@ mod tests {
     fn address_without_scheme_defaults_to_https() {
         assert_eq!(
             parse_address("example.org").unwrap().to_string(),
-            "https://example.org"
+            "https://example.org/"
         );
     }
 
