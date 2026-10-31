@@ -68,14 +68,6 @@ struct Message {
 }
 
 #[repr(C)]
-struct Rect {
-    left: i32,
-    top: i32,
-    right: i32,
-    bottom: i32,
-}
-
-#[repr(C)]
 struct CreateStructW {
     create_params: *mut c_void,
     instance: Hinstance,
@@ -465,8 +457,6 @@ unsafe extern "system" fn window_proc(
                             state.tabs.push((tab_id, button));
                             set_control_text(state.address, "");
                             refresh_page(state);
-                            let mut rect = Rect { left: 0, top: 0, right: 1180, bottom: 820 };
-                            let _ = rect;
                             layout_controls(state, 1180, 820);
                         }
                     }
