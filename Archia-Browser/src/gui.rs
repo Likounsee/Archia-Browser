@@ -2993,10 +2993,8 @@ mod gui_address_tests {
     fn download_names_are_safe_and_collisions_are_avoided() {
         assert_eq!(safe_download_filename("../CON"), ".._CON");
         assert_eq!(safe_download_filename("report?.zip"), "report_.zip");
-        let directory = std::env::temp_dir().join(format!(
-            "archia-download-names-{}",
-            std::process::id()
-        ));
+        let directory =
+            std::env::temp_dir().join(format!("archia-download-names-{}", std::process::id()));
         std::fs::create_dir_all(&directory).unwrap();
         let existing = directory.join("report.zip");
         std::fs::write(&existing, b"existing").unwrap();
