@@ -334,7 +334,7 @@ unsafe fn current_viewport(state: &AppState) -> LayoutViewport {
         client
             .right
             .saturating_sub(client.left)
-            .saturating_sub(20)
+            .saturating_sub(36)
             .max(1) as u32,
         client
             .bottom
@@ -590,7 +590,7 @@ unsafe extern "system" fn window_proc(
                         let width = client
                             .right
                             .saturating_sub(client.left)
-                            .saturating_sub(20)
+                            .saturating_sub(36)
                             .max(1) as u32;
                         let height = client
                             .bottom
@@ -670,7 +670,7 @@ unsafe extern "system" fn window_proc(
                 let height = ((l_param as u32 >> 16) & 0xffff) as i32;
                 layout_controls(state, width, height);
                 let viewport = LayoutViewport::new(
-                    width.saturating_sub(20).max(1) as u32,
+                    width.saturating_sub(36).max(1) as u32,
                     height.saturating_sub(102).max(1) as u32,
                 );
                 if state.browser.relayout_current_page(viewport) {
