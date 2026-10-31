@@ -12,6 +12,15 @@ const MAX_HTML_ATTRIBUTES_PER_TAG: usize = 256;
 const MAX_HTML_ATTRIBUTE_NAME_BYTES: usize = 1_024;
 const MAX_HTML_ATTRIBUTE_VALUE_BYTES: usize = 64 * 1024;
 
+/// Append one input character only after a fallible capacity reservation.
+fn try_push_char(value: &mut String, character: char) -> bool {
+    if value.try_reserve(character.len_utf8()).is_err() {
+        return false;
+    }
+    value.push(character);
+    true
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HtmlToken {
     Doctype(String),
@@ -242,7 +251,9 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
         if name.len().saturating_add(ch.len_utf8()) > MAX_HTML_TAG_NAME_BYTES {
             return None;
         }
-        name.push(ch.to_ascii_lowercase());
+        if !try_push_char(&mut name, ch.to_ascii_lowercase()) {
+            return None;
+        }
         chars.next();
     }
     if name.is_empty() {
@@ -279,7 +290,9 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
                 break;
             }
             if attr_name.len() + ch.len_utf8() <= MAX_HTML_ATTRIBUTE_NAME_BYTES {
-                attr_name.push(ch.to_ascii_lowercase());
+                if !try_push_char(&mut attr_name, ch.to_ascii_lowercase()) {
+                    return None;
+                }
             } else {
                 attr_name_too_long = true;
             }
@@ -309,7 +322,9 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
                         break;
                     }
                     if value.len() + ch.len_utf8() <= MAX_HTML_ATTRIBUTE_VALUE_BYTES {
-                        value.push(ch);
+                        if !try_push_char(&mut value, ch) {
+                            return None;
+                        }
                     } else {
                         value_too_long = true;
                     }
@@ -324,7 +339,9 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
                         break;
                     }
                     if value.len().saturating_add(ch.len_utf8()) <= MAX_HTML_ATTRIBUTE_VALUE_BYTES {
-                        value.push(ch);
+                        if !try_push_char(&mut value, ch) {
+                            return None;
+                        }
                     } else {
                         value_too_long = true;
                     }
@@ -350,6 +367,14 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn character_growth_reserves_utf8_capacity_before_appending() {
+        let mut value = String::new();
+        assert!(try_push_char(&mut value, 'é'));
+        assert!(try_push_char(&mut value, '😀'));
+        assert_eq!(value, "é😀");
+    }
 
     #[test]
     fn tag_and_attribute_separation_uses_only_html_whitespace() {
