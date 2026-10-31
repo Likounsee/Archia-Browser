@@ -8,8 +8,9 @@ use std::{ffi::c_void, mem, ptr};
 use archia_browser::{
     layout::LayoutViewport,
     net::{
+        download_to_path,
         pipeline::{NetworkPipeline, PolicyDecision, RequestPolicyEngine, ResourceKind},
-        download_to_path, DocumentLoader, HttpTransport, Request, Url,
+        DocumentLoader, HttpTransport, Request, Url,
     },
     surface::SoftwareSurface,
     theme::{ThemeColors, ThemeManager},
@@ -603,7 +604,10 @@ fn safe_download_filename(value: &str) -> String {
         .chars()
         .map(|character| {
             if character.is_control()
-                || matches!(character, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
+                || matches!(
+                    character,
+                    '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
+                )
             {
                 '_'
             } else {
@@ -616,7 +620,11 @@ fn safe_download_filename(value: &str) -> String {
     }
     if name.is_empty()
         || matches!(
-            name.split('.').next().unwrap_or_default().to_ascii_uppercase().as_str(),
+            name.split('.')
+                .next()
+                .unwrap_or_default()
+                .to_ascii_uppercase()
+                .as_str(),
             "CON" | "PRN" | "AUX" | "NUL"
         )
     {
@@ -625,10 +633,7 @@ fn safe_download_filename(value: &str) -> String {
     name.chars().take(180).collect()
 }
 
-fn unique_download_destination(
-    directory: &std::path::Path,
-    filename: &str,
-) -> std::path::PathBuf {
+fn unique_download_destination(directory: &std::path::Path, filename: &str) -> std::path::PathBuf {
     let original = std::path::Path::new(filename);
     let stem = original.file_stem().unwrap_or_default().to_string_lossy();
     let extension = original
