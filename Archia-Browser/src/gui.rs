@@ -993,6 +993,12 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
 }
 
 unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
+    let history_entries = state
+        .browser
+        .history()
+        .entries()
+        .cloned()
+        .collect::<Vec<_>>();
     let menu = CreatePopupMenu();
     if menu.is_null() {
         return;
@@ -1013,10 +1019,8 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
     let _ = AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
     let history_heading = wide("Pages récemment visitées");
     let _ = AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, history_heading.as_ptr());
-    for (index, entry) in state
-        .browser
-        .history()
-        .entries()
+    for (index, entry) in history_entries
+        .iter()
         .rev()
         .skip(1)
         .take(MAX_MENU_HISTORY_ITEMS)
@@ -1090,10 +1094,8 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
                 .contains(&history_id) =>
         {
             let index = (history_id - ID_MENU_HISTORY_BASE) as usize;
-            if let Some(url) = state
-                .browser
-                .history()
-                .entries()
+            if let Some(url) = history_entries
+                .iter()
                 .rev()
                 .skip(1)
                 .nth(index)
