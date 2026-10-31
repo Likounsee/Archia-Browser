@@ -515,12 +515,10 @@ unsafe extern "system" fn window_proc(
                                 if state.dib_pixels.len() != required {
                                     state.dib_pixels.resize(required, 0);
                                 }
-                                for (source, target) in surface
-                                    .pixels()
-                                    .chunks_exact(4)
-                                    .zip(state.dib_pixels.chunks_exact_mut(4))
-                                {
-                                    target.copy_from_slice(&[source[2], source[1], source[0], 0]);
+                                let source_pixels = surface.pixels().as_chunks::<4>().0;
+                                let target_pixels = state.dib_pixels.as_chunks_mut::<4>().0;
+                                for (source, target) in source_pixels.iter().zip(target_pixels.iter_mut()) {
+                                    *target = [source[2], source[1], source[0], 0];
                                 }
                                 let info = BitmapInfo {
                                     header: BitmapInfoHeader {
