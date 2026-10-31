@@ -43,6 +43,7 @@ const VK_W: usize = 0x57;
 const VK_R: usize = 0x52;
 const VK_D: usize = 0x44;
 const VK_H: usize = 0x48;
+const VK_J: usize = 0x4A;
 const VK_K: usize = 0x4B;
 const VK_F5: usize = 0x74;
 const VK_CONTROL: i32 = 0x11;
@@ -72,6 +73,7 @@ const ID_MENU_SET_HOMEPAGE: u32 = 3014;
 const ID_MENU_RESET_HOMEPAGE: u32 = 3015;
 const ID_MENU_TOGGLE_SESSION: u32 = 3016;
 const ID_MENU_DOWNLOAD_PAGE: u32 = 3017;
+const ID_MENU_OPEN_DOWNLOADS: u32 = 3018;
 const ID_MENU_THEME_ARCHIA: u32 = 3010;
 const ID_MENU_THEME_CHROME: u32 = 3011;
 const ID_MENU_THEME_FIREFOX: u32 = 3012;
@@ -347,6 +349,11 @@ unsafe extern "system" {
         info: *const BitmapInfo,
         usage: u32,
     ) -> i32;
+}
+
+#[link(name = "shell32")]
+unsafe extern "system" {
+    fn ShellExecuteW(hwnd: Hwnd, operation: *const u16, file: *const u16, parameters: *const u16, directory: *const u16, show_cmd: i32) -> Handle;
 }
 
 #[link(name = "kernel32")]
@@ -784,6 +791,22 @@ fn save_bookmarks(state: &AppState) {
         .collect::<Vec<_>>()
         .join("\n");
     let _ = std::fs::write(&state.bookmarks_path, contents);
+}
+
+unsafe fn open_downloads_folder(state: &mut AppState) {
+    let directory = downloads_directory();
+    if let Err(error) = std::fs::create_dir_all(&directory) {
+        let caption = wide(&format!("Ouverture des téléchargements impossible : {error}"));
+        let _ = SetWindowTextW(state.window, caption.as_ptr());
+        return;
+    }
+    let path = wide(&directory.to_string_lossy());
+    let operation = wide("open");
+    let result = ShellExecuteW(state.window, operation.as_ptr(), path.as_ptr(), ptr::null(), ptr::null(), SW_SHOW);
+    if (result as isize) <= 32 {
+        let caption = wide("Windows n’a pas pu ouvrir le dossier Téléchargements — Archia Browser");
+        let _ = SetWindowTextW(state.window, caption.as_ptr());
+    }
 }
 
 unsafe fn download_current_page(state: &mut AppState) {
@@ -1436,6 +1459,10 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
                 show_browser_menu(state, hwnd);
                 return true;
             }
+            VK_J => {
+                open_downloads_folder(state);
+                return true;
+            }
             VK_HOME => {
                 let homepage = state.settings.homepage.clone();
                 navigate(state, &homepage);
@@ -1617,6 +1644,7 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         ),
         (ID_MENU_RESET_HOMEPAGE, "Réinitialiser la page d'accueil"),
         (ID_MENU_DOWNLOAD_PAGE, "Télécharger la page actuelle"),
+        (ID_MENU_OPEN_DOWNLOADS, "Ouvrir le dossier Téléchargements"),
         (
             ID_MENU_TOGGLE_SESSION,
             if state.settings.restore_session {
@@ -1726,6 +1754,7 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             let _ = state.settings.save(&state.settings_path);
         }
         ID_MENU_DOWNLOAD_PAGE => download_current_page(state),
+        ID_MENU_OPEN_DOWNLOADS => open_downloads_folder(state),
         ID_MENU_TOGGLE_SESSION => {
             state.settings.restore_session = !state.settings.restore_session;
             if !state.settings.restore_session {
