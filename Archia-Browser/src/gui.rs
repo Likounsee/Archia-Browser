@@ -1607,7 +1607,9 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
 }
 
 unsafe fn current_page_url(state: &AppState) -> Option<String> {
-    state.browser.active_tab_id()
+    state
+        .browser
+        .active_tab_id()
         .and_then(|id| state.browser.tabs().tab(id))
         .and_then(|tab| tab.page())
         .and_then(|page| page.url())
@@ -1618,23 +1620,40 @@ unsafe fn copy_text_to_clipboard(hwnd: Hwnd, value: &str) -> bool {
     const GMEM_MOVEABLE: u32 = 0x0002;
     const CF_UNICODETEXT: u32 = 13;
     let text = wide(value);
-    let memory = GlobalAlloc(GMEM_MOVEABLE, text.len().saturating_mul(std::mem::size_of::<u16>()));
-    if memory.is_null() { return false; }
+    let memory = GlobalAlloc(
+        GMEM_MOVEABLE,
+        text.len().saturating_mul(std::mem::size_of::<u16>()),
+    );
+    if memory.is_null() {
+        return false;
+    }
     let destination = GlobalLock(memory) as *mut u16;
-    if destination.is_null() { let _ = GlobalFree(memory); return false; }
+    if destination.is_null() {
+        let _ = GlobalFree(memory);
+        return false;
+    }
     ptr::copy_nonoverlapping(text.as_ptr(), destination, text.len());
     let _ = GlobalUnlock(memory);
-    if OpenClipboard(hwnd) == 0 { let _ = GlobalFree(memory); return false; }
+    if OpenClipboard(hwnd) == 0 {
+        let _ = GlobalFree(memory);
+        return false;
+    }
     let success = EmptyClipboard() != 0 && !SetClipboardData(CF_UNICODETEXT, memory).is_null();
     let _ = CloseClipboard();
-    if !success { let _ = GlobalFree(memory); }
+    if !success {
+        let _ = GlobalFree(memory);
+    }
     success
 }
 
 unsafe fn show_page_context_menu(state: &mut AppState, hwnd: Hwnd) {
-    let Some(url) = current_page_url(state) else { return; };
+    let Some(url) = current_page_url(state) else {
+        return;
+    };
     let menu = CreatePopupMenu();
-    if menu.is_null() { return; }
+    if menu.is_null() {
+        return;
+    }
     for (id, label) in [
         (ID_MENU_COPY_PAGE_URL, "Copier l’adresse de la page"),
         (ID_MENU_BOOKMARK_PAGE, "Ajouter aux favoris"),
@@ -1646,10 +1665,20 @@ unsafe fn show_page_context_menu(state: &mut AppState, hwnd: Hwnd) {
     }
     let mut cursor = Point { x: 0, y: 0 };
     let _ = GetCursorPos(&mut cursor);
-    let selected = TrackPopupMenu(menu, TPM_RETURNCMD, cursor.x, cursor.y, 0, hwnd, ptr::null());
+    let selected = TrackPopupMenu(
+        menu,
+        TPM_RETURNCMD,
+        cursor.x,
+        cursor.y,
+        0,
+        hwnd,
+        ptr::null(),
+    );
     let _ = DestroyMenu(menu);
     match selected {
-        ID_MENU_COPY_PAGE_URL => { let _ = copy_text_to_clipboard(hwnd, &url); }
+        ID_MENU_COPY_PAGE_URL => {
+            let _ = copy_text_to_clipboard(hwnd, &url);
+        }
         ID_MENU_BOOKMARK_PAGE => toggle_current_bookmark(state),
         ID_MENU_RELOAD => navigate(state, &url),
         ID_MENU_DOWNLOAD_PAGE => download_current_page(state),
