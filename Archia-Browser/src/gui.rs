@@ -27,6 +27,7 @@ const WM_SIZE: u32 = 0x0005;
 const WM_PAINT: u32 = 0x000F;
 const WM_VSCROLL: u32 = 0x0115;
 const WM_MOUSEWHEEL: u32 = 0x020A;
+const WM_LBUTTONDOWN: u32 = 0x0201;
 const WM_COMMAND: u32 = 0x0111;
 const WM_NCCREATE: u32 = 0x0081;
 const WM_DESTROY: u32 = 0x0002;
@@ -476,6 +477,66 @@ unsafe fn navigate(state: &mut AppState, address: &str) {
     }
 }
 
+unsafe fn activate_link_at(state: &mut AppState, hwnd: Hwnd, client_x: i32, client_y: i32) {
+    let viewport = current_viewport(state);
+    let content_x = client_x.saturating_sub(10);
+    let content_y = client_y.saturating_sub(90);
+    if content_x < 0
+        || content_y < 0
+        || content_x as u32 >= viewport.width
+        || content_y as u32 >= viewport.height
+    {
+        return;
+    }
+
+    let document_y = content_y.saturating_add(state.scroll_y.min(i32::MAX as u32) as i32);
+    let destination = state.browser.current_page().and_then(|page| {
+        let link = page.link_at(content_x, document_y)?;
+        let href = link.link_href()?.trim();
+        let url = page.resolve_reference(href).ok()?;
+        if url.scheme() == "file"
+            && !page.url().is_some_and(|origin| origin.scheme() == "file")
+        {
+            return None;
+        }
+        let opens_new_tab = link
+            .attribute("target")
+            .is_some_and(|target| target.trim().eq_ignore_ascii_case("_blank"));
+        Some((url.to_string(), opens_new_tab))
+    });
+
+    if let Some((url, opens_new_tab)) = destination {
+        if opens_new_tab && state.tabs.len() < MAX_GUI_TABS {
+            let tab_id = state.browser.new_tab();
+            let index = state.tabs.len();
+            let caption = format!("{} · Nouvel onglet", index + 1);
+            let button = create_control(
+                hwnd,
+                GetModuleHandleW(ptr::null()),
+                "BUTTON",
+                &caption,
+                0,
+                ID_TAB_BASE + index,
+            );
+            state.tabs.push((tab_id, button));
+            let mut client = Rect {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            };
+            if GetClientRect(hwnd, &mut client) != 0 {
+                layout_controls(
+                    state,
+                    client.right.saturating_sub(client.left),
+                    client.bottom.saturating_sub(client.top),
+                );
+            }
+        }
+        navigate(state, &url);
+    }
+}
+
 unsafe fn layout_controls(state: &AppState, width: i32, height: i32) {
     let margin = 10;
     let button_y = 48;
@@ -681,6 +742,14 @@ unsafe extern "system" fn window_proc(
                     update_scrollbar(state);
                     let _ = InvalidateRect(hwnd, ptr::null(), 1);
                 }
+            }
+            0
+        }
+        WM_LBUTTONDOWN => {
+            if let Some(state) = app_state(hwnd) {
+                let client_x = (l_param as u32 & 0xffff) as u16 as i16 as i32;
+                let client_y = ((l_param as u32 >> 16) & 0xffff) as u16 as i16 as i32;
+                activate_link_at(state, hwnd, client_x, client_y);
             }
             0
         }
