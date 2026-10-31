@@ -428,7 +428,7 @@ impl BrowserSettings {
 
     fn save(&self, path: &std::path::Path) -> std::io::Result<()> {
         if let Some(parent) = path.parent() { std::fs::create_dir_all(parent)?; }
-        let contents = format!("search_provider={}\nhomepage={}\nrestore_session={}\n", self.search_provider.id(), self.homepage.replace(['\\r', '\\n'], ""), self.restore_session);
+        let contents = format!("search_provider={}\nhomepage={}\nrestore_session={}\n", self.search_provider.id(), self.homepage.replace(['\r', '\n'], ""), self.restore_session);
         let temporary = path.with_extension("tmp");
         std::fs::write(&temporary, contents)?;
         match std::fs::rename(&temporary, path) {
@@ -636,6 +636,10 @@ fn record_history(state: &mut AppState) {
 }
 
 fn save_session(state: &AppState) {
+    if !state.settings.restore_session {
+        let _ = std::fs::remove_file(&state.session_path);
+        return;
+    }
     if let Some(parent) = state.session_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
@@ -2752,6 +2756,41 @@ mod gui_address_tests {
             parse_address("rust browser engine").unwrap().to_string(),
             "https://www.google.com/search?q=rust%20browser%20engine"
         );
+    }
+
+    #[test]
+    fn alternate_search_providers_encode_queries() {
+        assert_eq!(
+            parse_address_with_provider("rust browser", SearchProvider::Bing).unwrap().to_string(),
+            "https://www.bing.com/search?q=rust%20browser"
+        );
+        assert_eq!(
+            parse_address_with_provider("rust browser", SearchProvider::DuckDuckGo).unwrap().to_string(),
+            "https://duckduckgo.com/?q=rust%20browser"
+        );
+    }
+
+    #[test]
+    fn alternate_search_provider_does_not_rewrite_explicit_urls() {
+        assert_eq!(
+            parse_address_with_provider("https://example.org/path", SearchProvider::Bing).unwrap().to_string(),
+            "https://example.org/path"
+        );
+    }
+
+    #[test]
+    fn settings_round_trip_and_reject_unsafe_homepages() {
+        let path = std::env::temp_dir().join(format!("archia-browser-settings-{}.ini", std::process::id()));
+        let settings = BrowserSettings {
+            search_provider: SearchProvider::DuckDuckGo,
+            homepage: "https://example.org/start".into(),
+            restore_session: false,
+        };
+        settings.save(&path).unwrap();
+        assert_eq!(BrowserSettings::load(&path), settings);
+        std::fs::write(&path, "search_provider=unknown\\nhomepage=file:///etc/passwd\\nrestore_session=maybe\\n").unwrap();
+        assert_eq!(BrowserSettings::load(&path), BrowserSettings::default());
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]
