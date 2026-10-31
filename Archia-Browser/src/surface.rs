@@ -25,6 +25,16 @@ impl Color {
             "green" => Some(Self(0, 128, 0, 255)),
             "blue" => Some(Self(0, 0, 255, 255)),
             "transparent" => Some(Self(0, 0, 0, 0)),
+            "yellow" => Some(Self(255, 255, 0, 255)),
+            "orange" => Some(Self(255, 165, 0, 255)),
+            "purple" => Some(Self(128, 0, 128, 255)),
+            "gray" | "grey" => Some(Self(128, 128, 128, 255)),
+            "silver" => Some(Self(192, 192, 192, 255)),
+            "navy" => Some(Self(0, 0, 128, 255)),
+            "teal" => Some(Self(0, 128, 128, 255)),
+            "lime" => Some(Self(0, 255, 0, 255)),
+            "maroon" => Some(Self(128, 0, 0, 255)),
+            value if value.starts_with("rgb(") || value.starts_with("rgba(") => parse_functional_color(value),
             value if value.len() == 4 && value.starts_with('#') => {
                 let mut digits = value[1..].chars();
                 let r = u8::from_str_radix(&digits.next()?.to_string().repeat(2), 16).ok()?;
@@ -436,9 +446,55 @@ impl SoftwareSurface {
                     }
                 }
             }
-            cursor_x = cursor_x.saturating_add(6);
+            cursor_x = cursor_x.saturating_add(glyph_advance(ch));
         }
     }
+}
+
+fn parse_functional_color(value: &str) -> Option<Color> {
+    let open = value.find('(')?;
+    if !value.ends_with(')') { return None; }
+    let name = &value[..open];
+    let body = &value[open + 1..value.len() - 1];
+    let (channels, alpha) = if let Some((channels, alpha)) = body.split_once('/') {
+        (channels, Some(alpha.trim()))
+    } else { (body, None) };
+    let normalized = channels.replace(',', " ");
+    let parts: Vec<&str> = normalized.split_whitespace().collect();
+    if parts.len() != 3 && parts.len() != 4 { return None; }
+    if name == "rgb" && parts.len() == 4 && alpha.is_none() { return None; }
+    if name == "rgba" && parts.len() == 3 && alpha.is_none() { return None; }
+    let parse_channel = |part: &str| -> Option<u8> {
+        if let Some(percent) = part.strip_suffix('%') {
+            let value = percent.trim().parse::<f32>().ok()?;
+            if !(0.0..=100.0).contains(&value) { return None; }
+            Some((value * 2.55).round() as u8)
+        } else {
+            u8::try_from(part.parse::<u16>().ok()?).ok()
+        }
+    };
+    let parse_alpha = |part: &str| -> Option<u8> {
+        if let Some(percent) = part.strip_suffix('%') {
+            let value = percent.trim().parse::<f32>().ok()?;
+            if !(0.0..=100.0).contains(&value) { return None; }
+            Some((value * 2.55).round() as u8)
+        } else {
+            let value = part.parse::<f32>().ok()?;
+            if !(0.0..=1.0).contains(&value) { return None; }
+            Some((value * 255.0).round() as u8)
+        }
+    };
+    let r = parse_channel(parts[0])?;
+    let g = parse_channel(parts[1])?;
+    let b = parse_channel(parts[2])?;
+    let inline_alpha = if parts.len() == 4 { Some(parts[3]) } else { None };
+    let a = match (alpha, inline_alpha) {
+        (Some(value), None) => parse_alpha(value)?,
+        (None, Some(value)) => parse_alpha(value)?,
+        (None, None) => 255,
+        _ => return None,
+    };
+    Some(Color(r, g, b, a))
 }
 
 fn glyph_advance(ch: char) -> i32 {
@@ -808,5 +864,30 @@ mod tests {
     fn parses_hex_color() {
         assert_eq!(Color::parse("#102030"), Some(Color(16, 32, 48, 255)));
         assert_eq!(Color::parse("#abc"), Some(Color(170, 187, 204, 255)));
+    }
+
+    #[test]
+    fn parses_common_css_named_colors() {
+        assert_eq!(Color::parse("orange"), Some(Color(255, 165, 0, 255)));
+        assert_eq!(Color::parse("grey"), Some(Color(128, 128, 128, 255)));
+        assert_eq!(Color::parse("navy"), Some(Color(0, 0, 128, 255)));
+    }
+
+    #[test]
+    fn parses_css_rgb_and_rgba_functional_colors() {
+        assert_eq!(Color::parse("rgb(12, 34, 56)"), Some(Color(12, 34, 56, 255)));
+        assert_eq!(Color::parse("rgba(12, 34, 56, 0.5)"), Some(Color(12, 34, 56, 128)));
+        assert_eq!(Color::parse("rgb(100% 0% 50% / 25%)"), Some(Color(255, 0, 127, 64)));
+        assert_eq!(Color::parse("rgb(256, 0, 0)"), None);
+        assert_eq!(Color::parse("rgba(1, 2, 3, 2)"), None);
+    }
+
+    #[test]
+    fn clipped_and_unclipped_text_use_identical_proportional_advances() {
+        let mut plain = SoftwareSurface::new(48, 8);
+        let mut clipped = SoftwareSurface::new(48, 8);
+        plain.draw_text(0, 0, "illW", Color::BLACK);
+        clipped.draw_text_clipped(0, 0, "illW", Color::BLACK, None);
+        assert_eq!(plain.pixels(), clipped.pixels());
     }
 }
