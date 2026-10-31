@@ -52,6 +52,7 @@ const VK_TAB: usize = 0x09;
 const VK_1: usize = 0x31;
 const VK_9: usize = 0x39;
 const VK_DELETE: usize = 0x2E;
+const VK_HOME: usize = 0x24;
 const VK_RIGHT: usize = 0x27;
 const MF_STRING: u32 = 0x0000;
 const MF_GRAYED: u32 = 0x0001;
@@ -63,6 +64,12 @@ const ID_MENU_CLOSE_TAB: u32 = 3003;
 const ID_MENU_QUIT: u32 = 3004;
 const ID_MENU_CLEAR_HISTORY: u32 = 3005;
 const ID_MENU_OPEN_ALL_BOOKMARKS: u32 = 3006;
+const ID_MENU_SEARCH_GOOGLE: u32 = 3007;
+const ID_MENU_SEARCH_BING: u32 = 3008;
+const ID_MENU_SEARCH_DDG: u32 = 3009;
+const ID_MENU_SET_HOMEPAGE: u32 = 3014;
+const ID_MENU_RESET_HOMEPAGE: u32 = 3015;
+const ID_MENU_TOGGLE_SESSION: u32 = 3016;
 const ID_MENU_THEME_ARCHIA: u32 = 3010;
 const ID_MENU_THEME_CHROME: u32 = 3011;
 const ID_MENU_THEME_FIREFOX: u32 = 3012;
@@ -364,6 +371,74 @@ struct Bookmark {
     url: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SearchProvider {
+    Google,
+    Bing,
+    DuckDuckGo,
+}
+
+impl SearchProvider {
+    fn id(self) -> &'static str {
+        match self { Self::Google => "google", Self::Bing => "bing", Self::DuckDuckGo => "duckduckgo" }
+    }
+
+    fn from_id(value: &str) -> Option<Self> {
+        match value { "google" => Some(Self::Google), "bing" => Some(Self::Bing), "duckduckgo" => Some(Self::DuckDuckGo), _ => None }
+    }
+
+    fn search_url(self, query: &str) -> String {
+        let query = encode_search_query(query);
+        match self {
+            Self::Google => format!("https://www.google.com/search?q={query}"),
+            Self::Bing => format!("https://www.bing.com/search?q={query}"),
+            Self::DuckDuckGo => format!("https://duckduckgo.com/?q={query}"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BrowserSettings {
+    search_provider: SearchProvider,
+    homepage: String,
+    restore_session: bool,
+}
+
+impl Default for BrowserSettings {
+    fn default() -> Self {
+        Self { search_provider: SearchProvider::Google, homepage: "https://www.google.com/".into(), restore_session: true }
+    }
+}
+
+impl BrowserSettings {
+    fn load(path: &std::path::Path) -> Self {
+        let Ok(contents) = std::fs::read_to_string(path) else { return Self::default(); };
+        let mut settings = Self::default();
+        for line in contents.lines() {
+            let Some((key, value)) = line.split_once('=') else { continue; };
+            match key.trim() {
+                "search_provider" => if let Some(provider) = SearchProvider::from_id(value.trim()) { settings.search_provider = provider; },
+                "homepage" => if let Ok(url) = Url::parse(value.trim()) { if matches!(url.scheme(), "http" | "https") { settings.homepage = url.to_string(); } },
+                "restore_session" => match value.trim() { "true" => settings.restore_session = true, "false" => settings.restore_session = false, _ => {} },
+                _ => {}
+            }
+        }
+        settings
+    }
+
+    fn save(&self, path: &std::path::Path) -> std::io::Result<()> {
+        if let Some(parent) = path.parent() { std::fs::create_dir_all(parent)?; }
+        let contents = format!("search_provider={}\nhomepage={}\nrestore_session={}\n", self.search_provider.id(), self.homepage.replace(['\\r', '\\n'], ""), self.restore_session);
+        let temporary = path.with_extension("tmp");
+        std::fs::write(&temporary, contents)?;
+        match std::fs::rename(&temporary, path) {
+            Ok(()) => Ok(()),
+            Err(error) if path.exists() => { std::fs::remove_file(path)?; std::fs::rename(&temporary, path).map_err(|_| error) },
+            Err(error) => Err(error),
+        }
+    }
+}
+
 struct AppState {
     browser: Browser,
     loader: Loader,
@@ -393,6 +468,8 @@ struct AppState {
     session_path: std::path::PathBuf,
     persistent_history: Vec<Bookmark>,
     startup_session: Vec<String>,
+    settings: BrowserSettings,
+    settings_path: std::path::PathBuf,
     closed_tabs: Vec<Option<String>>,
 }
 
@@ -468,6 +545,10 @@ fn browser_data_directory() -> std::path::PathBuf {
         })
         .unwrap_or_else(std::env::temp_dir)
         .join("ArchiaBrowser")
+}
+
+fn settings_storage_path() -> std::path::PathBuf {
+    browser_data_directory().join("settings.ini")
 }
 
 fn history_storage_path() -> std::path::PathBuf {
@@ -644,14 +725,15 @@ fn looks_like_host(input: &str) -> bool {
 }
 
 fn parse_address(input: &str) -> Result<Url, archia_browser::net::UrlError> {
+    parse_address_with_provider(input, SearchProvider::Google)
+}
+
+fn parse_address_with_provider(input: &str, provider: SearchProvider) -> Result<Url, archia_browser::net::UrlError> {
     let input = input.trim();
     let address = if input.contains("://") {
         input.to_owned()
     } else if input.chars().any(char::is_whitespace) || !looks_like_host(input) {
-        format!(
-            "https://www.google.com/search?q={}",
-            encode_search_query(input)
-        )
+        provider.search_url(input)
     } else {
         format!("https://{input}")
     };
@@ -824,7 +906,7 @@ unsafe fn navigate(state: &mut AppState, address: &str) {
     if address.trim().is_empty() {
         return;
     }
-    let url = match parse_address(address) {
+    let url = match parse_address_with_provider(address, state.settings.search_provider) {
         Ok(url) if matches!(url.scheme(), "http" | "https") => url,
         Ok(_) => {
             set_control_text(
@@ -1185,6 +1267,11 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
                 show_browser_menu(state, hwnd);
                 return true;
             }
+            VK_HOME => {
+                let homepage = state.settings.homepage.clone();
+                navigate(state, &homepage);
+                return true;
+            }
             VK_DELETE if GetKeyState(VK_SHIFT) < 0 => {
                 state.persistent_history.clear();
                 save_persistent_history(state);
@@ -1352,6 +1439,12 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         (ID_MENU_CLOSE_TAB, "Fermer l'onglet"),
         (ID_MENU_CLEAR_HISTORY, "Effacer l'historique"),
         (ID_MENU_OPEN_ALL_BOOKMARKS, "Ouvrir tous les favoris"),
+        (ID_MENU_SEARCH_GOOGLE, "Recherche : Google"),
+        (ID_MENU_SEARCH_BING, "Recherche : Bing"),
+        (ID_MENU_SEARCH_DDG, "Recherche : DuckDuckGo"),
+        (ID_MENU_SET_HOMEPAGE, "Définir la page actuelle comme accueil"),
+        (ID_MENU_RESET_HOMEPAGE, "Réinitialiser la page d'accueil"),
+        (ID_MENU_TOGGLE_SESSION, if state.settings.restore_session { "Désactiver la restauration de session" } else { "Activer la restauration de session" }),
         (ID_MENU_THEME_ARCHIA, "Theme : Archia"),
         (ID_MENU_THEME_CHROME, "Theme : Chrome"),
         (ID_MENU_THEME_FIREFOX, "Theme : Firefox"),
@@ -1433,6 +1526,29 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         ID_MENU_CLEAR_HISTORY => {
             state.persistent_history.clear();
             save_persistent_history(state);
+        }
+        ID_MENU_SEARCH_GOOGLE | ID_MENU_SEARCH_BING | ID_MENU_SEARCH_DDG => {
+            state.settings.search_provider = match selected {
+                ID_MENU_SEARCH_GOOGLE => SearchProvider::Google,
+                ID_MENU_SEARCH_BING => SearchProvider::Bing,
+                _ => SearchProvider::DuckDuckGo,
+            };
+            let _ = state.settings.save(&state.settings_path);
+        }
+        ID_MENU_SET_HOMEPAGE => {
+            if let Some(url) = state.browser.current_url() {
+                state.settings.homepage = url.to_string();
+                let _ = state.settings.save(&state.settings_path);
+            }
+        }
+        ID_MENU_RESET_HOMEPAGE => {
+            state.settings.homepage = BrowserSettings::default().homepage;
+            let _ = state.settings.save(&state.settings_path);
+        }
+        ID_MENU_TOGGLE_SESSION => {
+            state.settings.restore_session = !state.settings.restore_session;
+            if !state.settings.restore_session { let _ = std::fs::remove_file(&state.session_path); }
+            let _ = state.settings.save(&state.settings_path);
         }
         ID_MENU_OPEN_ALL_BOOKMARKS => {
             let urls = state
@@ -2570,7 +2686,12 @@ pub fn run() {
             history_path: history_storage_path(),
             session_path: session_storage_path(),
             persistent_history: load_persistent_history(&history_storage_path()),
-            startup_session: load_session(&session_storage_path()),
+            startup_session: {
+                let settings = BrowserSettings::load(&settings_storage_path());
+                if settings.restore_session { load_session(&session_storage_path()) } else { Vec::new() }
+            },
+            settings: BrowserSettings::load(&settings_storage_path()),
+            settings_path: settings_storage_path(),
             closed_tabs: Vec::new(),
             themes: std::env::var_os("APPDATA")
                 .map(|base| {
