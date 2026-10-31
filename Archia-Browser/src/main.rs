@@ -1,12 +1,17 @@
 use std::io::{self, Write};
 
 use archia_browser::{
+    html::Node,
     net::{
         pipeline::{NetworkPipeline, PolicyDecision, RequestPolicyEngine, ResourceKind},
         DocumentLoader, HttpTransport, Request, Url,
     },
     Browser,
 };
+
+const VIEWPORT_WIDTH: u32 = 1100;
+const VIEWPORT_HEIGHT: u32 = 760;
+const MAX_DISPLAYED_LINKS: usize = 100;
 
 struct BrowserPolicy;
 
@@ -19,6 +24,10 @@ impl RequestPolicyEngine for BrowserPolicy {
     }
 }
 
+fn viewport() -> archia_browser::layout::LayoutViewport {
+    archia_browser::layout::LayoutViewport::new(VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+}
+
 fn parse_address(input: &str) -> Result<Url, archia_browser::net::UrlError> {
     let input = input.trim();
     let address = if input.contains("://") {
@@ -27,6 +36,27 @@ fn parse_address(input: &str) -> Result<Url, archia_browser::net::UrlError> {
         format!("https://{input}")
     };
     Url::parse(&address)
+}
+
+fn collect_links(document: &Node) -> Vec<(String, String)> {
+    document
+        .find_elements_by_tag("a")
+        .into_iter()
+        .filter_map(|node| {
+            let href = node.link_href()?.trim();
+            if href.is_empty() {
+                return None;
+            }
+            let label = node.text_content();
+            let label = if label.trim().is_empty() {
+                href.to_owned()
+            } else {
+                label.split_whitespace().collect::<Vec<_>>().join(" ")
+            };
+            Some((label, href.to_owned()))
+        })
+        .take(MAX_DISPLAYED_LINKS)
+        .collect()
 }
 
 fn print_page(browser: &Browser) {
@@ -38,7 +68,10 @@ fn print_page(browser: &Browser) {
     let title = page.title().unwrap_or_else(|| "Archia Browser".to_owned());
     println!("\n{title}");
     println!("{}", "=".repeat(title.chars().count().min(72)));
-    println!("URL: {}\n", page.url().map(ToString::to_string).unwrap_or_default());
+    println!(
+        "URL: {}\n",
+        page.url().map(ToString::to_string).unwrap_or_default()
+    );
 
     let text = page.document.text_content();
     let mut line_length = 0usize;
@@ -56,20 +89,18 @@ fn print_page(browser: &Browser) {
         line_length += word_length;
     }
     println!("\n");
+
+    let links = collect_links(&page.document);
+    if !links.is_empty() {
+        println!("{} lien(s) detecte(s). Tapez :links pour les afficher.\n", links.len());
+    }
 }
 
-fn load_address(
+fn load_url(
     browser: &mut Browser,
     loader: &DocumentLoader<BrowserPolicy, HttpTransport>,
-    input: &str,
+    url: Url,
 ) -> bool {
-    let url = match parse_address(input) {
-        Ok(url) => url,
-        Err(error) => {
-            eprintln!("Adresse invalide: {error:?}");
-            return false;
-        }
-    };
     if !matches!(url.scheme(), "http" | "https") {
         eprintln!("Seules les adresses HTTP et HTTPS sont acceptees.");
         return false;
@@ -81,11 +112,7 @@ fn load_address(
 
     print!("Chargement de {} ... ", request.url);
     let _ = io::stdout().flush();
-    match browser.load_request(
-        loader,
-        &request,
-        archia_browser::layout::LayoutViewport::new(1000, 720),
-    ) {
+    match browser.load_request(loader, &request, viewport()) {
         Ok(_) => {
             println!("OK");
             print_page(browser);
@@ -99,14 +126,87 @@ fn load_address(
     }
 }
 
+fn load_address(
+    browser: &mut Browser,
+    loader: &DocumentLoader<BrowserPolicy, HttpTransport>,
+    input: &str,
+) -> bool {
+    match parse_address(input) {
+        Ok(url) => load_url(browser, loader, url),
+        Err(error) => {
+            eprintln!("Adresse invalide: {error:?}");
+            false
+        }
+    }
+}
+
+fn print_links(browser: &Browser) {
+    let Some(page) = browser.current_page() else {
+        println!("Aucune page chargee.");
+        return;
+    };
+    let links = collect_links(&page.document);
+    if links.is_empty() {
+        println!("Aucun lien exploitable sur cette page.");
+        return;
+    }
+    println!("Liens de la page :");
+    for (index, (label, href)) in links.iter().enumerate() {
+        println!("  {}. {}  ({})", index + 1, label, href);
+    }
+    println!("Pour ouvrir un lien : :open NUMERO");
+}
+
+fn open_link(
+    browser: &mut Browser,
+    loader: &DocumentLoader<BrowserPolicy, HttpTransport>,
+    index: usize,
+) -> bool {
+    let Some(page) = browser.current_page() else {
+        eprintln!("Aucune page chargee.");
+        return false;
+    };
+    let links = collect_links(&page.document);
+    let Some((_, href)) = links.get(index) else {
+        eprintln!("Numero de lien invalide. Utilisez :links pour voir la liste.");
+        return false;
+    };
+    let Some(base) = page.url() else {
+        eprintln!("La page courante ne possede pas d'URL de base.");
+        return false;
+    };
+    let url = match base.resolve(href) {
+        Ok(url) => url,
+        Err(error) => {
+            eprintln!("Lien invalide: {error:?}");
+            return false;
+        }
+    };
+    load_url(browser, loader, url)
+}
+
+fn print_help() {
+    println!("Commandes Archia Browser :");
+    println!("  URL             Naviguer vers une adresse (HTTPS par defaut)");
+    println!("  :links          Afficher les liens de la page");
+    println!("  :open NUMERO    Ouvrir un lien affiche par :links");
+    println!("  :back           Page precedente");
+    println!("  :forward        Page suivante");
+    println!("  :reload         Recharger la page");
+    println!("  :url            Afficher l'adresse courante");
+    println!("  :title          Afficher le titre de la page");
+    println!("  :help           Afficher cette aide");
+    println!("  :quit           Quitter Archia Browser");
+}
+
 fn main() {
     let mut browser = Browser::new();
     let pipeline = NetworkPipeline::new(BrowserPolicy);
     let loader = browser.document_loader(pipeline, HttpTransport::new());
 
     println!("Archia Browser {}", browser.version());
-    println!("Navigateur experimental en mode texte — moteur Archia natif.");
-    println!("Commandes: adresse | :back | :forward | :reload | :help | :quit\n");
+    println!("Navigateur experimental Windows/terminal — moteur Archia natif.");
+    println!("Tapez :help pour les commandes.\n");
 
     if let Some(address) = std::env::args().nth(1) {
         load_address(&mut browser, &loader, &address);
@@ -128,33 +228,38 @@ fn main() {
         if command.is_empty() {
             continue;
         }
+
+        if let Some(number) = command.strip_prefix(":open ") {
+            match number.trim().parse::<usize>() {
+                Ok(number) if number > 0 => {
+                    open_link(&mut browser, &loader, number - 1);
+                }
+                _ => eprintln!("Syntaxe : :open NUMERO"),
+            }
+            continue;
+        }
+
         match command {
             ":quit" | ":q" | "quit" | "exit" => break,
-            ":help" | ":h" => {
-                println!("Entrez une URL pour naviguer.");
-                println!(":back      Page precedente");
-                println!(":forward   Page suivante");
-                println!(":reload    Recharger la page");
-                println!(":quit      Quitter Archia Browser");
-            }
-            ":back" => match browser.go_back(
-                &loader,
-                archia_browser::layout::LayoutViewport::new(1000, 720),
-            ) {
+            ":help" | ":h" => print_help(),
+            ":links" => print_links(&browser),
+            ":url" => match browser.current_url() {
+                Some(url) => println!("{url}"),
+                None => println!("Aucune adresse courante."),
+            },
+            ":title" => match browser.current_page().and_then(|page| page.title()) {
+                Some(title) => println!("{title}"),
+                None => println!("Aucun titre disponible."),
+            },
+            ":back" => match browser.go_back(&loader, viewport()) {
                 Ok(_) => print_page(&browser),
                 Err(error) => eprintln!("Retour impossible: {error:?}"),
             },
-            ":forward" => match browser.go_forward(
-                &loader,
-                archia_browser::layout::LayoutViewport::new(1000, 720),
-            ) {
+            ":forward" => match browser.go_forward(&loader, viewport()) {
                 Ok(_) => print_page(&browser),
                 Err(error) => eprintln!("Avance impossible: {error:?}"),
             },
-            ":reload" => match browser.reload(
-                &loader,
-                archia_browser::layout::LayoutViewport::new(1000, 720),
-            ) {
+            ":reload" => match browser.reload(&loader, viewport()) {
                 Ok(_) => print_page(&browser),
                 Err(error) => eprintln!("Rechargement impossible: {error:?}"),
             },
@@ -182,6 +287,63 @@ mod tests {
         assert_eq!(
             parse_address("http://example.org/path").unwrap().to_string(),
             "http://example.org/path"
+        );
+    }
+
+    #[test]
+    fn address_is_trimmed_before_parsing() {
+        assert_eq!(
+            parse_address("  https://example.org/path  ").unwrap().to_string(),
+            "https://example.org/path"
+        );
+    }
+
+    #[test]
+    fn unsupported_schemes_are_rejected_by_navigation() {
+        let url = parse_address("file:///C:/secret.txt").unwrap();
+        assert!(!matches!(url.scheme(), "http" | "https"));
+    }
+
+    #[test]
+    fn links_are_collected_in_document_order_and_ignore_empty_hrefs() {
+        let mut document = Node::document();
+        let mut first = Node::element("a");
+        first.set_attribute("href", "/first");
+        first.append(Node::text("First link"));
+        document.append(first);
+
+        let mut empty = Node::element("a");
+        empty.set_attribute("href", "  ");
+        empty.append(Node::text("Ignored"));
+        document.append(empty);
+
+        let mut second = Node::element("a");
+        second.set_attribute("href", "https://example.org/second");
+        second.append(Node::text("Second"));
+        document.append(second);
+
+        assert_eq!(
+            collect_links(&document),
+            vec![
+                ("First link".to_owned(), "/first".to_owned()),
+                (
+                    "Second".to_owned(),
+                    "https://example.org/second".to_owned()
+                )
+            ]
+        );
+    }
+
+    #[test]
+    fn link_without_text_uses_its_destination_as_label() {
+        let mut document = Node::document();
+        let mut anchor = Node::element("a");
+        anchor.set_attribute("href", "/destination");
+        document.append(anchor);
+
+        assert_eq!(
+            collect_links(&document),
+            vec![("/destination".to_owned(), "/destination".to_owned())]
         );
     }
 }
