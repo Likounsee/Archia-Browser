@@ -243,6 +243,13 @@ fn open_link(
     load_url(browser, loader, url)
 }
 
+fn clear_terminal() {
+    // ANSI clear-screen + cursor-home works in modern Windows Terminal,
+    // PowerShell, and the usual Unix terminals without spawning a shell.
+    print!("\\x1B[2J\\x1B[H");
+    let _ = io::stdout().flush();
+}
+
 fn print_help() {
     println!("Commandes Archia Browser :");
     println!("  URL             Naviguer vers une adresse (HTTPS par defaut)");
@@ -257,6 +264,7 @@ fn print_help() {
     println!("  :theme ID       Selectionner un theme");
     println!("  :theme install PATH  Installer un manifeste de theme");
     println!("  :theme remove ID     Desinstaller un theme personnalise");
+    println!("  :clear / clear  Effacer l'ecran du terminal");
     println!("  :help           Afficher cette aide");
     println!("  :quit           Quitter Archia Browser");
 }
@@ -376,6 +384,7 @@ fn main() {
 
         match command {
             ":quit" | ":q" | "quit" | "exit" => break,
+            ":clear" | "clear" => clear_terminal(),
             ":help" | ":h" => print_help(),
             ":links" => print_links(&browser),
             ":url" => match browser.current_url() {
