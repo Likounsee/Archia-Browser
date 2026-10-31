@@ -92,7 +92,7 @@ fn print_page(browser: &Browser) {
 
     let links = collect_links(&page.document);
     if !links.is_empty() {
-        println!("{} lien(s) detecte(s). Tapez :links pour les afficher.\n", links.len());
+        println!(\n            "{} lien(s) detecte(s). Tapez :links pour les afficher.\n",\n            links.len()\n        );
     }
 }
 
@@ -285,7 +285,7 @@ mod tests {
     #[test]
     fn explicit_http_scheme_is_preserved() {
         assert_eq!(
-            parse_address("http://example.org/path").unwrap().to_string(),
+            parse_address("http://example.org/path")\n                .unwrap()\n                .to_string(),
             "http://example.org/path"
         );
     }
@@ -293,7 +293,7 @@ mod tests {
     #[test]
     fn address_is_trimmed_before_parsing() {
         assert_eq!(
-            parse_address("  https://example.org/path  ").unwrap().to_string(),
+            parse_address("  https://example.org/path  ")\n                .unwrap()\n                .to_string(),
             "https://example.org/path"
         );
     }
