@@ -1,3 +1,5 @@
+#![cfg_attr(windows, allow(dead_code, unused_imports))]
+
 #[cfg_attr(windows, allow(dead_code))]
 #[cfg(windows)]
 mod gui;
