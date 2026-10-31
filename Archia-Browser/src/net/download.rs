@@ -70,9 +70,7 @@ pub fn download_to_path_with_limit<T: Transport>(
             return Err(DownloadError::RedirectLoopDetected);
         }
 
-        let response = transport
-            .send(&current)
-            .map_err(DownloadError::Network)?;
+        let response = transport.send(&current).map_err(DownloadError::Network)?;
 
         if is_redirect(response.status) {
             if redirect_count == MAX_REDIRECTS {
@@ -162,7 +160,10 @@ fn sanitize_filename(value: &str) -> Option<String> {
         .chars()
         .map(|character| {
             if character.is_control()
-                || matches!(character, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
+                || matches!(
+                    character,
+                    '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
+                )
             {
                 '_'
             } else {
@@ -179,9 +180,28 @@ fn sanitize_filename(value: &str) -> Option<String> {
     let stem = safe.split('.').next().unwrap_or_default();
     if matches!(
         stem.to_ascii_uppercase().as_str(),
-        "CON" | "PRN" | "AUX" | "NUL" | "COM1" | "COM2" | "COM3" | "COM4"
-            | "COM5" | "COM6" | "COM7" | "COM8" | "COM9" | "LPT1" | "LPT2"
-            | "LPT3" | "LPT4" | "LPT5" | "LPT6" | "LPT7" | "LPT8" | "LPT9"
+        "CON"
+            | "PRN"
+            | "AUX"
+            | "NUL"
+            | "COM1"
+            | "COM2"
+            | "COM3"
+            | "COM4"
+            | "COM5"
+            | "COM6"
+            | "COM7"
+            | "COM8"
+            | "COM9"
+            | "LPT1"
+            | "LPT2"
+            | "LPT3"
+            | "LPT4"
+            | "LPT5"
+            | "LPT6"
+            | "LPT7"
+            | "LPT8"
+            | "LPT9"
     ) {
         safe.insert(0, '_');
     }
@@ -272,12 +292,10 @@ mod tests {
     fn saves_body_and_uses_content_disposition_filename() {
         let path = destination("disposition");
         let _ = fs::remove_file(&path);
-        let transport = QueueTransport(Mutex::new(vec![
-            Response::new(200)
-                .with_header("content-type", "application/octet-stream")
-                .with_header("content-disposition", "attachment; filename=\"report.bin\"")
-                .with_body(b"download payload".to_vec()),
-        ]));
+        let transport = QueueTransport(Mutex::new(vec![Response::new(200)
+            .with_header("content-type", "application/octet-stream")
+            .with_header("content-disposition", "attachment; filename=\"report.bin\"")
+            .with_body(b"download payload".to_vec())]));
         let request = Request::new(Url::parse("https://example.org/file").unwrap());
         let result = download_to_path(&transport, &request, &path).unwrap();
         assert_eq!(fs::read(&path).unwrap(), b"download payload");
@@ -296,7 +314,10 @@ mod tests {
         ]));
         let request = Request::new(Url::parse("https://example.org/start").unwrap());
         let result = download_to_path(&transport, &request, &path).unwrap();
-        assert_eq!(result.final_url.to_string(), "https://example.org/asset.bin");
+        assert_eq!(
+            result.final_url.to_string(),
+            "https://example.org/asset.bin"
+        );
         assert_eq!(fs::read(&path).unwrap(), b"ok");
         let _ = fs::remove_file(path);
     }
@@ -306,7 +327,7 @@ mod tests {
         let path = destination("blocked");
         let _ = fs::remove_file(&path);
         let redirect = QueueTransport(Mutex::new(vec![
-            Response::new(302).with_header("location", "http://example.org/file"),
+            Response::new(302).with_header("location", "http://example.org/file")
         ]));
         let request = Request::new(Url::parse("https://example.org/start").unwrap());
         assert_eq!(
