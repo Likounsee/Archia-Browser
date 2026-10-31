@@ -74,6 +74,11 @@ impl NavigationHistory {
         self.current
     }
 
+    /// Iterate over committed navigation entries in chronological order.
+    pub fn entries(&self) -> impl Iterator<Item = &NavigationEntry> {
+        self.entries.iter()
+    }
+
     pub fn back_target(&self) -> Option<(usize, &NavigationEntry)> {
         let target = self.current?.checked_sub(1)?;
         self.entries.get(target).map(|entry| (target, entry))
@@ -183,6 +188,27 @@ mod tests {
         assert_eq!(history.current(), None);
         assert!(!history.can_go_back());
         assert!(!history.can_go_forward());
+    }
+
+    #[test]
+    fn entries_iterates_in_chronological_order() {
+        let mut history = NavigationHistory::new();
+        history.push(entry("https://example.org/one"));
+        history.push(entry("https://example.org/two"));
+        history.back();
+
+        let urls = history
+            .entries()
+            .map(|entry| entry.url().to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            urls,
+            vec![
+                "https://example.org/one".to_owned(),
+                "https://example.org/two".to_owned()
+            ]
+        );
+        assert_eq!(history.current_index(), Some(0));
     }
 
     #[test]
