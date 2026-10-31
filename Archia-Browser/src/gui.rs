@@ -271,7 +271,14 @@ unsafe extern "system" {
     fn FillRect(hdc: Handle, rect: *const Rect, brush: Handle) -> i32;
     fn CreateSolidBrush(color: u32) -> Handle;
     fn DeleteObject(object: Handle) -> i32;
-    fn CreateRoundRectRgn(left: i32, top: i32, right: i32, bottom: i32, width: i32, height: i32) -> Handle;
+    fn CreateRoundRectRgn(
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+        width: i32,
+        height: i32,
+    ) -> Handle;
     fn FillRgn(hdc: Handle, region: Handle, brush: Handle) -> i32;
     #[allow(clippy::too_many_arguments)]
     fn CreateFontW(
@@ -1301,7 +1308,15 @@ unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i
     paint_fill(hdc, 0, top, width, height, background);
     let content_width = width.min(980);
     let left = (width - content_width) / 2;
-    paint_round_fill(hdc, left, 150, left + content_width, height.min(690), card, 22);
+    paint_round_fill(
+        hdc,
+        left,
+        150,
+        left + content_width,
+        height.min(690),
+        card,
+        22,
+    );
     paint_label(
         hdc,
         "ARCHIA",
