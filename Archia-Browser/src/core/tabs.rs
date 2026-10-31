@@ -88,6 +88,10 @@ impl Tab {
         self.page.as_ref()
     }
 
+    pub fn page_mut(&mut self) -> Option<&mut Page> {
+        self.page.as_mut()
+    }
+
     pub fn set_page(&mut self, page: Page) {
         self.page = Some(page);
     }
