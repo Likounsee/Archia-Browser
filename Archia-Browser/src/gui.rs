@@ -51,6 +51,7 @@ const VK_LEFT: usize = 0x25;
 const VK_TAB: usize = 0x09;
 const VK_1: usize = 0x31;
 const VK_9: usize = 0x39;
+const VK_DELETE: usize = 0x2E;
 const VK_RIGHT: usize = 0x27;
 const MF_STRING: u32 = 0x0000;
 const MF_GRAYED: u32 = 0x0001;
@@ -1184,7 +1185,7 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
                 show_browser_menu(state, hwnd);
                 return true;
             }
-            0x08 if GetKeyState(VK_SHIFT) < 0 => {
+            VK_DELETE if GetKeyState(VK_SHIFT) < 0 => {
                 state.persistent_history.clear();
                 save_persistent_history(state);
                 return true;
@@ -1765,7 +1766,12 @@ unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i
     let gap = 16;
     let card_width = ((content_width - 80 - gap * 2) / 3).max(120);
     let card_top = 470;
-    if state.bookmarks.is_empty() {
+    let quick_links = if state.bookmarks.is_empty() {
+        &state.persistent_history
+    } else {
+        &state.bookmarks
+    };
+    if quick_links.is_empty() {
         for (index, (title, detail)) in [
             ("Navigation", "Une interface simple et directe"),
             ("Indépendance", "Un moteur développé par Archia"),
@@ -1801,7 +1807,11 @@ unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i
     } else {
         paint_label(
             hdc,
-            "Accès rapides",
+            if state.bookmarks.is_empty() {
+                "Récemment consultés"
+            } else {
+                "Accès rapides"
+            },
             left + 40,
             430,
             left + content_width - 40,
@@ -1809,7 +1819,7 @@ unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i
             text,
             0,
         );
-        for (index, bookmark) in state.bookmarks.iter().take(6).enumerate() {
+        for (index, bookmark) in quick_links.iter().take(6).enumerate() {
             let column = index % 3;
             let row = index / 3;
             let x = left + 40 + column as i32 * (card_width + gap);
@@ -2258,7 +2268,12 @@ unsafe extern "system" fn window_proc(
                     let column = ((client_x - left - 40) / (card_width + 16)).max(0) as usize;
                     let row = ((client_y - 470) / 82).max(0) as usize;
                     if client_x >= left + 40 && column < 3 {
-                        if let Some(bookmark) = state.bookmarks.get(row * 3 + column) {
+                        let quick_links = if state.bookmarks.is_empty() {
+                            &state.persistent_history
+                        } else {
+                            &state.bookmarks
+                        };
+                        if let Some(bookmark) = quick_links.get(row * 3 + column) {
                             let url = bookmark.url.clone();
                             navigate(state, &url);
                         }
