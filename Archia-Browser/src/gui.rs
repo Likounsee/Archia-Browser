@@ -33,6 +33,12 @@ const WM_NCCREATE: u32 = 0x0081;
 const WM_DESTROY: u32 = 0x0002;
 const WM_KEYDOWN: u32 = 0x0100;
 const VK_RETURN: usize = 0x0D;
+const MF_STRING: u32 = 0x0000;
+const TPM_RETURNCMD: u32 = 0x0100;
+const ID_MENU_RELOAD: u32 = 3001;
+const ID_MENU_NEW_TAB: u32 = 3002;
+const ID_MENU_CLOSE_TAB: u32 = 3003;
+const ID_MENU_QUIT: u32 = 3004;
 const GWLP_WNDPROC: i32 = -4;
 const WM_CTLCOLOREDIT: u32 = 0x0133;
 const DT_SINGLELINE: u32 = 0x0020;
@@ -200,6 +206,19 @@ unsafe extern "system" {
     fn SetWindowLongPtrW(hwnd: Hwnd, index: i32, value: isize) -> isize;
     fn GetWindowLongPtrW(hwnd: Hwnd, index: i32) -> isize;
     fn GetParent(hwnd: Hwnd) -> Hwnd;
+    fn CreatePopupMenu() -> Handle;
+    fn AppendMenuW(menu: Handle, flags: u32, item_id: usize, text: *const u16) -> i32;
+    fn TrackPopupMenu(
+        menu: Handle,
+        flags: u32,
+        x: i32,
+        y: i32,
+        reserved: i32,
+        owner: Hwnd,
+        rect: *const Rect,
+    ) -> u32;
+    fn DestroyMenu(menu: Handle) -> i32;
+    fn GetCursorPos(point: *mut Point) -> i32;
     fn CallWindowProcW(
         previous: isize,
         hwnd: Hwnd,
@@ -678,6 +697,81 @@ unsafe fn paint_label(
     }
 }
 
+unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
+    let menu = CreatePopupMenu();
+    if menu.is_null() {
+        return;
+    }
+    for (id, label) in [
+        (ID_MENU_RELOAD, "Recharger"),
+        (ID_MENU_NEW_TAB, "Nouvel onglet"),
+        (ID_MENU_CLOSE_TAB, "Fermer l'onglet"),
+        (ID_MENU_QUIT, "Quitter Archia Browser"),
+    ] {
+        let label = wide(label);
+        let _ = AppendMenuW(menu, MF_STRING, id as usize, label.as_ptr());
+    }
+    let mut cursor = Point { x: 0, y: 0 };
+    let _ = GetCursorPos(&mut cursor);
+    let selected = TrackPopupMenu(
+        menu,
+        TPM_RETURNCMD,
+        cursor.x,
+        cursor.y,
+        0,
+        hwnd,
+        ptr::null(),
+    );
+    let _ = DestroyMenu(menu);
+
+    match selected {
+        ID_MENU_RELOAD => {
+            if state.browser.reload(&state.loader, current_viewport(state)).is_ok() {
+                refresh_page(state);
+            }
+        }
+        ID_MENU_NEW_TAB => {
+            if state.tabs.len() < MAX_GUI_TABS {
+                let tab_id = state.browser.new_tab();
+                let index = state.tabs.len();
+                let caption = format!("{} · Nouvel onglet", index + 1);
+                let button = create_control(
+                    hwnd,
+                    GetModuleHandleW(ptr::null()),
+                    "BUTTON",
+                    &caption,
+                    0,
+                    ID_TAB_BASE + index,
+                );
+                let _ = ShowWindow(button, SW_HIDE);
+                state.tabs.push((tab_id, button));
+                set_control_text(state.address, "");
+                refresh_page(state);
+            }
+        }
+        ID_MENU_CLOSE_TAB => {
+            if state.tabs.len() > 1 {
+                if let Some(index) = state
+                    .browser
+                    .active_tab_id()
+                    .and_then(|id| state.tabs.iter().position(|(tab_id, _)| *tab_id == id))
+                {
+                    let (id, handle) = state.tabs[index];
+                    if state.browser.close_tab(id) {
+                        let _ = DestroyWindow(handle);
+                        state.tabs.remove(index);
+                        refresh_page(state);
+                    }
+                }
+            }
+        }
+        ID_MENU_QUIT => {
+            let _ = DestroyWindow(hwnd);
+        }
+        _ => {}
+    }
+}
+
 unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
     // A deliberately restrained dark browser frame: separate tab strip,
     // navigation row, active-tab accent, and a quiet address-field surround.
@@ -685,7 +779,7 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
     paint_fill(hdc, 0, 39, width, 88, 0x002B2623);
     paint_fill(hdc, 0, 86, width, 89, 0x00443B36);
 
-    let tab_area = (width - 82).max(0);
+    let tab_area = (width - 134).max(0);
     let tab_width = (tab_area / state.tabs.len().max(1) as i32).clamp(120, 220);
     let active = state.browser.active_tab_id();
     for (index, (id, _)) in state.tabs.iter().enumerate() {
@@ -739,6 +833,8 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
             );
         }
     }
+    paint_fill(hdc, width - 108, 7, width - 62, 36, 0x003B3430);
+    paint_label(hdc, "⋯", width - 108, 7, width - 62, 36, 0x00F1EDE9, DT_CENTER);
     paint_fill(hdc, width - 58, 7, width - 10, 36, 0x003B3430);
     paint_label(
         hdc,
@@ -1106,8 +1202,8 @@ unsafe extern "system" fn window_proc(
                     }
                 };
                 if client_y < 42 {
-                    let tab_area = (width - 82).max(0);
-                    let tab_width = (tab_area / state.tabs.len().max(1) as i32).clamp(120, 220);
+                    let tab_area = (width - 134).max(0);
+                    let tab_width = (tab_area / state.tabs.len().max(1) as i32).clamp(86, 220);
                     if client_x >= width - 58 && client_x <= width - 10 {
                         if state.tabs.len() < MAX_GUI_TABS {
                             let tab_id = state.browser.new_tab();
@@ -1126,7 +1222,9 @@ unsafe extern "system" fn window_proc(
                             set_control_text(state.address, "");
                             refresh_page(state);
                         }
-                    } else if client_x >= 10 {
+                    } else if client_x >= width - 108 && client_x <= width - 62 {
+                        show_browser_menu(state, hwnd);
+                    } else if (10..width - 108).contains(&client_x) {
                         let index = ((client_x - 10) / tab_width.max(1)) as usize;
                         if let Some((id, handle)) = state.tabs.get(index).copied() {
                             let tab_left = 10 + index as i32 * tab_width;
