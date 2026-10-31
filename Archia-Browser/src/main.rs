@@ -1,8 +1,8 @@
+#[cfg_attr(windows, allow(dead_code))]
 #[cfg(windows)]
 mod gui;
 
 #[cfg(windows)]
-#[cfg(not(windows))]
 fn main() {
     gui::run();
 }
@@ -385,6 +385,7 @@ fn print_help() {
     println!("  :quit           Quitter Archia Browser");
 }
 
+#[cfg(not(windows))]
 fn main() {
     let mut browser = Browser::new();
     let pipeline = NetworkPipeline::new(BrowserPolicy);
