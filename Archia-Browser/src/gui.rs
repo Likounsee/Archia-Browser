@@ -1512,37 +1512,94 @@ unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i
     let gap = 16;
     let card_width = ((content_width - 80 - gap * 2) / 3).max(120);
     let card_top = 470;
-    for (index, (title, detail)) in [
-        ("Navigation", "Une interface simple et directe"),
-        ("Indépendance", "Un moteur développé par Archia"),
-        ("Confidentialité", "Pas de moteur tiers embarqué"),
-    ]
-    .iter()
-    .enumerate()
-    {
-        let x = left + 40 + index as i32 * (card_width + gap);
-        paint_round_fill(hdc, x, card_top, x + card_width, card_top + 112, card, 14);
-        paint_fill(hdc, x, card_top, x + card_width, card_top + 3, accent);
+    if state.bookmarks.is_empty() {
+        for (index, (title, detail)) in [
+            ("Navigation", "Une interface simple et directe"),
+            ("Indépendance", "Un moteur développé par Archia"),
+            ("Confidentialité", "Pas de moteur tiers embarqué"),
+        ]
+        .iter()
+        .enumerate()
+        {
+            let x = left + 40 + index as i32 * (card_width + gap);
+            paint_round_fill(hdc, x, card_top, x + card_width, card_top + 112, card, 14);
+            paint_fill(hdc, x, card_top, x + card_width, card_top + 3, accent);
+            paint_label(
+                hdc,
+                title,
+                x + 10,
+                card_top + 18,
+                x + card_width - 10,
+                card_top + 54,
+                text,
+                DT_CENTER,
+            );
+            paint_label(
+                hdc,
+                detail,
+                x + 12,
+                card_top + 55,
+                x + card_width - 12,
+                card_top + 94,
+                muted,
+                DT_CENTER,
+            );
+        }
+    } else {
         paint_label(
             hdc,
-            title,
-            x + 10,
-            card_top + 18,
-            x + card_width - 10,
-            card_top + 54,
+            "Accès rapides",
+            left + 40,
+            430,
+            left + content_width - 40,
+            462,
             text,
-            DT_CENTER,
+            0,
         );
-        paint_label(
-            hdc,
-            detail,
-            x + 12,
-            card_top + 55,
-            x + card_width - 12,
-            card_top + 94,
-            muted,
-            DT_CENTER,
-        );
+        for (index, bookmark) in state.bookmarks.iter().take(6).enumerate() {
+            let column = index % 3;
+            let row = index / 3;
+            let x = left + 40 + column as i32 * (card_width + gap);
+            let y = card_top + row as i32 * 82;
+            paint_round_fill(hdc, x, y, x + card_width, y + 68, card, 14);
+            paint_round_fill(hdc, x + 12, y + 13, x + 48, y + 49, accent, 10);
+            let initial = bookmark
+                .title
+                .chars()
+                .find(|character| character.is_alphanumeric())
+                .map(|character| character.to_uppercase().to_string())
+                .unwrap_or_else(|| "★".to_owned());
+            paint_label(
+                hdc,
+                &initial,
+                x + 12,
+                y + 13,
+                x + 48,
+                y + 49,
+                address_text,
+                DT_CENTER,
+            );
+            paint_label(
+                hdc,
+                &bookmark.title,
+                x + 58,
+                y + 8,
+                x + card_width - 10,
+                y + 37,
+                text,
+                0,
+            );
+            paint_label(
+                hdc,
+                &bookmark.url,
+                x + 58,
+                y + 35,
+                x + card_width - 10,
+                y + 59,
+                muted,
+                0,
+            );
+        }
     }
     paint_label(
         hdc,
@@ -1905,6 +1962,21 @@ unsafe extern "system" fn window_proc(
                 } else if (90..=118).contains(&client_y) && client_x >= 12 {
                     let index = ((client_x - 12) / 162) as usize;
                     if let Some(bookmark) = state.bookmarks.get(index) {
+                        let url = bookmark.url.clone();
+                        navigate(state, &url);
+                    }
+                } else if state.browser.current_page().is_none()
+                    && (470..=620).contains(&client_y)
+                {
+                    let content_width = width.min(980);
+                    let left = (width - content_width) / 2;
+                    let card_width = ((content_width - 80 - 32) / 3).max(120);
+                    let column = ((client_x - left - 40) / (card_width + 16)).max(0) as usize;
+                    let row = ((client_y - 470) / 82).max(0) as usize;
+                    if client_x >= left + 40
+                        && column < 3
+                        && let Some(bookmark) = state.bookmarks.get(row * 3 + column)
+                    {
                         let url = bookmark.url.clone();
                         navigate(state, &url);
                     }
