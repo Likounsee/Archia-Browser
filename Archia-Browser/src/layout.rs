@@ -1926,6 +1926,16 @@ fn transform_text_for_layout(text: &str, value: Option<&str>) -> String {
     }
 }
 
+fn glyph_advance(character: char) -> u32 {
+    match character {
+        'i' | 'l' | '!' | '.' | ',' | ':' | ';' | '\'' | '’' | '|' => 3,
+        'f' | 't' | 'r' | '(' | ')' | '[' | ']' => 4,
+        'm' | 'w' | 'M' | 'W' => 7,
+        ' ' => 4,
+        _ => 6,
+    }
+}
+
 fn intrinsic_inline_content_width(node: &crate::style_tree::StyledNode) -> u32 {
     if node.node.tag_name() == Some("img") {
         return node
@@ -1943,9 +1953,8 @@ fn intrinsic_inline_content_width(node: &crate::style_tree::StyledNode) -> u32 {
                 node.style.get("text-transform"),
             )
             .chars()
-            .count()
-            .min(u32::MAX as usize) as u32
-                * 6
+            .map(glyph_advance)
+            .fold(0_u32, u32::saturating_add)
         }
         _ => node
             .children
@@ -1963,12 +1972,15 @@ fn intrinsic_inline_width(node: &crate::style_tree::StyledNode, containing_width
                 &normalized_text(text, node.style.get("white-space")),
                 node.style.get("text-transform"),
             );
-            let width = normalized
+            normalized
                 .split('\n')
-                .map(|line| line.chars().count())
+                .map(|line| {
+                    line.chars()
+                        .map(glyph_advance)
+                        .fold(0_u32, u32::saturating_add)
+                })
                 .max()
-                .unwrap_or(0);
-            width.min(u32::MAX as usize) as u32 * 6
+                .unwrap_or(0)
         }
         _ => {
             let children_width = node
