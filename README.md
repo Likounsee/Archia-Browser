@@ -62,7 +62,7 @@ Theme manifests and selection are available in the engine, but the current Win32
 
 ### W1 — Usable browser essentials
 - [x] Multiple tabs and tab strip (create and switch).
-- [ ] Scrollable rendered page viewport.
+- [x] Scrollable rendered page viewport (native vertical scrollbar and mouse-wheel scrolling).
 - [ ] Bookmarks and persistent history.
 - [ ] Download handling and download destination controls.
 - [ ] Better error pages and loading feedback.
