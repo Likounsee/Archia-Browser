@@ -472,32 +472,72 @@ fn session_storage_path() -> std::path::PathBuf {
 }
 
 fn load_persistent_history(path: &std::path::Path) -> Vec<Bookmark> {
-    let Ok(contents) = std::fs::read_to_string(path) else { return Vec::new(); };
-    contents.lines().filter_map(|line| {
-        let (url, title) = line.split_once('\t')?;
-        let parsed = Url::parse(url).ok()?;
-        if !matches!(parsed.scheme(), "http" | "https") { return None; }
-        Some(Bookmark { title: title.trim().to_owned(), url: parsed.to_string() })
-    }).rev().take(MAX_PERSISTED_HISTORY_ITEMS).collect::<Vec<_>>().into_iter().rev().collect()
+    let Ok(contents) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    contents
+        .lines()
+        .filter_map(|line| {
+            let (url, title) = line.split_once('\t')?;
+            let parsed = Url::parse(url).ok()?;
+            if !matches!(parsed.scheme(), "http" | "https") {
+                return None;
+            }
+            Some(Bookmark {
+                title: title.trim().to_owned(),
+                url: parsed.to_string(),
+            })
+        })
+        .rev()
+        .take(MAX_PERSISTED_HISTORY_ITEMS)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect()
 }
 
 fn load_session(path: &std::path::Path) -> Vec<String> {
-    let Ok(contents) = std::fs::read_to_string(path) else { return Vec::new(); };
-    contents.lines().filter_map(|line| {
-        let url = Url::parse(line).ok()?;
-        matches!(url.scheme(), "http" | "https").then(|| url.to_string())
-    }).take(MAX_RESTORED_TABS).collect()
+    let Ok(contents) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    contents
+        .lines()
+        .filter_map(|line| {
+            let url = Url::parse(line).ok()?;
+            matches!(url.scheme(), "http" | "https").then(|| url.to_string())
+        })
+        .take(MAX_RESTORED_TABS)
+        .collect()
 }
 
 fn save_persistent_history(state: &AppState) {
-    if let Some(parent) = state.history_path.parent() { let _ = std::fs::create_dir_all(parent); }
-    let contents = state.persistent_history.iter().map(|entry| format!("{}\\t{}", entry.url.replace(['\\t','\\r','\\n'], " "), entry.title.replace(['\\t','\\r','\\n'], " "))).collect::<Vec<_>>().join("\\n");
+    if let Some(parent) = state.history_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let contents = state
+        .persistent_history
+        .iter()
+        .map(|entry| {
+            format!(
+                "{}\t{}",
+                entry.url.replace(['\t', '\r', '\n'], " "),
+                entry.title.replace(['\t', '\r', '\n'], " ")
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
     let _ = std::fs::write(&state.history_path, contents);
 }
 
 fn record_history(state: &mut AppState) {
-    let Some(url) = state.browser.current_url().map(ToString::to_string) else { return; };
-    let title = state.browser.current_page().and_then(|page| page.title()).unwrap_or_else(|| url.clone());
+    let Some(url) = state.browser.current_url().map(ToString::to_string) else {
+        return;
+    };
+    let title = state
+        .browser
+        .current_page()
+        .and_then(|page| page.title())
+        .unwrap_or_else(|| url.clone());
     state.persistent_history.retain(|entry| entry.url != url);
     state.persistent_history.push(Bookmark { title, url });
     if state.persistent_history.len() > MAX_PERSISTED_HISTORY_ITEMS {
@@ -508,9 +548,23 @@ fn record_history(state: &mut AppState) {
 }
 
 fn save_session(state: &AppState) {
-    if let Some(parent) = state.session_path.parent() { let _ = std::fs::create_dir_all(parent); }
-    let urls = state.tabs.iter().filter_map(|(id, _)| state.browser.tabs().tab(*id).and_then(|tab| tab.page()).and_then(|page| page.url()).map(ToString::to_string)).collect::<Vec<_>>();
-    let _ = std::fs::write(&state.session_path, urls.join("\\n"));
+    if let Some(parent) = state.session_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let urls = state
+        .tabs
+        .iter()
+        .filter_map(|(id, _)| {
+            state
+                .browser
+                .tabs()
+                .tab(*id)
+                .and_then(|tab| tab.page())
+                .and_then(|page| page.url())
+                .map(ToString::to_string)
+        })
+        .collect::<Vec<_>>();
+    let _ = std::fs::write(&state.session_path, urls.join("\n"));
 }
 
 fn save_bookmarks(state: &AppState) {
