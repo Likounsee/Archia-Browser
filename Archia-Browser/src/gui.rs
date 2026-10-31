@@ -319,6 +319,12 @@ impl RequestPolicyEngine for BrowserPolicy {
 
 type Loader = DocumentLoader<BrowserPolicy, HttpTransport>;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Bookmark {
+    title: String,
+    url: String,
+}
+
 struct AppState {
     browser: Browser,
     loader: Loader,
@@ -338,6 +344,8 @@ struct AppState {
     dib_pixels: Vec<u8>,
     tabs: Vec<(archia_browser::core::tabs::TabId, Hwnd)>,
     themes: Option<ThemeManager>,
+    bookmarks: Vec<Bookmark>,
+    bookmarks_path: std::path::PathBuf,
 }
 
 fn wide(value: &str) -> Vec<u16> {
@@ -368,6 +376,71 @@ unsafe fn create_control(
         instance,
         ptr::null_mut(),
     )
+}
+
+fn bookmark_storage_path() -> std::path::PathBuf {
+    std::env::var_os("APPDATA")
+        .map(|base| std::path::PathBuf::from(base).join("ArchiaBrowser"))
+        .or_else(|| std::env::current_dir().ok().map(|base| base.join(".archia-browser")))
+        .unwrap_or_else(std::env::temp_dir)
+        .join("bookmarks.tsv")
+}
+
+fn load_bookmarks(path: &std::path::Path) -> Vec<Bookmark> {
+    let Ok(contents) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    contents
+        .lines()
+        .filter_map(|line| {
+            let (url, title) = line.split_once('\t')?;
+            let parsed = Url::parse(url).ok()?;
+            if !matches!(parsed.scheme(), "http" | "https") {
+                return None;
+            }
+            Some(Bookmark {
+                title: title.trim().to_owned(),
+                url: parsed.to_string(),
+            })
+        })
+        .collect()
+}
+
+fn save_bookmarks(state: &AppState) {
+    if let Some(parent) = state.bookmarks_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let contents = state
+        .bookmarks
+        .iter()
+        .map(|bookmark| {
+            format!(
+                "{}\t{}",
+                bookmark.url.replace(['\\r', '\\n', '\\t'], " "),
+                bookmark.title.replace(['\\r', '\\n', '\\t'], " ")
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let _ = std::fs::write(&state.bookmarks_path, contents);
+}
+
+unsafe fn toggle_current_bookmark(state: &mut AppState) {
+    let Some(url) = state.browser.current_url().map(ToString::to_string) else {
+        return;
+    };
+    if let Some(index) = state.bookmarks.iter().position(|bookmark| bookmark.url == url) {
+        state.bookmarks.remove(index);
+    } else {
+        let title = state
+            .browser
+            .current_page()
+            .and_then(|page| page.title())
+            .unwrap_or_else(|| url.clone());
+        state.bookmarks.push(Bookmark { title, url });
+    }
+    save_bookmarks(state);
+    let _ = InvalidateRect(state.window, ptr::null(), 1);
 }
 
 unsafe fn app_state(hwnd: Hwnd) -> Option<&'static mut AppState> {
@@ -452,7 +525,7 @@ unsafe fn current_viewport(state: &AppState) -> LayoutViewport {
         client
             .bottom
             .saturating_sub(client.top)
-            .saturating_sub(102)
+            .saturating_sub(132)
             .max(1) as u32,
     )
 }
@@ -587,7 +660,7 @@ unsafe fn navigate(state: &mut AppState, address: &str) {
 unsafe fn activate_link_at(state: &mut AppState, hwnd: Hwnd, client_x: i32, client_y: i32) {
     let viewport = current_viewport(state);
     let content_x = client_x.saturating_sub(10);
-    let content_y = client_y.saturating_sub(90);
+    let content_y = client_y.saturating_sub(120);
     if content_x < 0
         || content_y < 0
         || content_x as u32 >= viewport.width
@@ -1132,9 +1205,9 @@ unsafe fn layout_controls(state: &AppState, width: i32, height: i32) {
     let _ = MoveWindow(
         state.page,
         margin,
-        button_y + button_h + 12,
+        120,
         (width - 2 * margin).max(100),
-        (height - button_y - button_h - 32).max(100),
+        (height - 132).max(100),
         1,
     );
 }
@@ -1233,7 +1306,7 @@ unsafe extern "system" fn window_proc(
                         let height = client
                             .bottom
                             .saturating_sub(client.top)
-                            .saturating_sub(102)
+                            .saturating_sub(132)
                             .max(1) as u32;
                         let needs_surface = state.surface.as_ref().is_none_or(|surface| {
                             surface.width() != width || surface.height() != height
@@ -1287,7 +1360,7 @@ unsafe extern "system" fn window_proc(
                             let _ = SetDIBitsToDevice(
                                 hdc,
                                 10,
-                                90,
+                                120,
                                 width,
                                 height,
                                 0,
@@ -1312,7 +1385,7 @@ unsafe extern "system" fn window_proc(
                 layout_controls(state, width, height);
                 let viewport = LayoutViewport::new(
                     width.saturating_sub(36).max(1) as u32,
-                    height.saturating_sub(102).max(1) as u32,
+                    height.saturating_sub(132).max(1) as u32,
                 );
                 if state.browser.relayout_current_page(viewport) {
                     state.surface_dirty = true;
@@ -1609,6 +1682,8 @@ pub fn run() {
             scroll_y: 0,
             dib_pixels: Vec::new(),
             tabs: Vec::new(),
+            bookmarks: load_bookmarks(&bookmark_storage_path()),
+            bookmarks_path: bookmark_storage_path(),
             themes: std::env::var_os("APPDATA")
                 .map(|base| {
                     std::path::PathBuf::from(base)
