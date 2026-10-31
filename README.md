@@ -51,7 +51,7 @@ Commands:
 - `:back`, `:forward` and `:reload` control navigation.
 - `:url`, `:title`, `:help` and `:quit` provide session information and controls.
 
-The CLI uses Archia's own URL, HTTP/HTTPS transport, document loader, HTML/DOM, CSS, layout, page and navigation code. It prints extracted text; it does **not** yet display the software-rendered surface in a native window. Interactive forms, JavaScript and full standards-compliant web compatibility are not available yet.\n\nTheme commands are available in the CLI: `:themes` lists themes, `:theme` displays the active theme and `:theme ID` persists a selection. The CLI reports the selected theme but cannot visually apply browser-chrome styling until the native GUI exists.
+The CLI uses Archia's own URL, HTTP/HTTPS transport, document loader, HTML/DOM, CSS, layout, page and navigation code. It prints extracted text; it does **not** yet display the software-rendered surface in a native window. Interactive forms, JavaScript and full standards-compliant web compatibility are not available yet.\n\nTheme commands are available in the CLI: `:themes` lists themes, `:theme` displays the active theme, `:theme ID` persists a selection, `:theme install PATH` installs a local theme manifest and `:theme remove ID` removes a custom theme. The CLI reports the selected theme but cannot visually apply browser-chrome styling until the native GUI exists. On Windows, theme data and the active selection are stored under `%APPDATA%\\ArchiaBrowser\\themes`.
 
 ## Immediate Windows product roadmap
 
