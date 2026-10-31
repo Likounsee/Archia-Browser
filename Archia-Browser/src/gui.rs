@@ -1775,7 +1775,9 @@ unsafe fn link_url_at(state: &AppState, client_x: i32, client_y: i32) -> Option<
 
 unsafe fn show_link_context_menu(state: &mut AppState, hwnd: Hwnd, url: String) {
     let menu = CreatePopupMenu();
-    if menu.is_null() { return; }
+    if menu.is_null() {
+        return;
+    }
     for (id, label) in [
         (ID_LINK_OPEN_NEW_TAB, "Ouvrir le lien dans un nouvel onglet"),
         (ID_LINK_COPY_URL, "Copier l’adresse du lien"),
@@ -1786,7 +1788,15 @@ unsafe fn show_link_context_menu(state: &mut AppState, hwnd: Hwnd, url: String) 
     }
     let mut cursor = Point { x: 0, y: 0 };
     let _ = GetCursorPos(&mut cursor);
-    let selected = TrackPopupMenu(menu, TPM_RETURNCMD, cursor.x, cursor.y, 0, hwnd, ptr::null());
+    let selected = TrackPopupMenu(
+        menu,
+        TPM_RETURNCMD,
+        cursor.x,
+        cursor.y,
+        0,
+        hwnd,
+        ptr::null(),
+    );
     let _ = DestroyMenu(menu);
     match selected {
         ID_LINK_OPEN_NEW_TAB if state.tabs.len() < MAX_GUI_TABS => {
