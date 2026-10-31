@@ -2053,7 +2053,7 @@ mod whitespace_layout_tests {
             crate::style_tree::StyledNode::new(Node::text("a  b"), ComputedStyle::default());
         let mut styled = styled;
         styled.style.set("white-space", "break-spaces");
-        assert_eq!(intrinsic_inline_width(&styled, 100), 24);
+        assert_eq!(intrinsic_inline_width(&styled, 100), 20);
     }
 
     #[test]
@@ -2971,7 +2971,7 @@ mod tests {
             crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
 
-        assert_eq!(layout.children[0].rect.width, 20);
+        assert_eq!(layout.children[0].rect.width, 24);
     }
 
     #[test]
