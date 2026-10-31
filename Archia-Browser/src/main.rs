@@ -333,10 +333,7 @@ mod tests {
             collect_links(&document),
             vec![
                 ("First link".to_owned(), "/first".to_owned()),
-                (
-                    "Second".to_owned(),
-                    "https://example.org/second".to_owned()
-                )
+                ("Second".to_owned(), "https://example.org/second".to_owned())
             ]
         );
     }
