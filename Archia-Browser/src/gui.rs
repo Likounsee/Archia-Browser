@@ -354,7 +354,14 @@ unsafe extern "system" {
 
 #[link(name = "shell32")]
 unsafe extern "system" {
-    fn ShellExecuteW(hwnd: Hwnd, operation: *const u16, file: *const u16, parameters: *const u16, directory: *const u16, show_cmd: i32) -> Handle;
+    fn ShellExecuteW(
+        hwnd: Hwnd,
+        operation: *const u16,
+        file: *const u16,
+        parameters: *const u16,
+        directory: *const u16,
+        show_cmd: i32,
+    ) -> Handle;
 }
 
 #[link(name = "kernel32")]
@@ -797,13 +804,22 @@ fn save_bookmarks(state: &AppState) {
 unsafe fn open_downloads_folder(state: &mut AppState) {
     let directory = downloads_directory();
     if let Err(error) = std::fs::create_dir_all(&directory) {
-        let caption = wide(&format!("Ouverture des téléchargements impossible : {error}"));
+        let caption = wide(&format!(
+            "Ouverture des téléchargements impossible : {error}"
+        ));
         let _ = SetWindowTextW(state.window, caption.as_ptr());
         return;
     }
     let path = wide(&directory.to_string_lossy());
     let operation = wide("open");
-    let result = ShellExecuteW(state.window, operation.as_ptr(), path.as_ptr(), ptr::null(), ptr::null(), SW_SHOW);
+    let result = ShellExecuteW(
+        state.window,
+        operation.as_ptr(),
+        path.as_ptr(),
+        ptr::null(),
+        ptr::null(),
+        SW_SHOW,
+    );
     if (result as isize) <= 32 {
         let caption = wide("Windows n’a pas pu ouvrir le dossier Téléchargements — Archia Browser");
         let _ = SetWindowTextW(state.window, caption.as_ptr());
@@ -1664,8 +1680,18 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         let _ = AppendMenuW(menu, MF_STRING, id as usize, label.as_ptr());
     }
     let reopen_label = wide("Rouvrir le dernier onglet fermé");
-    let reopen_flags = MF_STRING | if state.closed_tabs.is_empty() { MF_GRAYED } else { 0 };
-    let _ = AppendMenuW(menu, reopen_flags, ID_MENU_REOPEN_CLOSED_TAB as usize, reopen_label.as_ptr());
+    let reopen_flags = MF_STRING
+        | if state.closed_tabs.is_empty() {
+            MF_GRAYED
+        } else {
+            0
+        };
+    let _ = AppendMenuW(
+        menu,
+        reopen_flags,
+        ID_MENU_REOPEN_CLOSED_TAB as usize,
+        reopen_label.as_ptr(),
+    );
     let _ = AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
     let history_heading = wide("Pages récemment visitées");
     let _ = AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, history_heading.as_ptr());
