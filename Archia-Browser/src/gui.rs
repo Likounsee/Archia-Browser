@@ -224,6 +224,7 @@ struct AppState {
     new_tab: Hwnd,
     page: Hwnd,
     surface: Option<SoftwareSurface>,
+    surface_dirty: bool,
     dib_pixels: Vec<u8>,
     tabs: Vec<(archia_browser::core::tabs::TabId, Hwnd)>,
 }
@@ -314,6 +315,7 @@ unsafe fn current_viewport(state: &AppState) -> LayoutViewport {
 }
 
 unsafe fn refresh_page(state: &mut AppState) {
+    state.surface_dirty = true;
     if state.browser.current_page().is_some() {
         set_control_text(state.page, "");
         let _ = ShowWindow(state.page, SW_HIDE);
@@ -530,53 +532,60 @@ unsafe extern "system" fn window_proc(
                         if needs_surface {
                             state.surface = SoftwareSurface::try_new(width, height);
                             state.dib_pixels.clear();
+                            state.surface_dirty = true;
                         }
-                        if let Some(surface) = state.surface.as_mut() {
-                            if state.browser.render_current_page(surface) {
-                                let required = (width as usize)
-                                    .saturating_mul(height as usize)
-                                    .saturating_mul(4);
-                                if state.dib_pixels.len() != required {
-                                    state.dib_pixels.resize(required, 0);
+                        if state.surface_dirty {
+                            if let Some(surface) = state.surface.as_mut() {
+                                if state.browser.render_current_page(surface) {
+                                    let required = (width as usize)
+                                        .saturating_mul(height as usize)
+                                        .saturating_mul(4);
+                                    if state.dib_pixels.len() != required {
+                                        state.dib_pixels.resize(required, 0);
+                                    }
+                                    let source_pixels = surface.pixels().as_chunks::<4>().0;
+                                    let target_pixels = state.dib_pixels.as_chunks_mut::<4>().0;
+                                    for (source, target) in
+                                        source_pixels.iter().zip(target_pixels.iter_mut())
+                                    {
+                                        *target = [source[2], source[1], source[0], 0];
+                                    }
+                                    state.surface_dirty = false;
                                 }
-                                let source_pixels = surface.pixels().as_chunks::<4>().0;
-                                let target_pixels = state.dib_pixels.as_chunks_mut::<4>().0;
-                                for (source, target) in
-                                    source_pixels.iter().zip(target_pixels.iter_mut())
-                                {
-                                    *target = [source[2], source[1], source[0], 0];
-                                }
-                                let info = BitmapInfo {
-                                    header: BitmapInfoHeader {
-                                        size: mem::size_of::<BitmapInfoHeader>() as u32,
-                                        width: width as i32,
-                                        height: -(height as i32),
-                                        planes: 1,
-                                        bit_count: 32,
-                                        compression: 0,
-                                        size_image: required as u32,
-                                        x_pixels_per_meter: 0,
-                                        y_pixels_per_meter: 0,
-                                        colors_used: 0,
-                                        colors_important: 0,
-                                    },
-                                    colors: [0],
-                                };
-                                let _ = SetDIBitsToDevice(
-                                    hdc,
-                                    10,
-                                    90,
-                                    width,
-                                    height,
-                                    0,
-                                    0,
-                                    0,
-                                    height,
-                                    state.dib_pixels.as_ptr().cast(),
-                                    &info,
-                                    0,
-                                );
                             }
+                        }
+                        if !state.dib_pixels.is_empty() {
+                            let required = state.dib_pixels.len() as u32;
+                            let info = BitmapInfo {
+                                header: BitmapInfoHeader {
+                                    size: mem::size_of::<BitmapInfoHeader>() as u32,
+                                    width: width as i32,
+                                    height: -(height as i32),
+                                    planes: 1,
+                                    bit_count: 32,
+                                    compression: 0,
+                                    size_image: required,
+                                    x_pixels_per_meter: 0,
+                                    y_pixels_per_meter: 0,
+                                    colors_used: 0,
+                                    colors_important: 0,
+                                },
+                                colors: [0],
+                            };
+                            let _ = SetDIBitsToDevice(
+                                hdc,
+                                10,
+                                90,
+                                width,
+                                height,
+                                0,
+                                0,
+                                0,
+                                height,
+                                state.dib_pixels.as_ptr().cast(),
+                                &info,
+                                0,
+                            );
                         }
                     }
                 }
@@ -594,6 +603,7 @@ unsafe extern "system" fn window_proc(
                     height.saturating_sub(102).max(1) as u32,
                 );
                 if state.browser.relayout_current_page(viewport) {
+                    state.surface_dirty = true;
                     let _ = InvalidateRect(hwnd, ptr::null(), 1);
                 }
             }
@@ -722,6 +732,7 @@ pub fn run() {
             new_tab: ptr::null_mut(),
             page: ptr::null_mut(),
             surface: None,
+            surface_dirty: true,
             dib_pixels: Vec::new(),
             tabs: Vec::new(),
         });
