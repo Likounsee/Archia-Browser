@@ -494,9 +494,7 @@ unsafe fn activate_link_at(state: &mut AppState, hwnd: Hwnd, client_x: i32, clie
         let link = page.link_at(content_x, document_y)?;
         let href = link.link_href()?.trim();
         let url = page.resolve_reference(href).ok()?;
-        if url.scheme() == "file"
-            && !page.url().is_some_and(|origin| origin.scheme() == "file")
-        {
+        if url.scheme() == "file" && !page.url().is_some_and(|origin| origin.scheme() == "file") {
             return None;
         }
         let opens_new_tab = link
