@@ -489,7 +489,10 @@ fn parse_address(input: &str) -> Result<Url, archia_browser::net::UrlError> {
     } else if input.chars().any(char::is_whitespace)
         || (!input.contains('.') && !input.starts_with("localhost") && !input.starts_with("127."))
     {
-        format!("https://www.google.com/search?q={}", encode_search_query(input))
+        format!(
+            "https://www.google.com/search?q={}",
+            encode_search_query(input)
+        )
     } else {
         format!("https://{input}")
     };
@@ -1908,6 +1911,7 @@ pub fn run() {
             let _ = DispatchMessageW(&message);
         }
     }
+}
 
 #[cfg(test)]
 mod gui_address_tests {
@@ -1936,5 +1940,4 @@ mod gui_address_tests {
             "https://example.org/path"
         );
     }
-}
 }
