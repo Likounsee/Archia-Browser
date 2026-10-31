@@ -9,7 +9,7 @@ use archia_browser::{
     layout::LayoutViewport,
     net::{
         pipeline::{NetworkPipeline, PolicyDecision, RequestPolicyEngine, ResourceKind},
-        DocumentLoader, HttpTransport, Request, Url,
+        download_to_path, DocumentLoader, HttpTransport, Request, Url,
     },
     surface::SoftwareSurface,
     theme::{ThemeColors, ThemeManager},
@@ -70,6 +70,7 @@ const ID_MENU_SEARCH_DDG: u32 = 3009;
 const ID_MENU_SET_HOMEPAGE: u32 = 3014;
 const ID_MENU_RESET_HOMEPAGE: u32 = 3015;
 const ID_MENU_TOGGLE_SESSION: u32 = 3016;
+const ID_MENU_DOWNLOAD_PAGE: u32 = 3017;
 const ID_MENU_THEME_ARCHIA: u32 = 3010;
 const ID_MENU_THEME_CHROME: u32 = 3011;
 const ID_MENU_THEME_FIREFOX: u32 = 3012;
@@ -588,6 +589,39 @@ fn browser_data_directory() -> std::path::PathBuf {
         .join("ArchiaBrowser")
 }
 
+fn downloads_directory() -> std::path::PathBuf {
+    std::env::var_os("USERPROFILE")
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(std::path::PathBuf::from))
+        .unwrap_or_else(std::env::temp_dir)
+        .join("Downloads")
+}
+
+fn safe_download_filename(value: &str) -> String {
+    let mut name = value.trim().chars().map(|character| {
+        if character.is_control() || matches!(character, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') { '_' } else { character }
+    }).collect::<String>();
+    while name.ends_with([' ', '.']) { name.pop(); }
+    if name.is_empty() || matches!(name.split('.').next().unwrap_or_default().to_ascii_uppercase().as_str(), "CON" | "PRN" | "AUX" | "NUL") {
+        name.insert(0, '_');
+    }
+    name.chars().take(180).collect()
+}
+
+fn unique_download_destination(directory: &std::path::Path, filename: &str) -> std::path::PathBuf {
+    let original = std::path::Path::new(filename);
+    let stem = original.file_stem().unwrap_or_default().to_string_lossy();
+    let extension = original.extension().map(|value| value.to_string_lossy().to_string());
+    for index in 0..10_000_u32 {
+        let candidate_name = if index == 0 { filename.to_owned() }
+            else if let Some(extension) = &extension { format!("{stem} ({index}).{extension}") }
+            else { format!("{stem} ({index})") };
+        let candidate = directory.join(candidate_name);
+        if !candidate.exists() { return candidate; }
+    }
+    directory.join(format!("{filename}.download"))
+}
+
 fn settings_storage_path() -> std::path::PathBuf {
     browser_data_directory().join("settings.ini")
 }
@@ -717,6 +751,45 @@ fn save_bookmarks(state: &AppState) {
         .collect::<Vec<_>>()
         .join("\n");
     let _ = std::fs::write(&state.bookmarks_path, contents);
+}
+
+unsafe fn download_current_page(state: &mut AppState) {
+    let Some(url) = state.browser.current_url().cloned() else { return; };
+    if !matches!(url.scheme(), "http" | "https") { return; }
+    let directory = downloads_directory();
+    if let Err(error) = std::fs::create_dir_all(&directory) {
+        let caption = wide(&format!("Échec du téléchargement : {error}"));
+        let _ = SetWindowTextW(state.window, caption.as_ptr());
+        return;
+    }
+    let pending = directory.join(format!(".archia-pending-{}.tmp", std::process::id()));
+    let _ = std::fs::remove_file(&pending);
+    let mut request = Request::new(url);
+    request.headers.insert("accept".into(), "*/*".into());
+    request.headers.insert("user-agent".into(), format!("ArchiaBrowser/{}", state.browser.version()));
+    let transport = HttpTransport::new().with_limits(64 * 1024 * 1024, 64 * 1024);
+    match download_to_path(&transport, &request, &pending) {
+        Ok(result) => {
+            let filename = safe_download_filename(&result.suggested_filename);
+            let destination = unique_download_destination(&directory, &filename);
+            match std::fs::rename(&pending, &destination) {
+                Ok(()) => {
+                    let caption = wide(&format!("Téléchargement terminé : {} — Archia Browser", destination.display()));
+                    let _ = SetWindowTextW(state.window, caption.as_ptr());
+                }
+                Err(error) => {
+                    let _ = std::fs::remove_file(&pending);
+                    let caption = wide(&format!("Échec de l'enregistrement : {error} — Archia Browser"));
+                    let _ = SetWindowTextW(state.window, caption.as_ptr());
+                }
+            }
+        }
+        Err(error) => {
+            let _ = std::fs::remove_file(&pending);
+            let caption = wide(&format!("Téléchargement impossible : {error:?} — Archia Browser"));
+            let _ = SetWindowTextW(state.window, caption.as_ptr());
+        }
+    }
 }
 
 unsafe fn toggle_current_bookmark(state: &mut AppState) {
@@ -1495,6 +1568,7 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             "Définir la page actuelle comme accueil",
         ),
         (ID_MENU_RESET_HOMEPAGE, "Réinitialiser la page d'accueil"),
+        (ID_MENU_DOWNLOAD_PAGE, "Télécharger la page actuelle"),
         (
             ID_MENU_TOGGLE_SESSION,
             if state.settings.restore_session {
@@ -1603,6 +1677,7 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             state.settings.homepage = BrowserSettings::default().homepage;
             let _ = state.settings.save(&state.settings_path);
         }
+        ID_MENU_DOWNLOAD_PAGE => download_current_page(state),
         ID_MENU_TOGGLE_SESSION => {
             state.settings.restore_session = !state.settings.restore_session;
             if !state.settings.restore_session {
