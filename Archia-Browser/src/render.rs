@@ -944,6 +944,21 @@ mod tests {
     }
 
     #[test]
+    fn vertical_scroll_offset_moves_painted_rectangles_into_view() {
+        let mut list = DisplayList::new();
+        list.push(PaintCommand::FillRect {
+            rect: Rect::new(0, 12, 4, 4),
+            color: 0xff0000ff,
+        });
+        let mut surface = SoftwareSurface::new(4, 4);
+
+        SoftwareRenderer::rasterize_with_vertical_offset(&list, &mut surface, 12);
+
+        assert_eq!(surface.pixel(1, 1), Some(Color(255, 0, 0, 255)));
+        assert_eq!(surface.pixel(1, 3), Some(Color(255, 0, 0, 255)));
+    }
+
+    #[test]
     fn border_radius_paints_a_rounded_background_command() {
         let mut root = Node::element("div");
         root.set_attribute(
