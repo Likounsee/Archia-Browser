@@ -182,7 +182,13 @@ impl SoftwareRenderer {
                         ((color >> 8) & 0xff) as u8,
                         (color & 0xff) as u8,
                     );
-                    surface.draw_text_clipped(*x, y.saturating_sub(scroll_offset), text, color, clip);
+                    surface.draw_text_clipped(
+                        *x,
+                        y.saturating_sub(scroll_offset),
+                        text,
+                        color,
+                        clip,
+                    );
                 }
                 PaintCommand::PushClip { rect } => {
                     // Clip nesting comes from untrusted markup/CSS. Do not let the
