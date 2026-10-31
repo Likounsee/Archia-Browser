@@ -906,7 +906,14 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
     let address_text = chrome_color(state, |colors| &colors.address_text, 0x00211D1B);
     paint_fill(hdc, 0, 0, width, 88, toolbar);
     paint_fill(hdc, 0, 39, width, 88, window);
-    paint_fill(hdc, 0, 86, width, 89, chrome_color(state, |colors| &colors.border, 0x00443B36));
+    paint_fill(
+        hdc,
+        0,
+        86,
+        width,
+        89,
+        chrome_color(state, |colors| &colors.border, 0x00443B36),
+    );
 
     let tab_area = (width - 134).max(0);
     let tab_width = (tab_area / state.tabs.len().max(1) as i32).clamp(120, 220);
