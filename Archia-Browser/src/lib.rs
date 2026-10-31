@@ -523,6 +523,10 @@ impl Browser {
         self.tabs.open()
     }
 
+    pub fn active_tab_id(&self) -> Option<core::tabs::TabId> {
+        self.tabs.active_id()
+    }
+
     pub fn select_tab(&mut self, id: core::tabs::TabId) -> bool {
         self.tabs.select(id)
     }
