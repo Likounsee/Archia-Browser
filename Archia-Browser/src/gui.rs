@@ -75,6 +75,9 @@ const ID_MENU_RESET_HOMEPAGE: u32 = 3015;
 const ID_MENU_TOGGLE_SESSION: u32 = 3016;
 const ID_MENU_DOWNLOAD_PAGE: u32 = 3017;
 const ID_MENU_OPEN_DOWNLOADS: u32 = 3018;
+const ID_MENU_RECENT_DOWNLOADS: u32 = 3025;
+const ID_RECENT_DOWNLOAD_BASE: u32 = 3700;
+const MAX_RECENT_DOWNLOADS: usize = 12;
 const ID_MENU_REOPEN_CLOSED_TAB: u32 = 3019;
 const ID_MENU_COPY_PAGE_URL: u32 = 3020;
 const ID_MENU_BOOKMARK_PAGE: u32 = 3021;
@@ -837,6 +840,58 @@ unsafe fn open_downloads_folder(state: &mut AppState) {
     if (result as isize) <= 32 {
         let caption = wide("Windows n’a pas pu ouvrir le dossier Téléchargements — Archia Browser");
         let _ = SetWindowTextW(state.window, caption.as_ptr());
+    }
+}
+
+unsafe fn show_recent_downloads(state: &mut AppState, hwnd: Hwnd) {
+    let directory = downloads_directory();
+    let mut files = std::fs::read_dir(&directory)
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let metadata = entry.metadata().ok()?;
+            if !metadata.is_file() || entry.file_name().to_string_lossy().starts_with(".archia-pending-") {
+                return None;
+            }
+            Some((metadata.modified().unwrap_or(std::time::UNIX_EPOCH), entry.path()))
+        })
+        .collect::<Vec<_>>();
+    files.sort_by(|left, right| right.0.cmp(&left.0));
+    files.truncate(MAX_RECENT_DOWNLOADS);
+
+    let menu = CreatePopupMenu();
+    if menu.is_null() { return; }
+    let heading = wide(&format!("Téléchargements récents ({})", files.len()));
+    let _ = AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, heading.as_ptr());
+    if files.is_empty() {
+        let empty = wide("Aucun fichier téléchargé");
+        let _ = AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, empty.as_ptr());
+    } else {
+        for (index, (_, path)) in files.iter().enumerate() {
+            let name = path.file_name().unwrap_or_default().to_string_lossy();
+            let label = wide(&format!("{}", name.chars().take(58).collect::<String>()));
+            let _ = AppendMenuW(menu, MF_STRING, (ID_RECENT_DOWNLOAD_BASE + index as u32) as usize, label.as_ptr());
+        }
+    }
+    let _ = AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
+    let folder = wide("Ouvrir le dossier Téléchargements");
+    let _ = AppendMenuW(menu, MF_STRING, ID_MENU_OPEN_DOWNLOADS as usize, folder.as_ptr());
+    let mut cursor = Point { x: 0, y: 0 };
+    let _ = GetCursorPos(&mut cursor);
+    let selected = TrackPopupMenu(menu, TPM_RETURNCMD, cursor.x, cursor.y, 0, hwnd, ptr::null());
+    let _ = DestroyMenu(menu);
+    if selected == ID_MENU_OPEN_DOWNLOADS as usize {
+        open_downloads_folder(state);
+    } else if selected >= ID_RECENT_DOWNLOAD_BASE as usize
+        && selected < (ID_RECENT_DOWNLOAD_BASE + files.len() as u32) as usize
+    {
+        let index = selected - ID_RECENT_DOWNLOAD_BASE as usize;
+        if let Some((_, path)) = files.get(index) {
+            let operation = wide("open");
+            let target = wide(&path.to_string_lossy());
+            let _ = ShellExecuteW(hwnd, operation.as_ptr(), target.as_ptr(), ptr::null(), ptr::null(), SW_SHOW);
+        }
     }
 }
 
@@ -1823,6 +1878,7 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         (ID_MENU_RESET_HOMEPAGE, "Réinitialiser la page d'accueil"),
         (ID_MENU_DOWNLOAD_PAGE, "Télécharger la page actuelle"),
         (ID_MENU_OPEN_DOWNLOADS, "Ouvrir le dossier Téléchargements"),
+        (ID_MENU_RECENT_DOWNLOADS, "Téléchargements récents…"),
         (
             ID_MENU_TOGGLE_SESSION,
             if state.settings.restore_session {
@@ -1947,6 +2003,7 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         }
         ID_MENU_DOWNLOAD_PAGE => download_current_page(state),
         ID_MENU_OPEN_DOWNLOADS => open_downloads_folder(state),
+        ID_MENU_RECENT_DOWNLOADS => show_recent_downloads(state, hwnd),
         ID_MENU_TOGGLE_SESSION => {
             state.settings.restore_session = !state.settings.restore_session;
             if !state.settings.restore_session {
