@@ -29,6 +29,7 @@ const WM_PAINT: u32 = 0x000F;
 const WM_VSCROLL: u32 = 0x0115;
 const WM_MOUSEWHEEL: u32 = 0x020A;
 const WM_LBUTTONDOWN: u32 = 0x0201;
+const WM_RBUTTONDOWN: u32 = 0x0204;
 const WM_COMMAND: u32 = 0x0111;
 const WM_NCCREATE: u32 = 0x0081;
 const WM_DESTROY: u32 = 0x0002;
@@ -38,6 +39,7 @@ const VK_L: usize = 0x4C;
 const VK_T: usize = 0x54;
 const VK_W: usize = 0x57;
 const VK_R: usize = 0x52;
+const VK_D: usize = 0x44;
 const VK_F5: usize = 0x74;
 const VK_CONTROL: i32 = 0x11;
 const VK_MENU: i32 = 0x12;
@@ -61,6 +63,11 @@ const ID_MENU_THEME_FIREFOX: u32 = 3012;
 const ID_MENU_THEME_EDGE: u32 = 3013;
 const ID_MENU_HISTORY_BASE: u32 = 3200;
 const MAX_MENU_HISTORY_ITEMS: usize = 8;
+const ID_MENU_BOOKMARK_BASE: u32 = 3300;
+const MAX_MENU_BOOKMARK_ITEMS: usize = 16;
+const ID_BOOKMARK_OPEN: u32 = 3501;
+const ID_BOOKMARK_OPEN_NEW_TAB: u32 = 3502;
+const ID_BOOKMARK_REMOVE: u32 = 3503;
 const GWLP_WNDPROC: i32 = -4;
 const WM_CTLCOLOREDIT: u32 = 0x0133;
 const DT_SINGLELINE: u32 = 0x0020;
@@ -1015,6 +1022,10 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
                 }
                 return true;
             }
+            VK_D => {
+                toggle_current_bookmark(state);
+                return true;
+            }
             _ => {}
         }
     }
@@ -1049,6 +1060,52 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
         return true;
     }
     false
+}
+
+unsafe fn show_bookmark_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) {
+    let Some(bookmark) = state.bookmarks.get(index) else {
+        return;
+    };
+    let url = bookmark.url.clone();
+    let menu = CreatePopupMenu();
+    if menu.is_null() {
+        return;
+    }
+    for (id, label) in [
+        (ID_BOOKMARK_OPEN, "Ouvrir le favori"),
+        (ID_BOOKMARK_OPEN_NEW_TAB, "Ouvrir dans un nouvel onglet"),
+        (ID_BOOKMARK_REMOVE, "Supprimer des favoris"),
+    ] {
+        let label = wide(label);
+        let _ = AppendMenuW(menu, MF_STRING, id as usize, label.as_ptr());
+    }
+    let mut cursor = Point { x: 0, y: 0 };
+    let _ = GetCursorPos(&mut cursor);
+    let selected = TrackPopupMenu(
+        menu,
+        TPM_RETURNCMD,
+        cursor.x,
+        cursor.y,
+        0,
+        hwnd,
+        ptr::null(),
+    );
+    let _ = DestroyMenu(menu);
+    match selected {
+        ID_BOOKMARK_OPEN => navigate(state, &url),
+        ID_BOOKMARK_OPEN_NEW_TAB => {
+            create_new_tab(state, hwnd);
+            navigate(state, &url);
+        }
+        ID_BOOKMARK_REMOVE => {
+            if index < state.bookmarks.len() {
+                state.bookmarks.remove(index);
+                save_bookmarks(state);
+                let _ = InvalidateRect(hwnd, ptr::null(), 1);
+            }
+        }
+        _ => {}
+    }
 }
 
 unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
@@ -1097,6 +1154,28 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             (ID_MENU_HISTORY_BASE as usize) + index,
             label.as_ptr(),
         );
+    }
+    if !state.bookmarks.is_empty() {
+        let _ = AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
+        let heading = wide("Favoris");
+        let _ = AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, heading.as_ptr());
+        for (index, bookmark) in state
+            .bookmarks
+            .iter()
+            .take(MAX_MENU_BOOKMARK_ITEMS)
+            .enumerate()
+        {
+            let label = wide(&format!(
+                "★ {}",
+                bookmark.title.chars().take(38).collect::<String>()
+            ));
+            let _ = AppendMenuW(
+                menu,
+                MF_STRING,
+                (ID_MENU_BOOKMARK_BASE as usize) + index,
+                label.as_ptr(),
+            );
+        }
     }
     let mut cursor = Point { x: 0, y: 0 };
     let _ = GetCursorPos(&mut cursor);
@@ -1160,6 +1239,17 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
                 .nth(index)
                 .map(|entry| entry.url().to_string())
             {
+                navigate(state, &url);
+            }
+        }
+        bookmark_id
+            if (ID_MENU_BOOKMARK_BASE
+                ..ID_MENU_BOOKMARK_BASE + MAX_MENU_BOOKMARK_ITEMS as u32)
+                .contains(&bookmark_id) =>
+        {
+            let index = (bookmark_id - ID_MENU_BOOKMARK_BASE) as usize;
+            if let Some(bookmark) = state.bookmarks.get(index) {
+                let url = bookmark.url.clone();
                 navigate(state, &url);
             }
         }
@@ -1831,6 +1921,17 @@ unsafe extern "system" fn window_proc(
                 }
             }
             DefWindowProcW(hwnd, message, w_param, l_param)
+        }
+        WM_RBUTTONDOWN => {
+            if let Some(state) = app_state(hwnd) {
+                let client_x = (l_param as u32 & 0xffff) as u16 as i16 as i32;
+                let client_y = ((l_param as u32 >> 16) & 0xffff) as u16 as i16 as i32;
+                if (90..=118).contains(&client_y) && client_x >= 12 {
+                    let index = ((client_x - 12) / 162) as usize;
+                    show_bookmark_context_menu(state, hwnd, index);
+                }
+            }
+            0
         }
         WM_MOUSEWHEEL => {
             if let Some(state) = app_state(hwnd) {
