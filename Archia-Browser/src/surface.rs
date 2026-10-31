@@ -36,7 +36,7 @@ impl Color {
             "maroon" => Some(Self(128, 0, 0, 255)),
             value if value.starts_with("rgb(") || value.starts_with("rgba(") => {
                 parse_functional_color(value)
-            },
+            }
             value if value.len() == 4 && value.starts_with('#') => {
                 let mut digits = value[1..].chars();
                 let r = u8::from_str_radix(&digits.next()?.to_string().repeat(2), 16).ok()?;
