@@ -1316,8 +1316,7 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             }
         }
         bookmark_id
-            if (ID_MENU_BOOKMARK_BASE
-                ..ID_MENU_BOOKMARK_BASE + MAX_MENU_BOOKMARK_ITEMS as u32)
+            if (ID_MENU_BOOKMARK_BASE..ID_MENU_BOOKMARK_BASE + MAX_MENU_BOOKMARK_ITEMS as u32)
                 .contains(&bookmark_id) =>
         {
             let index = (bookmark_id - ID_MENU_BOOKMARK_BASE) as usize;
@@ -1824,18 +1823,8 @@ unsafe extern "system" fn window_proc(
             let _ = SendMessageW(state.home_search, 0x0030, 1, 0);
             let address_hint = wide("Rechercher ou saisir une adresse");
             let home_hint = wide("Rechercher sur le Web");
-            let _ = SendMessageW(
-                state.address,
-                0x1501,
-                0,
-                address_hint.as_ptr() as Lparam,
-            ); // EM_SETCUEBANNER
-            let _ = SendMessageW(
-                state.home_search,
-                0x1501,
-                0,
-                home_hint.as_ptr() as Lparam,
-            );
+            let _ = SendMessageW(state.address, 0x1501, 0, address_hint.as_ptr() as Lparam); // EM_SETCUEBANNER
+            let _ = SendMessageW(state.home_search, 0x1501, 0, home_hint.as_ptr() as Lparam);
             let _ = ShowWindow(state.page, SW_HIDE);
             let _ = SendMessageW(state.page, 0x0030, 1, 0);
             refresh_page(state);
@@ -2052,8 +2041,7 @@ unsafe extern "system" fn window_proc(
                         let url = bookmark.url.clone();
                         navigate(state, &url);
                     }
-                } else if state.browser.current_page().is_none()
-                    && (470..=620).contains(&client_y)
+                } else if state.browser.current_page().is_none() && (470..=620).contains(&client_y)
                 {
                     let content_width = width.min(980);
                     let left = (width - content_width) / 2;
