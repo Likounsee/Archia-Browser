@@ -1576,7 +1576,7 @@ unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i
                 y + 13,
                 x + 48,
                 y + 49,
-                address_text,
+                background,
                 DT_CENTER,
             );
             paint_label(
