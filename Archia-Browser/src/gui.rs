@@ -380,11 +380,20 @@ enum SearchProvider {
 
 impl SearchProvider {
     fn id(self) -> &'static str {
-        match self { Self::Google => "google", Self::Bing => "bing", Self::DuckDuckGo => "duckduckgo" }
+        match self {
+            Self::Google => "google",
+            Self::Bing => "bing",
+            Self::DuckDuckGo => "duckduckgo",
+        }
     }
 
     fn from_id(value: &str) -> Option<Self> {
-        match value { "google" => Some(Self::Google), "bing" => Some(Self::Bing), "duckduckgo" => Some(Self::DuckDuckGo), _ => None }
+        match value {
+            "google" => Some(Self::Google),
+            "bing" => Some(Self::Bing),
+            "duckduckgo" => Some(Self::DuckDuckGo),
+            _ => None,
+        }
     }
 
     fn search_url(self, query: &str) -> String {
@@ -406,20 +415,42 @@ struct BrowserSettings {
 
 impl Default for BrowserSettings {
     fn default() -> Self {
-        Self { search_provider: SearchProvider::Google, homepage: "https://www.google.com/".into(), restore_session: true }
+        Self {
+            search_provider: SearchProvider::Google,
+            homepage: "https://www.google.com/".into(),
+            restore_session: true,
+        }
     }
 }
 
 impl BrowserSettings {
     fn load(path: &std::path::Path) -> Self {
-        let Ok(contents) = std::fs::read_to_string(path) else { return Self::default(); };
+        let Ok(contents) = std::fs::read_to_string(path) else {
+            return Self::default();
+        };
         let mut settings = Self::default();
         for line in contents.lines() {
-            let Some((key, value)) = line.split_once('=') else { continue; };
+            let Some((key, value)) = line.split_once('=') else {
+                continue;
+            };
             match key.trim() {
-                "search_provider" => if let Some(provider) = SearchProvider::from_id(value.trim()) { settings.search_provider = provider; },
-                "homepage" => if let Ok(url) = Url::parse(value.trim()) { if matches!(url.scheme(), "http" | "https") { settings.homepage = url.to_string(); } },
-                "restore_session" => match value.trim() { "true" => settings.restore_session = true, "false" => settings.restore_session = false, _ => {} },
+                "search_provider" => {
+                    if let Some(provider) = SearchProvider::from_id(value.trim()) {
+                        settings.search_provider = provider;
+                    }
+                }
+                "homepage" => {
+                    if let Ok(url) = Url::parse(value.trim()) {
+                        if matches!(url.scheme(), "http" | "https") {
+                            settings.homepage = url.to_string();
+                        }
+                    }
+                }
+                "restore_session" => match value.trim() {
+                    "true" => settings.restore_session = true,
+                    "false" => settings.restore_session = false,
+                    _ => {}
+                },
                 _ => {}
             }
         }
@@ -427,13 +458,23 @@ impl BrowserSettings {
     }
 
     fn save(&self, path: &std::path::Path) -> std::io::Result<()> {
-        if let Some(parent) = path.parent() { std::fs::create_dir_all(parent)?; }
-        let contents = format!("search_provider={}\nhomepage={}\nrestore_session={}\n", self.search_provider.id(), self.homepage.replace(['\r', '\n'], ""), self.restore_session);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let contents = format!(
+            "search_provider={}\nhomepage={}\nrestore_session={}\n",
+            self.search_provider.id(),
+            self.homepage.replace(['\r', '\n'], ""),
+            self.restore_session
+        );
         let temporary = path.with_extension("tmp");
         std::fs::write(&temporary, contents)?;
         match std::fs::rename(&temporary, path) {
             Ok(()) => Ok(()),
-            Err(error) if path.exists() => { std::fs::remove_file(path)?; std::fs::rename(&temporary, path).map_err(|_| error) },
+            Err(error) if path.exists() => {
+                std::fs::remove_file(path)?;
+                std::fs::rename(&temporary, path).map_err(|_| error)
+            }
             Err(error) => Err(error),
         }
     }
@@ -732,7 +773,10 @@ fn parse_address(input: &str) -> Result<Url, archia_browser::net::UrlError> {
     parse_address_with_provider(input, SearchProvider::Google)
 }
 
-fn parse_address_with_provider(input: &str, provider: SearchProvider) -> Result<Url, archia_browser::net::UrlError> {
+fn parse_address_with_provider(
+    input: &str,
+    provider: SearchProvider,
+) -> Result<Url, archia_browser::net::UrlError> {
     let input = input.trim();
     let address = if input.contains("://") {
         input.to_owned()
@@ -1446,9 +1490,19 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         (ID_MENU_SEARCH_GOOGLE, "Recherche : Google"),
         (ID_MENU_SEARCH_BING, "Recherche : Bing"),
         (ID_MENU_SEARCH_DDG, "Recherche : DuckDuckGo"),
-        (ID_MENU_SET_HOMEPAGE, "Définir la page actuelle comme accueil"),
+        (
+            ID_MENU_SET_HOMEPAGE,
+            "Définir la page actuelle comme accueil",
+        ),
         (ID_MENU_RESET_HOMEPAGE, "Réinitialiser la page d'accueil"),
-        (ID_MENU_TOGGLE_SESSION, if state.settings.restore_session { "Désactiver la restauration de session" } else { "Activer la restauration de session" }),
+        (
+            ID_MENU_TOGGLE_SESSION,
+            if state.settings.restore_session {
+                "Désactiver la restauration de session"
+            } else {
+                "Activer la restauration de session"
+            },
+        ),
         (ID_MENU_THEME_ARCHIA, "Theme : Archia"),
         (ID_MENU_THEME_CHROME, "Theme : Chrome"),
         (ID_MENU_THEME_FIREFOX, "Theme : Firefox"),
@@ -1551,7 +1605,9 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         }
         ID_MENU_TOGGLE_SESSION => {
             state.settings.restore_session = !state.settings.restore_session;
-            if !state.settings.restore_session { let _ = std::fs::remove_file(&state.session_path); }
+            if !state.settings.restore_session {
+                let _ = std::fs::remove_file(&state.session_path);
+            }
             let _ = state.settings.save(&state.settings_path);
         }
         ID_MENU_OPEN_ALL_BOOKMARKS => {
@@ -2692,7 +2748,11 @@ pub fn run() {
             persistent_history: load_persistent_history(&history_storage_path()),
             startup_session: {
                 let settings = BrowserSettings::load(&settings_storage_path());
-                if settings.restore_session { load_session(&session_storage_path()) } else { Vec::new() }
+                if settings.restore_session {
+                    load_session(&session_storage_path())
+                } else {
+                    Vec::new()
+                }
             },
             settings: BrowserSettings::load(&settings_storage_path()),
             settings_path: settings_storage_path(),
@@ -2761,11 +2821,15 @@ mod gui_address_tests {
     #[test]
     fn alternate_search_providers_encode_queries() {
         assert_eq!(
-            parse_address_with_provider("rust browser", SearchProvider::Bing).unwrap().to_string(),
+            parse_address_with_provider("rust browser", SearchProvider::Bing)
+                .unwrap()
+                .to_string(),
             "https://www.bing.com/search?q=rust%20browser"
         );
         assert_eq!(
-            parse_address_with_provider("rust browser", SearchProvider::DuckDuckGo).unwrap().to_string(),
+            parse_address_with_provider("rust browser", SearchProvider::DuckDuckGo)
+                .unwrap()
+                .to_string(),
             "https://duckduckgo.com/?q=rust%20browser"
         );
     }
@@ -2773,14 +2837,19 @@ mod gui_address_tests {
     #[test]
     fn alternate_search_provider_does_not_rewrite_explicit_urls() {
         assert_eq!(
-            parse_address_with_provider("https://example.org/path", SearchProvider::Bing).unwrap().to_string(),
+            parse_address_with_provider("https://example.org/path", SearchProvider::Bing)
+                .unwrap()
+                .to_string(),
             "https://example.org/path"
         );
     }
 
     #[test]
     fn settings_round_trip_and_reject_unsafe_homepages() {
-        let path = std::env::temp_dir().join(format!("archia-browser-settings-{}.ini", std::process::id()));
+        let path = std::env::temp_dir().join(format!(
+            "archia-browser-settings-{}.ini",
+            std::process::id()
+        ));
         let settings = BrowserSettings {
             search_provider: SearchProvider::DuckDuckGo,
             homepage: "https://example.org/start".into(),
@@ -2788,7 +2857,11 @@ mod gui_address_tests {
         };
         settings.save(&path).unwrap();
         assert_eq!(BrowserSettings::load(&path), settings);
-        std::fs::write(&path, "search_provider=unknown\nhomepage=file:///etc/passwd\nrestore_session=maybe\n").unwrap();
+        std::fs::write(
+            &path,
+            "search_provider=unknown\nhomepage=file:///etc/passwd\nrestore_session=maybe\n",
+        )
+        .unwrap();
         assert_eq!(BrowserSettings::load(&path), BrowserSettings::default());
         let _ = std::fs::remove_file(path);
     }
