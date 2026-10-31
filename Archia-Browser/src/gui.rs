@@ -416,8 +416,8 @@ fn save_bookmarks(state: &AppState) {
         .map(|bookmark| {
             format!(
                 "{}\t{}",
-                bookmark.url.replace(['\r', '\n', '\t'], " "),
-                bookmark.title.replace(['\r', '\n', '\t'], " ")
+                bookmark.url.replace('\t', " ").replace('\r', " ").replace('\n', " "),
+                bookmark.title.replace('\t', " ").replace('\r', " ").replace('\n', " ")
             )
         })
         .collect::<Vec<_>>()
@@ -954,6 +954,14 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             };
             if let Some(themes) = state.themes.as_mut() {
                 if themes.select(theme_id).is_ok() {
+                    if !state.address_brush.is_null() {
+                        let _ = DeleteObject(state.address_brush);
+                    }
+                    state.address_brush = CreateSolidBrush(chrome_color(
+                        state,
+                        |colors| &colors.address_background,
+                        0x00F5F3F1,
+                    ));
                     let _ = InvalidateRect(hwnd, ptr::null(), 1);
                 }
             }
@@ -1235,7 +1243,7 @@ unsafe fn layout_controls(state: &AppState, width: i32, height: i32) {
         state.address,
         margin + 122,
         button_y + 2,
-        (width - 274).max(100),
+        (width - 314).max(80),
         button_h - 4,
         1,
     );
@@ -1272,7 +1280,11 @@ unsafe extern "system" fn window_proc(
             state.forward = create_control(hwnd, instance, "BUTTON", "→", 0, ID_FORWARD);
             state.reload = create_control(hwnd, instance, "BUTTON", "↻", 0, ID_RELOAD);
             state.address = create_control(hwnd, instance, "EDIT", "", ES_AUTOHSCROLL, ID_ADDRESS);
-            state.address_brush = CreateSolidBrush(0x00F5F3F1);
+            state.address_brush = CreateSolidBrush(chrome_color(
+                state,
+                |colors| &colors.address_background,
+                0x00F5F3F1,
+            ));
             state.address_proc = SetWindowLongPtrW(
                 state.address,
                 GWLP_WNDPROC,
@@ -1589,8 +1601,14 @@ unsafe extern "system" fn window_proc(
         WM_CTLCOLOREDIT => {
             if let Some(state) = app_state(hwnd) {
                 if l_param as Hwnd == state.address && !state.address_brush.is_null() {
-                    let _ = SetTextColor(w_param as Handle, 0x00211D1B);
-                    let _ = SetBkColor(w_param as Handle, 0x00F5F3F1);
+                    let _ = SetTextColor(
+                        w_param as Handle,
+                        chrome_color(state, |colors| &colors.address_text, 0x00211D1B),
+                    );
+                    let _ = SetBkColor(
+                        w_param as Handle,
+                        chrome_color(state, |colors| &colors.address_background, 0x00F5F3F1),
+                    );
                     return state.address_brush as Lresult;
                 }
             }
