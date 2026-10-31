@@ -220,7 +220,7 @@ impl SoftwareSurface {
                     }
                 }
             }
-            cursor_x = cursor_x.saturating_add(6);
+            cursor_x = cursor_x.saturating_add(glyph_advance(ch));
         }
     }
 
@@ -438,6 +438,16 @@ impl SoftwareSurface {
             }
             cursor_x = cursor_x.saturating_add(6);
         }
+    }
+}
+
+fn glyph_advance(ch: char) -> i32 {
+    match ch {
+        'i' | 'l' | '!' | '.' | ',' | ':' | ';' | '\'' | '’' | '|' => 3,
+        'f' | 't' | 'r' | '(' | ')' | '[' | ']' => 4,
+        'm' | 'w' | 'M' | 'W' => 7,
+        ' ' => 4,
+        _ => 6,
     }
 }
 
