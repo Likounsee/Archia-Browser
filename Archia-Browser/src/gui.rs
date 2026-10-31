@@ -99,6 +99,8 @@ const ID_GO: usize = 1004;
 const ID_NEW_TAB: usize = 1005;
 const ID_ADDRESS: usize = 1100;
 const ID_PAGE: usize = 1200;
+const ID_HOME_SEARCH: usize = 1201;
+const ID_HOME_GO: usize = 1202;
 const ID_TAB_BASE: usize = 2000;
 const MAX_GUI_TABS: usize = 100;
 
@@ -340,8 +342,11 @@ struct AppState {
     go: Hwnd,
     new_tab: Hwnd,
     page: Hwnd,
+    home_search: Hwnd,
+    home_go: Hwnd,
     address_brush: Handle,
     address_proc: isize,
+    home_search_proc: isize,
     surface: Option<SoftwareSurface>,
     surface_dirty: bool,
     scroll_y: u32,
@@ -528,7 +533,7 @@ unsafe extern "system" fn address_edit_proc(
     if message == WM_KEYDOWN && w_param == VK_RETURN {
         let parent = GetParent(hwnd);
         if let Some(state) = app_state(parent) {
-            let address = read_control_text(state.address);
+            let address = read_control_text(hwnd);
             navigate(state, &address);
         }
         return 0;
@@ -536,8 +541,13 @@ unsafe extern "system" fn address_edit_proc(
 
     let parent = GetParent(hwnd);
     if let Some(state) = app_state(parent) {
-        if state.address_proc != 0 {
-            return CallWindowProcW(state.address_proc, hwnd, message, w_param, l_param);
+        let previous_proc = if hwnd == state.address {
+            state.address_proc
+        } else {
+            state.home_search_proc
+        };
+        if previous_proc != 0 {
+            return CallWindowProcW(previous_proc, hwnd, message, w_param, l_param);
         }
     }
     DefWindowProcW(hwnd, message, w_param, l_param)
@@ -615,6 +625,9 @@ unsafe fn refresh_page(state: &mut AppState) {
     state.scroll_y = 0;
     set_control_text(state.page, "");
     let _ = ShowWindow(state.page, SW_HIDE);
+    let has_page = state.browser.current_page().is_some();
+    let _ = ShowWindow(state.home_search, if has_page { SW_HIDE } else { SW_SHOW });
+    let _ = ShowWindow(state.home_go, if has_page { SW_HIDE } else { SW_SHOW });
     let title = state
         .browser
         .current_page()
@@ -680,6 +693,8 @@ unsafe fn navigate(state: &mut AppState, address: &str) {
     request.policy.top_level_navigation = true;
 
     set_control_text(state.page, "Chargement de la page…");
+    let _ = ShowWindow(state.home_search, SW_HIDE);
+    let _ = ShowWindow(state.home_go, SW_HIDE);
     let _ = ShowWindow(state.page, SW_SHOW);
     let _ = SendMessageW(state.page, EM_SETLIMITTEXT, 2 * 1024 * 1024, 0);
     let viewport = current_viewport(state);
@@ -1287,7 +1302,7 @@ unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i
 
     let gap = 16;
     let card_width = ((content_width - 80 - gap * 2) / 3).max(120);
-    let card_top = 390;
+    let card_top = 470;
     for (index, (title, detail)) in [
         ("Navigation", "Une interface simple et directe"),
         ("Indépendance", "Un moteur développé par Archia"),
@@ -1324,9 +1339,9 @@ unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i
         hdc,
         "Saisissez une adresse dans la barre en haut pour commencer.",
         left + 20,
-        535,
+        620,
         left + content_width - 20,
-        575,
+        660,
         muted,
         DT_CENTER,
     );
@@ -1369,6 +1384,10 @@ unsafe fn layout_controls(state: &AppState, width: i32, height: i32) {
         1,
     );
     let _ = MoveWindow(state.go, width - 118, button_y, 108, button_h, 1);
+    let home_width = (width - 120).clamp(220, 620);
+    let home_left = (width - home_width - 82).max(20) / 2;
+    let _ = MoveWindow(state.home_search, home_left, 378, home_width, 42, 1);
+    let _ = MoveWindow(state.home_go, home_left + home_width + 10, 378, 72, 42, 1);
     let _ = MoveWindow(
         state.page,
         margin,
@@ -1401,6 +1420,15 @@ unsafe extern "system" fn window_proc(
             state.forward = create_control(hwnd, instance, "BUTTON", "→", 0, ID_FORWARD);
             state.reload = create_control(hwnd, instance, "BUTTON", "↻", 0, ID_RELOAD);
             state.address = create_control(hwnd, instance, "EDIT", "", ES_AUTOHSCROLL, ID_ADDRESS);
+            state.home_search = create_control(
+                hwnd,
+                instance,
+                "EDIT",
+                "",
+                ES_AUTOHSCROLL,
+                ID_HOME_SEARCH,
+            );
+            state.home_go = create_control(hwnd, instance, "BUTTON", "Rechercher", 0, ID_HOME_GO);
             state.address_brush = CreateSolidBrush(chrome_color(
                 state,
                 |colors| &colors.address_background,
@@ -1408,6 +1436,11 @@ unsafe extern "system" fn window_proc(
             ));
             state.address_proc = SetWindowLongPtrW(
                 state.address,
+                GWLP_WNDPROC,
+                address_edit_proc as *const () as isize,
+            );
+            state.home_search_proc = SetWindowLongPtrW(
+                state.home_search,
                 GWLP_WNDPROC,
                 address_edit_proc as *const () as isize,
             );
@@ -1442,6 +1475,7 @@ unsafe extern "system" fn window_proc(
             );
             let _ = SendMessageW(state.page, EM_SETLIMITTEXT, 2 * 1024 * 1024, 0);
             let _ = SendMessageW(state.address, 0x0030, 1, 0); // WM_SETFONT
+            let _ = SendMessageW(state.home_search, 0x0030, 1, 0);
             let _ = ShowWindow(state.page, SW_HIDE);
             let _ = SendMessageW(state.page, 0x0030, 1, 0);
             refresh_page(state);
@@ -1721,7 +1755,9 @@ unsafe extern "system" fn window_proc(
         }
         WM_CTLCOLOREDIT => {
             if let Some(state) = app_state(hwnd) {
-                if l_param as Hwnd == state.address && !state.address_brush.is_null() {
+                if (l_param as Hwnd == state.address || l_param as Hwnd == state.home_search)
+                    && !state.address_brush.is_null()
+                {
                     let _ = SetTextColor(
                         w_param as Handle,
                         chrome_color(state, |colors| &colors.address_text, 0x00211D1B),
@@ -1741,6 +1777,10 @@ unsafe extern "system" fn window_proc(
                 match id {
                     ID_GO => {
                         let address = read_control_text(state.address);
+                        navigate(state, &address);
+                    }
+                    ID_HOME_GO => {
+                        let address = read_control_text(state.home_search);
                         navigate(state, &address);
                     }
                     ID_BACK => {
@@ -1863,8 +1903,11 @@ pub fn run() {
             go: ptr::null_mut(),
             new_tab: ptr::null_mut(),
             page: ptr::null_mut(),
+            home_search: ptr::null_mut(),
+            home_go: ptr::null_mut(),
             address_brush: ptr::null_mut(),
             address_proc: 0,
+            home_search_proc: 0,
             surface: None,
             surface_dirty: true,
             scroll_y: 0,
