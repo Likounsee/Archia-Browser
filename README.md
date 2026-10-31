@@ -24,7 +24,7 @@ ArchiaOS is currently at a very early development stage. Its browser port is the
 
 ## Current application status
 
-The current runnable application is an **experimental text-mode browser**, not yet a graphical desktop browser.
+The current Windows application now starts in an **experimental native desktop GUI**. It uses Win32 windowing and controls directly; it does not embed WebView2, Edge, Chromium or another browser engine.
 
 On Windows, from the repository root, run:
 
@@ -32,26 +32,17 @@ On Windows, from the repository root, run:
 .\scripts\run-windows.ps1 https://example.org
 ```
 
-Or start without an address:
+Or start with a blank tab:
 
 ```powershell
 .\scripts\run-windows.ps1
 ```
 
-The launcher checks that Cargo is installed and runs the workspace with the locked dependency versions. The direct equivalent is:
+The GUI currently provides a native window, selectable tabs, an address bar, Go, Back, Forward, Reload and a scrollable document-text area. Navigation uses Archia's own HTTP/HTTPS transport, document loader, HTML/DOM and navigation state. The page area currently displays extracted document text rather than the engine's software-rendered CSS surface. Mouse-driven page links, full layout painting, JavaScript, forms and modern-site compatibility are still under development.
 
-```powershell
-cargo run --locked -p archia-browser -- https://example.org
-```
+On non-Windows systems the executable remains a terminal-based development client. It supports entering addresses and the commands `:links`, `:open NUMERO`, `:back`, `:forward`, `:reload`, `:history`, `:url`, `:title`, `:help` and `:quit`.
 
-Commands:
-- Enter an address to navigate (HTTPS is assumed when no scheme is supplied).
-- `:links` lists links found in the current document.
-- `:open NUMERO` opens a listed link.
-- `:back`, `:forward` and `:reload` control navigation.
-- `:url`, `:title`, `:help` and `:quit` provide session information and controls.
-
-The CLI uses Archia's own URL, HTTP/HTTPS transport, document loader, HTML/DOM, CSS, layout, page and navigation code. It prints extracted text; it does **not** yet display the software-rendered surface in a native window. Interactive forms, JavaScript and full standards-compliant web compatibility are not available yet.\n\nTheme commands are available in the CLI: `:themes` lists themes, `:theme` displays the active theme, `:theme ID` persists a selection, `:theme install PATH` installs a local theme manifest and `:theme remove ID` removes a custom theme. The CLI reports the selected theme but cannot visually apply browser-chrome styling until the native GUI exists. On Windows, theme data and the active selection are stored under `%APPDATA%\\ArchiaBrowser\\themes`.
+Theme manifests and selection are available in the engine, but the current Win32 frontend does not yet apply the theme palette to its controls. On Windows, theme data is stored under `%APPDATA%\\ArchiaBrowser\\themes`.
 
 ## Immediate Windows product roadmap
 
@@ -62,16 +53,16 @@ The CLI uses Archia's own URL, HTTP/HTTPS transport, document loader, HTML/DOM, 
 - [x] Extract and list document links.
 - [x] Open a listed link.
 - [x] PowerShell launcher.
-- [ ] Native Windows window and message loop.
-- [ ] Address bar and navigation controls.
+- [x] Native Windows window and message loop.
+- [x] Address bar and navigation controls.
 - [ ] Display Archia's software-rendered page surface.
 - [ ] Mouse hit-testing and clickable links.
 - [ ] Resize handling and viewport re-layout.
 - [ ] Windows packaging and a repeatable install/run workflow.
 
 ### W1 — Usable browser essentials
-- [ ] Multiple tabs and tab strip.
-- [ ] Scrollable page viewport.
+- [x] Multiple tabs and tab strip (create and switch).
+- [ ] Scrollable rendered page viewport.
 - [ ] Bookmarks and persistent history.
 - [ ] Download handling and download destination controls.
 - [ ] Better error pages and loading feedback.
