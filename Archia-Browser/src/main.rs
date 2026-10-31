@@ -198,6 +198,34 @@ fn load_address(
     }
 }
 
+fn print_history(browser: &Browser) {
+    let history = browser.history();
+    if history.is_empty() {
+        println!("Aucun historique de navigation.");
+        return;
+    }
+
+    println!("Historique de navigation :");
+    let current_index = history.current_index();
+    for (index, entry) in history.entries().enumerate() {
+        let marker = if current_index == Some(index) {
+            " *"
+        } else {
+            "  "
+        };
+        let title = entry.title().unwrap_or("(sans titre)");
+        let title = title.split_whitespace().collect::<Vec<_>>().join(" ");
+        println!(
+            "{:>3}.{} {} — {}",
+            index + 1,
+            marker,
+            title,
+            entry.url()
+        );
+    }
+    println!("* Page actuellement ouverte");
+}
+
 fn print_links(browser: &Browser) {
     let Some(page) = browser.current_page() else {
         println!("Aucune page chargee.");
@@ -338,6 +366,7 @@ fn print_help() {
     println!("Commandes Archia Browser :");
     println!("  URL             Naviguer vers une adresse (HTTPS par defaut)");
     println!("  :links          Afficher les liens de la page");
+    println!("  :history        Afficher l'historique de navigation");
     println!("  :open NUMERO    Ouvrir un lien affiche par :links");
     println!("  :back           Page precedente");
     println!("  :forward        Page suivante");
@@ -471,6 +500,7 @@ fn main() {
             ":clear" | "clear" => clear_terminal(),
             ":help" | ":h" => print_help(),
             ":links" => print_links(&browser),
+            ":history" => print_history(&browser),
             ":url" => match browser.current_url() {
                 Some(url) => println!("{url}"),
                 None => println!("Aucune adresse courante."),
