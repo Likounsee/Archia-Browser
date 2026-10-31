@@ -246,7 +246,7 @@ fn open_link(
 fn clear_terminal() {
     // ANSI clear-screen + cursor-home works in modern Windows Terminal,
     // PowerShell, and the usual Unix terminals without spawning a shell.
-    print!("\\x1B[2J\\x1B[H");
+    print!("\x1B[2J\x1B[H");
     let _ = io::stdout().flush();
 }
 
