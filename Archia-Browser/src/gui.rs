@@ -31,6 +31,7 @@ const WM_LBUTTONDOWN: u32 = 0x0201;
 const WM_COMMAND: u32 = 0x0111;
 const WM_NCCREATE: u32 = 0x0081;
 const WM_DESTROY: u32 = 0x0002;
+const WM_CTLCOLOREDIT: u32 = 0x0133;
 const DT_SINGLELINE: u32 = 0x0020;
 const DT_CENTER: u32 = 0x0001;
 const DT_VCENTER: u32 = 0x0004;
@@ -217,6 +218,7 @@ unsafe extern "system" {
     fn CreateSolidBrush(color: u32) -> Handle;
     fn DeleteObject(object: Handle) -> i32;
     fn SetTextColor(hdc: Handle, color: u32) -> u32;
+    fn SetBkColor(hdc: Handle, color: u32) -> u32;
     fn SetBkMode(hdc: Handle, mode: i32) -> i32;
     fn SetDIBitsToDevice(
         hdc: Handle,
@@ -263,6 +265,7 @@ struct AppState {
     go: Hwnd,
     new_tab: Hwnd,
     page: Hwnd,
+    address_brush: Handle,
     surface: Option<SoftwareSurface>,
     surface_dirty: bool,
     scroll_y: u32,
@@ -399,11 +402,10 @@ unsafe fn refresh_page(state: &mut AppState) {
     state.scroll_y = 0;
     if state.browser.current_page().is_some() {
         set_control_text(state.page, "");
-        let _ = ShowWindow(state.page, SW_HIDE);
     } else {
-        set_control_text(state.page, welcome_text());
-        let _ = ShowWindow(state.page, SW_SHOW);
+        set_control_text(state.page, "");
     }
+    let _ = ShowWindow(state.page, SW_HIDE);
     let title = state
         .browser
         .current_page()
@@ -628,6 +630,33 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
     paint_label(hdc, "Aller", width - 122, 48, width - 10, 80, 0x00211D1B, DT_CENTER);
 }
 
+unsafe fn paint_home_screen(hdc: Handle, width: i32, height: i32) {
+    let top = 90;
+    paint_fill(hdc, 0, top, width, height, 0x00181513);
+    let content_width = width.min(980);
+    let left = (width - content_width) / 2;
+    paint_fill(hdc, left, 150, left + content_width, height.min(560), 0x001F1B18);
+    paint_label(hdc, "ARCHIA", left + 30, 190, left + content_width - 30, 232, 0x00D78B55, DT_CENTER);
+    paint_label(hdc, "Le web, à votre façon.", left + 30, 240, left + content_width - 30, 300, 0x00F5F1ED, DT_CENTER);
+    paint_label(hdc, "Un navigateur indépendant, construit autour du moteur Archia.", left + 30, 304, left + content_width - 30, 340, 0x00B8AEA6, DT_CENTER);
+
+    let gap = 16;
+    let card_width = ((content_width - 80 - gap * 2) / 3).max(120);
+    let card_top = 390;
+    for (index, (title, detail)) in [
+        ("Navigation", "Une interface simple et directe"),
+        ("Indépendance", "Un moteur développé par Archia"),
+        ("Confidentialité", "Pas de moteur tiers embarqué"),
+    ].iter().enumerate() {
+        let x = left + 40 + index as i32 * (card_width + gap);
+        paint_fill(hdc, x, card_top, x + card_width, card_top + 112, 0x00312B27);
+        paint_fill(hdc, x, card_top, x + card_width, card_top + 3, 0x00D78B55);
+        paint_label(hdc, title, x + 10, card_top + 18, x + card_width - 10, card_top + 54, 0x00F5F1ED, DT_CENTER);
+        paint_label(hdc, detail, x + 12, card_top + 55, x + card_width - 12, card_top + 94, 0x00B8AEA6, DT_CENTER);
+    }
+    paint_label(hdc, "Saisissez une adresse dans la barre en haut pour commencer.", left + 20, 535, left + content_width - 20, 575, 0x00B8AEA6, DT_CENTER);
+}
+
 unsafe fn layout_controls(state: &AppState, width: i32, height: i32) {
     let margin = 10;
     let button_y = 48;
@@ -700,10 +729,11 @@ unsafe extern "system" fn window_proc(
                 hwnd,
                 instance,
                 "EDIT",
-                "https://example.org",
-                WS_BORDER | ES_AUTOHSCROLL,
+                "",
+                ES_AUTOHSCROLL,
                 ID_ADDRESS,
             );
+            state.address_brush = CreateSolidBrush(0x00F5F3F1);
             state.go = create_control(hwnd, instance, "BUTTON", "Aller", 0, ID_GO);
             state.new_tab = create_control(hwnd, instance, "BUTTON", "+", 0, ID_NEW_TAB);
             let initial_tab = state
@@ -735,6 +765,7 @@ unsafe extern "system" fn window_proc(
             );
             let _ = SendMessageW(state.page, EM_SETLIMITTEXT, 2 * 1024 * 1024, 0);
             let _ = SendMessageW(state.address, 0x0030, 1, 0); // WM_SETFONT
+            let _ = ShowWindow(state.page, SW_HIDE);
             let _ = SendMessageW(state.page, 0x0030, 1, 0);
             refresh_page(state);
             0
@@ -751,11 +782,12 @@ unsafe extern "system" fn window_proc(
                         bottom: 0,
                     };
                     if GetClientRect(hwnd, &mut client) != 0 {
-                        paint_browser_chrome(
-                            state,
-                            hdc,
-                            client.right.saturating_sub(client.left),
-                        );
+                        let width = client.right.saturating_sub(client.left);
+                        let height = client.bottom.saturating_sub(client.top);
+                        paint_browser_chrome(state, hdc, width);
+                        if state.browser.current_page().is_none() {
+                            paint_home_screen(hdc, width, height);
+                        }
                     }
                     if GetClientRect(hwnd, &mut client) != 0
                         && state.browser.current_page().is_some()
@@ -952,6 +984,16 @@ unsafe extern "system" fn window_proc(
             }
             0
         }
+        WM_CTLCOLOREDIT => {
+            if let Some(state) = app_state(hwnd) {
+                if l_param as Hwnd == state.address && !state.address_brush.is_null() {
+                    let _ = SetTextColor(w_param as Handle, 0x00211D1B);
+                    let _ = SetBkColor(w_param as Handle, 0x00F5F3F1);
+                    return state.address_brush as Lresult;
+                }
+            }
+            DefWindowProcW(hwnd, message, w_param, l_param)
+        }
         WM_COMMAND => {
             let id = w_param & 0xffff;
             if let Some(state) = app_state(hwnd) {
@@ -1031,6 +1073,12 @@ unsafe extern "system" fn window_proc(
             0
         }
         WM_DESTROY => {
+            if let Some(state) = app_state(hwnd) {
+                if !state.address_brush.is_null() {
+                    let _ = DeleteObject(state.address_brush);
+                    state.address_brush = ptr::null_mut();
+                }
+            }
             PostQuitMessage(0);
             0
         }
@@ -1074,6 +1122,7 @@ pub fn run() {
             go: ptr::null_mut(),
             new_tab: ptr::null_mut(),
             page: ptr::null_mut(),
+            address_brush: ptr::null_mut(),
             surface: None,
             surface_dirty: true,
             scroll_y: 0,
