@@ -1776,7 +1776,7 @@ unsafe extern "system" fn window_proc(
                         show_browser_menu(state, hwnd);
                     } else if (10..width - 108).contains(&client_x) {
                         let index = ((client_x - 10) / tab_width.max(1)) as usize;
-                        if let Some((id, handle)) = state.tabs.get(index).copied() {
+                        if let Some((id, _)) = state.tabs.get(index).copied() {
                             let tab_left = 10 + index as i32 * tab_width;
                             let close_clicked =
                                 state.tabs.len() > 1 && client_x >= tab_left + tab_width - 36;
