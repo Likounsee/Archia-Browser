@@ -127,8 +127,6 @@ unsafe extern "system" {
     fn TranslateMessage(message: *const Message) -> i32;
     fn DispatchMessageW(message: *const Message) -> Lresult;
     fn PostQuitMessage(exit_code: i32);
-    fn ShowWindow(hwnd: Hwnd, command: i32) -> i32;
-    fn UpdateWindow(hwnd: Hwnd) -> i32;
     fn SetWindowLongPtrW(hwnd: Hwnd, index: i32, value: isize) -> isize;
     fn GetWindowLongPtrW(hwnd: Hwnd, index: i32) -> isize;
     fn SetWindowTextW(hwnd: Hwnd, text: *const u16) -> i32;
