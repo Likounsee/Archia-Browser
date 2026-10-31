@@ -481,22 +481,45 @@ unsafe extern "system" fn window_proc(
             let hdc = BeginPaint(hwnd, &mut paint);
             if !hdc.is_null() {
                 if let Some(state) = app_state(hwnd) {
-                    let mut client = Rect { left: 0, top: 0, right: 0, bottom: 0 };
-                    if GetClientRect(hwnd, &mut client) != 0 && state.browser.current_page().is_some() {
-                        let width = client.right.saturating_sub(client.left).saturating_sub(20).max(1) as u32;
-                        let height = client.bottom.saturating_sub(client.top).saturating_sub(102).max(1) as u32;
-                        let needs_surface = state.surface.as_ref().is_none_or(|surface| surface.width() != width || surface.height() != height);
+                    let mut client = Rect {
+                        left: 0,
+                        top: 0,
+                        right: 0,
+                        bottom: 0,
+                    };
+                    if GetClientRect(hwnd, &mut client) != 0
+                        && state.browser.current_page().is_some()
+                    {
+                        let width = client
+                            .right
+                            .saturating_sub(client.left)
+                            .saturating_sub(20)
+                            .max(1) as u32;
+                        let height = client
+                            .bottom
+                            .saturating_sub(client.top)
+                            .saturating_sub(102)
+                            .max(1) as u32;
+                        let needs_surface = state.surface.as_ref().is_none_or(|surface| {
+                            surface.width() != width || surface.height() != height
+                        });
                         if needs_surface {
                             state.surface = SoftwareSurface::try_new(width, height);
                             state.dib_pixels.clear();
                         }
                         if let Some(surface) = state.surface.as_mut() {
                             if state.browser.render_current_page(surface) {
-                                let required = (width as usize).saturating_mul(height as usize).saturating_mul(4);
+                                let required = (width as usize)
+                                    .saturating_mul(height as usize)
+                                    .saturating_mul(4);
                                 if state.dib_pixels.len() != required {
                                     state.dib_pixels.resize(required, 0);
                                 }
-                                for (source, target) in surface.pixels().chunks_exact(4).zip(state.dib_pixels.chunks_exact_mut(4)) {
+                                for (source, target) in surface
+                                    .pixels()
+                                    .chunks_exact(4)
+                                    .zip(state.dib_pixels.chunks_exact_mut(4))
+                                {
                                     target.copy_from_slice(&[source[2], source[1], source[0], 0]);
                                 }
                                 let info = BitmapInfo {
@@ -515,7 +538,20 @@ unsafe extern "system" fn window_proc(
                                     },
                                     colors: [0],
                                 };
-                                let _ = SetDIBitsToDevice(hdc, 10, 90, width, height, 0, 0, 0, height, state.dib_pixels.as_ptr().cast(), &info, 0);
+                                let _ = SetDIBitsToDevice(
+                                    hdc,
+                                    10,
+                                    90,
+                                    width,
+                                    height,
+                                    0,
+                                    0,
+                                    0,
+                                    height,
+                                    state.dib_pixels.as_ptr().cast(),
+                                    &info,
+                                    0,
+                                );
                             }
                         }
                     }
