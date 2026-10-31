@@ -381,7 +381,11 @@ unsafe fn create_control(
 fn bookmark_storage_path() -> std::path::PathBuf {
     std::env::var_os("APPDATA")
         .map(|base| std::path::PathBuf::from(base).join("ArchiaBrowser"))
-        .or_else(|| std::env::current_dir().ok().map(|base| base.join(".archia-browser")))
+        .or_else(|| {
+            std::env::current_dir()
+                .ok()
+                .map(|base| base.join(".archia-browser"))
+        })
         .unwrap_or_else(std::env::temp_dir)
         .join("bookmarks.tsv")
 }
@@ -416,8 +420,16 @@ fn save_bookmarks(state: &AppState) {
         .map(|bookmark| {
             format!(
                 "{}\t{}",
-                bookmark.url.replace('\t', " ").replace('\r', " ").replace('\n', " "),
-                bookmark.title.replace('\t', " ").replace('\r', " ").replace('\n', " ")
+                bookmark
+                    .url
+                    .replace('\t', " ")
+                    .replace('\r', " ")
+                    .replace('\n', " "),
+                bookmark
+                    .title
+                    .replace('\t', " ")
+                    .replace('\r', " ")
+                    .replace('\n', " ")
             )
         })
         .collect::<Vec<_>>()
@@ -429,7 +441,11 @@ unsafe fn toggle_current_bookmark(state: &mut AppState) {
     let Some(url) = state.browser.current_url().map(ToString::to_string) else {
         return;
     };
-    if let Some(index) = state.bookmarks.iter().position(|bookmark| bookmark.url == url) {
+    if let Some(index) = state
+        .bookmarks
+        .iter()
+        .position(|bookmark| bookmark.url == url)
+    {
         state.bookmarks.remove(index);
     } else {
         let title = state
@@ -1109,7 +1125,16 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
         chrome_color(state, |colors| &colors.border, 0x00443B36),
     );
     if state.bookmarks.is_empty() {
-        paint_label(hdc, "Ajoutez vos pages favorites avec ☆", 14, 91, width - 14, 117, muted, 0);
+        paint_label(
+            hdc,
+            "Ajoutez vos pages favorites avec ☆",
+            14,
+            91,
+            width - 14,
+            117,
+            muted,
+            0,
+        );
     } else {
         let item_width = 154;
         let visible = ((width - 24).max(0) / (item_width + 8)) as usize;
@@ -1117,7 +1142,16 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
             let left = 12 + index as i32 * (item_width + 8);
             paint_fill(hdc, left, 93, left + item_width, 115, inactive_tab);
             let label = bookmark.title.chars().take(20).collect::<String>();
-            paint_label(hdc, &label, left + 8, 93, left + item_width - 8, 115, text, 0);
+            paint_label(
+                hdc,
+                &label,
+                left + 8,
+                93,
+                left + item_width - 8,
+                115,
+                text,
+                0,
+            );
         }
     }
 }
