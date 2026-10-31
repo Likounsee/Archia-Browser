@@ -11,6 +11,7 @@ pub mod render;
 pub mod security;
 pub mod style_tree;
 pub mod surface;
+pub mod theme;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LinkActivationError {
