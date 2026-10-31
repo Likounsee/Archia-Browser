@@ -243,9 +243,65 @@ fn open_link(
     load_url(browser, loader, url)
 }
 
+#[cfg(windows)]
 fn clear_terminal() {
-    // ANSI clear-screen + cursor-home works in modern Windows Terminal,
-    // PowerShell, and the usual Unix terminals without spawning a shell.
+    use std::ffi::c_void;
+
+    type Handle = *mut c_void;
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct Coord { x: i16, y: i16 }
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct SmallRect { left: i16, top: i16, right: i16, bottom: i16 }
+    #[repr(C)]
+    struct ConsoleScreenBufferInfo {
+        size: Coord,
+        cursor_position: Coord,
+        attributes: u16,
+        window: SmallRect,
+        maximum_window_size: Coord,
+    }
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetStdHandle(kind: u32) -> Handle;
+        fn GetConsoleScreenBufferInfo(console: Handle, info: *mut ConsoleScreenBufferInfo) -> i32;
+        fn FillConsoleOutputCharacterW(console: Handle, character: u16, length: u32, position: Coord, written: *mut u32) -> i32;
+        fn FillConsoleOutputAttribute(console: Handle, attribute: u16, length: u32, position: Coord, written: *mut u32) -> i32;
+        fn SetConsoleCursorPosition(console: Handle, position: Coord) -> i32;
+    }
+
+    // Clear the real Windows console buffer, including scrollback, then home the cursor.
+    let cleared = unsafe {
+        let console = GetStdHandle((-11i32) as u32);
+        if console.is_null() || console as isize == -1 {
+            false
+        } else {
+            let mut info = std::mem::MaybeUninit::<ConsoleScreenBufferInfo>::uninit();
+            if GetConsoleScreenBufferInfo(console, info.as_mut_ptr()) == 0 {
+                false
+            } else {
+                let info = info.assume_init();
+                let cells = (info.size.x.max(0) as u32).saturating_mul(info.size.y.max(0) as u32);
+                let origin = Coord { x: 0, y: 0 };
+                let mut written = 0;
+                let chars_ok = FillConsoleOutputCharacterW(console, b' ' as u16, cells, origin, &mut written) != 0;
+                let attrs_ok = FillConsoleOutputAttribute(console, info.attributes, cells, origin, &mut written) != 0;
+                let cursor_ok = SetConsoleCursorPosition(console, origin) != 0;
+                chars_ok && attrs_ok && cursor_ok
+            }
+        }
+    };
+
+    if !cleared {
+        print!("\x1B[2J\x1B[H");
+        let _ = io::stdout().flush();
+    }
+}
+
+#[cfg(not(windows))]
+fn clear_terminal() {
     print!("\x1B[2J\x1B[H");
     let _ = io::stdout().flush();
 }
