@@ -1,4 +1,4 @@
-use std::io::{self, Write};
+use std::{io::{self, Write}, path::PathBuf};
 
 use archia_browser::{
     html::Node,
@@ -6,6 +6,7 @@ use archia_browser::{
         pipeline::{NetworkPipeline, PolicyDecision, RequestPolicyEngine, ResourceKind},
         DocumentLoader, HttpTransport, Request, Url,
     },
+    theme::ThemeManager,
     Browser,
 };
 
@@ -26,6 +27,35 @@ impl RequestPolicyEngine for BrowserPolicy {
 
 fn viewport() -> archia_browser::layout::LayoutViewport {
     archia_browser::layout::LayoutViewport::new(VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+}
+
+
+#[cfg(windows)]
+fn theme_directory() -> PathBuf {
+    std::env::var_os("APPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("ArchiaBrowser")
+        .join("themes")
+}
+
+#[cfg(not(windows))]
+fn theme_directory() -> PathBuf {
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".config")
+        .join("archia-browser")
+        .join("themes")
+}
+
+fn print_themes(themes: &ThemeManager) {
+    println!("Themes disponibles :");
+    for theme in themes.themes() {
+        let active = if theme.manifest.id == themes.active_id() { " [actif]" } else { "" };
+        println!("  {} — {}{}", theme.manifest.id, theme.manifest.name, active);
+    }
+    println!("Changer de theme : :theme ID");
 }
 
 fn parse_address(input: &str) -> Result<Url, archia_browser::net::UrlError> {
@@ -198,6 +228,8 @@ fn print_help() {
     println!("  :reload         Recharger la page");
     println!("  :url            Afficher l'adresse courante");
     println!("  :title          Afficher le titre de la page");
+    println!("  :themes         Lister les themes disponibles");
+    println!("  :theme ID       Selectionner un theme");
     println!("  :help           Afficher cette aide");
     println!("  :quit           Quitter Archia Browser");
 }
@@ -206,9 +238,19 @@ fn main() {
     let mut browser = Browser::new();
     let pipeline = NetworkPipeline::new(BrowserPolicy);
     let loader = browser.document_loader(pipeline, HttpTransport::new());
+    let mut theme_manager = match ThemeManager::load(theme_directory()) {
+        Ok(manager) => Some(manager),
+        Err(error) => {
+            eprintln!("Gestion des themes indisponible: {error}");
+            None
+        }
+    };
 
     println!("Archia Browser {}", browser.version());
     println!("Navigateur experimental Windows/terminal — moteur Archia natif.");
+    if let Some(themes) = theme_manager.as_ref() {
+        println!("Theme actif : {}", themes.active_theme().manifest.name);
+    }
     println!("Tapez :help pour les commandes.\n");
 
     if let Some(address) = std::env::args().nth(1) {
