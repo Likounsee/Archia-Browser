@@ -42,6 +42,7 @@ const VK_W: usize = 0x57;
 const VK_R: usize = 0x52;
 const VK_D: usize = 0x44;
 const VK_H: usize = 0x48;
+const VK_K: usize = 0x4B;
 const VK_F5: usize = 0x74;
 const VK_CONTROL: i32 = 0x11;
 const VK_MENU: i32 = 0x12;
@@ -997,7 +998,7 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             return true;
         }
         match key {
-            VK_L => {
+            VK_L | VK_K => {
                 let _ = SetFocus(state.address);
                 let _ = SendMessageW(state.address, 0x00B1, 0, -1); // EM_SETSEL
                 return true;
@@ -1756,6 +1757,20 @@ unsafe extern "system" fn window_proc(
             let _ = SendMessageW(state.page, EM_SETLIMITTEXT, 2 * 1024 * 1024, 0);
             let _ = SendMessageW(state.address, 0x0030, 1, 0); // WM_SETFONT
             let _ = SendMessageW(state.home_search, 0x0030, 1, 0);
+            let address_hint = wide("Rechercher ou saisir une adresse");
+            let home_hint = wide("Rechercher sur le Web");
+            let _ = SendMessageW(
+                state.address,
+                0x1501,
+                0,
+                address_hint.as_ptr() as Lparam,
+            ); // EM_SETCUEBANNER
+            let _ = SendMessageW(
+                state.home_search,
+                0x1501,
+                0,
+                home_hint.as_ptr() as Lparam,
+            );
             let _ = ShowWindow(state.page, SW_HIDE);
             let _ = SendMessageW(state.page, 0x0030, 1, 0);
             refresh_page(state);
