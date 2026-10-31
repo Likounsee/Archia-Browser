@@ -1,0 +1,21 @@
+id = "firefox"
+name = "Firefox-inspired"
+description = "A Firefox-inspired toolbar with a strong accent and optional side-oriented browser chrome."
+version = "1.0.0"
+author = "Archia Browser"
+layout = "firefox"
+tab_position = "top"
+sidebar = true
+
+[colors]
+window_background = "#20123A"
+toolbar_background = "#29213B"
+tab_active_background = "#3B3152"
+tab_inactive_background = "#211A32"
+address_background = "#171321"
+address_text = "#F9F5FF"
+text = "#F9F5FF"
+muted_text = "#C2B8D5"
+accent = "#A78BFA"
+border = "#4A3D61"
+page_background = "#FFFFFF"
