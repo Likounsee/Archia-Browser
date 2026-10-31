@@ -889,7 +889,7 @@ unsafe extern "system" fn window_proc(
                         }
                     }
                 } else if (48..=82).contains(&client_x) && (45..=84).contains(&client_y) {
-                    if state.browser.go_back(&state.loader, current_viewport(state)).is_ok() {
+                    if state.browser.go_forward(&state.loader, current_viewport(state)).is_ok() {
                         refresh_page(state);
                     }
                 } else if (86..=122).contains(&client_x) && (45..=84).contains(&client_y) {
