@@ -902,13 +902,16 @@ mod tests {
     #[test]
     fn parses_css_rgb_and_rgba_functional_colors() {
         assert_eq!(
-            Color::parse("rgb(12, 34, 56)"),\n            Some(Color(12, 34, 56, 255))
+            Color::parse("rgb(12, 34, 56)"),
+            Some(Color(12, 34, 56, 255))
         );
         assert_eq!(
-            Color::parse("rgba(12, 34, 56, 0.5)"),\n            Some(Color(12, 34, 56, 128))
+            Color::parse("rgba(12, 34, 56, 0.5)"),
+            Some(Color(12, 34, 56, 128))
         );
         assert_eq!(
-            Color::parse("rgb(100% 0% 50% / 25%)"),\n            Some(Color(255, 0, 127, 64))
+            Color::parse("rgb(100% 0% 50% / 25%)"),
+            Some(Color(255, 0, 127, 64))
         );
         assert_eq!(Color::parse("rgb(256, 0, 0)"), None);
         assert_eq!(Color::parse("rgba(1, 2, 3, 2)"), None);
