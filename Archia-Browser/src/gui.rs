@@ -1433,14 +1433,8 @@ unsafe extern "system" fn window_proc(
             state.forward = create_control(hwnd, instance, "BUTTON", "→", 0, ID_FORWARD);
             state.reload = create_control(hwnd, instance, "BUTTON", "↻", 0, ID_RELOAD);
             state.address = create_control(hwnd, instance, "EDIT", "", ES_AUTOHSCROLL, ID_ADDRESS);
-            state.home_search = create_control(
-                hwnd,
-                instance,
-                "EDIT",
-                "",
-                ES_AUTOHSCROLL,
-                ID_HOME_SEARCH,
-            );
+            state.home_search =
+                create_control(hwnd, instance, "EDIT", "", ES_AUTOHSCROLL, ID_HOME_SEARCH);
             state.home_go = create_control(hwnd, instance, "BUTTON", "Rechercher", 0, ID_HOME_GO);
             state.address_brush = CreateSolidBrush(chrome_color(
                 state,
