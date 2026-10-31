@@ -403,6 +403,15 @@ impl Page {
         surface.clear(crate::surface::Color::WHITE);
         SoftwareRenderer::rasterize(&self.display_list, surface);
     }
+
+    pub fn render_into_with_vertical_offset(
+        &self,
+        surface: &mut crate::surface::SoftwareSurface,
+        scroll_y: u32,
+    ) {
+        surface.clear(crate::surface::Color::WHITE);
+        SoftwareRenderer::rasterize_with_vertical_offset(&self.display_list, surface, scroll_y);
+    }
 }
 
 fn collect_inline_styles(node: &Node, css: &mut String) {
