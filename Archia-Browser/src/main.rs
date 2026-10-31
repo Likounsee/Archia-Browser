@@ -215,13 +215,7 @@ fn print_history(browser: &Browser) {
         };
         let title = entry.title().unwrap_or("(sans titre)");
         let title = title.split_whitespace().collect::<Vec<_>>().join(" ");
-        println!(
-            "{:>3}.{} {} — {}",
-            index + 1,
-            marker,
-            title,
-            entry.url()
-        );
+        println!("{:>3}.{} {} — {}", index + 1, marker, title, entry.url());
     }
     println!("* Page actuellement ouverte");
 }
