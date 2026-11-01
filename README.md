@@ -155,3 +155,6 @@ Use Ctrl+Shift+U or the browser menu to copy all currently open tab titles and U
 - Le menu contextuel d'un onglet propose également de fermer les onglets à gauche ou à droite de celui-ci.
 - L'ouverture multiple est plafonnée à 20 liens par opération et respecte la limite globale de 100 onglets.
 - Les liens non HTTP(S) sont ignorés et les doublons sont supprimés par le parseur d'import.
+
+
+Les favoris peuvent aussi être exportés en Markdown depuis le menu Archia ou avec `Ctrl+Alt+Shift+B`. L’import des favoris accepte les liens Markdown HTTP(S) (y compris les URL encadrées par `<...>`), en plus des formats texte, TSV et Netscape HTML.
