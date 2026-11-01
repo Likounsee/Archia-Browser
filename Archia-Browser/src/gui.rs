@@ -2578,10 +2578,7 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
                         .title()
                         .filter(|title| !title.trim().is_empty())
                         .unwrap_or_else(|| url.to_string());
-                    let _ = copy_text_to_clipboard(
-                        hwnd,
-                        &format!("{title}\r\n{url}"),
-                    );
+                    let _ = copy_text_to_clipboard(hwnd, &format!("{title}\r\n{url}"));
                 }
             }
         }
