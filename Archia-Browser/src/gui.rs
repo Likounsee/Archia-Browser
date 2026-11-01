@@ -792,18 +792,36 @@ fn parse_markdown_bookmarks(text: &str) -> Vec<Bookmark> {
     let mut imported = Vec::new();
     for line in text.lines().take(MAX_IMPORTED_BOOKMARKS) {
         let line = line.trim().trim_start_matches(['-', '*']).trim();
-        let Some(label_start) = line.find('[') else { continue };
-        let Some(label_end) = line[label_start + 1..].find("](") else { continue };
+        let Some(label_start) = line.find('[') else {
+            continue;
+        };
+        let Some(label_end) = line[label_start + 1..].find("](") else {
+            continue;
+        };
         let label_end = label_start + 1 + label_end;
         let raw_label = &line[label_start + 1..label_end];
         let target = line[label_end + 2..].trim();
         let target = target.strip_suffix(')').unwrap_or(target).trim();
-        let target = target.strip_prefix('<').and_then(|value| value.strip_suffix('>')).unwrap_or(target);
-        let Ok(url) = Url::parse(target) else { continue };
-        if !matches!(url.scheme(), "http" | "https") { continue; }
-        let title = raw_label.replace("\\[", "[").replace("\\]", "]").replace("\\\\", "\\");
+        let target = target
+            .strip_prefix('<')
+            .and_then(|value| value.strip_suffix('>'))
+            .unwrap_or(target);
+        let Ok(url) = Url::parse(target) else {
+            continue;
+        };
+        if !matches!(url.scheme(), "http" | "https") {
+            continue;
+        }
+        let title = raw_label
+            .replace("\\[", "[")
+            .replace("\\]", "]")
+            .replace("\\\\", "\\");
         imported.push(Bookmark {
-            title: if title.trim().is_empty() { url.host().to_owned() } else { title },
+            title: if title.trim().is_empty() {
+                url.host().to_owned()
+            } else {
+                title
+            },
             url: url.to_string(),
         });
     }
@@ -907,11 +925,13 @@ fn export_bookmarks_markdown(bookmarks: &[Bookmark]) -> String {
         .iter()
         .filter_map(|bookmark| {
             let url = Url::parse(&bookmark.url).ok()?;
-            if !matches!(url.scheme(), "http" | "https") { return None; }
+            if !matches!(url.scheme(), "http" | "https") {
+                return None;
+            }
             Some(format!("- {}", markdown_link(&bookmark.title, &url.to_string())))
         })
         .collect::<Vec<_>>()
-        .join("\\n")
+        .join("\n")
 }
 
 fn export_bookmarks_html(bookmarks: &[Bookmark]) -> String {
@@ -1792,7 +1812,7 @@ unsafe fn activate_link_at(state: &mut AppState, hwnd: Hwnd, client_x: i32, clie
                 );
             }
         }
-        navigate(state, &url);
+        navigate(state, url);
     }
 }
 
@@ -4675,8 +4695,14 @@ mod gui_address_tests {
     #[test]
     fn markdown_bookmark_import_and_export_round_trip() {
         let bookmarks = vec![
-            Bookmark { title: "Docs [draft]".to_owned(), url: "https://docs.example/path_(one)".to_owned() },
-            Bookmark { title: "Archia".to_owned(), url: "https://archia.example/".to_owned() },
+            Bookmark {
+                title: "Docs [draft]".to_owned(),
+                url: "https://docs.example/path_(one)".to_owned(),
+            },
+            Bookmark {
+                title: "Archia".to_owned(),
+                url: "https://archia.example/".to_owned(),
+            },
         ];
         let markdown = export_bookmarks_markdown(&bookmarks);
         assert!(markdown.contains("[Docs \\\\[draft\\\\]](<https://docs.example/path_(one)>)"));
