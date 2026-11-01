@@ -155,6 +155,8 @@ struct ArchiaApp {
     settings_path: std::path::PathBuf,
     session_path: std::path::PathBuf,
     closed_tabs: Vec<String>,
+    bookmark_import_open: bool,
+    bookmark_import_text: String,
     pending_restore: Vec<String>,
     restore_started: bool,
     download_sender: Sender<DownloadMessage>,
@@ -215,6 +217,8 @@ impl ArchiaApp {
             settings_path,
             session_path,
             closed_tabs: Vec::new(),
+            bookmark_import_open: false,
+            bookmark_import_text: String::new(),
             pending_restore,
             restore_started: false,
             download_sender,
@@ -562,6 +566,22 @@ impl ArchiaApp {
         );
     }
 
+    fn import_bookmarks(&mut self) {
+        let imported = parse_bookmark_text(&self.bookmark_import_text);
+        let mut added = 0;
+        for item in imported {
+            if !self.bookmarks.iter().any(|saved| saved.url == item.url) {
+                self.bookmarks.push(item);
+                added += 1;
+            }
+        }
+        self.bookmarks.sort_by(|left, right| left.title.to_lowercase().cmp(&right.title.to_lowercase()));
+        save_saved_pages(&browser_data_directory().join("bookmarks.tsv"), &self.bookmarks);
+        self.bookmark_import_text.clear();
+        self.bookmark_import_open = false;
+        self.status = format!("{added} favori(s) importé(s)");
+    }
+
     fn toggle_bookmark(&mut self) {
         let Some(url) = self.browser.current_url().map(ToString::to_string) else {
             self.status = "Aucune page à ajouter aux favoris.".to_owned();
@@ -806,13 +826,37 @@ impl eframe::App for ArchiaApp {
                         if ui.button("Ajouter / retirer la page actuelle").clicked() {
                             self.toggle_bookmark();
                         }
+                        if ui.button("Importer des favoris…").clicked() {
+                            self.bookmark_import_open = true;
+                        }
+                        if ui.button("Exporter les favoris (TSV)").clicked() {
+                            let text = self.bookmarks.iter().map(|item| format!("{}\\t{}", item.title, item.url)).collect::<Vec<_>>().join("\\n");
+                            ui.ctx().copy_text(text);
+                            self.status = "Favoris exportés en TSV".to_owned();
+                        }
+                        if ui.button("Exporter les favoris (Markdown)").clicked() {
+                            let text = self.bookmarks.iter().map(|item| format!("- [{}](<{}>)", item.title.replace('[', "\\\\[").replace(']', "\\\\]"), item.url)).collect::<Vec<_>>().join("\\n");
+                            ui.ctx().copy_text(text);
+                            self.status = "Favoris exportés en Markdown".to_owned();
+                        }
+                        ui.separator();
+                        ui.menu_button("Trier", |ui| {
+                            if ui.button("Par nom (A → Z)").clicked() {
+                                self.bookmarks.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+                                save_saved_pages(&browser_data_directory().join("bookmarks.tsv"), &self.bookmarks);
+                            }
+                            if ui.button("Par site").clicked() {
+                                self.bookmarks.sort_by_key(|item| Url::parse(&item.url).map(|url| url.host().to_ascii_lowercase()).unwrap_or_default());
+                                save_saved_pages(&browser_data_directory().join("bookmarks.tsv"), &self.bookmarks);
+                            }
+                        });
                         ui.separator();
                         let items = self.bookmarks.clone();
                         if items.is_empty() {
                             ui.label("Aucun favori enregistré");
                         }
                         for item in items {
-                            if ui.button(&item.title).clicked() {
+                            if ui.button(&item.title).on_hover_text(&item.url).clicked() {
                                 self.navigate(&item.url);
                             }
                         }
@@ -1021,7 +1065,56 @@ impl eframe::App for ArchiaApp {
                     });
                 }
             });
+        if self.bookmark_import_open {
+            egui::Window::new("Importer des favoris")
+                .open(&mut self.bookmark_import_open)
+                .default_width(560.0)
+                .show(ctx, |ui| {
+                    ui.label("Collez des URL, un fichier TSV (titre + URL) ou des liens Markdown.");
+                    ui.add(egui::TextEdit::multiline(&mut self.bookmark_import_text)
+                        .desired_width(f32::INFINITY)
+                        .desired_rows(12)
+                        .hint_text("https://example.org/"));
+                    ui.horizontal(|ui| {
+                        if ui.button("Importer").clicked() {
+                            self.import_bookmarks();
+                        }
+                        if ui.button("Effacer").clicked() {
+                            self.bookmark_import_text.clear();
+                        }
+                    });
+                });
+        }
     }
+}
+
+fn parse_bookmark_text(text: &str) -> Vec<SavedPage> {
+    let mut imported = Vec::new();
+    for line in text.lines().take(500) {
+        let line = line.trim();
+        if line.is_empty() { continue; }
+        let (title, raw_url) = if let Some(rest) = line.strip_prefix("- [") {
+            if let Some((label, target)) = rest.split_once("](<") {
+                (label.trim_end_matches(']').replace("\\\\[", "[").replace("\\\\]", "]"), target.trim_end_matches("> )").trim_end_matches(')'))
+            } else {
+                (String::new(), line)
+            }
+        } else if let Some((first, second)) = line.split_once('\\t') {
+            if Url::parse(first.trim()).is_ok() { (second.trim().to_owned(), first.trim()) }
+            else { (first.trim().to_owned(), second.trim()) }
+        } else {
+            (String::new(), line)
+        };
+        if let Ok(url) = Url::parse(raw_url.trim()) {
+            if matches!(url.scheme(), "http" | "https") {
+                let title = if title.trim().is_empty() { url.host().to_owned() } else { title };
+                if !imported.iter().any(|item: &SavedPage| item.url == url.to_string()) {
+                    imported.push(SavedPage { title, url: url.to_string() });
+                }
+            }
+        }
+    }
+    imported
 }
 
 fn downloads_directory() -> PathBuf {
