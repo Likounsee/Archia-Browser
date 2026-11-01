@@ -6,6 +6,7 @@
 
 use archia_browser::{
     layout::LayoutViewport,
+    theme::{ThemeManager, ThemeManifest},
     net::{
         pipeline::{NetworkPipeline, PolicyDecision, RequestPolicyEngine, ResourceKind},
         DocumentLoader, HttpTransport, Request, Url,
@@ -181,6 +182,62 @@ const LIME: egui::Color32 = egui::Color32::from_rgb(190, 242, 100);
 const TEXT: egui::Color32 = egui::Color32::from_rgb(238, 241, 235);
 const MUTED: egui::Color32 = egui::Color32::from_rgb(147, 155, 163);
 
+#[derive(Clone, Copy)]
+struct UiPalette {
+    window: egui::Color32,
+    toolbar: egui::Color32,
+    address: egui::Color32,
+    text: egui::Color32,
+    muted: egui::Color32,
+    accent: egui::Color32,
+}
+
+impl Default for UiPalette {
+    fn default() -> Self {
+        Self { window: GRAPHITE, toolbar: PANEL, address: PANEL_LIGHT, text: TEXT, muted: MUTED, accent: LIME }
+    }
+}
+
+impl UiPalette {
+    fn from_manifest(manifest: &ThemeManifest) -> Self {
+        let defaults = Self::default();
+        Self {
+            window: parse_theme_color(&manifest.colors.window_background).unwrap_or(defaults.window),
+            toolbar: parse_theme_color(&manifest.colors.toolbar_background).unwrap_or(defaults.toolbar),
+            address: parse_theme_color(&manifest.colors.address_background).unwrap_or(defaults.address),
+            text: parse_theme_color(&manifest.colors.text).unwrap_or(defaults.text),
+            muted: parse_theme_color(&manifest.colors.muted_text).unwrap_or(defaults.muted),
+            accent: parse_theme_color(&manifest.colors.accent).unwrap_or(defaults.accent),
+        }
+    }
+}
+
+fn parse_theme_color(value: &str) -> Option<egui::Color32> {
+    let value = value.strip_prefix('#')?;
+    if value.len() != 6 { return None; }
+    let red = u8::from_str_radix(&value[0..2], 16).ok()?;
+    let green = u8::from_str_radix(&value[2..4], 16).ok()?;
+    let blue = u8::from_str_radix(&value[4..6], 16).ok()?;
+    Some(egui::Color32::from_rgb(red, green, blue))
+}
+
+fn apply_palette(ctx: &egui::Context, palette: UiPalette) {
+    let mut style = (*ctx.style()).clone();
+    style.visuals.panel_fill = palette.window;
+    style.visuals.window_fill = palette.toolbar;
+    style.visuals.extreme_bg_color = palette.window;
+    style.visuals.faint_bg_color = palette.toolbar;
+    style.visuals.selection.bg_fill = palette.accent.gamma_multiply(0.22);
+    style.visuals.selection.stroke = egui::Stroke::new(1.0, palette.accent);
+    style.visuals.override_text_color = Some(palette.text);
+    style.visuals.widgets.inactive.bg_fill = palette.address;
+    style.visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, palette.text);
+    style.visuals.widgets.hovered.bg_fill = palette.accent.gamma_multiply(0.24);
+    style.visuals.widgets.active.bg_fill = palette.accent.gamma_multiply(0.32);
+    style.visuals.widgets.open.bg_fill = palette.address;
+    ctx.set_style(style);
+}
+
 struct DownloadMessage {
     result: Result<(PathBuf, usize), String>,
 }
@@ -199,6 +256,8 @@ struct ArchiaApp {
     bookmarks: Vec<SavedPage>,
     history_items: Vec<SavedPage>,
     settings: BrowserSettings,
+    themes: Option<ThemeManager>,
+    palette: UiPalette,
     homepage_edit: String,
     settings_path: std::path::PathBuf,
     session_path: std::path::PathBuf,
@@ -238,6 +297,11 @@ impl ArchiaApp {
         let loader =
             browser.document_loader(NetworkPipeline::new(BrowserPolicy), HttpTransport::new());
         let data_dir = browser_data_directory();
+        let themes = ThemeManager::load(data_dir.join("themes")).ok();
+        let palette = themes.as_ref()
+            .map(|manager| UiPalette::from_manifest(&manager.active_theme().manifest))
+            .unwrap_or_default();
+        apply_palette(&cc.egui_ctx, palette);
         let bookmarks = load_saved_pages(&data_dir.join("bookmarks.tsv"));
         let history_items = load_saved_pages(&data_dir.join("history.tsv"));
         let settings_path = data_dir.join("settings.ini");
@@ -266,6 +330,8 @@ impl ArchiaApp {
             history_items,
             homepage_edit: settings.homepage.clone(),
             settings,
+            themes,
+            palette,
             settings_path,
             session_path,
             closed_tabs: Vec::new(),
@@ -901,7 +967,7 @@ impl eframe::App for ArchiaApp {
         egui::TopBottomPanel::top("archia_tabs")
             .frame(
                 egui::Frame::new()
-                    .fill(PANEL)
+                    .fill(self.palette.toolbar)
                     .inner_margin(egui::Margin::symmetric(12, 8)),
             )
             .show(ctx, |ui| {
@@ -948,7 +1014,7 @@ impl eframe::App for ArchiaApp {
         egui::TopBottomPanel::top("archia_toolbar")
             .frame(
                 egui::Frame::new()
-                    .fill(GRAPHITE)
+                    .fill(self.palette.window)
                     .inner_margin(egui::Margin::symmetric(14, 10)),
             )
             .show(ctx, |ui| {
@@ -1209,6 +1275,25 @@ impl eframe::App for ArchiaApp {
                         if ui.button("Ouvrir la page d'accueil · Alt+Home").clicked() {
                             self.open_homepage();
                         }
+                        if let Some(manager) = self.themes.as_ref() {
+                            ui.separator();
+                            ui.label("Thème de l'interface");
+                            let choices = manager.themes().iter()
+                                .map(|theme| (theme.manifest.id.clone(), theme.manifest.name.clone()))
+                                .collect::<Vec<_>>();
+                            for (id, name) in choices {
+                                let active = self.themes.as_ref().is_some_and(|themes| themes.active_id() == id);
+                                if ui.selectable_label(active, name).clicked() {
+                                    if let Some(themes) = self.themes.as_mut() {
+                                        if themes.select(&id).is_ok() {
+                                            self.palette = UiPalette::from_manifest(&themes.active_theme().manifest);
+                                            apply_palette(ui.ctx(), self.palette);
+                                            self.status = format!("Thème appliqué : {id}");
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         if changed {
                             self.persist_settings();
                         }
@@ -1224,8 +1309,8 @@ impl eframe::App for ArchiaApp {
             )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("●").color(LIME));
-                    ui.label(egui::RichText::new(&self.status).color(MUTED).small());
+                    ui.label(egui::RichText::new("●").color(self.palette.accent));
+                    ui.label(egui::RichText::new(&self.status).color(self.palette.muted).small());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(
                             egui::RichText::new(format!(
@@ -1299,7 +1384,7 @@ impl eframe::App for ArchiaApp {
                             egui::RichText::new("Le web, à votre façon.")
                                 .size(34.0)
                                 .strong()
-                                .color(TEXT),
+                                .color(self.palette.text),
                         );
                         ui.add_space(8.0);
                         ui.label(
@@ -1330,10 +1415,10 @@ impl eframe::App for ArchiaApp {
                             .add(
                                 egui::Button::new(
                                     egui::RichText::new("Rechercher  →")
-                                        .color(GRAPHITE)
+                                        .color(self.palette.window)
                                         .strong(),
                                 )
-                                .fill(LIME),
+                                .fill(self.palette.accent),
                             )
                             .clicked()
                         {
