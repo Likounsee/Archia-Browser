@@ -51,6 +51,7 @@ const VK_K: usize = 0x4B;
 const VK_O: usize = 0x4F;
 const VK_I: usize = 0x49;
 const VK_Y: usize = 0x59;
+const VK_B: usize = 0x42;
 const VK_F5: usize = 0x74;
 const VK_F6: usize = 0x75;
 const VK_CONTROL: i32 = 0x11;
@@ -100,6 +101,7 @@ const ID_MENU_CLEAR_SITE_DATA: u32 = 3038;
 const ID_MENU_COPY_OPEN_TABS: u32 = 3039;
 const ID_MENU_HARD_RELOAD: u32 = 3040;
 const ID_MENU_IMPORT_BOOKMARKS: u32 = 3041;
+const ID_MENU_COPY_BOOKMARKS_HTML: u32 = 3042;
 const MAX_IMPORTED_BOOKMARKS: usize = 5_000;
 const MAX_CLIPBOARD_BYTES: usize = 2 * 1024 * 1024;
 const ID_RECENT_DOWNLOAD_BASE: u32 = 3700;
@@ -727,6 +729,9 @@ fn deduplicate_bookmarks(bookmarks: &mut Vec<Bookmark>) {
 }
 
 fn parse_imported_bookmarks(text: &str) -> Vec<Bookmark> {
+    if text.to_ascii_lowercase().contains("<a ") {
+        return parse_netscape_bookmarks(text);
+    }
     let mut imported = Vec::new();
     for line in text.lines().take(MAX_IMPORTED_BOOKMARKS) {
         let line = line.trim();
@@ -771,6 +776,105 @@ fn parse_imported_bookmarks(text: &str) -> Vec<Bookmark> {
     }
     deduplicate_bookmarks(&mut imported);
     imported
+}
+
+
+fn decode_bookmark_html_text(value: &str) -> String {
+    value
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&apos;", "'")
+        .trim()
+        .to_owned()
+}
+
+fn parse_netscape_bookmarks(text: &str) -> Vec<Bookmark> {
+    let lower = text.to_ascii_lowercase();
+    let mut imported = Vec::new();
+    let mut cursor = 0;
+    while imported.len() < MAX_IMPORTED_BOOKMARKS {
+        let Some(relative_start) = lower[cursor..].find("<a ") else {
+            break;
+        };
+        let start = cursor + relative_start;
+        let Some(relative_end) = lower[start..].find('>') else {
+            break;
+        };
+        let tag_end = start + relative_end;
+        let tag = &text[start..=tag_end];
+        let tag_lower = &lower[start..=tag_end];
+        let Some(href_start) = tag_lower.find("href") else {
+            cursor = tag_end + 1;
+            continue;
+        };
+        let after_href = tag[href_start + 4..].trim_start();
+        let Some(after_equals) = after_href.strip_prefix('=') else {
+            cursor = tag_end + 1;
+            continue;
+        };
+        let attribute = after_equals.trim_start();
+        let (raw_url, _) = if let Some(value) = attribute.strip_prefix('"') {
+            let Some(end) = value.find('"') else {
+                cursor = tag_end + 1;
+                continue;
+            };
+            (&value[..end], end + 2)
+        } else if let Some(value) = attribute.strip_prefix('\'') {
+            let Some(end) = value.find('\'') else {
+                cursor = tag_end + 1;
+                continue;
+            };
+            (&value[..end], end + 2)
+        } else {
+            let end = attribute.find(char::is_whitespace).unwrap_or(attribute.len());
+            (&attribute[..end], end)
+        };
+        let Some(close_relative) = lower[tag_end + 1..].find("</a>") else {
+            break;
+        };
+        let close_start = tag_end + 1 + close_relative;
+        let title = text[tag_end + 1..close_start]
+            .replace("<b>", "")
+            .replace("</b>", "")
+            .replace("<B>", "")
+            .replace("</B>", "");
+        let title = decode_bookmark_html_text(&title);
+        if let Ok(url) = Url::parse(&decode_bookmark_html_text(raw_url)) {
+            if matches!(url.scheme(), "http" | "https") {
+                imported.push(Bookmark {
+                    title: if title.is_empty() { url.host().to_owned() } else { title },
+                    url: url.to_string(),
+                });
+            }
+        }
+        cursor = close_start + 4;
+    }
+    deduplicate_bookmarks(&mut imported);
+    imported
+}
+
+fn escape_bookmark_html(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+fn export_bookmarks_html(bookmarks: &[Bookmark]) -> String {
+    let entries = bookmarks.iter().map(|bookmark| {
+        format!(
+            "<DT><A HREF=\"{}\">{}</A>",
+            escape_bookmark_html(&bookmark.url),
+            escape_bookmark_html(&bookmark.title)
+        )
+    }).collect::<Vec<_>>().join("\n");
+    format!(
+        "<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=UTF-8\">\n<TITLE>Archia Browser Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n<DL><p>\n{entries}\n</DL><p>\n"
+    )
 }
 
 fn export_bookmarks_text(bookmarks: &[Bookmark]) -> String {
@@ -1849,6 +1953,13 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             import_bookmarks_from_clipboard(state, hwnd);
             return true;
         }
+        if key == VK_B && GetKeyState(VK_SHIFT) < 0 {
+            let html = export_bookmarks_html(&state.bookmarks);
+            if !state.bookmarks.is_empty() {
+                let _ = copy_text_to_clipboard(hwnd, &html);
+            }
+            return true;
+        }
         if key == VK_Y && GetKeyState(VK_SHIFT) < 0 {
             let text = export_bookmarks_text(&state.persistent_history);
             if !text.is_empty() {
@@ -2427,7 +2538,8 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             ID_MENU_DEDUPLICATE_BOOKMARKS,
             "Supprimer les favoris en double",
         ),
-        (ID_MENU_COPY_BOOKMARKS, "Copier tous les favoris"),
+        (ID_MENU_COPY_BOOKMARKS, "Copier tous les favoris (texte)"),
+        (ID_MENU_COPY_BOOKMARKS_HTML, "Copier les favoris au format HTML (Netscape)"),
         (
             ID_MENU_IMPORT_BOOKMARKS,
             "Importer les favoris depuis le presse-papiers",
@@ -2625,6 +2737,12 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             if state.bookmarks.len() != previous_count {
                 save_bookmarks(state);
                 let _ = InvalidateRect(hwnd, ptr::null(), 1);
+            }
+        }
+        ID_MENU_COPY_BOOKMARKS_HTML => {
+            let html = export_bookmarks_html(&state.bookmarks);
+            if !state.bookmarks.is_empty() {
+                let _ = copy_text_to_clipboard(hwnd, &html);
             }
         }
         ID_MENU_COPY_BOOKMARKS => {
@@ -4157,6 +4275,28 @@ mod gui_address_tests {
         assert_eq!(url_only.len(), 2);
         assert_eq!(url_only[0].title, "one.example");
         assert_eq!(url_only[1].url, "https://two.example/");
+    }
+
+    #[test]
+    fn netscape_bookmark_import_and_html_export_round_trip() {
+        let html = r#"<!DOCTYPE NETSCAPE-Bookmark-file-1>
+            <DL><p>
+            <DT><A HREF="https://example.org/docs?a=1&amp;b=2">Docs &amp; Guides</A>
+            <DT><A HREF='http://archia.example/'>Archia</A>
+            <DT><A HREF="javascript:alert(1)">Unsafe</A>
+            <DT><A HREF="https://example.org/docs?a=1&amp;b=2">Duplicate</A>
+            </DL>"#;
+        let bookmarks = parse_netscape_bookmarks(html);
+        assert_eq!(bookmarks.len(), 2);
+        assert_eq!(bookmarks[0].title, "Docs & Guides");
+        assert_eq!(bookmarks[0].url, "https://example.org/docs?a=1&b=2");
+        assert_eq!(bookmarks[1].title, "Archia");
+
+        let exported = export_bookmarks_html(&bookmarks);
+        assert!(exported.contains("<!DOCTYPE NETSCAPE-Bookmark-file-1>"));
+        assert!(exported.contains("Docs &amp; Guides"));
+        assert!(exported.contains("a=1&amp;b=2"));
+        assert_eq!(parse_imported_bookmarks(&exported), bookmarks);
     }
 
     #[test]
