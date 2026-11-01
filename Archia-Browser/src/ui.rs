@@ -761,9 +761,11 @@ impl ArchiaApp {
 
     fn copy_history_csv(&mut self, ctx: &egui::Context) {
         let mut rows = vec!["title,url".to_owned()];
-        rows.extend(self.history_items.iter().map(|item| {
-            format!("{},{}", escape_csv(&item.title), escape_csv(&item.url))
-        }));
+        rows.extend(
+            self.history_items
+                .iter()
+                .map(|item| format!("{},{}", escape_csv(&item.title), escape_csv(&item.url))),
+        );
         ctx.copy_text(rows.join("\r\n"));
         self.status = "Historique exporté en CSV".to_owned();
     }
@@ -771,7 +773,10 @@ impl ArchiaApp {
     fn clear_history(&mut self) {
         let count = self.history_items.len();
         self.history_items.clear();
-        save_saved_pages(&browser_data_directory().join("history.tsv"), &self.history_items);
+        save_saved_pages(
+            &browser_data_directory().join("history.tsv"),
+            &self.history_items,
+        );
         self.status = format!("{count} entrée(s) d'historique supprimée(s)");
     }
 
@@ -2544,25 +2549,61 @@ mod tests {
     #[test]
     fn bookmark_sorting_is_stable_by_title_and_site() {
         let mut pages = vec![
-            super::SavedPage { title: "Zulu".into(), url: "https://z.example/".into() },
-            super::SavedPage { title: "B page".into(), url: "https://a.example/b".into() },
-            super::SavedPage { title: "A page".into(), url: "https://a.example/a".into() },
-            super::SavedPage { title: "alpha".into(), url: "https://alpha.example/".into() },
+            super::SavedPage {
+                title: "Zulu".into(),
+                url: "https://z.example/".into(),
+            },
+            super::SavedPage {
+                title: "B page".into(),
+                url: "https://a.example/b".into(),
+            },
+            super::SavedPage {
+                title: "A page".into(),
+                url: "https://a.example/a".into(),
+            },
+            super::SavedPage {
+                title: "alpha".into(),
+                url: "https://alpha.example/".into(),
+            },
         ];
         super::sort_saved_pages_by_title(&mut pages);
-        assert_eq!(pages.iter().map(|page| page.title.as_str()).collect::<Vec<_>>(),
-            vec!["A page", "alpha", "B page", "Zulu"]);
+        assert_eq!(
+            pages
+                .iter()
+                .map(|page| page.title.as_str())
+                .collect::<Vec<_>>(),
+            vec!["A page", "alpha", "B page", "Zulu"]
+        );
         super::sort_saved_pages_by_site(&mut pages);
-        assert_eq!(pages.iter().map(|page| page.url.as_str()).collect::<Vec<_>>(),
-            vec!["https://a.example/a", "https://a.example/b", "https://alpha.example/", "https://z.example/"]);
+        assert_eq!(
+            pages
+                .iter()
+                .map(|page| page.url.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "https://a.example/a",
+                "https://a.example/b",
+                "https://alpha.example/",
+                "https://z.example/"
+            ]
+        );
     }
 
     #[test]
     fn saved_page_deduplication_keeps_first_entry_and_latest_history_order() {
         let mut pages = vec![
-            super::SavedPage { title: "Latest".into(), url: "https://same.example/".into() },
-            super::SavedPage { title: "Middle".into(), url: "https://middle.example/".into() },
-            super::SavedPage { title: "Older duplicate".into(), url: "https://same.example/".into() },
+            super::SavedPage {
+                title: "Latest".into(),
+                url: "https://same.example/".into(),
+            },
+            super::SavedPage {
+                title: "Middle".into(),
+                url: "https://middle.example/".into(),
+            },
+            super::SavedPage {
+                title: "Older duplicate".into(),
+                url: "https://same.example/".into(),
+            },
         ];
         super::deduplicate_saved_pages(&mut pages);
         assert_eq!(pages.len(), 2);
