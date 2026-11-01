@@ -1282,6 +1282,9 @@ impl eframe::App for ArchiaApp {
                 ctrl && alt && shift && input.key_pressed(egui::Key::U),
                 ctrl && alt && shift && input.key_pressed(egui::Key::C),
                 ctrl && alt && shift && input.key_pressed(egui::Key::L),
+                ctrl && shift && input.key_pressed(egui::Key::R),
+                ctrl && input.key_pressed(egui::Key::S),
+                ctrl && shift && input.key_pressed(egui::Key::I),
             )
         });
         let (
@@ -1309,6 +1312,9 @@ impl eframe::App for ArchiaApp {
             export_tabs_html,
             export_tabs_csv,
             open_clipboard_links,
+            hard_reload_shortcut,
+            download_shortcut,
+            import_bookmarks_shortcut,
         ) = shortcuts;
         if ctrl_t {
             self.new_tab();
@@ -1320,6 +1326,16 @@ impl eframe::App for ArchiaApp {
         }
         if ctrl_r {
             self.reload();
+        }
+        if hard_reload_shortcut {
+            self.hard_reload();
+        }
+        if download_shortcut {
+            self.start_download();
+        }
+        if import_bookmarks_shortcut {
+            self.pending_paste = Some(PasteAction::ImportBookmarks);
+            ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
         }
         if ctrl_d {
             self.toggle_bookmark();
