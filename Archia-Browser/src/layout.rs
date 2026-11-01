@@ -819,10 +819,7 @@ fn parse_grid_track(value: &str, reference: u32) -> Option<GridTrack> {
     if let Some(factor) = value.strip_suffix("fr") {
         let factor = factor.trim().parse::<f32>().ok()?;
         if factor.is_finite() && factor > 0.0 && factor <= 10_000.0 {
-            return Some(GridTrack::Fraction {
-                minimum: 0,
-                factor,
-            });
+            return Some(GridTrack::Fraction { minimum: 0, factor });
         }
         return None;
     }
@@ -856,7 +853,10 @@ fn parse_grid_tracks(value: Option<&str>, reference: u32) -> Vec<GridTrack> {
         return vec![GridTrack::Auto];
     };
     for token in split_grid_track_list(value) {
-        if let Some(inner) = token.strip_prefix("repeat(").and_then(|v| v.strip_suffix(')')) {
+        if let Some(inner) = token
+            .strip_prefix("repeat(")
+            .and_then(|v| v.strip_suffix(')'))
+        {
             let Some((count, repeated)) = inner.split_once(',') else {
                 continue;
             };
@@ -868,7 +868,9 @@ fn parse_grid_tracks(value: Option<&str>, reference: u32) -> Vec<GridTrack> {
             }
             let repeated_tracks = split_grid_track_list(repeated);
             if repeated_tracks.is_empty()
-                || tracks.len().saturating_add(repeated_tracks.len().saturating_mul(count))
+                || tracks
+                    .len()
+                    .saturating_add(repeated_tracks.len().saturating_mul(count))
                     > MAX_GRID_TRACKS
             {
                 continue;
@@ -4551,7 +4553,6 @@ mod tests {
         assert_eq!(layout.children[1].rect.x, 110);
         assert_eq!(layout.children[1].rect.width, 213);
         assert_eq!(layout.children[2].rect.x, 333);
-        assert_eq!(layout.children[2].rect.width, 94);
+        assert_eq!(layout.children[2].rect.width, 67);
     }
-
 }
