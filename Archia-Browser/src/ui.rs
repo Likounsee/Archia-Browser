@@ -2035,8 +2035,7 @@ impl eframe::App for ArchiaApp {
                                 });
                                 let page_url = self.browser.current_url().map(ToString::to_string);
                                 let page_title = self.browser.current_page()
-                                    .and_then(|page| page.title())
-                                    .map(str::to_owned);
+                                    .and_then(|page| page.title());
                                 response.context_menu(|ui| {
                                     if let Some(link) = context_link.as_ref() {
                                         if ui.button("Ouvrir le lien dans un nouvel onglet").clicked() {
