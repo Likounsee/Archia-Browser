@@ -353,8 +353,8 @@ impl eframe::App for ArchiaApp {
                                 "ARCHIA BROWSER · {}",
                                 self.browser.version()
                             ))
-                                .color(MUTED)
-                                .small(),
+                            .color(MUTED)
+                            .small(),
                         );
                     });
                 });
@@ -407,8 +407,8 @@ impl eframe::App for ArchiaApp {
                             egui::RichText::new(
                                 "Un navigateur indépendant, construit autour du moteur Archia.",
                             )
-                                .size(15.0)
-                                .color(MUTED),
+                            .size(15.0)
+                            .color(MUTED),
                         );
                         ui.add_space(28.0);
                         ui.horizontal(|ui| {
