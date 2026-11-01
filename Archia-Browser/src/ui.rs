@@ -14,7 +14,10 @@ use archia_browser::{
     Browser,
 };
 use eframe::egui;
-use std::{path::{Path, PathBuf}, sync::mpsc::{self, Receiver, Sender}};
+use std::{
+    path::{Path, PathBuf},
+    sync::mpsc::{self, Receiver, Sender},
+};
 
 struct BrowserPolicy;
 
@@ -30,7 +33,10 @@ impl RequestPolicyEngine for BrowserPolicy {
 type Loader = DocumentLoader<BrowserPolicy, HttpTransport>;
 
 #[derive(Clone, Copy)]
-enum ExportFormat { Tsv, Markdown }
+enum ExportFormat {
+    Tsv,
+    Markdown,
+}
 
 #[derive(Clone)]
 struct SavedPage {
@@ -39,11 +45,19 @@ struct SavedPage {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SearchProvider { Google, Bing, DuckDuckGo }
+enum SearchProvider {
+    Google,
+    Bing,
+    DuckDuckGo,
+}
 
 impl SearchProvider {
     fn id(self) -> &'static str {
-        match self { Self::Google => "google", Self::Bing => "bing", Self::DuckDuckGo => "duckduckgo" }
+        match self {
+            Self::Google => "google",
+            Self::Bing => "bing",
+            Self::DuckDuckGo => "duckduckgo",
+        }
     }
     fn search_url(self, query: &str) -> String {
         let query = encode_query(query);
@@ -56,11 +70,19 @@ impl SearchProvider {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum UserAgentProfile { Archia, ChromiumCompatible, FirefoxCompatible }
+enum UserAgentProfile {
+    Archia,
+    ChromiumCompatible,
+    FirefoxCompatible,
+}
 
 impl UserAgentProfile {
     fn id(self) -> &'static str {
-        match self { Self::Archia => "archia", Self::ChromiumCompatible => "chromium", Self::FirefoxCompatible => "firefox" }
+        match self {
+            Self::Archia => "archia",
+            Self::ChromiumCompatible => "chromium",
+            Self::FirefoxCompatible => "firefox",
+        }
     }
     fn header(self, version: &str) -> String {
         match self {
@@ -81,29 +103,48 @@ struct BrowserSettings {
 
 impl Default for BrowserSettings {
     fn default() -> Self {
-        Self { search_provider: SearchProvider::Google, homepage: "https://www.google.com/".to_owned(), restore_session: true, user_agent: UserAgentProfile::Archia }
+        Self {
+            search_provider: SearchProvider::Google,
+            homepage: "https://www.google.com/".to_owned(),
+            restore_session: true,
+            user_agent: UserAgentProfile::Archia,
+        }
     }
 }
 
 impl BrowserSettings {
     fn load(path: &std::path::Path) -> Self {
         let mut settings = Self::default();
-        let Ok(contents) = std::fs::read_to_string(path) else { return settings };
+        let Ok(contents) = std::fs::read_to_string(path) else {
+            return settings;
+        };
         for line in contents.lines() {
-            let Some((key, value)) = line.split_once('=') else { continue };
+            let Some((key, value)) = line.split_once('=') else {
+                continue;
+            };
             match key.trim() {
-                "search_provider" => settings.search_provider = match value.trim() {
-                    "bing" => SearchProvider::Bing, "duckduckgo" => SearchProvider::DuckDuckGo, _ => SearchProvider::Google,
-                },
+                "search_provider" => {
+                    settings.search_provider = match value.trim() {
+                        "bing" => SearchProvider::Bing,
+                        "duckduckgo" => SearchProvider::DuckDuckGo,
+                        _ => SearchProvider::Google,
+                    }
+                }
                 "homepage" => {
                     if let Ok(url) = Url::parse(value.trim()) {
-                        if matches!(url.scheme(), "http" | "https") { settings.homepage = url.to_string(); }
+                        if matches!(url.scheme(), "http" | "https") {
+                            settings.homepage = url.to_string();
+                        }
                     }
                 }
                 "restore_session" => settings.restore_session = value.trim() != "false",
-                "user_agent" => settings.user_agent = match value.trim() {
-                    "chromium" => UserAgentProfile::ChromiumCompatible, "firefox" => UserAgentProfile::FirefoxCompatible, _ => UserAgentProfile::Archia,
-                },
+                "user_agent" => {
+                    settings.user_agent = match value.trim() {
+                        "chromium" => UserAgentProfile::ChromiumCompatible,
+                        "firefox" => UserAgentProfile::FirefoxCompatible,
+                        _ => UserAgentProfile::Archia,
+                    }
+                }
                 _ => {}
             }
         }
@@ -112,14 +153,21 @@ impl BrowserSettings {
 
     fn save(&self, path: &std::path::Path) {
         if let Some(parent) = path.parent() {
-            if std::fs::create_dir_all(parent).is_err() { return; }
+            if std::fs::create_dir_all(parent).is_err() {
+                return;
+            }
         }
         let contents = format!(
             "search_provider={}\nhomepage={}\nrestore_session={}\nuser_agent={}\n",
-            self.search_provider.id(), self.homepage.replace(['\r', '\n'], ""), self.restore_session, self.user_agent.id()
+            self.search_provider.id(),
+            self.homepage.replace(['\r', '\n'], ""),
+            self.restore_session,
+            self.user_agent.id()
         );
         let temporary = path.with_extension("tmp");
-        if std::fs::write(&temporary, contents).is_ok() && std::fs::rename(&temporary, path).is_err() {
+        if std::fs::write(&temporary, contents).is_ok()
+            && std::fs::rename(&temporary, path).is_err()
+        {
             let _ = std::fs::remove_file(path);
             let _ = std::fs::rename(temporary, path);
         }
@@ -195,7 +243,11 @@ impl ArchiaApp {
         let settings_path = data_dir.join("settings.ini");
         let session_path = data_dir.join("session.tsv");
         let settings = BrowserSettings::load(&settings_path);
-        let restored_tabs = if settings.restore_session { load_saved_pages(&session_path) } else { Vec::new() };
+        let restored_tabs = if settings.restore_session {
+            load_saved_pages(&session_path)
+        } else {
+            Vec::new()
+        };
         let pending_restore = restored_tabs.into_iter().map(|saved| saved.url).collect();
         let (download_sender, download_receiver) = mpsc::channel();
 
@@ -233,10 +285,17 @@ impl ArchiaApp {
             let _ = std::fs::remove_file(&self.session_path);
             return;
         }
-        let entries = self.tabs.iter().filter_map(|id| {
-            let entry = self.browser.tabs().tab(*id)?.history().current()?;
-            Some(SavedPage { title: entry.title().unwrap_or_else(|| entry.url().to_string()), url: entry.url().to_string() })
-        }).collect::<Vec<_>>();
+        let entries = self
+            .tabs
+            .iter()
+            .filter_map(|id| {
+                let entry = self.browser.tabs().tab(*id)?.history().current()?;
+                Some(SavedPage {
+                    title: entry.title().unwrap_or_else(|| entry.url().to_string()),
+                    url: entry.url().to_string(),
+                })
+            })
+            .collect::<Vec<_>>();
         save_saved_pages(&self.session_path, &entries);
     }
 
@@ -330,7 +389,10 @@ impl ArchiaApp {
             self.status = "Le dernier onglet ne peut pas être fermé.".to_owned();
             return;
         }
-        let closed_url = self.browser.tabs().tab(id)
+        let closed_url = self
+            .browser
+            .tabs()
+            .tab(id)
             .and_then(|tab| tab.history().current())
             .map(|entry| entry.url().to_string());
         if self.browser.close_tab(id) {
@@ -367,34 +429,67 @@ impl ArchiaApp {
     }
 
     fn copy_open_tabs(&mut self, ctx: &egui::Context, format: ExportFormat) {
-        let entries = self.tabs.iter().filter_map(|id| {
-            let entry = self.browser.tabs().tab(*id)?.history().current()?;
-            Some((entry.title().unwrap_or_else(|| entry.url().to_string()), entry.url().to_string()))
-        }).collect::<Vec<_>>();
+        let entries = self
+            .tabs
+            .iter()
+            .filter_map(|id| {
+                let entry = self.browser.tabs().tab(*id)?.history().current()?;
+                Some((
+                    entry.title().unwrap_or_else(|| entry.url().to_string()),
+                    entry.url().to_string(),
+                ))
+            })
+            .collect::<Vec<_>>();
         let exported = match format {
-            ExportFormat::Tsv => entries.iter()
+            ExportFormat::Tsv => entries
+                .iter()
                 .map(|(title, url)| format!("{}\t{}", title.replace(['\t', '\r', '\n'], " "), url))
-                .collect::<Vec<_>>().join("\n"),
-            ExportFormat::Markdown => entries.iter()
-                .map(|(title, url)| format!("- [{}](<{}>)", title.replace('[', "\\[").replace(']', "\\]"), url))
-                .collect::<Vec<_>>().join("\n"),
+                .collect::<Vec<_>>()
+                .join("\n"),
+            ExportFormat::Markdown => entries
+                .iter()
+                .map(|(title, url)| {
+                    format!(
+                        "- [{}](<{}>)",
+                        title.replace('[', "\\[").replace(']', "\\]"),
+                        url
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
         };
         ctx.copy_text(exported);
         self.status = "Liste des onglets copiée".to_owned();
     }
 
     fn copy_history(&mut self, ctx: &egui::Context) {
-        let exported = self.history_items.iter()
-            .map(|item| format!("{}\t{}", item.title.replace(['\t', '\r', '\n'], " "), item.url))
-            .collect::<Vec<_>>().join("\n");
+        let exported = self
+            .history_items
+            .iter()
+            .map(|item| {
+                format!(
+                    "{}\t{}",
+                    item.title.replace(['\t', '\r', '\n'], " "),
+                    item.url
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
         ctx.copy_text(exported);
         self.status = "Historique copié".to_owned();
     }
 
     fn open_all_bookmarks(&mut self) {
-        let urls = self.bookmarks.iter().map(|item| item.url.clone()).take(20).collect::<Vec<_>>();
+        let urls = self
+            .bookmarks
+            .iter()
+            .map(|item| item.url.clone())
+            .take(20)
+            .collect::<Vec<_>>();
         for (index, url) in urls.into_iter().enumerate() {
-            if index > 0 { self.new_tab(); }
+            if index > 0 {
+                self.new_tab();
+            }
             self.navigate(&url);
         }
     }
@@ -413,9 +508,14 @@ impl ArchiaApp {
             self.status = format!("Dossier de téléchargements inaccessible : {error}");
             return;
         }
-        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default().as_nanos();
-        let pending = directory.join(format!(".archia-pending-{}-{nonce}.tmp", std::process::id()));
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let pending = directory.join(format!(
+            ".archia-pending-{}-{nonce}.tmp",
+            std::process::id()
+        ));
         let sender = self.download_sender.clone();
         let user_agent = self.settings.user_agent.header(self.browser.version());
         self.status = format!("Téléchargement de {url}…");
@@ -434,7 +534,9 @@ impl ArchiaApp {
                     let _ = std::fs::remove_file(&pending);
                     Ok((destination, download.bytes_written))
                 });
-            if result.is_err() { let _ = std::fs::remove_file(&pending); }
+            if result.is_err() {
+                let _ = std::fs::remove_file(&pending);
+            }
             let _ = sender.send(DownloadMessage { result });
         });
     }
@@ -442,7 +544,11 @@ impl ArchiaApp {
     fn poll_downloads(&mut self) {
         while let Ok(message) = self.download_receiver.try_recv() {
             self.status = match message.result {
-                Ok((path, bytes)) => format!("Téléchargement terminé · {} octets · {}", bytes, path.display()),
+                Ok((path, bytes)) => format!(
+                    "Téléchargement terminé · {} octets · {}",
+                    bytes,
+                    path.display()
+                ),
                 Err(error) => format!("Échec du téléchargement : {error}"),
             };
         }
@@ -575,8 +681,12 @@ impl ArchiaApp {
                 added += 1;
             }
         }
-        self.bookmarks.sort_by(|left, right| left.title.to_lowercase().cmp(&right.title.to_lowercase()));
-        save_saved_pages(&browser_data_directory().join("bookmarks.tsv"), &self.bookmarks);
+        self.bookmarks
+            .sort_by(|left, right| left.title.to_lowercase().cmp(&right.title.to_lowercase()));
+        save_saved_pages(
+            &browser_data_directory().join("bookmarks.tsv"),
+            &self.bookmarks,
+        );
         self.bookmark_import_text.clear();
         self.bookmark_import_open = false;
         self.status = format!("{added} favori(s) importé(s)");
@@ -677,9 +787,24 @@ impl eframe::App for ArchiaApp {
                 alt && input.key_pressed(egui::Key::Home),
             )
         });
-        let (ctrl_l, ctrl_t, ctrl_w, ctrl_r, ctrl_d, alt_left, alt_right,
-            reopen_tab, export_tabs, export_history, duplicate_tab, close_others,
-            open_bookmarks, copy_page_tsv, copy_page_markdown, open_home) = shortcuts;
+        let (
+            ctrl_l,
+            ctrl_t,
+            ctrl_w,
+            ctrl_r,
+            ctrl_d,
+            alt_left,
+            alt_right,
+            reopen_tab,
+            export_tabs,
+            export_history,
+            duplicate_tab,
+            close_others,
+            open_bookmarks,
+            copy_page_tsv,
+            copy_page_markdown,
+            open_home,
+        ) = shortcuts;
         if ctrl_t {
             self.new_tab();
         }
@@ -703,25 +828,52 @@ impl eframe::App for ArchiaApp {
         if ctrl_l {
             self.focus_address = true;
         }
-        if reopen_tab { self.reopen_closed_tab(); }
-        if export_tabs { self.copy_open_tabs(ctx, ExportFormat::Tsv); }
-        if export_history { self.copy_history(ctx); }
-        if duplicate_tab { self.duplicate_active_tab(); }
-        if open_home { self.open_homepage(); }
+        if reopen_tab {
+            self.reopen_closed_tab();
+        }
+        if export_tabs {
+            self.copy_open_tabs(ctx, ExportFormat::Tsv);
+        }
+        if export_history {
+            self.copy_history(ctx);
+        }
+        if duplicate_tab {
+            self.duplicate_active_tab();
+        }
+        if open_home {
+            self.open_homepage();
+        }
         if close_others {
             if let Some(active) = self.browser.active_tab_id() {
-                let to_close = self.tabs.iter().copied().filter(|id| *id != active).collect::<Vec<_>>();
-                for id in to_close { self.close_tab(id); }
+                let to_close = self
+                    .tabs
+                    .iter()
+                    .copied()
+                    .filter(|id| *id != active)
+                    .collect::<Vec<_>>();
+                for id in to_close {
+                    self.close_tab(id);
+                }
             }
         }
-        if open_bookmarks { self.open_all_bookmarks(); }
+        if open_bookmarks {
+            self.open_all_bookmarks();
+        }
         if copy_page_tsv || copy_page_markdown {
             if let Some(url) = self.browser.current_url().map(ToString::to_string) {
-                let title = self.browser.current_page().and_then(|page| page.title()).unwrap_or_else(|| url.clone());
+                let title = self
+                    .browser
+                    .current_page()
+                    .and_then(|page| page.title())
+                    .unwrap_or_else(|| url.clone());
                 let text = if copy_page_tsv {
                     format!("{}\t{}", title.replace(['\t', '\r', '\n'], " "), url)
                 } else {
-                    format!("[{}](<{}>)", title.replace('[', "\\\\[").replace(']', "\\\\]"), url)
+                    format!(
+                        "[{}](<{}>)",
+                        title.replace('[', "\\\\[").replace(']', "\\\\]"),
+                        url
+                    )
                 };
                 ctx.copy_text(text);
                 self.status = "Lien de la page copié".to_owned();
@@ -830,24 +982,52 @@ impl eframe::App for ArchiaApp {
                             self.bookmark_import_open = true;
                         }
                         if ui.button("Exporter les favoris (TSV)").clicked() {
-                            let text = self.bookmarks.iter().map(|item| format!("{}\t{}", item.title, item.url)).collect::<Vec<_>>().join("\n");
+                            let text = self
+                                .bookmarks
+                                .iter()
+                                .map(|item| format!("{}\t{}", item.title, item.url))
+                                .collect::<Vec<_>>()
+                                .join("\n");
                             ui.ctx().copy_text(text);
                             self.status = "Favoris exportés en TSV".to_owned();
                         }
                         if ui.button("Exporter les favoris (Markdown)").clicked() {
-                            let text = self.bookmarks.iter().map(|item| format!("- [{}](<{}>)", item.title.replace('[', "\\[").replace(']', "\\]"), item.url)).collect::<Vec<_>>().join("\n");
+                            let text = self
+                                .bookmarks
+                                .iter()
+                                .map(|item| {
+                                    format!(
+                                        "- [{}](<{}>)",
+                                        item.title.replace('[', "\\[").replace(']', "\\]"),
+                                        item.url
+                                    )
+                                })
+                                .collect::<Vec<_>>()
+                                .join("\n");
                             ui.ctx().copy_text(text);
                             self.status = "Favoris exportés en Markdown".to_owned();
                         }
                         ui.separator();
                         ui.menu_button("Trier", |ui| {
                             if ui.button("Par nom (A → Z)").clicked() {
-                                self.bookmarks.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
-                                save_saved_pages(&browser_data_directory().join("bookmarks.tsv"), &self.bookmarks);
+                                self.bookmarks.sort_by(|a, b| {
+                                    a.title.to_lowercase().cmp(&b.title.to_lowercase())
+                                });
+                                save_saved_pages(
+                                    &browser_data_directory().join("bookmarks.tsv"),
+                                    &self.bookmarks,
+                                );
                             }
                             if ui.button("Par site").clicked() {
-                                self.bookmarks.sort_by_key(|item| Url::parse(&item.url).map(|url| url.host().to_ascii_lowercase()).unwrap_or_default());
-                                save_saved_pages(&browser_data_directory().join("bookmarks.tsv"), &self.bookmarks);
+                                self.bookmarks.sort_by_key(|item| {
+                                    Url::parse(&item.url)
+                                        .map(|url| url.host().to_ascii_lowercase())
+                                        .unwrap_or_default()
+                                });
+                                save_saved_pages(
+                                    &browser_data_directory().join("bookmarks.tsv"),
+                                    &self.bookmarks,
+                                );
                             }
                         });
                         ui.separator();
@@ -900,7 +1080,11 @@ impl eframe::App for ArchiaApp {
                         }
                         for path in recent {
                             let label = path.file_name().unwrap_or_default().to_string_lossy();
-                            if ui.button(label.to_string()).on_hover_text(path.display().to_string()).clicked() {
+                            if ui
+                                .button(label.to_string())
+                                .on_hover_text(path.display().to_string())
+                                .clicked()
+                            {
                                 open_local_path(&path);
                             }
                         }
@@ -909,7 +1093,10 @@ impl eframe::App for ArchiaApp {
                         if ui.button("Télécharger la page actuelle").clicked() {
                             self.start_download();
                         }
-                        if ui.button("Copier les onglets (TSV) · Ctrl+Shift+U").clicked() {
+                        if ui
+                            .button("Copier les onglets (TSV) · Ctrl+Shift+U")
+                            .clicked()
+                        {
                             self.copy_open_tabs(ui.ctx(), ExportFormat::Tsv);
                         }
                         if ui.button("Copier les onglets (Markdown)").clicked() {
@@ -918,26 +1105,73 @@ impl eframe::App for ArchiaApp {
                         if ui.button("Copier l'historique · Ctrl+Shift+Y").clicked() {
                             self.copy_history(ui.ctx());
                         }
-                        if ui.button("Rouvrir le dernier onglet fermé · Ctrl+Shift+T").clicked() {
+                        if ui
+                            .button("Rouvrir le dernier onglet fermé · Ctrl+Shift+T")
+                            .clicked()
+                        {
                             self.reopen_closed_tab();
                         }
-                        if ui.button("Ouvrir tous les favoris · Ctrl+Shift+O").clicked() {
+                        if ui
+                            .button("Ouvrir tous les favoris · Ctrl+Shift+O")
+                            .clicked()
+                        {
                             self.open_all_bookmarks();
                         }
                     });
                     ui.menu_button("Paramètres", |ui| {
                         ui.label("Moteur de recherche");
                         let mut changed = false;
-                        changed |= ui.selectable_value(&mut self.settings.search_provider, SearchProvider::Google, "Google").clicked();
-                        changed |= ui.selectable_value(&mut self.settings.search_provider, SearchProvider::Bing, "Bing").clicked();
-                        changed |= ui.selectable_value(&mut self.settings.search_provider, SearchProvider::DuckDuckGo, "DuckDuckGo").clicked();
+                        changed |= ui
+                            .selectable_value(
+                                &mut self.settings.search_provider,
+                                SearchProvider::Google,
+                                "Google",
+                            )
+                            .clicked();
+                        changed |= ui
+                            .selectable_value(
+                                &mut self.settings.search_provider,
+                                SearchProvider::Bing,
+                                "Bing",
+                            )
+                            .clicked();
+                        changed |= ui
+                            .selectable_value(
+                                &mut self.settings.search_provider,
+                                SearchProvider::DuckDuckGo,
+                                "DuckDuckGo",
+                            )
+                            .clicked();
                         ui.separator();
                         ui.label("Profil User-Agent");
-                        changed |= ui.selectable_value(&mut self.settings.user_agent, UserAgentProfile::Archia, "Archia").clicked();
-                        changed |= ui.selectable_value(&mut self.settings.user_agent, UserAgentProfile::ChromiumCompatible, "Chromium compatible").clicked();
-                        changed |= ui.selectable_value(&mut self.settings.user_agent, UserAgentProfile::FirefoxCompatible, "Firefox compatible").clicked();
+                        changed |= ui
+                            .selectable_value(
+                                &mut self.settings.user_agent,
+                                UserAgentProfile::Archia,
+                                "Archia",
+                            )
+                            .clicked();
+                        changed |= ui
+                            .selectable_value(
+                                &mut self.settings.user_agent,
+                                UserAgentProfile::ChromiumCompatible,
+                                "Chromium compatible",
+                            )
+                            .clicked();
+                        changed |= ui
+                            .selectable_value(
+                                &mut self.settings.user_agent,
+                                UserAgentProfile::FirefoxCompatible,
+                                "Firefox compatible",
+                            )
+                            .clicked();
                         ui.separator();
-                        changed |= ui.checkbox(&mut self.settings.restore_session, "Restaurer la session au démarrage").changed();
+                        changed |= ui
+                            .checkbox(
+                                &mut self.settings.restore_session,
+                                "Restaurer la session au démarrage",
+                            )
+                            .changed();
                         ui.label("Page d'accueil HTTP(S)");
                         ui.text_edit_singleline(&mut self.homepage_edit);
                         if ui.button("Enregistrer la page d'accueil").clicked() {
@@ -947,13 +1181,19 @@ impl eframe::App for ArchiaApp {
                                     self.persist_settings();
                                     self.status = "Page d'accueil enregistrée".to_owned();
                                 }
-                                _ => self.status = "La page d'accueil doit être une URL HTTP(S) valide".to_owned(),
+                                _ => {
+                                    self.status =
+                                        "La page d'accueil doit être une URL HTTP(S) valide"
+                                            .to_owned()
+                                }
                             }
                         }
                         if ui.button("Ouvrir la page d'accueil · Alt+Home").clicked() {
                             self.open_homepage();
                         }
-                        if changed { self.persist_settings(); }
+                        if changed {
+                            self.persist_settings();
+                        }
                     });
                 });
             });
@@ -1071,10 +1311,12 @@ impl eframe::App for ArchiaApp {
                 .default_width(560.0)
                 .show(ctx, |ui| {
                     ui.label("Collez des URL, un fichier TSV (titre + URL) ou des liens Markdown.");
-                    ui.add(egui::TextEdit::multiline(&mut self.bookmark_import_text)
-                        .desired_width(f32::INFINITY)
-                        .desired_rows(12)
-                        .hint_text("https://example.org/"));
+                    ui.add(
+                        egui::TextEdit::multiline(&mut self.bookmark_import_text)
+                            .desired_width(f32::INFINITY)
+                            .desired_rows(12)
+                            .hint_text("https://example.org/"),
+                    );
                     ui.horizontal(|ui| {
                         if ui.button("Importer").clicked() {
                             self.import_bookmarks();
@@ -1092,24 +1334,45 @@ fn parse_bookmark_text(text: &str) -> Vec<SavedPage> {
     let mut imported = Vec::new();
     for line in text.lines().take(500) {
         let line = line.trim();
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
         let (title, raw_url) = if let Some(rest) = line.strip_prefix("- [") {
             if let Some((label, target)) = rest.split_once("](<") {
-                (label.trim_end_matches(']').replace("\\[", "[").replace("\\]", "]"), target.trim_end_matches(')').trim_end_matches('>'))
+                (
+                    label
+                        .trim_end_matches(']')
+                        .replace("\\[", "[")
+                        .replace("\\]", "]"),
+                    target.trim_end_matches(')').trim_end_matches('>'),
+                )
             } else {
                 (String::new(), line)
             }
         } else if let Some((first, second)) = line.split_once('\t') {
-            if Url::parse(first.trim()).is_ok() { (second.trim().to_owned(), first.trim()) }
-            else { (first.trim().to_owned(), second.trim()) }
+            if Url::parse(first.trim()).is_ok() {
+                (second.trim().to_owned(), first.trim())
+            } else {
+                (first.trim().to_owned(), second.trim())
+            }
         } else {
             (String::new(), line)
         };
         if let Ok(url) = Url::parse(raw_url.trim()) {
             if matches!(url.scheme(), "http" | "https") {
-                let title = if title.trim().is_empty() { url.host().to_owned() } else { title };
-                if !imported.iter().any(|item: &SavedPage| item.url == url.to_string()) {
-                    imported.push(SavedPage { title, url: url.to_string() });
+                let title = if title.trim().is_empty() {
+                    url.host().to_owned()
+                } else {
+                    title
+                };
+                if !imported
+                    .iter()
+                    .any(|item: &SavedPage| item.url == url.to_string())
+                {
+                    imported.push(SavedPage {
+                        title,
+                        url: url.to_string(),
+                    });
                 }
             }
         }
@@ -1125,9 +1388,17 @@ fn downloads_directory() -> PathBuf {
 }
 
 fn safe_download_filename(value: &str) -> String {
-    let leaf = Path::new(value).file_name().unwrap_or_default().to_string_lossy();
-    let cleaned = leaf.chars()
-        .filter(|character| !character.is_control() && !matches!(*character, '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|') && *character != char::from(92))
+    let leaf = Path::new(value)
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy();
+    let cleaned = leaf
+        .chars()
+        .filter(|character| {
+            !character.is_control()
+                && !matches!(*character, '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
+                && *character != char::from(92)
+        })
         .take(180)
         .collect::<String>();
     let cleaned = cleaned.trim_matches([' ', '.']);
@@ -1140,30 +1411,49 @@ fn safe_download_filename(value: &str) -> String {
 
 fn unique_download_destination(directory: &Path, filename: &str) -> PathBuf {
     let candidate = directory.join(filename);
-    if !candidate.exists() { return candidate; }
+    if !candidate.exists() {
+        return candidate;
+    }
     let path = Path::new(filename);
     let stem = path.file_stem().unwrap_or_default().to_string_lossy();
-    let extension = path.extension().map(|value| value.to_string_lossy().to_string());
+    let extension = path
+        .extension()
+        .map(|value| value.to_string_lossy().to_string());
     for index in 1..=10_000 {
         let name = match extension.as_deref() {
             Some(extension) => format!("{stem} ({index}).{extension}"),
             None => format!("{stem} ({index})"),
         };
         let candidate = directory.join(name);
-        if !candidate.exists() { return candidate; }
+        if !candidate.exists() {
+            return candidate;
+        }
     }
     directory.join(format!("download-{}.bin", std::process::id()))
 }
 
 fn recent_downloads() -> Vec<PathBuf> {
-    let Ok(entries) = std::fs::read_dir(downloads_directory()) else { return Vec::new() };
-    let mut files = entries.filter_map(Result::ok).filter_map(|entry| {
-        let metadata = entry.metadata().ok()?;
-        if !metadata.is_file() || entry.file_name().to_string_lossy().starts_with(".archia-pending-") {
-            return None;
-        }
-        Some((metadata.modified().unwrap_or(std::time::UNIX_EPOCH), entry.path()))
-    }).collect::<Vec<_>>();
+    let Ok(entries) = std::fs::read_dir(downloads_directory()) else {
+        return Vec::new();
+    };
+    let mut files = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let metadata = entry.metadata().ok()?;
+            if !metadata.is_file()
+                || entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".archia-pending-")
+            {
+                return None;
+            }
+            Some((
+                metadata.modified().unwrap_or(std::time::UNIX_EPOCH),
+                entry.path(),
+            ))
+        })
+        .collect::<Vec<_>>();
     files.sort_by_key(|entry| std::cmp::Reverse(entry.0));
     files.into_iter().take(12).map(|(_, path)| path).collect()
 }
@@ -1230,9 +1520,7 @@ fn save_saved_pages(path: &std::path::Path, pages: &[SavedPage]) {
         contents.push('\n');
     }
     let temporary = path.with_extension("tsv.tmp");
-    if std::fs::write(&temporary, contents).is_ok()
-        && std::fs::rename(&temporary, path).is_err()
-    {
+    if std::fs::write(&temporary, contents).is_ok() && std::fs::rename(&temporary, path).is_err() {
         let _ = std::fs::remove_file(path);
         let _ = std::fs::rename(temporary, path);
     }
@@ -1336,7 +1624,10 @@ mod tests {
         assert_eq!(loaded, settings);
         std::fs::write(&path, "homepage=file:///etc/passwd\n").unwrap();
         let rejected = super::BrowserSettings::load(&path);
-        assert_eq!(rejected.homepage, super::BrowserSettings::default().homepage);
+        assert_eq!(
+            rejected.homepage,
+            super::BrowserSettings::default().homepage
+        );
         let _ = std::fs::remove_file(path);
     }
 
@@ -1353,7 +1644,10 @@ mod tests {
 
     #[test]
     fn download_filename_sanitization_removes_path_and_reserved_characters() {
-        assert_eq!(super::safe_download_filename("../../bad:name?.txt"), "badname.txt");
+        assert_eq!(
+            super::safe_download_filename("../../bad:name?.txt"),
+            "badname.txt"
+        );
         assert_eq!(super::safe_download_filename("..."), "download.bin");
     }
 }
