@@ -2943,8 +2943,14 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         (ID_MENU_CLEAR_HISTORY, "Effacer l'historique"),
         (ID_MENU_CLEAR_SITE_DATA, "Effacer les cookies et le cache"),
         (ID_MENU_OPEN_ALL_BOOKMARKS, "Ouvrir tous les favoris"),
-        (ID_MENU_REOPEN_ALL_CLOSED_TABS, "Rouvrir tous les onglets récemment fermés"),
-        (ID_MENU_COPY_CLOSED_TABS_MARKDOWN, "Copier les onglets fermés au format Markdown"),
+        (
+            ID_MENU_REOPEN_ALL_CLOSED_TABS,
+            "Rouvrir tous les onglets récemment fermés",
+        ),
+        (
+            ID_MENU_COPY_CLOSED_TABS_MARKDOWN,
+            "Copier les onglets fermés au format Markdown",
+        ),
         (ID_MENU_SEARCH_GOOGLE, "Recherche : Google"),
         (ID_MENU_SEARCH_BING, "Recherche : Bing"),
         (ID_MENU_SEARCH_DDG, "Recherche : DuckDuckGo"),
