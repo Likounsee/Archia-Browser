@@ -1,7 +1,7 @@
 name: Archia Browser CI
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: archia-browser-ci-${{ github.ref }}
@@ -34,6 +34,16 @@ jobs:
           path: Cargo.lock
           if-no-files-found: error
           retention-days: 1
+      - name: Commit resolved lockfile for the shared GPU UI
+        if: runner.os == 'Linux' && github.event_name == 'push'
+        run: |
+          if ! git diff --quiet -- Cargo.lock; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add Cargo.lock
+            git commit -m "Pin shared wgpu UI dependency graph"
+            git push origin HEAD:Archia-Browser
+          fi
       - name: Verify dependency resolution
         run: cargo metadata --format-version 1 --no-deps
       - run: cargo fmt --all -- --check
