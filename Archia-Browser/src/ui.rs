@@ -198,6 +198,8 @@ const BORDER: egui::Color32 = egui::Color32::from_rgb(0x35, 0x38, 0x42);
 const DARK_ON_ACCENT: egui::Color32 = egui::Color32::from_rgb(0x11, 0x13, 0x0A);
 // Rayon des angles : l'ancien chrome utilisait 3 px partout.
 const CHROME_RADIUS: u8 = 3;
+// Wgpu commonly guarantees a maximum 2D texture dimension of 8192 pixels.
+const MAX_PAGE_TEXTURE_DIMENSION: u32 = 8192;
 
 #[derive(Clone, Copy)]
 struct UiPalette {
@@ -1094,7 +1096,13 @@ impl ArchiaApp {
 
         let width = viewport_width.clamp(480, 2400);
         let max_height = (64 * 1024 * 1024 / (width as usize * 4)) as u32;
-        let height = page.layout.rect.height.max(760).min(max_height.max(760));
+        let height = page
+            .layout
+            .rect
+            .height
+            .max(760)
+            .min(max_height.max(760))
+            .min(MAX_PAGE_TEXTURE_DIMENSION);
         let Some(mut surface) = SoftwareSurface::try_new(width, height) else {
             self.status = "Mémoire insuffisante pour afficher cette page.".to_owned();
             self.page_dirty = false;
