@@ -1025,7 +1025,7 @@ fn export_open_tabs_text(entries: &[(String, String)]) -> String {
 }
 
 fn export_open_tabs_csv(entries: &[(String, String)]) -> String {
-            "title,url\r\n\"Docs, \"\"draft\"\"\",\"https://docs.example/path\"\r\n\"Second\",\"https://example.org/\""
+    let mut rows = vec!["title,url".to_owned()];
     for (title, url) in entries {
         let Ok(parsed) = Url::parse(url) else {
             continue;
@@ -5266,7 +5266,7 @@ mod gui_address_tests {
         ];
         assert_eq!(
             export_open_tabs_csv(&entries),
-            "title,url\\r\\n\\"Docs, \\"\\"draft\\"\\",\\"https://docs.example/path\\"\\r\\n\\"Second\\",\\"https://example.org/\\""
+            "title,url\r\n\"Docs, \"\"draft\"\"\",\"https://docs.example/path\"\r\n\"Second\",\"https://example.org/\""
         );
         assert!(export_open_tabs_csv(&[]).is_empty());
         assert!(export_open_tabs_csv(&[(
