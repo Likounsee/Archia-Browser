@@ -1234,7 +1234,9 @@ mod eof_regression_tests {
     #[test]
     fn decodes_extended_latin_entities_used_by_european_pages() {
         assert_eq!(
-            decode_character_references("&eacute; &Eacute; &agrave; &uuml; &ccedil; &oelig; &Scaron;"),
+            decode_character_references(
+                "&eacute; &Eacute; &agrave; &uuml; &ccedil; &oelig; &Scaron;"
+            ),
             "é É à ü ç œ Š"
         );
     }
@@ -1242,7 +1244,9 @@ mod eof_regression_tests {
     #[test]
     fn decodes_common_math_arrows_and_spacing_entities() {
         assert_eq!(
-            decode_character_references("&larr;&rarr; &le; &ge; &ne; &infin; &sum; &radic; &ensp;x&thinsp;y"),
+            decode_character_references(
+                "&larr;&rarr; &le; &ge; &ne; &infin; &sum; &radic; &ensp;x&thinsp;y"
+            ),
             "←→ ≤ ≥ ≠ ∞ ∑ √\u{2002}x\u{2009}y"
         );
     }
@@ -1254,5 +1258,4 @@ mod eof_regression_tests {
             "&not-a-real-entity; &customThing;"
         );
     }
-
 }
