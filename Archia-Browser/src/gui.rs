@@ -1802,7 +1802,9 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
                 })
                 .collect::<Vec<_>>();
             let text = export_open_tabs_text(&entries);
-            if !text.is_empty() { let _ = copy_text_to_clipboard(hwnd, &text); }
+            if !text.is_empty() {
+                let _ = copy_text_to_clipboard(hwnd, &text);
+            }
             return true;
         }
         match key {
@@ -2495,11 +2497,18 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             }
         }
         ID_MENU_COPY_OPEN_TABS => {
-            let entries = state.tabs.iter().filter_map(|(id, _)| {
-                let tab = state.browser.tabs().tab(*id)?;
-                let page = tab.page()?;
-                Some((page.title().unwrap_or("(sans titre)").to_owned(), page.url()?.to_string()))
-            }).collect::<Vec<_>>();
+            let entries = state
+                .tabs
+                .iter()
+                .filter_map(|(id, _)| {
+                    let tab = state.browser.tabs().tab(*id)?;
+                    let page = tab.page()?;
+                    Some((
+                        page.title().unwrap_or("(sans titre)").to_owned(),
+                        page.url()?.to_string(),
+                    ))
+                })
+                .collect::<Vec<_>>();
             let text = export_open_tabs_text(&entries);
             if !text.is_empty() { let _ = copy_text_to_clipboard(hwnd, &text); }
         }
