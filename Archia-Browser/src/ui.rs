@@ -994,14 +994,23 @@ impl ArchiaApp {
     }
 
     fn open_recent_history_in_tabs(&mut self) {
-        let urls = self.history_items.iter().take(10).map(|item| item.url.clone()).collect::<Vec<_>>();
+        let urls = self
+            .history_items
+            .iter()
+            .take(10)
+            .map(|item| item.url.clone())
+            .collect::<Vec<_>>();
         if urls.is_empty() {
             self.status = "Aucune page récente à ouvrir".to_owned();
             return;
         }
         let mut opened = 0;
         for url in urls {
-            if self.browser.current_url().is_some_and(|current| current.to_string() == url) {
+            if self
+                .browser
+                .current_url()
+                .is_some_and(|current| current.to_string() == url)
+            {
                 continue;
             }
             if opened > 0 || self.browser.current_url().is_some() {
@@ -1014,12 +1023,19 @@ impl ArchiaApp {
     }
 
     fn reopen_all_closed_tabs(&mut self) {
-        let urls = self.closed_tabs.iter().rev().take(20).cloned().collect::<Vec<_>>();
+        let urls = self
+            .closed_tabs
+            .iter()
+            .rev()
+            .take(20)
+            .cloned()
+            .collect::<Vec<_>>();
         if urls.is_empty() {
             self.status = "Aucun onglet à restaurer".to_owned();
             return;
         }
-        self.closed_tabs.truncate(self.closed_tabs.len().saturating_sub(urls.len()));
+        self.closed_tabs
+            .truncate(self.closed_tabs.len().saturating_sub(urls.len()));
         for (index, url) in urls.iter().enumerate() {
             if index > 0 || self.browser.current_url().is_some() {
                 self.new_tab();
@@ -1031,7 +1047,11 @@ impl ArchiaApp {
     }
 
     fn open_clipboard_links(&mut self, text: &str) {
-        let mut links = parse_bookmark_text(text).into_iter().map(|item| item.url).take(20).collect::<Vec<_>>();
+        let mut links = parse_bookmark_text(text)
+            .into_iter()
+            .map(|item| item.url)
+            .take(20)
+            .collect::<Vec<_>>();
         if links.is_empty() {
             self.status = "Aucun lien HTTP(S) trouvé dans le presse-papiers".to_owned();
             return;
@@ -1624,7 +1644,10 @@ impl eframe::App for ArchiaApp {
                                 self.copy_history_html(ui.ctx());
                             }
                         });
-                        if ui.button("Ouvrir les 10 pages récentes dans des onglets").clicked() {
+                        if ui
+                            .button("Ouvrir les 10 pages récentes dans des onglets")
+                            .clicked()
+                        {
                             self.open_recent_history_in_tabs();
                         }
                         if ui.button("Effacer tout l'historique").clicked() {
@@ -1733,9 +1756,13 @@ impl eframe::App for ArchiaApp {
                             ui.ctx()
                                 .send_viewport_cmd(egui::ViewportCommand::RequestPaste);
                         }
-                        if ui.button("Ouvrir les liens du presse-papiers · Ctrl+Alt+Shift+L").clicked() {
+                        if ui
+                            .button("Ouvrir les liens du presse-papiers · Ctrl+Alt+Shift+L")
+                            .clicked()
+                        {
                             self.pending_paste = Some(PasteAction::OpenLinks);
-                            ui.ctx().send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                            ui.ctx()
+                                .send_viewport_cmd(egui::ViewportCommand::RequestPaste);
                         }
                         if ui.button("Rouvrir tous les onglets fermés").clicked() {
                             self.reopen_all_closed_tabs();
@@ -1865,7 +1892,10 @@ impl eframe::App for ArchiaApp {
                         if ui.button("Ouvrir la page d'accueil · Alt+Home").clicked() {
                             self.open_homepage();
                         }
-                        if ui.button("Définir la page actuelle comme accueil").clicked() {
+                        if ui
+                            .button("Définir la page actuelle comme accueil")
+                            .clicked()
+                        {
                             self.set_homepage_to_current();
                         }
                         if ui.button("Réinitialiser la page d'accueil").clicked() {
