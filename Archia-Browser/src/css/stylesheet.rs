@@ -301,7 +301,6 @@ impl StyleSheet {
     }
 }
 
-
 /// Evaluate the bounded, commonly used subset of CSS media queries.
 fn media_query_matches(query: &str, viewport_width: u32, viewport_height: u32) -> bool {
     query.split(',').any(|alternative| {
@@ -363,7 +362,11 @@ fn media_query_matches(query: &str, viewport_width: u32, viewport_height: u32) -
         if conditions.trim().is_empty() && !media_type.starts_with('(') {
             matches = true;
         }
-        if negate { !matches } else { matches }
+        if negate {
+            !matches
+        } else {
+            matches
+        }
     })
 }
 
@@ -1085,7 +1088,8 @@ mod tests {
         let style = sheet.compute_style_path(&path);
         assert_eq!(style.get("color"), Some("green"));
         assert_eq!(style.get("margin"), None);
-    } 
+    }
+
     #[test]
     fn media_queries_apply_only_when_viewport_matches() {
         let css = "@media screen and (max-width: 600px) { .card { color: red; } } @media (min-width: 601px) { .card { color: blue; } }";
@@ -1104,8 +1108,14 @@ mod tests {
         let paragraph = Node::element("p");
         let portrait = StyleSheet::parse_for_viewport(css, 360, 800);
         let landscape = StyleSheet::parse_for_viewport(css, 900, 600);
-        assert_eq!(portrait.compute_style(&paragraph).get("color"), Some("green"));
-        assert_eq!(landscape.compute_style(&paragraph).get("color"), Some("green"));
+        assert_eq!(
+            portrait.compute_style(&paragraph).get("color"),
+            Some("green")
+        );
+        assert_eq!(
+            landscape.compute_style(&paragraph).get("color"),
+            Some("green")
+        );
     }
 
     #[test]
@@ -1124,5 +1134,4 @@ mod tests {
         let sheet = StyleSheet::parse_for_viewport(&nested, 800, 600);
         assert!(sheet.rules.is_empty());
     }
-
 }
