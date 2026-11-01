@@ -660,10 +660,13 @@ impl ArchiaApp {
                 .collect::<Vec<_>>()
                 .join("\n"),
             ExportFormat::Html => {
-                let bookmarks = entries.iter().map(|(title, url)| SavedPage {
-                    title: title.clone(),
-                    url: url.clone(),
-                }).collect::<Vec<_>>();
+                let bookmarks = entries
+                    .iter()
+                    .map(|(title, url)| SavedPage {
+                        title: title.clone(),
+                        url: url.clone(),
+                    })
+                    .collect::<Vec<_>>();
                 export_bookmarks_html(&bookmarks)
             }
         };
