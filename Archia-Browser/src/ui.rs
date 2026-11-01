@@ -417,7 +417,7 @@ impl ArchiaApp {
         let pending_restore = restored_tabs.into_iter().map(|saved| saved.url).collect();
         let (download_sender, download_receiver) = mpsc::channel();
 
-        let app = Self {
+        Self {
             browser,
             loader,
             tabs: vec![first_tab],
@@ -445,8 +445,7 @@ impl ArchiaApp {
             download_sender,
             download_receiver,
             focus_address: false,
-        };
-        app
+        }
     }
 
     fn save_session(&self) {
@@ -3104,11 +3103,12 @@ mod tests {
     #[test]
     fn settings_round_trip_and_reject_unsafe_homepages() {
         let path = std::env::temp_dir().join(format!("archia-settings-{}.ini", std::process::id()));
-        let mut settings = super::BrowserSettings::default();
-        settings.search_provider = super::SearchProvider::DuckDuckGo;
-        settings.user_agent = super::UserAgentProfile::ChromiumCompatible;
-        settings.homepage = "https://example.org/".to_owned();
-        settings.restore_session = false;
+        let settings = super::BrowserSettings {
+            search_provider: super::SearchProvider::DuckDuckGo,
+            user_agent: super::UserAgentProfile::ChromiumCompatible,
+            homepage: "https://example.org/".to_owned(),
+            restore_session: false,
+        };
         settings.save(&path);
         let loaded = super::BrowserSettings::load(&path);
         assert_eq!(loaded, settings);
