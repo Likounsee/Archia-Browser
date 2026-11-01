@@ -2034,12 +2034,16 @@ impl eframe::App for ArchiaApp {
                                     self.link_target_at(x, y)
                                 });
                                 let page_url = self.browser.current_url().map(ToString::to_string);
-                                let page_title = self.browser.current_page()
-                                    .and_then(|page| page.title());
+                                let page_title =
+                                    self.browser.current_page().and_then(|page| page.title());
                                 response.context_menu(|ui| {
                                     if let Some(link) = context_link.as_ref() {
-                                        if ui.button("Ouvrir le lien dans un nouvel onglet").clicked() {
-                                            if let Some(base) = self.browser.current_url().cloned() {
+                                        if ui
+                                            .button("Ouvrir le lien dans un nouvel onglet")
+                                            .clicked()
+                                        {
+                                            if let Some(base) = self.browser.current_url().cloned()
+                                            {
                                                 if let Ok(url) = base.resolve(link) {
                                                     self.new_tab();
                                                     self.navigate(&url.to_string());
