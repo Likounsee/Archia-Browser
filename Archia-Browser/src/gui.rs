@@ -80,6 +80,10 @@ const ID_MENU_DOWNLOAD_PAGE: u32 = 3017;
 const ID_MENU_OPEN_DOWNLOADS: u32 = 3018;
 const ID_MENU_RECENT_DOWNLOADS: u32 = 3025;
 const ID_MENU_OPEN_RECENT_HISTORY: u32 = 3026;
+const ID_MENU_SORT_BOOKMARKS_TITLE: u32 = 3027;
+const ID_MENU_SORT_BOOKMARKS_DOMAIN: u32 = 3028;
+const ID_MENU_DEDUPLICATE_BOOKMARKS: u32 = 3029;
+const ID_MENU_COPY_BOOKMARKS: u32 = 3030;
 const ID_RECENT_DOWNLOAD_BASE: u32 = 3700;
 const ID_RECENT_DOWNLOAD_REVEAL_BASE: u32 = 3720;
 const ID_RECENT_DOWNLOAD_COPY_BASE: u32 = 3740;
@@ -605,7 +609,7 @@ fn load_bookmarks(path: &std::path::Path) -> Vec<Bookmark> {
     let Ok(contents) = std::fs::read_to_string(path) else {
         return Vec::new();
     };
-    contents
+    let mut bookmarks = contents
         .lines()
         .filter_map(|line| {
             let (url, title) = line.split_once('\t')?;
@@ -618,7 +622,48 @@ fn load_bookmarks(path: &std::path::Path) -> Vec<Bookmark> {
                 url: parsed.to_string(),
             })
         })
-        .collect()
+        .collect::<Vec<_>>();
+    deduplicate_bookmarks(&mut bookmarks);
+    bookmarks
+}
+
+fn bookmark_host_key(url: &str) -> String {
+    Url::parse(url)
+        .ok()
+        .and_then(|parsed| parsed.host().map(str::to_ascii_lowercase))
+        .unwrap_or_else(|| url.to_ascii_lowercase())
+}
+
+fn sort_bookmarks_by_title(bookmarks: &mut [Bookmark]) {
+    bookmarks.sort_by(|left, right| {
+        left.title
+            .to_lowercase()
+            .cmp(&right.title.to_lowercase())
+            .then_with(|| left.url.cmp(&right.url))
+    });
+}
+
+fn sort_bookmarks_by_domain(bookmarks: &mut [Bookmark]) {
+    bookmarks.sort_by_key(|bookmark| {
+        (
+            bookmark_host_key(&bookmark.url),
+            bookmark.title.to_lowercase(),
+            bookmark.url.clone(),
+        )
+    });
+}
+
+fn deduplicate_bookmarks(bookmarks: &mut Vec<Bookmark>) {
+    let mut seen = std::collections::HashSet::new();
+    bookmarks.retain(|bookmark| seen.insert(bookmark.url.clone()));
+}
+
+fn export_bookmarks_text(bookmarks: &[Bookmark]) -> String {
+    bookmarks
+        .iter()
+        .map(|bookmark| format!("{}\t{}", bookmark.title, bookmark.url))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn browser_data_directory() -> std::path::PathBuf {
@@ -2079,6 +2124,10 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             ID_MENU_OPEN_RECENT_HISTORY,
             "Ouvrir les pages récentes dans des onglets",
         ),
+        (ID_MENU_SORT_BOOKMARKS_TITLE, "Trier les favoris par nom"),
+        (ID_MENU_SORT_BOOKMARKS_DOMAIN, "Trier les favoris par site"),
+        (ID_MENU_DEDUPLICATE_BOOKMARKS, "Supprimer les favoris en double"),
+        (ID_MENU_COPY_BOOKMARKS, "Copier tous les favoris"),
         (
             ID_MENU_TOGGLE_SESSION,
             if state.settings.restore_session {
@@ -2214,6 +2263,30 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         ID_MENU_OPEN_DOWNLOADS => open_downloads_folder(state),
         ID_MENU_RECENT_DOWNLOADS => show_recent_downloads(state, hwnd),
         ID_MENU_OPEN_RECENT_HISTORY => open_recent_history_in_tabs(state, hwnd),
+        ID_MENU_SORT_BOOKMARKS_TITLE => {
+            sort_bookmarks_by_title(&mut state.bookmarks);
+            save_bookmarks(state);
+            let _ = InvalidateRect(hwnd, ptr::null(), 1);
+        }
+        ID_MENU_SORT_BOOKMARKS_DOMAIN => {
+            sort_bookmarks_by_domain(&mut state.bookmarks);
+            save_bookmarks(state);
+            let _ = InvalidateRect(hwnd, ptr::null(), 1);
+        }
+        ID_MENU_DEDUPLICATE_BOOKMARKS => {
+            let previous_count = state.bookmarks.len();
+            deduplicate_bookmarks(&mut state.bookmarks);
+            if state.bookmarks.len() != previous_count {
+                save_bookmarks(state);
+                let _ = InvalidateRect(hwnd, ptr::null(), 1);
+            }
+        }
+        ID_MENU_COPY_BOOKMARKS => {
+            let text = export_bookmarks_text(&state.bookmarks);
+            if !text.is_empty() {
+                let _ = copy_text_to_clipboard(hwnd, &text);
+            }
+        }
         ID_MENU_TOGGLE_SESSION => {
             state.settings.restore_session = !state.settings.restore_session;
             if !state.settings.restore_session {
@@ -3481,6 +3554,51 @@ mod gui_address_tests {
                 .unwrap()
                 .to_string(),
             "https://example.org/path"
+        );
+    }
+
+    #[test]
+    fn bookmarks_sort_by_title_without_losing_urls() {
+        let mut bookmarks = vec![
+            Bookmark { title: "Zulu".into(), url: "https://z.example/".into() },
+            Bookmark { title: "alpha".into(), url: "https://a.example/".into() },
+            Bookmark { title: "Beta".into(), url: "https://b.example/".into() },
+        ];
+        sort_bookmarks_by_title(&mut bookmarks);
+        assert_eq!(
+            bookmarks.iter().map(|bookmark| bookmark.title.as_str()).collect::<Vec<_>>(),
+            vec!["alpha", "Beta", "Zulu"]
+        );
+        assert_eq!(bookmarks[0].url, "https://a.example/");
+    }
+
+    #[test]
+    fn bookmarks_sort_by_site_then_title() {
+        let mut bookmarks = vec![
+            Bookmark { title: "Z page".into(), url: "https://z.example/".into() },
+            Bookmark { title: "B page".into(), url: "https://a.example/b".into() },
+            Bookmark { title: "A page".into(), url: "https://a.example/a".into() },
+        ];
+        sort_bookmarks_by_domain(&mut bookmarks);
+        assert_eq!(
+            bookmarks.iter().map(|bookmark| bookmark.title.as_str()).collect::<Vec<_>>(),
+            vec!["A page", "B page", "Z page"]
+        );
+    }
+
+    #[test]
+    fn duplicate_bookmarks_keep_the_first_entry_and_export_as_tsv() {
+        let mut bookmarks = vec![
+            Bookmark { title: "First title".into(), url: "https://example.org/".into() },
+            Bookmark { title: "Duplicate".into(), url: "https://example.org/".into() },
+            Bookmark { title: "Other".into(), url: "https://other.example/".into() },
+        ];
+        deduplicate_bookmarks(&mut bookmarks);
+        assert_eq!(bookmarks.len(), 2);
+        assert_eq!(bookmarks[0].title, "First title");
+        assert_eq!(
+            export_bookmarks_text(&bookmarks),
+            "First title\thttps://example.org/\nOther\thttps://other.example/"
         );
     }
 
