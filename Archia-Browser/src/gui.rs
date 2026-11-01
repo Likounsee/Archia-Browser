@@ -3703,7 +3703,10 @@ mod gui_address_tests {
         ];
         sort_bookmarks_by_domain(&mut bookmarks);
         assert_eq!(
-            bookmarks.iter().map(|bookmark| bookmark.title.as_str()).collect::<Vec<_>>(),
+            bookmarks
+                .iter()
+                .map(|bookmark| bookmark.title.as_str())
+                .collect::<Vec<_>>(),
             vec!["A page", "B page", "Z page"]
         );
     }
