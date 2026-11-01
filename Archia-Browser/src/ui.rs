@@ -1261,7 +1261,7 @@ impl eframe::App for ArchiaApp {
                 ctrl && input.key_pressed(egui::Key::L),
                 ctrl && input.key_pressed(egui::Key::T),
                 ctrl && input.key_pressed(egui::Key::W),
-                ctrl && input.key_pressed(egui::Key::R),
+                ctrl && !shift && input.key_pressed(egui::Key::R),
                 ctrl && input.key_pressed(egui::Key::D),
                 alt && input.key_pressed(egui::Key::ArrowLeft),
                 alt && input.key_pressed(egui::Key::ArrowRight),
