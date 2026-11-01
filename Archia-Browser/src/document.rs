@@ -105,11 +105,8 @@ impl Page {
         stylesheet_input.push_str(css);
         stylesheet_input.push('\n');
         collect_inline_styles(&document, &mut stylesheet_input);
-        let stylesheet = StyleSheet::parse_for_viewport(
-            &stylesheet_input,
-            viewport.width,
-            viewport.height,
-        );
+        let stylesheet =
+            StyleSheet::parse_for_viewport(&stylesheet_input, viewport.width, viewport.height);
         let styled = StyleEngine::style(&document, &stylesheet);
         let layout = LayoutEngine::layout_styled(&styled, viewport);
         let display_list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
@@ -1176,12 +1173,15 @@ b</textarea></form>"#,
 
         let narrow_main = narrow.document.find_first_element("main").unwrap();
         let wide_main = wide.document.find_first_element("main").unwrap();
-        let narrow_style = narrow.styled.children[0].children[1].children[0].style.get("width");
-        let wide_style = wide.styled.children[0].children[1].children[0].style.get("width");
+        let narrow_style = narrow.styled.children[0].children[1].children[0]
+            .style
+            .get("width");
+        let wide_style = wide.styled.children[0].children[1].children[0]
+            .style
+            .get("width");
         assert_eq!(narrow_style, Some("100%"));
         assert_eq!(wide_style, Some("720px"));
         assert_eq!(narrow_main.tag_name(), Some("main"));
         assert_eq!(wide_main.tag_name(), Some("main"));
     }
-
 }
