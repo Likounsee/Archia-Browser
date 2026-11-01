@@ -38,6 +38,7 @@ enum PasteAction {
     Navigate,
     NewTab,
     ImportBookmarks,
+    OpenLinks,
 }
 
 #[derive(Clone, Copy)]
@@ -759,6 +760,11 @@ impl ArchiaApp {
         self.status = "Historique copié".to_owned();
     }
 
+    fn copy_history_html(&mut self, ctx: &egui::Context) {
+        ctx.copy_text(export_bookmarks_html(&self.history_items));
+        self.status = "Historique exporté en HTML Netscape".to_owned();
+    }
+
     fn copy_history_csv(&mut self, ctx: &egui::Context) {
         let mut rows = vec!["title,url".to_owned()];
         rows.extend(
@@ -806,6 +812,13 @@ impl ArchiaApp {
                 }
                 self.bookmark_import_text = text;
                 self.bookmark_import_open = true;
+            }
+            Some(PasteAction::OpenLinks) => {
+                if !is_safe_bookmark_import(&text) {
+                    self.status = "Presse-papiers vide ou trop volumineux".to_owned();
+                    return;
+                }
+                self.open_clipboard_links(&text);
             }
             Some(action @ (PasteAction::Navigate | PasteAction::NewTab)) => {
                 let Some(url) = clipboard_navigation_url(&text, self.settings.search_provider)
@@ -943,6 +956,92 @@ impl ArchiaApp {
             return;
         };
         self.navigate(&url.to_string());
+    }
+
+    fn hard_reload(&mut self) {
+        let _ = self.loader.clear_cache();
+        self.reload();
+    }
+
+    fn clear_site_data(&mut self) {
+        match self.loader.clear_cookies_and_cache() {
+            Ok(()) => self.status = "Cookies et cache supprimés".to_owned(),
+            Err(error) => self.status = format!("Impossible de vider les données du site : {error:?}"),
+        }
+    }
+
+    fn set_homepage_to_current(&mut self) {
+        let Some(url) = self.browser.current_url() else {
+            self.status = "Aucune page HTTP(S) à définir comme accueil".to_owned();
+            return;
+        };
+        if !matches!(url.scheme(), "http" | "https") {
+            self.status = "La page d'accueil doit utiliser HTTP ou HTTPS".to_owned();
+            return;
+        }
+        self.settings.homepage = url.to_string();
+        self.homepage_edit = self.settings.homepage.clone();
+        self.persist_settings();
+        self.status = "Page actuelle définie comme page d'accueil".to_owned();
+    }
+
+    fn reset_homepage(&mut self) {
+        self.settings.homepage = BrowserSettings::default().homepage;
+        self.homepage_edit = self.settings.homepage.clone();
+        self.persist_settings();
+        self.status = "Page d'accueil réinitialisée".to_owned();
+    }
+
+    fn open_recent_history_in_tabs(&mut self) {
+        let urls = self.history_items.iter().take(10).map(|item| item.url.clone()).collect::<Vec<_>>();
+        if urls.is_empty() {
+            self.status = "Aucune page récente à ouvrir".to_owned();
+            return;
+        }
+        let mut opened = 0;
+        for url in urls {
+            if self.browser.current_url().is_some_and(|current| current.as_str() == url) {
+                continue;
+            }
+            if opened > 0 || self.browser.current_url().is_some() {
+                self.new_tab();
+            }
+            self.navigate(&url);
+            opened += 1;
+        }
+        self.status = format!("{opened} page(s) récente(s) ouverte(s)");
+    }
+
+    fn reopen_all_closed_tabs(&mut self) {
+        let urls = self.closed_tabs.iter().rev().take(20).cloned().collect::<Vec<_>>();
+        if urls.is_empty() {
+            self.status = "Aucun onglet à restaurer".to_owned();
+            return;
+        }
+        self.closed_tabs.truncate(self.closed_tabs.len().saturating_sub(urls.len()));
+        for (index, url) in urls.iter().enumerate() {
+            if index > 0 || self.browser.current_url().is_some() {
+                self.new_tab();
+            }
+            self.navigate(url);
+        }
+        self.status = format!("{} onglet(s) restauré(s)", urls.len());
+        self.save_session();
+    }
+
+    fn open_clipboard_links(&mut self, text: &str) {
+        let mut links = parse_bookmark_text(text).into_iter().map(|item| item.url).take(20).collect::<Vec<_>>();
+        if links.is_empty() {
+            self.status = "Aucun lien HTTP(S) trouvé dans le presse-papiers".to_owned();
+            return;
+        }
+        let first = links.remove(0);
+        self.navigate(&first);
+        for url in links {
+            self.new_tab();
+            self.navigate(&url);
+        }
+        self.status = "Liens du presse-papiers ouverts".to_owned();
     }
 
     fn sync_address(&mut self) {
@@ -1161,6 +1260,7 @@ impl eframe::App for ArchiaApp {
                 ctrl && alt && shift && input.key_pressed(egui::Key::H),
                 ctrl && alt && shift && input.key_pressed(egui::Key::U),
                 ctrl && alt && shift && input.key_pressed(egui::Key::C),
+                ctrl && alt && shift && input.key_pressed(egui::Key::L),
             )
         });
         let (
@@ -1187,6 +1287,7 @@ impl eframe::App for ArchiaApp {
             export_history_markdown,
             export_tabs_html,
             export_tabs_csv,
+            open_clipboard_links,
         ) = shortcuts;
         if ctrl_t {
             self.new_tab();
@@ -1231,6 +1332,10 @@ impl eframe::App for ArchiaApp {
         }
         if export_tabs_csv {
             self.copy_open_tabs(ctx, ExportFormat::Csv);
+        }
+        if open_clipboard_links {
+            self.pending_paste = Some(PasteAction::OpenLinks);
+            ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
         }
         if paste_navigate || paste_new_tab || paste_bookmarks {
             self.pending_paste = Some(if paste_bookmarks {
@@ -1492,7 +1597,13 @@ impl eframe::App for ArchiaApp {
                             if ui.button("Markdown").clicked() {
                                 self.copy_history_markdown(ui.ctx());
                             }
+                            if ui.button("HTML").clicked() {
+                                self.copy_history_html(ui.ctx());
+                            }
                         });
+                        if ui.button("Ouvrir les 10 pages récentes dans des onglets").clicked() {
+                            self.open_recent_history_in_tabs();
+                        }
                         if ui.button("Effacer tout l'historique").clicked() {
                             self.clear_history();
                         }
@@ -1587,6 +1698,19 @@ impl eframe::App for ArchiaApp {
                             self.pending_paste = Some(PasteAction::ImportBookmarks);
                             ui.ctx()
                                 .send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                        }
+                        if ui.button("Ouvrir les liens du presse-papiers · Ctrl+Alt+Shift+L").clicked() {
+                            self.pending_paste = Some(PasteAction::OpenLinks);
+                            ui.ctx().send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                        }
+                        if ui.button("Rouvrir tous les onglets fermés").clicked() {
+                            self.reopen_all_closed_tabs();
+                        }
+                        if ui.button("Recharger sans cache").clicked() {
+                            self.hard_reload();
+                        }
+                        if ui.button("Effacer cookies et cache").clicked() {
+                            self.clear_site_data();
                         }
                         if ui.button("Télécharger la page actuelle").clicked() {
                             self.start_download();
@@ -1706,6 +1830,12 @@ impl eframe::App for ArchiaApp {
                         }
                         if ui.button("Ouvrir la page d'accueil · Alt+Home").clicked() {
                             self.open_homepage();
+                        }
+                        if ui.button("Définir la page actuelle comme accueil").clicked() {
+                            self.set_homepage_to_current();
+                        }
+                        if ui.button("Réinitialiser la page d'accueil").clicked() {
+                            self.reset_homepage();
                         }
                         if let Some(manager) = self.themes.as_ref() {
                             ui.separator();
