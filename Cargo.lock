@@ -95,6 +95,7 @@ dependencies = [
 name = "archia-browser"
 version = "0.1.0"
 dependencies = [
+ "ab_glyph",
  "eframe",
  "httpdate",
  "libc",
