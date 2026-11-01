@@ -222,7 +222,6 @@ impl UiPalette {
     }
 }
 
-
 fn load_inter_font(ctx: &egui::Context) {
     let mut candidates = Vec::new();
     if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
@@ -237,13 +236,16 @@ fn load_inter_font(ctx: &egui::Context) {
     candidates.push(PathBuf::from("/usr/local/share/fonts/Inter.ttc"));
 
     for path in candidates {
-        let Ok(bytes) = std::fs::read(path) else { continue };
+        let Ok(bytes) = std::fs::read(path) else {
+            continue;
+        };
         let mut fonts = egui::FontDefinitions::default();
         fonts.font_data.insert(
             "archia-inter".to_owned(),
             egui::FontData::from_owned(bytes).into(),
         );
-        fonts.families
+        fonts
+            .families
             .entry(egui::FontFamily::Proportional)
             .or_default()
             .insert(0, "archia-inter".to_owned());
