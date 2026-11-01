@@ -107,6 +107,7 @@ const ID_MENU_SEARCH_CLIPBOARD_NEW_TAB: u32 = 3044;
 const ID_MENU_COPY_HISTORY_HTML: u32 = 3045;
 const ID_MENU_COPY_OPEN_TABS_HTML: u32 = 3046;
 const ID_MENU_OPEN_CLIPBOARD_LINKS: u32 = 3047;
+const ID_MENU_COPY_BOOKMARKS_MARKDOWN: u32 = 3048;
 const MAX_IMPORTED_BOOKMARKS: usize = 5_000;
 const MAX_CLIPBOARD_BYTES: usize = 2 * 1024 * 1024;
 const ID_RECENT_DOWNLOAD_BASE: u32 = 3700;
@@ -735,6 +736,9 @@ fn deduplicate_bookmarks(bookmarks: &mut Vec<Bookmark>) {
 }
 
 fn parse_imported_bookmarks(text: &str) -> Vec<Bookmark> {
+    if text.contains("](") {
+        return parse_markdown_bookmarks(text);
+    }
     if text.to_ascii_lowercase().contains("<a ") {
         return parse_netscape_bookmarks(text);
     }
@@ -777,6 +781,29 @@ fn parse_imported_bookmarks(text: &str) -> Vec<Bookmark> {
             } else {
                 title.to_owned()
             },
+            url: url.to_string(),
+        });
+    }
+    deduplicate_bookmarks(&mut imported);
+    imported
+}
+
+fn parse_markdown_bookmarks(text: &str) -> Vec<Bookmark> {
+    let mut imported = Vec::new();
+    for line in text.lines().take(MAX_IMPORTED_BOOKMARKS) {
+        let line = line.trim().trim_start_matches(['-', '*']).trim();
+        let Some(label_start) = line.find('[') else { continue };
+        let Some(label_end) = line[label_start + 1..].find("](") else { continue };
+        let label_end = label_start + 1 + label_end;
+        let raw_label = &line[label_start + 1..label_end];
+        let target = line[label_end + 2..].trim();
+        let target = target.strip_suffix(')').unwrap_or(target).trim();
+        let target = target.strip_prefix('<').and_then(|value| value.strip_suffix('>')).unwrap_or(target);
+        let Ok(url) = Url::parse(target) else { continue };
+        if !matches!(url.scheme(), "http" | "https") { continue; }
+        let title = raw_label.replace("\\[", "[").replace("\\]", "]").replace("\\\\", "\\");
+        imported.push(Bookmark {
+            title: if title.trim().is_empty() { url.host().to_owned() } else { title },
             url: url.to_string(),
         });
     }
@@ -873,6 +900,18 @@ fn escape_bookmark_html(value: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
+}
+
+fn export_bookmarks_markdown(bookmarks: &[Bookmark]) -> String {
+    bookmarks
+        .iter()
+        .filter_map(|bookmark| {
+            let url = Url::parse(&bookmark.url).ok()?;
+            if !matches!(url.scheme(), "http" | "https") { return None; }
+            Some(format!("- {}", markdown_link(&bookmark.title, &url.to_string())))
+        })
+        .collect::<Vec<_>>()
+        .join("\\n")
 }
 
 fn export_bookmarks_html(bookmarks: &[Bookmark]) -> String {
@@ -2153,6 +2192,13 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             }
             return true;
         }
+        if alt && key == VK_B && GetKeyState(VK_SHIFT) < 0 {
+            let markdown = export_bookmarks_markdown(&state.bookmarks);
+            if !markdown.is_empty() {
+                let _ = copy_text_to_clipboard(hwnd, &markdown);
+            }
+            return true;
+        }
         if key == VK_B && GetKeyState(VK_SHIFT) < 0 {
             let html = export_bookmarks_html(&state.bookmarks);
             if !state.bookmarks.is_empty() {
@@ -2852,6 +2898,7 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             ID_MENU_COPY_BOOKMARKS_HTML,
             "Copier les favoris au format HTML (Netscape)",
         ),
+        (ID_MENU_COPY_BOOKMARKS_MARKDOWN, "Copier les favoris au format Markdown"),
         (
             ID_MENU_PASTE_AND_GO,
             "Coller et ouvrir l’adresse ou rechercher le texte copié",
@@ -3069,6 +3116,12 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             if state.bookmarks.len() != previous_count {
                 save_bookmarks(state);
                 let _ = InvalidateRect(hwnd, ptr::null(), 1);
+            }
+        }
+        ID_MENU_COPY_BOOKMARKS_MARKDOWN => {
+            let markdown = export_bookmarks_markdown(&state.bookmarks);
+            if !markdown.is_empty() {
+                let _ = copy_text_to_clipboard(hwnd, &markdown);
             }
         }
         ID_MENU_COPY_BOOKMARKS_HTML => {
@@ -4617,6 +4670,18 @@ mod gui_address_tests {
         assert_eq!(url_only.len(), 2);
         assert_eq!(url_only[0].title, "one.example");
         assert_eq!(url_only[1].url, "https://two.example/");
+    }
+
+    #[test]
+    fn markdown_bookmark_import_and_export_round_trip() {
+        let bookmarks = vec![
+            Bookmark { title: "Docs [draft]".to_owned(), url: "https://docs.example/path_(one)".to_owned() },
+            Bookmark { title: "Archia".to_owned(), url: "https://archia.example/".to_owned() },
+        ];
+        let markdown = export_bookmarks_markdown(&bookmarks);
+        assert!(markdown.contains("[Docs \\\\[draft\\\\]](<https://docs.example/path_(one)>)"));
+        assert_eq!(parse_imported_bookmarks(&markdown), bookmarks);
+        assert!(parse_imported_bookmarks("[unsafe](javascript:alert(1))").is_empty());
     }
 
     #[test]
