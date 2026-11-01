@@ -147,6 +147,7 @@ const ID_TAB_CONTEXT_CLOSE_RIGHT: u32 = 3604;
 const ID_TAB_CONTEXT_COPY_URL: u32 = 3605;
 const ID_TAB_CONTEXT_RELOAD: u32 = 3606;
 const ID_TAB_CONTEXT_CLOSE_LEFT: u32 = 3607;
+const ID_TAB_CONTEXT_CLOSE_SAME_SITE: u32 = 3608;
 const GWLP_WNDPROC: i32 = -4;
 const WM_CTLCOLOREDIT: u32 = 0x0133;
 const DT_SINGLELINE: u32 = 0x0020;
@@ -2037,6 +2038,24 @@ fn tab_indices_to_close(active_index: usize, tab_count: usize, close_left: bool)
     }
 }
 
+fn tab_indices_for_same_site(hosts: &[Option<String>], active_index: usize) -> Vec<usize> {
+    let Some(target_host) = hosts.get(active_index).and_then(Option::as_deref) else {
+        return Vec::new();
+    };
+    hosts
+        .iter()
+        .enumerate()
+        .rev()
+        .filter_map(|(index, host)| {
+            (index != active_index
+                && host
+                    .as_deref()
+                    .is_some_and(|host| host.eq_ignore_ascii_case(target_host)))
+            .then_some(index)
+        })
+        .collect()
+}
+
 fn tab_indices_to_close_except(active_index: usize, tab_count: usize) -> Vec<usize> {
     if active_index >= tab_count {
         return Vec::new();
@@ -2098,7 +2117,8 @@ unsafe fn reopen_closed_tab_at(state: &mut AppState, hwnd: Hwnd, recent_index: u
     if state.tabs.len() >= MAX_GUI_TABS {
         return;
     }
-    let Some(storage_index) = closed_tab_storage_index(state.closed_tabs.len(), recent_index) else {
+    let Some(storage_index) = closed_tab_storage_index(state.closed_tabs.len(), recent_index)
+    else {
         return;
     };
     let closed_url = state.closed_tabs.remove(storage_index);
@@ -2454,6 +2474,10 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
         (ID_TAB_CONTEXT_CLOSE_OTHERS, "Fermer les autres onglets"),
         (ID_TAB_CONTEXT_CLOSE_RIGHT, "Fermer les onglets à droite"),
         (ID_TAB_CONTEXT_CLOSE_LEFT, "Fermer les onglets à gauche"),
+        (
+            ID_TAB_CONTEXT_CLOSE_SAME_SITE,
+            "Fermer les autres onglets de ce site",
+        ),
     ] {
         let label = wide(label);
         let _ = AppendMenuW(menu, MF_STRING, id as usize, label.as_ptr());
@@ -2485,6 +2509,27 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
         ID_TAB_CONTEXT_COPY_URL => {
             if let Some(url) = duplicate_url.as_deref() {
                 let _ = copy_text_to_clipboard(hwnd, url);
+            }
+        }
+        ID_TAB_CONTEXT_CLOSE_SAME_SITE => {
+            let hosts = state
+                .tabs
+                .iter()
+                .map(|(id, _)| {
+                    state
+                        .browser
+                        .tabs()
+                        .tab(*id)
+                        .and_then(|tab| tab.page())
+                        .and_then(|page| page.url())
+                        .map(|url| url.host().to_owned())
+                })
+                .collect::<Vec<_>>();
+            for other_index in tab_indices_for_same_site(&hosts, index) {
+                close_tab_at(state, other_index);
+            }
+            if let Some(active_index) = state.tabs.iter().position(|(id, _)| *id == tab_id) {
+                select_tab_index(state, active_index);
             }
         }
         ID_TAB_CONTEXT_CLOSE_RIGHT | ID_TAB_CONTEXT_CLOSE_LEFT => {
@@ -3199,7 +3244,9 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         ID_MENU_CLOSE_TAB => close_active_tab(state),
         ID_MENU_REOPEN_CLOSED_TAB => reopen_closed_tab(state, hwnd),
         ID_MENU_REOPEN_ALL_CLOSED_TABS => reopen_all_closed_tabs(state, hwnd),
-        id if (ID_MENU_CLOSED_TAB_BASE..ID_MENU_CLOSED_TAB_BASE + MAX_MENU_CLOSED_TABS as u32).contains(&id) => {
+        id if (ID_MENU_CLOSED_TAB_BASE..ID_MENU_CLOSED_TAB_BASE + MAX_MENU_CLOSED_TABS as u32)
+            .contains(&id) =>
+        {
             reopen_closed_tab_at(state, hwnd, (id - ID_MENU_CLOSED_TAB_BASE) as usize);
         }
         ID_MENU_COPY_CLOSED_TABS_MARKDOWN => {
@@ -4550,6 +4597,20 @@ pub fn run() {
 #[cfg(test)]
 mod gui_address_tests {
     use super::*;
+
+    #[test]
+    fn close_same_site_keeps_selected_tab_and_ignores_other_hosts() {
+        let hosts = vec![
+            Some("example.com".into()),
+            Some("other.test".into()),
+            Some("EXAMPLE.COM".into()),
+            None,
+            Some("example.com".into()),
+        ];
+        assert_eq!(tab_indices_for_same_site(&hosts, 2), vec![4, 0]);
+        assert!(tab_indices_for_same_site(&hosts, 3).is_empty());
+        assert!(tab_indices_for_same_site(&hosts, 8).is_empty());
+    }
 
     #[test]
     fn recently_closed_tab_indices_map_newest_first_and_reject_out_of_range() {
