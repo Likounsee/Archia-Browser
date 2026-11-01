@@ -68,6 +68,7 @@ Theme manifests and selection are available in the engine. The Win32 frontend ap
 - [x] Basic HTTP/HTTPS download handling with safe destination naming and overwrite protection (background queue/progress UI still pending).
 - [ ] Better error pages and loading feedback.
 - [x] Basic persistent settings for search provider, homepage and session restoration.
+- [x] Open individual history entries and bookmarks in new tabs, plus batch-open recent history and saved bookmarks with keyboard shortcuts.
 - [ ] User-agent controls.
 
 
