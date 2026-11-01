@@ -899,7 +899,8 @@ fn explicit_url_scheme(value: &str) -> Option<&str> {
         || !characters.all(|character| {
             character.is_ascii_alphanumeric() || matches!(character, '+' | '-' | '.')
         })
-        || remainder.trim_start_matches('/').chars().all(|character| character.is_ascii_digit())
+        || (!remainder.is_empty()
+            && remainder.chars().all(|character| character.is_ascii_digit()))
     {
         return None;
     }
@@ -911,10 +912,12 @@ fn clipboard_navigation_url(value: &str, provider: SearchProvider) -> Option<Url
     if value.is_empty() || value.len() > 4_096 || value.chars().any(char::is_control) {
         return None;
     }
-    if explicit_url_scheme(value)
-        .is_some_and(|scheme| !matches!(scheme, "http" | "https"))
-    {
-        return None;
+    if let Some(scheme) = explicit_url_scheme(value) {
+        if !matches!(scheme, "http" | "https")
+            || !value[scheme.len() + 1..].starts_with("//")
+        {
+            return None;
+        }
     }
     let url = parse_address_with_provider(value, provider).ok()?;
     matches!(url.scheme(), "http" | "https").then_some(url)
@@ -4581,6 +4584,8 @@ mod gui_address_tests {
     fn clipboard_navigation_rejects_unsafe_empty_and_oversized_values() {
         assert!(clipboard_navigation_url("", SearchProvider::Google).is_none());
         assert!(clipboard_navigation_url("javascript:alert(1)", SearchProvider::Google).is_none());
+        assert!(clipboard_navigation_url("javascript:", SearchProvider::Google).is_none());
+        assert!(clipboard_navigation_url("http:example.org", SearchProvider::Google).is_none());
         assert!(clipboard_navigation_url("mailto:test@example.com", SearchProvider::Google).is_none());
         assert!(clipboard_navigation_url("ftp://example.org/file", SearchProvider::Google).is_none());
         assert!(clipboard_navigation_url("file:///etc/passwd", SearchProvider::Google).is_none());
@@ -4612,7 +4617,7 @@ mod gui_address_tests {
         );
         assert_eq!(
             markdown_link("", "https://example.org/"),
-            "[https://example.org/] (https://example.org/)".replace("] (", "](")
+            "[https://example.org/](https://example.org/)"
         );
     }
 
