@@ -1966,6 +1966,16 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             close_tabs_on_side(state, key == VK_LEFT);
             return true;
         }
+        if alt && key == VK_D {
+            if let Some(url) = current_page_url(state) {
+                open_link_in_new_tab(state, hwnd, &url);
+            }
+            return true;
+        }
+        if alt && key == VK_C {
+            copy_current_page_title_and_url(state, hwnd);
+            return true;
+        }
         if (key == VK_TAB || key == VK_PRIOR || key == VK_NEXT) && !state.tabs.is_empty() {
             let active_index = state
                 .browser
@@ -2328,6 +2338,17 @@ unsafe fn copy_current_page_title(state: &AppState, hwnd: Hwnd) {
             let _ = copy_text_to_clipboard(hwnd, &title);
         }
     }
+}
+
+unsafe fn copy_current_page_title_and_url(state: &AppState, hwnd: Hwnd) {
+    let Some(page) = state.browser.current_page() else {
+        return;
+    };
+    let Some(url) = page.url() else {
+        return;
+    };
+    let title = page.title().filter(|title| !title.trim().is_empty()).unwrap_or_else(|| url.to_string());
+    let _ = copy_text_to_clipboard(hwnd, &format!("{title}\t{url}"));
 }
 
 unsafe fn open_url_externally(hwnd: Hwnd, value: &str) {
