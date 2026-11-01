@@ -104,6 +104,16 @@ impl<P, T> DocumentLoader<P, T> {
         true
     }
 
+    /// Clear cached HTTP responses without touching cookies or other site data.
+    /// Returns false if the cache lock has been poisoned.
+    pub fn clear_cache(&self) -> bool {
+        let Ok(mut cache) = self.cache.lock() else {
+            return false;
+        };
+        cache.clear();
+        true
+    }
+
     /// Report the configured cache ceiling, or None if its lock is poisoned.
     pub fn cache_capacity_bytes(&self) -> Option<usize> {
         self.cache.lock().ok().map(|cache| cache.capacity_bytes())
