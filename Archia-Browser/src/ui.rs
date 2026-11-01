@@ -28,7 +28,6 @@ impl RequestPolicyEngine for BrowserPolicy {
 
 type Loader = DocumentLoader<BrowserPolicy, HttpTransport>;
 
-
 #[derive(Clone)]
 struct SavedPage {
     title: String,
@@ -363,7 +362,6 @@ impl ArchiaApp {
             Err(error) => self.status = format!("Lien invalide : {error:?}"),
         }
     }
-
 }
 
 impl eframe::App for ArchiaApp {
@@ -485,11 +483,16 @@ impl eframe::App for ArchiaApp {
                         let target = self.address.clone();
                         self.navigate(&target);
                     }
-                    let is_bookmarked = self
-                        .browser
-                        .current_url()
-                        .is_some_and(|url| self.bookmarks.iter().any(|entry| entry.url == url.to_string()));
-                    if ui.button(if is_bookmarked { "★" } else { "☆" }).on_hover_text("Ajouter ou retirer des favoris").clicked() {
+                    let is_bookmarked = self.browser.current_url().is_some_and(|url| {
+                        self.bookmarks
+                            .iter()
+                            .any(|entry| entry.url == url.to_string())
+                    });
+                    if ui
+                        .button(if is_bookmarked { "★" } else { "☆" })
+                        .on_hover_text("Ajouter ou retirer des favoris")
+                        .clicked()
+                    {
                         self.toggle_bookmark();
                     }
                     ui.menu_button("Favoris", |ui| {
@@ -641,8 +644,6 @@ impl eframe::App for ArchiaApp {
             });
     }
 }
-
-
 
 #[cfg(windows)]
 fn browser_data_directory() -> std::path::PathBuf {
