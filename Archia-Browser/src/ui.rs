@@ -360,7 +360,10 @@ impl ArchiaApp {
         load_inter_font(&cc.egui_ctx);
         let mut bookmarks = load_saved_pages(&data_dir.join("bookmarks.tsv"));
         deduplicate_saved_pages(&mut bookmarks);
-        let history_items = load_saved_pages(&data_dir.join("history.tsv"));
+        let mut history_items = load_saved_pages(&data_dir.join("history.tsv"));
+        deduplicate_saved_pages(&mut history_items);
+        history_items.truncate(500);
+        save_saved_pages(&data_dir.join("history.tsv"), &history_items);
         let settings_path = data_dir.join("settings.ini");
         let session_path = data_dir.join("session.tsv");
         let settings = BrowserSettings::load(&settings_path);
@@ -756,6 +759,22 @@ impl ArchiaApp {
         self.status = "Historique copié".to_owned();
     }
 
+    fn copy_history_csv(&mut self, ctx: &egui::Context) {
+        let mut rows = vec!["title,url".to_owned()];
+        rows.extend(self.history_items.iter().map(|item| {
+            format!("{},{}", escape_csv(&item.title), escape_csv(&item.url))
+        }));
+        ctx.copy_text(rows.join("\r\n"));
+        self.status = "Historique exporté en CSV".to_owned();
+    }
+
+    fn clear_history(&mut self) {
+        let count = self.history_items.len();
+        self.history_items.clear();
+        save_saved_pages(&browser_data_directory().join("history.tsv"), &self.history_items);
+        self.status = format!("{count} entrée(s) d'historique supprimée(s)");
+    }
+
     fn copy_history_markdown(&mut self, ctx: &egui::Context) {
         let exported = self
             .history_items
@@ -1002,8 +1021,7 @@ impl ArchiaApp {
                 added += 1;
             }
         }
-        self.bookmarks
-            .sort_by(|left, right| left.title.to_lowercase().cmp(&right.title.to_lowercase()));
+        sort_saved_pages_by_title(&mut self.bookmarks);
         save_saved_pages(
             &browser_data_directory().join("bookmarks.tsv"),
             &self.bookmarks,
@@ -1423,26 +1441,30 @@ impl eframe::App for ArchiaApp {
                         ui.separator();
                         ui.menu_button("Trier", |ui| {
                             if ui.button("Par nom (A → Z)").clicked() {
-                                self.bookmarks.sort_by(|a, b| {
-                                    a.title.to_lowercase().cmp(&b.title.to_lowercase())
-                                });
+                                sort_saved_pages_by_title(&mut self.bookmarks);
                                 save_saved_pages(
                                     &browser_data_directory().join("bookmarks.tsv"),
                                     &self.bookmarks,
                                 );
                             }
-                            if ui.button("Par site").clicked() {
-                                self.bookmarks.sort_by_key(|item| {
-                                    Url::parse(&item.url)
-                                        .map(|url| url.host().to_ascii_lowercase())
-                                        .unwrap_or_default()
-                                });
+                            if ui.button("Par site puis par nom").clicked() {
+                                sort_saved_pages_by_site(&mut self.bookmarks);
                                 save_saved_pages(
                                     &browser_data_directory().join("bookmarks.tsv"),
                                     &self.bookmarks,
                                 );
                             }
                         });
+                        if ui.button("Supprimer les favoris en double").clicked() {
+                            let before = self.bookmarks.len();
+                            deduplicate_saved_pages(&mut self.bookmarks);
+                            let removed = before - self.bookmarks.len();
+                            save_saved_pages(
+                                &browser_data_directory().join("bookmarks.tsv"),
+                                &self.bookmarks,
+                            );
+                            self.status = format!("{removed} favori(s) en double supprimé(s)");
+                        }
                         ui.separator();
                         let items = self.bookmarks.clone();
                         if items.is_empty() {
@@ -1455,6 +1477,21 @@ impl eframe::App for ArchiaApp {
                         }
                     });
                     ui.menu_button("Historique", |ui| {
+                        ui.horizontal(|ui| {
+                            if ui.button("Exporter TSV").clicked() {
+                                self.copy_history(ui.ctx());
+                            }
+                            if ui.button("Exporter CSV").clicked() {
+                                self.copy_history_csv(ui.ctx());
+                            }
+                            if ui.button("Markdown").clicked() {
+                                self.copy_history_markdown(ui.ctx());
+                            }
+                        });
+                        if ui.button("Effacer tout l'historique").clicked() {
+                            self.clear_history();
+                        }
+                        ui.separator();
                         let items = self.history_items.clone();
                         if items.is_empty() {
                             ui.label("Aucune navigation enregistrée");
@@ -2268,6 +2305,31 @@ fn browser_data_directory() -> std::path::PathBuf {
         .join("archia-browser")
 }
 
+fn sort_saved_pages_by_title(pages: &mut [SavedPage]) {
+    pages.sort_by(|left, right| {
+        left.title
+            .to_lowercase()
+            .cmp(&right.title.to_lowercase())
+            .then_with(|| left.url.cmp(&right.url))
+    });
+}
+
+fn saved_page_host_key(page: &SavedPage) -> String {
+    Url::parse(&page.url)
+        .map(|url| url.host().to_ascii_lowercase())
+        .unwrap_or_default()
+}
+
+fn sort_saved_pages_by_site(pages: &mut [SavedPage]) {
+    pages.sort_by_key(|page| {
+        (
+            saved_page_host_key(page),
+            page.title.to_lowercase(),
+            page.url.clone(),
+        )
+    });
+}
+
 fn deduplicate_saved_pages(pages: &mut Vec<SavedPage>) {
     let mut seen = std::collections::HashSet::new();
     pages.retain(|page| seen.insert(page.url.clone()));
@@ -2477,6 +2539,35 @@ mod tests {
         assert!(!super::is_safe_bookmark_import("https://example.org/\0"));
         assert!(!super::is_safe_bookmark_import("https://example.org/\\0"));
         assert!(!super::is_safe_bookmark_import(&"x".repeat(128 * 1024 + 1)));
+    }
+
+    #[test]
+    fn bookmark_sorting_is_stable_by_title_and_site() {
+        let mut pages = vec![
+            super::SavedPage { title: "Zulu".into(), url: "https://z.example/".into() },
+            super::SavedPage { title: "B page".into(), url: "https://a.example/b".into() },
+            super::SavedPage { title: "A page".into(), url: "https://a.example/a".into() },
+            super::SavedPage { title: "alpha".into(), url: "https://alpha.example/".into() },
+        ];
+        super::sort_saved_pages_by_title(&mut pages);
+        assert_eq!(pages.iter().map(|page| page.title.as_str()).collect::<Vec<_>>(),
+            vec!["A page", "alpha", "B page", "Zulu"]);
+        super::sort_saved_pages_by_site(&mut pages);
+        assert_eq!(pages.iter().map(|page| page.url.as_str()).collect::<Vec<_>>(),
+            vec!["https://a.example/a", "https://a.example/b", "https://alpha.example/", "https://z.example/"]);
+    }
+
+    #[test]
+    fn saved_page_deduplication_keeps_first_entry_and_latest_history_order() {
+        let mut pages = vec![
+            super::SavedPage { title: "Latest".into(), url: "https://same.example/".into() },
+            super::SavedPage { title: "Middle".into(), url: "https://middle.example/".into() },
+            super::SavedPage { title: "Older duplicate".into(), url: "https://same.example/".into() },
+        ];
+        super::deduplicate_saved_pages(&mut pages);
+        assert_eq!(pages.len(), 2);
+        assert_eq!(pages[0].title, "Latest");
+        assert_eq!(pages[1].title, "Middle");
     }
 
     #[test]
