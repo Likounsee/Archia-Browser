@@ -49,6 +49,8 @@ const VK_H: usize = 0x48;
 const VK_J: usize = 0x4A;
 const VK_K: usize = 0x4B;
 const VK_O: usize = 0x4F;
+const VK_I: usize = 0x49;
+const VK_Y: usize = 0x59;
 const VK_F5: usize = 0x74;
 const VK_CONTROL: i32 = 0x11;
 const VK_MENU: i32 = 0x12;
@@ -1828,6 +1830,17 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
         }
         if key == VK_O && GetKeyState(VK_SHIFT) < 0 {
             open_all_bookmarks(state, hwnd);
+            return true;
+        }
+        if key == VK_I && GetKeyState(VK_SHIFT) < 0 {
+            import_bookmarks_from_clipboard(state, hwnd);
+            return true;
+        }
+        if key == VK_Y && GetKeyState(VK_SHIFT) < 0 {
+            let text = export_bookmarks_text(&state.persistent_history);
+            if !text.is_empty() {
+                let _ = copy_text_to_clipboard(hwnd, &text);
+            }
             return true;
         }
         if key == 0x55 && GetKeyState(VK_SHIFT) < 0 {
