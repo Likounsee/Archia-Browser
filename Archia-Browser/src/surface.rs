@@ -1,10 +1,10 @@
-use ab_glyph::{point, Font, FontArc, PxScale, ScaleFont};
 use crate::{
     core::memory::{
         MemoryBudget, MemoryReservation, MemoryResourceSlot, MAX_LIVE_BUDGETED_OBJECTS,
     },
     html::{Node, NodeKind},
 };
+use ab_glyph::{point, Font, FontArc, PxScale, ScaleFont};
 use std::sync::{Arc, OnceLock};
 
 const MAX_SOFTWARE_SURFACE_BYTES: usize = 64 * 1024 * 1024;
@@ -391,14 +391,12 @@ impl SoftwareSurface {
     }
 }
 
-
 fn inter_page_font() -> Option<&'static FontArc> {
     static FONT: OnceLock<Option<FontArc>> = OnceLock::new();
     FONT.get_or_init(|| {
         let mut candidates = Vec::new();
         if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
-            let base = std::path::PathBuf::from(local_app_data)
-                .join("Microsoft/Windows/Fonts");
+            let base = std::path::PathBuf::from(local_app_data).join("Microsoft/Windows/Fonts");
             candidates.push(base.join("Inter.ttc"));
             candidates.push(base.join("Inter-Regular.ttf"));
         }
@@ -409,13 +407,18 @@ fn inter_page_font() -> Option<&'static FontArc> {
             candidates.push(base.join("Inter-Regular.ttf"));
             candidates.push(home.join(".fonts/Inter.ttc"));
         }
-        candidates.push(std::path::PathBuf::from("/usr/share/fonts/truetype/inter/Inter.ttc"));
-        candidates.push(std::path::PathBuf::from("/usr/share/fonts/truetype/inter/Inter-Regular.ttf"));
+        candidates.push(std::path::PathBuf::from(
+            "/usr/share/fonts/truetype/inter/Inter.ttc",
+        ));
+        candidates.push(std::path::PathBuf::from(
+            "/usr/share/fonts/truetype/inter/Inter-Regular.ttf",
+        ));
         candidates.into_iter().find_map(|path| {
             let bytes = std::fs::read(path).ok()?;
             FontArc::try_from_vec(bytes).ok()
         })
-    }).as_ref()
+    })
+    .as_ref()
 }
 
 fn draw_text_impl(
@@ -453,14 +456,18 @@ fn draw_text_impl(
         let glyph_id = font.glyph_id(character);
         let advance = scaled.h_advance(glyph_id);
         if glyph_id.0 == 0 {
-            draw_bitmap_glyph(surface, cursor_x.round() as i32, cursor_y.round() as i32, character, color, clip);
+            draw_bitmap_glyph(
+                surface,
+                cursor_x.round() as i32,
+                cursor_y.round() as i32,
+                character,
+                color,
+                clip,
+            );
             cursor_x += glyph_advance(character) as f32;
             continue;
         }
-        let glyph = glyph_id.with_scale_and_position(
-            scale,
-            point(cursor_x, cursor_y + ascent),
-        );
+        let glyph = glyph_id.with_scale_and_position(scale, point(cursor_x, cursor_y + ascent));
         if let Some(outlined) = font.outline_glyph(glyph) {
             let bounds = outlined.px_bounds();
             let min_x = bounds.min.x.floor() as i32;
