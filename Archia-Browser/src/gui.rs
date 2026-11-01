@@ -112,6 +112,8 @@ const ID_MENU_COPY_HISTORY_MARKDOWN: u32 = 3049;
 const ID_MENU_REOPEN_ALL_CLOSED_TABS: u32 = 3050;
 const ID_MENU_COPY_CLOSED_TABS_MARKDOWN: u32 = 3051;
 const ID_MENU_CLEAR_CLOSED_TABS: u32 = 3052;
+const ID_MENU_COPY_OPEN_TABS_MARKDOWN: u32 = 3053;
+const ID_MENU_COPY_OPEN_TABS_CSV: u32 = 3054;
 const ID_MENU_CLOSED_TAB_BASE: u32 = 3800;
 const MAX_MENU_CLOSED_TABS: usize = 20;
 const MAX_IMPORTED_BOOKMARKS: usize = 5_000;
@@ -1020,6 +1022,26 @@ fn export_open_tabs_text(entries: &[(String, String)]) -> String {
         .map(|(title, url)| format!("{title}\t{url}"))
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn export_open_tabs_csv(entries: &[(String, String)]) -> String {
+    let mut rows = vec!["title,url".to_owned()];
+    for (title, url) in entries {
+        let Ok(parsed) = Url::parse(url) else {
+            continue;
+        };
+        if !matches!(parsed.scheme(), "http" | "https") {
+            continue;
+        }
+        let title = title.replace('"', "\"\"");
+        let url = parsed.to_string().replace('"', "\"\"");
+        rows.push(format!("\"{title}\",\"{url}\""));
+    }
+    if rows.len() == 1 {
+        String::new()
+    } else {
+        rows.join("\r\n")
+    }
 }
 
 fn export_open_tabs_markdown(entries: &[(String, String)]) -> String {
@@ -3219,6 +3241,14 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             "Exporter les onglets ouverts en HTML (Netscape)",
         ),
         (
+            ID_MENU_COPY_OPEN_TABS_MARKDOWN,
+            "Copier les onglets ouverts au format Markdown",
+        ),
+        (
+            ID_MENU_COPY_OPEN_TABS_CSV,
+            "Copier les onglets ouverts au format CSV",
+        ),
+        (
             ID_MENU_OPEN_CLIPBOARD_LINKS,
             "Ouvrir les liens du presse-papiers dans des onglets",
         ),
@@ -3491,6 +3521,24 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             }
         }
         ID_MENU_COPY_OPEN_TABS_HTML => copy_open_tabs_html(state, hwnd),
+        ID_MENU_COPY_OPEN_TABS_MARKDOWN => copy_open_tabs_markdown(state, hwnd),
+        ID_MENU_COPY_OPEN_TABS_CSV => {
+            let entries = state
+                .tabs
+                .iter()
+                .filter_map(|(id, _)| {
+                    let page = state.browser.tabs().tab(*id)?.page()?;
+                    Some((
+                        page.title().unwrap_or_else(|| "(sans titre)".to_owned()),
+                        page.url()?.to_string(),
+                    ))
+                })
+                .collect::<Vec<_>>();
+            let csv = export_open_tabs_csv(&entries);
+            if !csv.is_empty() {
+                let _ = copy_text_to_clipboard(hwnd, &csv);
+            }
+        }
         ID_MENU_OPEN_CLIPBOARD_LINKS => open_links_from_clipboard(state, hwnd),
         ID_MENU_COPY_HISTORY => {
             let text = export_bookmarks_text(&state.persistent_history);
