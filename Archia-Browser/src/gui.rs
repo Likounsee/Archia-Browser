@@ -109,6 +109,8 @@ const ID_MENU_COPY_OPEN_TABS_HTML: u32 = 3046;
 const ID_MENU_OPEN_CLIPBOARD_LINKS: u32 = 3047;
 const ID_MENU_COPY_BOOKMARKS_MARKDOWN: u32 = 3048;
 const ID_MENU_COPY_HISTORY_MARKDOWN: u32 = 3049;
+const ID_MENU_REOPEN_ALL_CLOSED_TABS: u32 = 3050;
+const ID_MENU_COPY_CLOSED_TABS_MARKDOWN: u32 = 3051;
 const MAX_IMPORTED_BOOKMARKS: usize = 5_000;
 const MAX_CLIPBOARD_BYTES: usize = 2 * 1024 * 1024;
 const ID_RECENT_DOWNLOAD_BASE: u32 = 3700;
@@ -2084,6 +2086,29 @@ unsafe fn reopen_closed_tab(state: &mut AppState, hwnd: Hwnd) {
     }
 }
 
+unsafe fn reopen_all_closed_tabs(state: &mut AppState, hwnd: Hwnd) {
+    while !state.closed_tabs.is_empty() && state.tabs.len() < MAX_GUI_TABS {
+        reopen_closed_tab(state, hwnd);
+    }
+}
+
+fn closed_tabs_as_bookmarks(closed_tabs: &[Option<String>]) -> Vec<Bookmark> {
+    closed_tabs
+        .iter()
+        .filter_map(|url| {
+            let url = url.as_ref()?;
+            let parsed = Url::parse(url).ok()?;
+            if !matches!(parsed.scheme(), "http" | "https") {
+                return None;
+            }
+            Some(Bookmark {
+                title: parsed.host().to_owned(),
+                url: parsed.to_string(),
+            })
+        })
+        .collect()
+}
+
 unsafe fn select_tab_index(state: &mut AppState, index: usize) {
     if let Some((id, _)) = state.tabs.get(index) {
         state.browser.select_tab(*id);
@@ -2095,6 +2120,17 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
     let control = GetKeyState(VK_CONTROL) < 0;
     let alt = GetKeyState(VK_MENU) < 0;
     if control {
+        if alt && GetKeyState(VK_SHIFT) < 0 && key == VK_T {
+            reopen_all_closed_tabs(state, hwnd);
+            return true;
+        }
+        if alt && GetKeyState(VK_SHIFT) < 0 && key == VK_R {
+            let markdown = export_bookmarks_markdown(&closed_tabs_as_bookmarks(&state.closed_tabs));
+            if !markdown.is_empty() {
+                let _ = copy_text_to_clipboard(hwnd, &markdown);
+            }
+            return true;
+        }
         if alt && (key == VK_LEFT || key == VK_RIGHT) {
             close_tabs_on_side(state, key == VK_LEFT);
             return true;
@@ -2907,6 +2943,8 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         (ID_MENU_CLEAR_HISTORY, "Effacer l'historique"),
         (ID_MENU_CLEAR_SITE_DATA, "Effacer les cookies et le cache"),
         (ID_MENU_OPEN_ALL_BOOKMARKS, "Ouvrir tous les favoris"),
+        (ID_MENU_REOPEN_ALL_CLOSED_TABS, "Rouvrir tous les onglets récemment fermés"),
+        (ID_MENU_COPY_CLOSED_TABS_MARKDOWN, "Copier les onglets fermés au format Markdown"),
         (ID_MENU_SEARCH_GOOGLE, "Recherche : Google"),
         (ID_MENU_SEARCH_BING, "Recherche : Bing"),
         (ID_MENU_SEARCH_DDG, "Recherche : DuckDuckGo"),
@@ -3113,6 +3151,13 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         ID_MENU_NEW_TAB => create_new_tab(state, hwnd),
         ID_MENU_CLOSE_TAB => close_active_tab(state),
         ID_MENU_REOPEN_CLOSED_TAB => reopen_closed_tab(state, hwnd),
+        ID_MENU_REOPEN_ALL_CLOSED_TABS => reopen_all_closed_tabs(state, hwnd),
+        ID_MENU_COPY_CLOSED_TABS_MARKDOWN => {
+            let markdown = export_bookmarks_markdown(&closed_tabs_as_bookmarks(&state.closed_tabs));
+            if !markdown.is_empty() {
+                let _ = copy_text_to_clipboard(hwnd, &markdown);
+            }
+        }
         ID_MENU_CLEAR_HISTORY => {
             state.persistent_history.clear();
             save_persistent_history(state);
@@ -4453,6 +4498,22 @@ pub fn run() {
 }
 
 #[cfg(test)]
+    #[test]
+    fn closed_tabs_markdown_export_filters_invalid_urls_and_keeps_order() {
+        let closed = vec![
+            Some("https://example.com/first".to_owned()),
+            None,
+            Some("javascript:alert(1)".to_owned()),
+            Some("https://example.org/second".to_owned()),
+        ];
+        let bookmarks = closed_tabs_as_bookmarks(&closed);
+        assert_eq!(bookmarks.len(), 2);
+        assert_eq!(bookmarks[0].url, "https://example.com/first");
+        assert_eq!(bookmarks[1].url, "https://example.org/second");
+        assert!(export_bookmarks_markdown(&bookmarks).contains("example.com/first"));
+    }
+
+
 mod gui_address_tests {
     use super::*;
 
