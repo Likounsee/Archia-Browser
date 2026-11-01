@@ -1259,6 +1259,10 @@ impl eframe::App for ArchiaApp {
                             ui.ctx().copy_text(text);
                             self.status = "Favoris exportés en Markdown".to_owned();
                         }
+                        if ui.button("Exporter les favoris (HTML Netscape)").clicked() {
+                            ui.ctx().copy_text(export_bookmarks_html(&self.bookmarks));
+                            self.status = "Favoris exportés en HTML Netscape".to_owned();
+                        }
                         ui.separator();
                         ui.menu_button("Trier", |ui| {
                             if ui.button("Par nom (A → Z)").clicked() {
@@ -1655,7 +1659,111 @@ fn is_safe_clipboard_text(value: &str) -> bool {
     !value.is_empty() && value.len() <= 4_096 && !value.chars().any(char::is_control)
 }
 
+
+fn decode_bookmark_html_text(value: &str) -> String {
+    value.replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&apos;", "'")
+        .trim()
+        .to_owned()
+}
+
+fn strip_html_tags(value: &str) -> String {
+    let mut output = String::with_capacity(value.len());
+    let mut inside_tag = false;
+    for character in value.chars() {
+        match character {
+            '<' => inside_tag = true,
+            '>' => inside_tag = false,
+            _ if !inside_tag => output.push(character),
+            _ => {}
+        }
+    }
+    decode_bookmark_html_text(&output)
+}
+
+fn parse_netscape_bookmarks(text: &str) -> Vec<SavedPage> {
+    let lower = text.to_ascii_lowercase();
+    let mut imported = Vec::new();
+    let mut cursor = 0;
+    while imported.len() < 500 {
+        let Some(relative_start) = lower[cursor..].find("<a ") else { break };
+        let start = cursor + relative_start;
+        let Some(relative_end) = lower[start..].find('>') else { break };
+        let tag_end = start + relative_end;
+        let tag = &text[start..=tag_end];
+        let tag_lower = &lower[start..=tag_end];
+        let Some(href_start) = tag_lower.find("href") else {
+            cursor = tag_end + 1;
+            continue;
+        };
+        let after_href = tag[href_start + 4..].trim_start();
+        let Some(after_equals) = after_href.strip_prefix('=') else {
+            cursor = tag_end + 1;
+            continue;
+        };
+        let attribute = after_equals.trim_start();
+        let raw_url = if let Some(value) = attribute.strip_prefix('"') {
+            let Some(end) = value.find('"') else {
+                cursor = tag_end + 1;
+                continue;
+            };
+            &value[..end]
+        } else if let Some(value) = attribute.strip_prefix('\'') {
+            let Some(end) = value.find('\'') else {
+                cursor = tag_end + 1;
+                continue;
+            };
+            &value[..end]
+        } else {
+            let end = attribute.find(char::is_whitespace).unwrap_or(attribute.len());
+            &attribute[..end]
+        };
+        let Some(close_relative) = lower[tag_end + 1..].find("</a>") else { break };
+        let close_start = tag_end + 1 + close_relative;
+        let title = strip_html_tags(&text[tag_end + 1..close_start]);
+        if let Ok(url) = Url::parse(&decode_bookmark_html_text(raw_url)) {
+            if matches!(url.scheme(), "http" | "https") {
+                let title = if title.is_empty() { url.host().to_owned() } else { title };
+                if !imported.iter().any(|item: &SavedPage| item.url == url.to_string()) {
+                    imported.push(SavedPage { title, url: url.to_string() });
+                }
+            }
+        }
+        cursor = close_start + 4;
+    }
+    imported
+}
+
+fn escape_bookmark_html(value: &str) -> String {
+    value.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+fn export_bookmarks_html(bookmarks: &[SavedPage]) -> String {
+    let entries = bookmarks.iter().filter_map(|item| {
+        let url = Url::parse(&item.url).ok()?;
+        if !matches!(url.scheme(), "http" | "https") { return None; }
+        Some(format!(
+            "<DT><A HREF=\"{}\">{}</A>",
+            escape_bookmark_html(&url.to_string()),
+            escape_bookmark_html(&item.title)
+        ))
+    }).collect::<Vec<_>>().join("\n");
+    format!(
+        "<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=UTF-8\">\n<TITLE>Archia Browser Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n<DL><p>\n{entries}\n</DL><p>\n"
+    )
+}
+
 fn parse_bookmark_text(text: &str) -> Vec<SavedPage> {
+    if text.to_ascii_lowercase().contains("<a ") {
+        return parse_netscape_bookmarks(text);
+    }
     let mut imported = Vec::new();
     for line in text.lines().take(500) {
         let line = line.trim();
@@ -1965,6 +2073,18 @@ mod tests {
         assert_eq!(imported[0].url, "https://example.org/");
         assert_eq!(imported[1].title, "Example");
         assert_eq!(imported[2].title, "Docs");
+    }
+
+    #[test]
+    fn netscape_bookmark_import_and_html_export_round_trip() {
+        let imported = super::parse_bookmark_text(
+            "<DL><DT><A HREF=\"https://example.org/\" ADD_DATE=\"1\">Example &amp; Docs</A></DL>"
+        );
+        assert_eq!(imported.len(), 1);
+        assert_eq!(imported[0].title, "Example & Docs");
+        let exported = super::export_bookmarks_html(&imported);
+        assert!(exported.contains("https://example.org/"));
+        assert!(exported.contains("Example &amp; Docs"));
     }
 
     #[test]
