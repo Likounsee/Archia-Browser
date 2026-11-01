@@ -3780,9 +3780,15 @@ mod gui_address_tests {
 
     #[test]
     fn user_agent_profiles_are_distinct_and_persisted() {
-        assert!(UserAgentProfile::Archia.header("1.2").contains("ArchiaBrowser/1.2"));
-        assert!(UserAgentProfile::ChromiumCompatible.header("1.2").contains("Chrome/131.0.0.0"));
-        assert!(UserAgentProfile::FirefoxCompatible.header("1.2").contains("Firefox/128.0"));
+        assert!(UserAgentProfile::Archia
+            .header("1.2")
+            .contains("ArchiaBrowser/1.2"));
+        assert!(UserAgentProfile::ChromiumCompatible
+            .header("1.2")
+            .contains("Chrome/131.0.0.0"));
+        assert!(UserAgentProfile::FirefoxCompatible
+            .header("1.2")
+            .contains("Firefox/128.0"));
 
         let path = std::env::temp_dir().join(format!(
             "archia-browser-user-agent-{}.ini",
