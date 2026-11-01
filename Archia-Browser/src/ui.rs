@@ -630,7 +630,9 @@ impl ArchiaApp {
             .iter()
             .filter_map(|id| {
                 let url = self.browser.tabs().tab(*id)?.history().current()?.url();
-                url.host().eq_ignore_ascii_case(&host).then(|| url.to_string())
+                url.host()
+                    .eq_ignore_ascii_case(&host)
+                    .then(|| url.to_string())
             })
             .collect::<Vec<_>>()
             .join("\n");
