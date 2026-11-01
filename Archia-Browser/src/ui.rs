@@ -116,7 +116,7 @@ impl BrowserSettings {
         }
         let contents = format!(
             "search_provider={}\nhomepage={}\nrestore_session={}\nuser_agent={}\n",
-            self.search_provider.id(), self.homepage.replace(['\\r', '\\n'], ""), self.restore_session, self.user_agent.id()
+            self.search_provider.id(), self.homepage.replace(['\r', '\n'], ""), self.restore_session, self.user_agent.id()
         );
         let temporary = path.with_extension("tmp");
         if std::fs::write(&temporary, contents).is_ok() && std::fs::rename(&temporary, path).is_err() {
@@ -367,11 +367,11 @@ impl ArchiaApp {
         }).collect::<Vec<_>>();
         let exported = match format {
             ExportFormat::Tsv => entries.iter()
-                .map(|(title, url)| format!("{}\\t{}", title.replace(['\\t', '\\r', '\\n'], " "), url))
-                .collect::<Vec<_>>().join("\\n"),
+                .map(|(title, url)| format!("{}\t{}", title.replace(['\t', '\r', '\n'], " "), url))
+                .collect::<Vec<_>>().join("\n"),
             ExportFormat::Markdown => entries.iter()
                 .map(|(title, url)| format!("- [{}](<{}>)", title.replace('[', "\\\\[").replace(']', "\\\\]"), url))
-                .collect::<Vec<_>>().join("\\n"),
+                .collect::<Vec<_>>().join("\n"),
         };
         ctx.copy_text(exported);
         self.status = "Liste des onglets copiée".to_owned();
@@ -379,8 +379,8 @@ impl ArchiaApp {
 
     fn copy_history(&mut self, ctx: &egui::Context) {
         let exported = self.history_items.iter()
-            .map(|item| format!("{}\\t{}", item.title.replace(['\\t', '\\r', '\\n'], " "), item.url))
-            .collect::<Vec<_>>().join("\\n");
+            .map(|item| format!("{}\t{}", item.title.replace(['\t', '\r', '\n'], " "), item.url))
+            .collect::<Vec<_>>().join("\n");
         ctx.copy_text(exported);
         self.status = "Historique copié".to_owned();
     }
@@ -697,7 +697,7 @@ impl eframe::App for ArchiaApp {
             if let Some(url) = self.browser.current_url().map(ToString::to_string) {
                 let title = self.browser.current_page().and_then(|page| page.title()).unwrap_or_else(|| url.clone());
                 let text = if copy_page_tsv {
-                    format!("{}\\t{}", title.replace(['\\t', '\\r', '\\n'], " "), url)
+                    format!("{}\t{}", title.replace(['\t', '\r', '\n'], " "), url)
                 } else {
                     format!("[{}](<{}>)", title.replace('[', "\\\\[").replace(']', "\\\\]"), url)
                 };
