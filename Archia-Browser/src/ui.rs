@@ -530,6 +530,44 @@ impl ArchiaApp {
         }
     }
 
+    fn close_tabs_left_of(&mut self, target: archia_browser::core::tabs::TabId) {
+        let Some(index) = self.tabs.iter().position(|id| *id == target) else { return };
+        let ids = self.tabs[..index].to_vec();
+        for id in ids { self.close_tab(id); }
+    }
+
+    fn close_tabs_right_of(&mut self, target: archia_browser::core::tabs::TabId) {
+        let Some(index) = self.tabs.iter().position(|id| *id == target) else { return };
+        let ids = self.tabs[index + 1..].to_vec();
+        for id in ids { self.close_tab(id); }
+    }
+
+    fn close_duplicate_tabs(&mut self, target: archia_browser::core::tabs::TabId) {
+        let target_url = self.browser.tabs().tab(target)
+            .and_then(|tab| tab.history().current())
+            .map(|entry| entry.url().to_string());
+        let Some(target_url) = target_url else { return };
+        let ids = self.tabs.iter().copied().filter(|id| {
+            *id != target && self.browser.tabs().tab(*id)
+                .and_then(|tab| tab.history().current())
+                .is_some_and(|entry| entry.url().to_string() == target_url)
+        }).collect::<Vec<_>>();
+        for id in ids { self.close_tab(id); }
+    }
+
+    fn close_same_site_tabs(&mut self, target: archia_browser::core::tabs::TabId) {
+        let host = self.browser.tabs().tab(target)
+            .and_then(|tab| tab.history().current())
+            .map(|entry| entry.url().host().to_ascii_lowercase());
+        let Some(host) = host else { return };
+        let ids = self.tabs.iter().copied().filter(|id| {
+            *id != target && self.browser.tabs().tab(*id)
+                .and_then(|tab| tab.history().current())
+                .is_some_and(|entry| entry.url().host().eq_ignore_ascii_case(&host))
+        }).collect::<Vec<_>>();
+        for id in ids { self.close_tab(id); }
+    }
+
     fn reopen_closed_tab(&mut self) {
         if let Some(url) = self.closed_tabs.pop() {
             self.new_tab();
@@ -1110,6 +1148,18 @@ impl eframe::App for ArchiaApp {
                                         self.new_tab();
                                         self.navigate(&url);
                                     }
+                                }
+                                if ui.button("Fermer les onglets à gauche").clicked() {
+                                    self.close_tabs_left_of(id);
+                                }
+                                if ui.button("Fermer les onglets à droite").clicked() {
+                                    self.close_tabs_right_of(id);
+                                }
+                                if ui.button("Fermer les doublons").clicked() {
+                                    self.close_duplicate_tabs(id);
+                                }
+                                if ui.button("Fermer les onglets du même site").clicked() {
+                                    self.close_same_site_tabs(id);
                                 }
                             });
                             if response.clicked() {
