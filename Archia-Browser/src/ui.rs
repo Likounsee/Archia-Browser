@@ -697,11 +697,11 @@ fn save_saved_pages(path: &std::path::Path, pages: &[SavedPage]) {
         contents.push('\n');
     }
     let temporary = path.with_extension("tsv.tmp");
-    if std::fs::write(&temporary, contents).is_ok() {
-        if std::fs::rename(&temporary, path).is_err() {
-            let _ = std::fs::remove_file(path);
-            let _ = std::fs::rename(temporary, path);
-        }
+    if std::fs::write(&temporary, contents).is_ok()
+        && std::fs::rename(&temporary, path).is_err()
+    {
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::rename(temporary, path);
     }
 }
 
