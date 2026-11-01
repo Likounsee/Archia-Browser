@@ -1475,7 +1475,7 @@ impl eframe::App for ArchiaApp {
                                                 egui::Button::new(
                                                     egui::RichText::new(title)
                                                         .color(if active { self.palette.text } else { self.palette.muted })
-                                                        .strong(active),
+                                                        .strong(),
                                                 )
                                                 .fill(egui::Color32::TRANSPARENT)
                                                 .stroke(egui::Stroke::NONE),
