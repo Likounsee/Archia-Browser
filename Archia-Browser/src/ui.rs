@@ -14,6 +14,7 @@ use archia_browser::{
     Browser,
 };
 use eframe::egui;
+use std::{path::{Path, PathBuf}, sync::mpsc::{self, Receiver, Sender}};
 
 struct BrowserPolicy;
 
@@ -132,6 +133,10 @@ const LIME: egui::Color32 = egui::Color32::from_rgb(190, 242, 100);
 const TEXT: egui::Color32 = egui::Color32::from_rgb(238, 241, 235);
 const MUTED: egui::Color32 = egui::Color32::from_rgb(147, 155, 163);
 
+struct DownloadMessage {
+    result: Result<(PathBuf, usize), String>,
+}
+
 struct ArchiaApp {
     browser: Browser,
     loader: Loader,
@@ -149,6 +154,10 @@ struct ArchiaApp {
     settings_path: std::path::PathBuf,
     session_path: std::path::PathBuf,
     closed_tabs: Vec<String>,
+    pending_restore: Vec<String>,
+    restore_started: bool,
+    download_sender: Sender<DownloadMessage>,
+    download_receiver: Receiver<DownloadMessage>,
     focus_address: bool,
 }
 
@@ -184,6 +193,8 @@ impl ArchiaApp {
         let session_path = data_dir.join("session.tsv");
         let settings = BrowserSettings::load(&settings_path);
         let restored_tabs = if settings.restore_session { load_saved_pages(&session_path) } else { Vec::new() };
+        let pending_restore = restored_tabs.into_iter().map(|saved| saved.url).collect();
+        let (download_sender, download_receiver) = mpsc::channel();
 
         let mut app = Self {
             browser,
@@ -202,12 +213,12 @@ impl ArchiaApp {
             settings_path,
             session_path,
             closed_tabs: Vec::new(),
+            pending_restore,
+            restore_started: false,
+            download_sender,
+            download_receiver,
             focus_address: false,
         };
-        for (index, saved) in restored_tabs.into_iter().enumerate() {
-            if index > 0 { app.new_tab(); }
-            app.navigate(&saved.url);
-        }
         app
     }
 
@@ -379,6 +390,55 @@ impl ArchiaApp {
         for (index, url) in urls.into_iter().enumerate() {
             if index > 0 { self.new_tab(); }
             self.navigate(&url);
+        }
+    }
+
+    fn start_download(&mut self) {
+        let Some(url) = self.browser.current_url().cloned() else {
+            self.status = "Aucune page à télécharger".to_owned();
+            return;
+        };
+        if !matches!(url.scheme(), "http" | "https") {
+            self.status = "Seuls les téléchargements HTTP(S) sont autorisés".to_owned();
+            return;
+        }
+        let directory = downloads_directory();
+        if let Err(error) = std::fs::create_dir_all(&directory) {
+            self.status = format!("Dossier de téléchargements inaccessible : {error}");
+            return;
+        }
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default().as_nanos();
+        let pending = directory.join(format!(".archia-pending-{}-{nonce}.tmp", std::process::id()));
+        let sender = self.download_sender.clone();
+        let user_agent = self.settings.user_agent.header(self.browser.version());
+        self.status = format!("Téléchargement de {url}…");
+        std::thread::spawn(move || {
+            let transport = HttpTransport::new().with_limits(64 * 1024 * 1024, 64 * 1024);
+            let mut request = Request::new(url);
+            request.headers.insert("accept".into(), "*/*".into());
+            request.headers.insert("user-agent".into(), user_agent);
+            let result = archia_browser::net::download_to_path(&transport, &request, &pending)
+                .map_err(|error| format!("{error:?}"))
+                .and_then(|download| {
+                    let filename = safe_download_filename(&download.suggested_filename);
+                    let destination = unique_download_destination(&directory, &filename);
+                    std::fs::hard_link(&pending, &destination)
+                        .map_err(|error| format!("Impossible de publier le fichier : {error}"))?;
+                    let _ = std::fs::remove_file(&pending);
+                    Ok((destination, download.bytes_written))
+                });
+            if result.is_err() { let _ = std::fs::remove_file(&pending); }
+            let _ = sender.send(DownloadMessage { result });
+        });
+    }
+
+    fn poll_downloads(&mut self) {
+        while let Ok(message) = self.download_receiver.try_recv() {
+            self.status = match message.result {
+                Ok((path, bytes)) => format!("Téléchargement terminé · {} octets · {}", bytes, path.display()),
+                Err(error) => format!("Échec du téléchargement : {error}"),
+            };
         }
     }
 
@@ -562,6 +622,16 @@ impl ArchiaApp {
 
 impl eframe::App for ArchiaApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.poll_downloads();
+        if !self.pending_restore.is_empty() {
+            let url = self.pending_restore.remove(0);
+            if self.restore_started {
+                self.new_tab();
+            } else {
+                self.restore_started = true;
+            }
+            self.navigate(&url);
+        }
         let shortcuts = ctx.input(|input| {
             let ctrl = input.modifiers.ctrl;
             let shift = input.modifiers.shift;
@@ -767,7 +837,32 @@ impl eframe::App for ArchiaApp {
                             }
                         }
                     });
+                    ui.menu_button("Téléchargements", |ui| {
+                        if ui.button("Télécharger la page actuelle").clicked() {
+                            self.start_download();
+                        }
+                        if ui.button("Ouvrir le dossier Téléchargements").clicked() {
+                            let directory = downloads_directory();
+                            if std::fs::create_dir_all(&directory).is_ok() {
+                                open_local_path(&directory);
+                            }
+                        }
+                        ui.separator();
+                        let recent = recent_downloads();
+                        if recent.is_empty() {
+                            ui.label("Aucun téléchargement récent");
+                        }
+                        for path in recent {
+                            let label = path.file_name().unwrap_or_default().to_string_lossy();
+                            if ui.button(label.to_string()).on_hover_text(path.display().to_string()).clicked() {
+                                open_local_path(&path);
+                            }
+                        }
+                    });
                     ui.menu_button("Outils", |ui| {
+                        if ui.button("Télécharger la page actuelle").clicked() {
+                            self.start_download();
+                        }
                         if ui.button("Copier les onglets (TSV) · Ctrl+Shift+U").clicked() {
                             self.copy_open_tabs(ui.ctx(), ExportFormat::Tsv);
                         }
@@ -918,6 +1013,68 @@ impl eframe::App for ArchiaApp {
 }
 
 #[cfg(windows)]
+
+fn downloads_directory() -> PathBuf {
+    let base = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+    base.join("Downloads").join("Archia Browser")
+}
+
+fn safe_download_filename(value: &str) -> String {
+    let leaf = Path::new(value).file_name().unwrap_or_default().to_string_lossy();
+    let cleaned = leaf.chars()
+        .filter(|character| !character.is_control() && !matches!(character, '/' | '\\\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+        .take(180)
+        .collect::<String>();
+    let cleaned = cleaned.trim_matches([' ', '.']);
+    if cleaned.is_empty() || cleaned == "." || cleaned == ".." {
+        "download.bin".to_owned()
+    } else {
+        cleaned.to_owned()
+    }
+}
+
+fn unique_download_destination(directory: &Path, filename: &str) -> PathBuf {
+    let candidate = directory.join(filename);
+    if !candidate.exists() { return candidate; }
+    let path = Path::new(filename);
+    let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+    let extension = path.extension().map(|value| value.to_string_lossy().to_string());
+    for index in 1..=10_000 {
+        let name = match extension.as_deref() {
+            Some(extension) => format!("{stem} ({index}).{extension}"),
+            None => format!("{stem} ({index})"),
+        };
+        let candidate = directory.join(name);
+        if !candidate.exists() { return candidate; }
+    }
+    directory.join(format!("download-{}.bin", std::process::id()))
+}
+
+fn recent_downloads() -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(downloads_directory()) else { return Vec::new() };
+    let mut files = entries.filter_map(Result::ok).filter_map(|entry| {
+        let metadata = entry.metadata().ok()?;
+        if !metadata.is_file() || entry.file_name().to_string_lossy().starts_with(".archia-pending-") {
+            return None;
+        }
+        Some((metadata.modified().unwrap_or(std::time::UNIX_EPOCH), entry.path()))
+    }).collect::<Vec<_>>();
+    files.sort_by_key(|entry| std::cmp::Reverse(entry.0));
+    files.into_iter().take(12).map(|(_, path)| path).collect()
+}
+
+fn open_local_path(path: &Path) {
+    #[cfg(windows)]
+    let result = std::process::Command::new("explorer").arg(path).spawn();
+    #[cfg(target_os = "macos")]
+    let result = std::process::Command::new("open").arg(path).spawn();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let result = std::process::Command::new("xdg-open").arg(path).spawn();
+    let _ = result;
+}
+
 fn browser_data_directory() -> std::path::PathBuf {
     std::env::var_os("APPDATA")
         .map(std::path::PathBuf::from)
