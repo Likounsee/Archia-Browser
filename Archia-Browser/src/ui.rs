@@ -151,6 +151,7 @@ struct ArchiaApp {
     bookmarks: Vec<SavedPage>,
     history_items: Vec<SavedPage>,
     settings: BrowserSettings,
+    homepage_edit: String,
     settings_path: std::path::PathBuf,
     session_path: std::path::PathBuf,
     closed_tabs: Vec<String>,
@@ -209,6 +210,7 @@ impl ArchiaApp {
             last_viewport_width: 0,
             bookmarks,
             history_items,
+            homepage_edit: settings.homepage.clone(),
             settings,
             settings_path,
             session_path,
@@ -893,7 +895,17 @@ impl eframe::App for ArchiaApp {
                         ui.separator();
                         changed |= ui.checkbox(&mut self.settings.restore_session, "Restaurer la session au démarrage").changed();
                         ui.label("Page d'accueil HTTP(S)");
-                        changed |= ui.text_edit_singleline(&mut self.settings.homepage).changed();
+                        ui.text_edit_singleline(&mut self.homepage_edit);
+                        if ui.button("Enregistrer la page d'accueil").clicked() {
+                            match Url::parse(self.homepage_edit.trim()) {
+                                Ok(url) if matches!(url.scheme(), "http" | "https") => {
+                                    self.settings.homepage = url.to_string();
+                                    self.persist_settings();
+                                    self.status = "Page d'accueil enregistrée".to_owned();
+                                }
+                                _ => self.status = "La page d'accueil doit être une URL HTTP(S) valide".to_owned(),
+                            }
+                        }
                         if ui.button("Ouvrir la page d'accueil · Alt+Home").clicked() {
                             self.open_homepage();
                         }
@@ -1070,7 +1082,7 @@ fn open_local_path(path: &Path) {
     let result = std::process::Command::new("explorer").arg(path).spawn();
     #[cfg(target_os = "macos")]
     let result = std::process::Command::new("open").arg(path).spawn();
-    #[cfg(all(unix, not(target_os = "macos")))]
+    #[cfg(not(any(windows, target_os = "macos")))]
     let result = std::process::Command::new("xdg-open").arg(path).spawn();
     let _ = result;
 }
