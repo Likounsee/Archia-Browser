@@ -358,7 +358,8 @@ impl ArchiaApp {
             .unwrap_or_default();
         apply_palette(&cc.egui_ctx, palette);
         load_inter_font(&cc.egui_ctx);
-        let bookmarks = load_saved_pages(&data_dir.join("bookmarks.tsv"));
+        let mut bookmarks = load_saved_pages(&data_dir.join("bookmarks.tsv"));
+        deduplicate_saved_pages(&mut bookmarks);
         let history_items = load_saved_pages(&data_dir.join("history.tsv"));
         let settings_path = data_dir.join("settings.ini");
         let session_path = data_dir.join("session.tsv");
@@ -608,6 +609,33 @@ impl ArchiaApp {
         for id in ids {
             self.close_tab(id);
         }
+    }
+
+    fn copy_same_site_urls(
+        &mut self,
+        ctx: &egui::Context,
+        target: archia_browser::core::tabs::TabId,
+    ) {
+        let host = self
+            .browser
+            .tabs()
+            .tab(target)
+            .and_then(|tab| tab.history().current())
+            .map(|entry| entry.url().host().to_ascii_lowercase());
+        let Some(host) = host else {
+            return;
+        };
+        let urls = self
+            .tabs
+            .iter()
+            .filter_map(|id| {
+                let url = self.browser.tabs().tab(*id)?.history().current()?.url();
+                url.host().eq_ignore_ascii_case(&host).then(|| url.to_string())
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        ctx.copy_text(urls);
+        self.status = "URL du même site copiées".to_owned();
     }
 
     fn reopen_closed_tab(&mut self) {
@@ -1275,6 +1303,9 @@ impl eframe::App for ArchiaApp {
                                 }
                                 if ui.button("Fermer les onglets du même site").clicked() {
                                     self.close_same_site_tabs(id);
+                                }
+                                if ui.button("Copier les URL du même site").clicked() {
+                                    self.copy_same_site_urls(ui.ctx(), id);
                                 }
                             });
                             if response.clicked() {
@@ -2170,6 +2201,11 @@ fn browser_data_directory() -> std::path::PathBuf {
         .join(".local")
         .join("share")
         .join("archia-browser")
+}
+
+fn deduplicate_saved_pages(pages: &mut Vec<SavedPage>) {
+    let mut seen = std::collections::HashSet::new();
+    pages.retain(|page| seen.insert(page.url.clone()));
 }
 
 fn load_saved_pages(path: &std::path::Path) -> Vec<SavedPage> {
