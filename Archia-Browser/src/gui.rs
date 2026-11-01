@@ -2347,7 +2347,10 @@ unsafe fn copy_current_page_title_and_url(state: &AppState, hwnd: Hwnd) {
     let Some(url) = page.url() else {
         return;
     };
-    let title = page.title().filter(|title| !title.trim().is_empty()).unwrap_or_else(|| url.to_string());
+    let title = page
+        .title()
+        .filter(|title| !title.trim().is_empty())
+        .unwrap_or_else(|| url.to_string());
     let _ = copy_text_to_clipboard(hwnd, &format!("{title}\t{url}"));
 }
 
