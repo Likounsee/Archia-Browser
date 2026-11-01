@@ -688,7 +688,7 @@ fn load_bookmarks(path: &std::path::Path) -> Vec<Bookmark> {
 fn bookmark_host_key(url: &str) -> String {
     Url::parse(url)
         .ok()
-        .and_then(|parsed| parsed.host().map(str::to_ascii_lowercase))
+        .map(|parsed| parsed.host().to_ascii_lowercase())
         .unwrap_or_else(|| url.to_ascii_lowercase())
 }
 
@@ -1051,12 +1051,12 @@ unsafe fn show_recent_downloads(state: &mut AppState, hwnd: Hwnd) {
         ptr::null(),
     );
     let _ = DestroyMenu(menu);
-    if selected == ID_MENU_OPEN_DOWNLOADS as usize {
+    if selected == ID_MENU_OPEN_DOWNLOADS {
         open_downloads_folder(state);
-    } else if selected >= ID_RECENT_DOWNLOAD_BASE as usize
-        && selected < (ID_RECENT_DOWNLOAD_BASE + files.len() as u32) as usize
+    } else if selected >= ID_RECENT_DOWNLOAD_BASE
+        && selected < ID_RECENT_DOWNLOAD_BASE + files.len() as u32
     {
-        let index = selected - ID_RECENT_DOWNLOAD_BASE as usize;
+        let index = (selected - ID_RECENT_DOWNLOAD_BASE) as usize;
         if let Some((_, path)) = files.get(index) {
             let operation = wide("open");
             let target = wide(&path.to_string_lossy());
@@ -1069,10 +1069,10 @@ unsafe fn show_recent_downloads(state: &mut AppState, hwnd: Hwnd) {
                 SW_SHOW,
             );
         }
-    } else if selected >= ID_RECENT_DOWNLOAD_REVEAL_BASE as usize
-        && selected < (ID_RECENT_DOWNLOAD_REVEAL_BASE + files.len() as u32) as usize
+    } else if selected >= ID_RECENT_DOWNLOAD_REVEAL_BASE
+        && selected < ID_RECENT_DOWNLOAD_REVEAL_BASE + files.len() as u32
     {
-        let index = selected - ID_RECENT_DOWNLOAD_REVEAL_BASE as usize;
+        let index = (selected - ID_RECENT_DOWNLOAD_REVEAL_BASE) as usize;
         if let Some((_, path)) = files.get(index) {
             let operation = wide("open");
             let target = wide("explorer.exe");
@@ -1086,10 +1086,10 @@ unsafe fn show_recent_downloads(state: &mut AppState, hwnd: Hwnd) {
                 SW_SHOW,
             );
         }
-    } else if selected >= ID_RECENT_DOWNLOAD_COPY_BASE as usize
-        && selected < (ID_RECENT_DOWNLOAD_COPY_BASE + files.len() as u32) as usize
+    } else if selected >= ID_RECENT_DOWNLOAD_COPY_BASE
+        && selected < ID_RECENT_DOWNLOAD_COPY_BASE + files.len() as u32
     {
-        let index = selected - ID_RECENT_DOWNLOAD_COPY_BASE as usize;
+        let index = (selected - ID_RECENT_DOWNLOAD_COPY_BASE) as usize;
         if let Some((_, path)) = files.get(index) {
             let _ = copy_text_to_clipboard(hwnd, &path.to_string_lossy());
         }
@@ -2033,7 +2033,7 @@ unsafe fn open_url_externally(hwnd: Hwnd, value: &str) {
         return;
     }
     let operation = wide("open");
-    let target = wide(url.as_str());
+    let target = wide(&url.to_string());
     let result = ShellExecuteW(
         hwnd,
         operation.as_ptr(),
