@@ -1247,7 +1247,7 @@ mod eof_regression_tests {
             decode_character_references(
                 "&larr;&rarr; &le; &ge; &ne; &infin; &sum; &radic; &ensp;x&thinsp;y"
             ),
-            "←→ ≤ ≥ ≠ ∞ ∑ √\u{2002}x\u{2009}y"
+            "←→ ≤ ≥ ≠ ∞ ∑ √ \u{2002}x\u{2009}y"
         );
     }
 
