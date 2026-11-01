@@ -750,6 +750,24 @@ impl ArchiaApp {
             Err(error) => self.status = format!("Lien invalide : {error:?}"),
         }
     }
+
+    fn link_target_at(&self, x: i32, y: i32) -> Option<String> {
+        self.browser.current_page()
+            .and_then(|page| page.link_at(x, y))
+            .and_then(|node| node.link_href().map(str::to_owned))
+    }
+
+    fn open_link_at(&mut self, x: i32, y: i32, new_tab: bool) {
+        let Some(href) = self.link_target_at(x, y) else { return };
+        let Some(base) = self.browser.current_url().cloned() else { return };
+        match base.resolve(&href) {
+            Ok(url) => {
+                if new_tab { self.new_tab(); }
+                self.navigate(&url.to_string());
+            }
+            Err(error) => self.status = format!("Lien invalide : {error:?}"),
+        }
+    }
 }
 
 impl eframe::App for ArchiaApp {
@@ -1237,13 +1255,30 @@ impl eframe::App for ArchiaApp {
                 if self.browser.current_page().is_some() {
                     self.update_page_texture(ctx, width);
                     if let Some(texture) = self.page_texture.as_ref() {
+                        let texture_id = texture.id();
+                        let image_size = self.page_texture_size;
                         egui::ScrollArea::both()
                             .auto_shrink([false, false])
                             .show(ui, |ui| {
-                                ui.add(
-                                    egui::Image::new((texture.id(), self.page_texture_size))
+                                let response = ui.add(
+                                    egui::Image::new((texture_id, image_size))
                                         .sense(egui::Sense::click_and_drag()),
                                 );
+                                if let Some(pointer) = response.hover_pos() {
+                                    let x = (pointer.x - response.rect.min.x).floor() as i32;
+                                    let y = (pointer.y - response.rect.min.y).floor() as i32;
+                                    if self.link_target_at(x, y).is_some() {
+                                        response.on_hover_cursor(egui::CursorIcon::PointingHand);
+                                    }
+                                }
+                                if response.clicked() {
+                                    if let Some(pointer) = response.interact_pointer_pos() {
+                                        let x = (pointer.x - response.rect.min.x).floor() as i32;
+                                        let y = (pointer.y - response.rect.min.y).floor() as i32;
+                                        let new_tab = ctx.input(|input| input.modifiers.ctrl);
+                                        self.open_link_at(x, y, new_tab);
+                                    }
+                                }
                             });
                     }
                 } else {
