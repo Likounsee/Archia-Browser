@@ -21,6 +21,24 @@ pub struct StyleSheet {
 
 impl StyleSheet {
     pub fn parse(input: &str) -> Self {
+        Self::parse_for_viewport(input, 1024, 768)
+    }
+
+    /// Parse a stylesheet using the target document viewport for media queries.
+    /// Unsupported media features fail closed rather than applying rules globally.
+    pub fn parse_for_viewport(input: &str, viewport_width: u32, viewport_height: u32) -> Self {
+        Self::parse_internal(input, viewport_width, viewport_height, 0)
+    }
+
+    fn parse_internal(
+        input: &str,
+        viewport_width: u32,
+        viewport_height: u32,
+        depth: usize,
+    ) -> Self {
+        if depth > 8 {
+            return Self::default();
+        }
         // CSS can be supplied directly by callers as well as through the
         // document loader. Bound both scanned bytes and retained rule/selector
         // complexity so a hostile stylesheet cannot multiply work per DOM node.
@@ -36,14 +54,37 @@ impl StyleSheet {
         let mut rules = Vec::new();
         let mut total_selectors = 0usize;
         for (selector_text, declaration_text) in parse_rule_blocks(input, MAX_STYLE_RULES) {
-            if total_selectors >= MAX_TOTAL_SELECTORS {
+            if rules.len() >= MAX_STYLE_RULES || total_selectors >= MAX_TOTAL_SELECTORS {
                 break;
             }
-            // Nested at-rules (for example @media) are intentionally ignored until
-            // the engine implements their conditions; never misinterpret them as selectors.
-            if selector_text.trim_start().starts_with('@')
-                || selector_text.len() > MAX_SELECTOR_BYTES
-            {
+            let prelude = selector_text.trim();
+            if let Some(condition) = prelude.strip_prefix("@media") {
+                if media_query_matches(condition.trim(), viewport_width, viewport_height) {
+                    let nested = Self::parse_internal(
+                        &declaration_text,
+                        viewport_width,
+                        viewport_height,
+                        depth + 1,
+                    );
+                    for rule in nested.rules {
+                        if rules.len() >= MAX_STYLE_RULES {
+                            break;
+                        }
+                        total_selectors = total_selectors.saturating_add(rule.selectors.len());
+                        if total_selectors > MAX_TOTAL_SELECTORS {
+                            break;
+                        }
+                        if rules.try_reserve(1).is_err() {
+                            return Self { rules };
+                        }
+                        rules.push(rule);
+                    }
+                }
+                continue;
+            }
+            // Other at-rules are deliberately ignored until their semantics are
+            // implemented; never misinterpret them as selectors.
+            if prelude.starts_with('@') || selector_text.len() > MAX_SELECTOR_BYTES {
                 continue;
             }
 
@@ -258,6 +299,88 @@ impl StyleSheet {
 
         inherited
     }
+}
+
+
+/// Evaluate the bounded, commonly used subset of CSS media queries.
+fn media_query_matches(query: &str, viewport_width: u32, viewport_height: u32) -> bool {
+    query.split(',').any(|alternative| {
+        let mut query = alternative.trim().to_ascii_lowercase();
+        if query.is_empty() {
+            return false;
+        }
+        let negate = query.starts_with("not ");
+        if negate {
+            query = query[4..].trim_start().to_owned();
+        }
+        if let Some(rest) = query.strip_prefix("only ") {
+            query = rest.trim_start().to_owned();
+        }
+
+        let (media_type, conditions) = if let Some((kind, rest)) = query.split_once(" and ") {
+            (kind.trim(), rest)
+        } else {
+            (query.as_str(), "")
+        };
+        let mut matches = match media_type {
+            "" | "all" | "screen" => true,
+            "print" => false,
+            _ if media_type.starts_with('(') => true,
+            _ => false,
+        };
+        if !matches {
+            return negate;
+        }
+
+        let mut remaining = if media_type.starts_with('(') {
+            query.as_str()
+        } else {
+            conditions
+        };
+        while let Some(open) = remaining.find('(') {
+            let after_open = &remaining[open + 1..];
+            let Some(close) = after_open.find(')') else {
+                return false;
+            };
+            let feature = after_open[..close].trim();
+            let Some((name, value)) = feature.split_once(':') else {
+                return false;
+            };
+            let value = value.trim();
+            let expected = parse_media_length(value);
+            let condition = match name.trim() {
+                "min-width" => expected.is_some_and(|v| viewport_width >= v),
+                "max-width" => expected.is_some_and(|v| viewport_width <= v),
+                "min-height" => expected.is_some_and(|v| viewport_height >= v),
+                "max-height" => expected.is_some_and(|v| viewport_height <= v),
+                "orientation" if value == "portrait" => viewport_height >= viewport_width,
+                "orientation" if value == "landscape" => viewport_width > viewport_height,
+                _ => false,
+            };
+            matches &= condition;
+            remaining = &after_open[close + 1..];
+        }
+        if conditions.trim().is_empty() && !media_type.starts_with('(') {
+            matches = true;
+        }
+        if negate { !matches } else { matches }
+    })
+}
+
+fn parse_media_length(value: &str) -> Option<u32> {
+    let value = value.trim();
+    let (number, multiplier) = if let Some(number) = value.strip_suffix("px") {
+        (number, 1.0_f64)
+    } else if let Some(number) = value.strip_suffix("rem") {
+        (number, 16.0)
+    } else if let Some(number) = value.strip_suffix("em") {
+        (number, 16.0)
+    } else {
+        return None;
+    };
+    let pixels = number.trim().parse::<f64>().ok()? * multiplier;
+    (pixels.is_finite() && pixels >= 0.0 && pixels <= u32::MAX as f64)
+        .then_some(pixels.round() as u32)
 }
 
 /// Scan only top-level qualified rules. Unlike splitting on braces, this respects
@@ -962,5 +1085,45 @@ mod tests {
         let style = sheet.compute_style_path(&path);
         assert_eq!(style.get("color"), Some("green"));
         assert_eq!(style.get("margin"), None);
+    } 
+    #[test]
+    fn media_queries_apply_only_when_viewport_matches() {
+        let css = "@media screen and (max-width: 600px) { .card { color: red; } } @media (min-width: 601px) { .card { color: blue; } }";
+        let mut card = Node::element("div");
+        card.set_attribute("class", "card");
+
+        let narrow = StyleSheet::parse_for_viewport(css, 400, 800);
+        let wide = StyleSheet::parse_for_viewport(css, 900, 700);
+        assert_eq!(narrow.compute_style(&card).get("color"), Some("red"));
+        assert_eq!(wide.compute_style(&card).get("color"), Some("blue"));
     }
+
+    #[test]
+    fn media_query_lists_and_orientation_are_supported() {
+        let css = "@media (max-width: 400px), screen and (orientation: landscape) { p { color: green; } }";
+        let mut paragraph = Node::element("p");
+        let portrait = StyleSheet::parse_for_viewport(css, 360, 800);
+        let landscape = StyleSheet::parse_for_viewport(css, 900, 600);
+        assert_eq!(portrait.compute_style(&paragraph).get("color"), Some("green"));
+        assert_eq!(landscape.compute_style(&paragraph).get("color"), Some("green"));
+        let _ = &mut paragraph;
+    }
+
+    #[test]
+    fn unsupported_media_features_do_not_leak_rules() {
+        let sheet = StyleSheet::parse_for_viewport(
+            "@media (hover: hover) { p { color: red; } }",
+            1200,
+            800,
+        );
+        assert!(sheet.rules.is_empty());
+    }
+
+    #[test]
+    fn nested_media_rules_are_depth_bounded() {
+        let nested = "@media all { ".repeat(12) + "p { color: red; }" + &"} ".repeat(12);
+        let sheet = StyleSheet::parse_for_viewport(&nested, 800, 600);
+        assert!(sheet.rules.is_empty());
+    }
+
 }
