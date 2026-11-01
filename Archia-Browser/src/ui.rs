@@ -212,6 +212,36 @@ impl UiPalette {
     }
 }
 
+
+fn load_inter_font(ctx: &egui::Context) {
+    let mut candidates = Vec::new();
+    if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
+        candidates.push(PathBuf::from(local_app_data).join("Microsoft/Windows/Fonts/Inter.ttc"));
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        let home = PathBuf::from(home);
+        candidates.push(home.join(".local/share/fonts/Inter.ttc"));
+        candidates.push(home.join(".fonts/Inter.ttc"));
+    }
+    candidates.push(PathBuf::from("/usr/share/fonts/truetype/inter/Inter.ttc"));
+    candidates.push(PathBuf::from("/usr/local/share/fonts/Inter.ttc"));
+
+    for path in candidates {
+        let Ok(bytes) = std::fs::read(path) else { continue };
+        let mut fonts = egui::FontDefinitions::default();
+        fonts.font_data.insert(
+            "archia-inter".to_owned(),
+            egui::FontData::from_owned(bytes).into(),
+        );
+        fonts.families
+            .entry(egui::FontFamily::Proportional)
+            .or_default()
+            .insert(0, "archia-inter".to_owned());
+        ctx.set_fonts(fonts);
+        break;
+    }
+}
+
 fn parse_theme_color(value: &str) -> Option<egui::Color32> {
     let value = value.strip_prefix('#')?;
     if value.len() != 6 { return None; }
@@ -302,6 +332,7 @@ impl ArchiaApp {
             .map(|manager| UiPalette::from_manifest(&manager.active_theme().manifest))
             .unwrap_or_default();
         apply_palette(&cc.egui_ctx, palette);
+        load_inter_font(&cc.egui_ctx);
         let bookmarks = load_saved_pages(&data_dir.join("bookmarks.tsv"));
         let history_items = load_saved_pages(&data_dir.join("history.tsv"));
         let settings_path = data_dir.join("settings.ini");
@@ -1311,7 +1342,7 @@ impl eframe::App for ArchiaApp {
         egui::TopBottomPanel::bottom("archia_status")
             .frame(
                 egui::Frame::new()
-                    .fill(PANEL)
+                    .fill(self.palette.toolbar)
                     .inner_margin(egui::Margin::symmetric(14, 6)),
             )
             .show(ctx, |ui| {
@@ -1324,7 +1355,7 @@ impl eframe::App for ArchiaApp {
                                 "ARCHIA BROWSER · {}",
                                 self.browser.version()
                             ))
-                            .color(MUTED)
+                            .color(self.palette.muted)
                             .small(),
                         );
                     });
@@ -1332,7 +1363,7 @@ impl eframe::App for ArchiaApp {
             });
 
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(GRAPHITE).inner_margin(0))
+            .frame(egui::Frame::new().fill(self.palette.window).inner_margin(0))
             .show(ctx, |ui| {
                 let width = ui.available_width().max(480.0) as u32;
                 if width != self.last_viewport_width {
@@ -1384,7 +1415,7 @@ impl eframe::App for ArchiaApp {
                             egui::RichText::new("ARCHIA")
                                 .size(18.0)
                                 .strong()
-                                .color(LIME),
+                                .color(self.palette.accent),
                         );
                         ui.add_space(12.0);
                         ui.label(
@@ -1399,7 +1430,7 @@ impl eframe::App for ArchiaApp {
                                 "Un navigateur indépendant, construit autour du moteur Archia.",
                             )
                             .size(15.0)
-                            .color(MUTED),
+                            .color(self.palette.muted),
                         );
                         ui.add_space(28.0);
                         ui.horizontal(|ui| {
