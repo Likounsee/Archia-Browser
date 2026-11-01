@@ -892,13 +892,38 @@ fn export_bookmarks_html(bookmarks: &[Bookmark]) -> String {
     )
 }
 
+fn explicit_url_scheme(value: &str) -> Option<&str> {
+    let (scheme, remainder) = value.split_once(':')?;
+    let mut characters = scheme.chars();
+    if !characters.next()?.is_ascii_alphabetic()
+        || !characters.all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '+' | '-' | '.')
+        })
+        || remainder.trim_start_matches('/').chars().all(|character| character.is_ascii_digit())
+    {
+        return None;
+    }
+    Some(scheme)
+}
+
 fn clipboard_navigation_url(value: &str, provider: SearchProvider) -> Option<Url> {
     let value = value.trim();
     if value.is_empty() || value.len() > 4_096 || value.chars().any(char::is_control) {
         return None;
     }
+    if explicit_url_scheme(value)
+        .is_some_and(|scheme| !matches!(scheme, "http" | "https"))
+    {
+        return None;
+    }
     let url = parse_address_with_provider(value, provider).ok()?;
     matches!(url.scheme(), "http" | "https").then_some(url)
+}
+
+fn markdown_link(title: &str, url: &str) -> String {
+    let label = if title.trim().is_empty() { url } else { title };
+    let escaped = label.replace('\\', "\\\\").replace('[', "\\[").replace(']', "\\]");
+    format!("[{escaped}]({url})")
 }
 
 fn export_bookmarks_text(bookmarks: &[Bookmark]) -> String {
@@ -1976,6 +2001,10 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             copy_current_page_title_and_url(state, hwnd);
             return true;
         }
+        if alt && key == 0x4D {
+            copy_current_page_markdown_link(state, hwnd);
+            return true;
+        }
         if (key == VK_TAB || key == VK_PRIOR || key == VK_NEXT) && !state.tabs.is_empty() {
             let active_index = state
                 .browser
@@ -2352,6 +2381,18 @@ unsafe fn copy_current_page_title_and_url(state: &AppState, hwnd: Hwnd) {
         .filter(|title| !title.trim().is_empty())
         .unwrap_or_else(|| url.to_string());
     let _ = copy_text_to_clipboard(hwnd, &format!("{title}\t{url}"));
+}
+
+unsafe fn copy_current_page_markdown_link(state: &AppState, hwnd: Hwnd) {
+    let Some(page) = state.browser.current_page() else {
+        return;
+    };
+    let Some(url) = page.url() else {
+        return;
+    };
+    let title = page.title().unwrap_or_default();
+    let link = markdown_link(&title, &url.to_string());
+    let _ = copy_text_to_clipboard(hwnd, &link);
 }
 
 unsafe fn open_url_externally(hwnd: Hwnd, value: &str) {
@@ -4540,9 +4581,39 @@ mod gui_address_tests {
     fn clipboard_navigation_rejects_unsafe_empty_and_oversized_values() {
         assert!(clipboard_navigation_url("", SearchProvider::Google).is_none());
         assert!(clipboard_navigation_url("javascript:alert(1)", SearchProvider::Google).is_none());
+        assert!(clipboard_navigation_url("mailto:test@example.com", SearchProvider::Google).is_none());
+        assert!(clipboard_navigation_url("ftp://example.org/file", SearchProvider::Google).is_none());
         assert!(clipboard_navigation_url("file:///etc/passwd", SearchProvider::Google).is_none());
         assert!(clipboard_navigation_url(&"x".repeat(4_097), SearchProvider::Google).is_none());
         assert!(clipboard_navigation_url("hello\nworld", SearchProvider::Google).is_none());
+    }
+
+    #[test]
+    fn clipboard_navigation_keeps_localhost_ports_and_http_schemes() {
+        assert_eq!(
+            clipboard_navigation_url("localhost:8080", SearchProvider::Google)
+                .unwrap()
+                .to_string(),
+            "https://localhost:8080/"
+        );
+        assert_eq!(
+            clipboard_navigation_url("https://example.org/path", SearchProvider::Google)
+                .unwrap()
+                .to_string(),
+            "https://example.org/path"
+        );
+    }
+
+    #[test]
+    fn markdown_link_escapes_label_delimiters_and_falls_back_to_url() {
+        assert_eq!(
+            markdown_link("Docs [draft]", "https://example.org/docs"),
+            "[Docs \\[draft\\]](https://example.org/docs)"
+        );
+        assert_eq!(
+            markdown_link("", "https://example.org/"),
+            "[https://example.org/] (https://example.org/)".replace("] (", "](")
+        );
     }
 
     #[test]
