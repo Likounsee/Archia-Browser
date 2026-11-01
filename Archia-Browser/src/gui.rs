@@ -96,6 +96,9 @@ const ID_MENU_OPEN_EXTERNAL: u32 = 3037;
 const ID_MENU_CLEAR_SITE_DATA: u32 = 3038;
 const ID_MENU_COPY_OPEN_TABS: u32 = 3039;
 const ID_MENU_HARD_RELOAD: u32 = 3040;
+const ID_MENU_IMPORT_BOOKMARKS: u32 = 3041;
+const MAX_IMPORTED_BOOKMARKS: usize = 5_000;
+const MAX_CLIPBOARD_BYTES: usize = 2 * 1024 * 1024;
 const ID_RECENT_DOWNLOAD_BASE: u32 = 3700;
 const ID_RECENT_DOWNLOAD_REVEAL_BASE: u32 = 3720;
 const ID_RECENT_DOWNLOAD_COPY_BASE: u32 = 3740;
@@ -336,6 +339,7 @@ unsafe extern "system" {
     fn ShowScrollBar(hwnd: Hwnd, bar: i32, show: i32) -> i32;
     fn DrawTextW(hdc: Handle, text: *const u16, count: i32, rect: *mut Rect, format: u32) -> i32;
     fn OpenClipboard(owner: Hwnd) -> i32;
+    fn GetClipboardData(format: u32) -> Handle;
     fn EmptyClipboard() -> i32;
     fn SetClipboardData(format: u32, memory: Handle) -> Handle;
     fn CloseClipboard() -> i32;
@@ -410,6 +414,7 @@ unsafe extern "system" {
     fn GlobalAlloc(flags: u32, bytes: usize) -> Handle;
     fn GlobalLock(memory: Handle) -> *mut c_void;
     fn GlobalUnlock(memory: Handle) -> i32;
+    fn GlobalSize(memory: Handle) -> usize;
     fn GlobalFree(memory: Handle) -> Handle;
 }
 
@@ -718,6 +723,40 @@ fn deduplicate_bookmarks(bookmarks: &mut Vec<Bookmark>) {
     bookmarks.retain(|bookmark| seen.insert(bookmark.url.clone()));
 }
 
+fn parse_imported_bookmarks(text: &str) -> Vec<Bookmark> {
+    let mut imported = Vec::new();
+    for line in text.lines().take(MAX_IMPORTED_BOOKMARKS) {
+        let Some((first, second)) = line.split_once('\t') else {
+            continue;
+        };
+        let first = first.trim();
+        let second = second.trim();
+        let (title, raw_url) = if Url::parse(first)
+            .is_ok_and(|url| matches!(url.scheme(), "http" | "https"))
+        {
+            (second, first)
+        } else if Url::parse(second)
+            .is_ok_and(|url| matches!(url.scheme(), "http" | "https"))
+        {
+            (first, second)
+        } else {
+            continue;
+        };
+        let Ok(url) = Url::parse(raw_url) else {
+            continue;
+        };
+        if !matches!(url.scheme(), "http" | "https") {
+            continue;
+        }
+        imported.push(Bookmark {
+            title: if title.is_empty() { url.host().to_owned() } else { title.to_owned() },
+            url: url.to_string(),
+        });
+    }
+    deduplicate_bookmarks(&mut imported);
+    imported
+}
+
 fn export_bookmarks_text(bookmarks: &[Bookmark]) -> String {
     bookmarks
         .iter()
@@ -998,7 +1037,7 @@ unsafe fn show_recent_downloads(state: &mut AppState, hwnd: Hwnd) {
             ))
         })
         .collect::<Vec<_>>();
-    files.sort_by(|left, right| right.0.cmp(&left.0));
+    files.sort_by_key(|entry| std::cmp::Reverse(entry.0));
     files.truncate(MAX_RECENT_DOWNLOADS);
 
     let menu = CreatePopupMenu();
@@ -1504,7 +1543,7 @@ unsafe fn activate_link_at(state: &mut AppState, hwnd: Hwnd, client_x: i32, clie
                 );
             }
         }
-        navigate(state, &url);
+        navigate(state, url);
     }
 }
 
@@ -2071,6 +2110,54 @@ unsafe fn open_url_externally(hwnd: Hwnd, value: &str) {
     }
 }
 
+unsafe fn read_text_from_clipboard(hwnd: Hwnd) -> Option<String> {
+    const CF_UNICODETEXT: u32 = 13;
+    if OpenClipboard(hwnd) == 0 {
+        return None;
+    }
+    let memory = GetClipboardData(CF_UNICODETEXT);
+    if memory.is_null() {
+        let _ = CloseClipboard();
+        return None;
+    }
+    let byte_len = GlobalSize(memory).min(MAX_CLIPBOARD_BYTES);
+    if byte_len < std::mem::size_of::<u16>() {
+        let _ = CloseClipboard();
+        return None;
+    }
+    let source = GlobalLock(memory) as *const u16;
+    if source.is_null() {
+        let _ = CloseClipboard();
+        return None;
+    }
+    let max_units = byte_len / std::mem::size_of::<u16>();
+    let mut length = 0;
+    while length < max_units && *source.add(length) != 0 {
+        length += 1;
+    }
+    let value = String::from_utf16_lossy(std::slice::from_raw_parts(source, length));
+    let _ = GlobalUnlock(memory);
+    let _ = CloseClipboard();
+    Some(value)
+}
+
+unsafe fn import_bookmarks_from_clipboard(state: &mut AppState, hwnd: Hwnd) {
+    let Some(text) = read_text_from_clipboard(hwnd) else {
+        return;
+    };
+    let imported = parse_imported_bookmarks(&text);
+    if imported.is_empty() {
+        return;
+    }
+    let previous_count = state.bookmarks.len();
+    state.bookmarks.extend(imported);
+    deduplicate_bookmarks(&mut state.bookmarks);
+    if state.bookmarks.len() != previous_count {
+        save_bookmarks(state);
+        let _ = InvalidateRect(hwnd, ptr::null(), 1);
+    }
+}
+
 unsafe fn copy_text_to_clipboard(hwnd: Hwnd, value: &str) -> bool {
     const GMEM_MOVEABLE: u32 = 0x0002;
     const CF_UNICODETEXT: u32 = 13;
@@ -2309,6 +2396,7 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             "Supprimer les favoris en double",
         ),
         (ID_MENU_COPY_BOOKMARKS, "Copier tous les favoris"),
+        (ID_MENU_IMPORT_BOOKMARKS, "Importer les favoris depuis le presse-papiers"),
         (ID_MENU_COPY_HISTORY, "Copier l'historique"),
         (
             ID_MENU_COPY_OPEN_TABS,
@@ -2510,6 +2598,7 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
                 let _ = copy_text_to_clipboard(hwnd, &text);
             }
         }
+        ID_MENU_IMPORT_BOOKMARKS => import_bookmarks_from_clipboard(state, hwnd),
         ID_MENU_COPY_HISTORY => {
             let text = export_bookmarks_text(&state.persistent_history);
             if !text.is_empty() {
@@ -4014,6 +4103,18 @@ mod gui_address_tests {
             parse_address("[::1]:8080").unwrap().to_string(),
             "https://[::1]:8080/"
         );
+    }
+
+    #[test]
+    fn bookmark_import_accepts_both_tsv_column_orders_and_filters_unsafe_urls() {
+        let imported = parse_imported_bookmarks(
+            "Docs\\thttps://docs.example/path\\nhttps://archia.example/\\tArchia\\nBad\\tfile:///etc/passwd\\nDuplicate\\thttps://docs.example/path\\nNo separator",
+        );
+        assert_eq!(imported.len(), 2);
+        assert_eq!(imported[0].title, "Docs");
+        assert_eq!(imported[0].url, "https://docs.example/path");
+        assert_eq!(imported[1].title, "Archia");
+        assert_eq!(imported[1].url, "https://archia.example/");
     }
 
     #[test]
