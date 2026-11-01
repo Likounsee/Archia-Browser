@@ -1264,13 +1264,17 @@ impl eframe::App for ArchiaApp {
                                     egui::Image::new((texture_id, image_size))
                                         .sense(egui::Sense::click_and_drag()),
                                 );
-                                if let Some(pointer) = response.hover_pos() {
+                                let response = if let Some(pointer) = response.hover_pos() {
                                     let x = (pointer.x - response.rect.min.x).floor() as i32;
                                     let y = (pointer.y - response.rect.min.y).floor() as i32;
                                     if self.link_target_at(x, y).is_some() {
-                                        response.on_hover_cursor(egui::CursorIcon::PointingHand);
+                                        response.on_hover_cursor(egui::CursorIcon::PointingHand)
+                                    } else {
+                                        response
                                     }
-                                }
+                                } else {
+                                    response
+                                };
                                 if response.clicked() {
                                     if let Some(pointer) = response.interact_pointer_pos() {
                                         let x = (pointer.x - response.rect.min.x).floor() as i32;
