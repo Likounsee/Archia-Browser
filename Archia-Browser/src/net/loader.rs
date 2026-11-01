@@ -90,6 +90,20 @@ impl<P, T> DocumentLoader<P, T> {
         self
     }
 
+    /// Clear in-memory HTTP cookies and cached responses for this browser session.
+    /// Returns false if either internal lock has been poisoned.
+    pub fn clear_cookies_and_cache(&self) -> bool {
+        let Ok(mut cookies) = self.cookies.lock() else {
+            return false;
+        };
+        *cookies = super::CookieJar::new();
+        let Ok(mut cache) = self.cache.lock() else {
+            return false;
+        };
+        cache.clear();
+        true
+    }
+
     /// Report the configured cache ceiling, or None if its lock is poisoned.
     pub fn cache_capacity_bytes(&self) -> Option<usize> {
         self.cache.lock().ok().map(|cache| cache.capacity_bytes())
