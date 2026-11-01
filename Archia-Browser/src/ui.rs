@@ -818,17 +818,24 @@ impl ArchiaApp {
     }
 
     fn link_target_at(&self, x: i32, y: i32) -> Option<String> {
-        self.browser.current_page()
+        self.browser
+            .current_page()
             .and_then(|page| page.link_at(x, y))
             .and_then(|node| node.link_href().map(str::to_owned))
     }
 
     fn open_link_at(&mut self, x: i32, y: i32, new_tab: bool) {
-        let Some(href) = self.link_target_at(x, y) else { return };
-        let Some(base) = self.browser.current_url().cloned() else { return };
+        let Some(href) = self.link_target_at(x, y) else {
+            return;
+        };
+        let Some(base) = self.browser.current_url().cloned() else {
+            return;
+        };
         match base.resolve(&href) {
             Ok(url) => {
-                if new_tab { self.new_tab(); }
+                if new_tab {
+                    self.new_tab();
+                }
                 self.navigate(&url.to_string());
             }
             Err(error) => self.status = format!("Lien invalide : {error:?}"),
