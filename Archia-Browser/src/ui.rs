@@ -57,9 +57,9 @@ impl ArchiaApp {
         style.visuals.extreme_bg_color = egui::Color32::from_rgb(12, 14, 18);
         style.visuals.faint_bg_color = PANEL;
         style.visuals.selection.bg_fill = egui::Color32::from_rgb(66, 91, 43);
-        style.visuals.selection.stroke = egui::Stroke::new(1.0, LIME);
+        style.visuals.selection.stroke = egui::Stroke::new(1.0_f32, LIME);
         style.visuals.widgets.inactive.bg_fill = PANEL_LIGHT;
-        style.visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, TEXT);
+        style.visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0_f32, TEXT);
         style.visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(48, 56, 63);
         style.visuals.widgets.active.bg_fill = egui::Color32::from_rgb(57, 75, 44);
         style.visuals.widgets.open.bg_fill = PANEL_LIGHT;
@@ -67,7 +67,7 @@ impl ArchiaApp {
         style.spacing.button_padding = egui::vec2(11.0, 7.0);
         cc.egui_ctx.set_style(style);
 
-        let mut browser = Browser::new();
+        let browser = Browser::new();
         let first_tab = browser
             .active_tab_id()
             .expect("Browser creates an initial tab");
