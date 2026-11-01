@@ -2333,6 +2333,38 @@ mod tests {
     }
 
     #[test]
+    fn clipboard_navigation_uses_provider_and_rejects_non_web_schemes() {
+        let provider = super::SearchProvider::DuckDuckGo;
+        assert_eq!(
+            super::clipboard_navigation_url("example.org", provider).unwrap().as_str(),
+            "https://example.org/"
+        );
+        assert!(super::clipboard_navigation_url("rust browser engine", provider)
+            .unwrap().as_str().contains("duckduckgo.com"));
+        assert!(super::clipboard_navigation_url("file:///etc/passwd", provider).is_none());
+        assert!(super::clipboard_navigation_url("javascript:alert(1)", provider).is_none());
+        assert!(super::clipboard_navigation_url("https:example.org", provider).is_none());
+    }
+
+    #[test]
+    fn bookmark_import_accepts_both_tsv_orders_and_markdown_bullets() {
+        let imported = super::parse_bookmark_text(
+            "https://first.example/\\tFirst\\nSecond\\thttps://second.example/\\n* [Third](https://third.example/)\\nfile:///etc/passwd\\thostile"
+        );
+        assert_eq!(imported.len(), 3);
+        assert_eq!(imported[0].title, "First");
+        assert_eq!(imported[1].title, "Second");
+        assert_eq!(imported[2].title, "Third");
+    }
+
+    #[test]
+    fn bookmark_import_allows_newlines_but_rejects_null_bytes_and_oversized_data() {
+        assert!(super::is_safe_bookmark_import("https://example.org/\\nhttps://example.net/"));
+        assert!(!super::is_safe_bookmark_import("https://example.org/\\0"));
+        assert!(!super::is_safe_bookmark_import(&"x".repeat(128 * 1024 + 1)));
+    }
+
+    #[test]
     fn download_filename_sanitization_removes_path_and_reserved_characters() {
         assert_eq!(
             super::safe_download_filename("../../bad:name?.txt"),
