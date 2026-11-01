@@ -34,6 +34,9 @@ impl RequestPolicyEngine for BrowserPolicy {
 type Loader = DocumentLoader<BrowserPolicy, HttpTransport>;
 
 #[derive(Clone, Copy)]
+enum PasteAction { Navigate, NewTab, ImportBookmarks }
+
+#[derive(Clone, Copy)]
 enum ExportFormat {
     Tsv,
     Markdown,
@@ -308,6 +311,7 @@ struct ArchiaApp {
     closed_tabs: Vec<String>,
     bookmark_import_open: bool,
     bookmark_import_text: String,
+    pending_paste: Option<PasteAction>,
     pending_restore: Vec<String>,
     restore_started: bool,
     download_sender: Sender<DownloadMessage>,
@@ -383,6 +387,7 @@ impl ArchiaApp {
             closed_tabs: Vec::new(),
             bookmark_import_open: false,
             bookmark_import_text: String::new(),
+            pending_paste: None,
             pending_restore,
             restore_started: false,
             download_sender,
@@ -589,6 +594,34 @@ impl ArchiaApp {
             .join("\n");
         ctx.copy_text(exported);
         self.status = "Historique copié".to_owned();
+    }
+
+    fn copy_history_markdown(&mut self, ctx: &egui::Context) {
+        let exported = self.history_items.iter()
+            .map(|item| format!("- [{}](<{}>)", item.title.replace('[', "\\[").replace(']', "\\]"), item.url))
+            .collect::<Vec<_>>()
+            .join("\n");
+        ctx.copy_text(exported);
+        self.status = "Historique copié en Markdown".to_owned();
+    }
+
+    fn handle_pasted_text(&mut self, text: String) {
+        if !is_safe_clipboard_text(&text) {
+            self.status = "Presse-papiers vide, trop long ou invalide".to_owned();
+            return;
+        }
+        match self.pending_paste.take() {
+            Some(PasteAction::Navigate) => self.navigate(&text),
+            Some(PasteAction::NewTab) => {
+                self.new_tab();
+                self.navigate(&text);
+            }
+            Some(PasteAction::ImportBookmarks) => {
+                self.bookmark_import_text = text;
+                self.bookmark_import_open = true;
+            }
+            None => {}
+        }
     }
 
     fn open_all_bookmarks(&mut self) {
@@ -922,6 +955,11 @@ impl eframe::App for ArchiaApp {
                 ctrl && alt && input.key_pressed(egui::Key::C),
                 ctrl && alt && input.key_pressed(egui::Key::M),
                 alt && input.key_pressed(egui::Key::Home),
+                ctrl && shift && input.key_pressed(egui::Key::V),
+                ctrl && shift && input.key_pressed(egui::Key::F),
+                ctrl && shift && input.key_pressed(egui::Key::M),
+                ctrl && alt && shift && input.key_pressed(egui::Key::M),
+                ctrl && alt && shift && input.key_pressed(egui::Key::H),
             )
         });
         let (
@@ -941,6 +979,11 @@ impl eframe::App for ArchiaApp {
             copy_page_tsv,
             copy_page_markdown,
             open_home,
+            paste_navigate,
+            paste_new_tab,
+            paste_bookmarks,
+            export_tabs_markdown,
+            export_history_markdown,
         ) = shortcuts;
         if ctrl_t {
             self.new_tab();
@@ -973,6 +1016,28 @@ impl eframe::App for ArchiaApp {
         }
         if export_history {
             self.copy_history(ctx);
+        }
+        if export_tabs_markdown {
+            self.copy_open_tabs(ctx, ExportFormat::Markdown);
+        }
+        if export_history_markdown {
+            self.copy_history_markdown(ctx);
+        }
+        if paste_navigate || paste_new_tab || paste_bookmarks {
+            self.pending_paste = Some(if paste_bookmarks {
+                PasteAction::ImportBookmarks
+            } else if paste_new_tab {
+                PasteAction::NewTab
+            } else {
+                PasteAction::Navigate
+            });
+            ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+        }
+        let pasted = ctx.input(|input| input.events.iter().find_map(|event| {
+            if let egui::Event::Paste(text) = event { Some(text.clone()) } else { None }
+        }));
+        if let Some(text) = pasted {
+            self.handle_pasted_text(text);
         }
         if duplicate_tab {
             self.duplicate_active_tab();
@@ -1227,6 +1292,18 @@ impl eframe::App for ArchiaApp {
                         }
                     });
                     ui.menu_button("Outils", |ui| {
+                        if ui.button("Coller une adresse/recherche · Ctrl+Shift+V").clicked() {
+                            self.pending_paste = Some(PasteAction::Navigate);
+                            ui.ctx().send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                        }
+                        if ui.button("Coller dans un nouvel onglet · Ctrl+Shift+F").clicked() {
+                            self.pending_paste = Some(PasteAction::NewTab);
+                            ui.ctx().send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                        }
+                        if ui.button("Importer depuis le presse-papiers · Ctrl+Shift+M").clicked() {
+                            self.pending_paste = Some(PasteAction::ImportBookmarks);
+                            ui.ctx().send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                        }
                         if ui.button("Télécharger la page actuelle").clicked() {
                             self.start_download();
                         }
@@ -1241,6 +1318,9 @@ impl eframe::App for ArchiaApp {
                         }
                         if ui.button("Copier l'historique · Ctrl+Shift+Y").clicked() {
                             self.copy_history(ui.ctx());
+                        }
+                        if ui.button("Copier l'historique (Markdown) · Ctrl+Alt+Shift+H").clicked() {
+                            self.copy_history_markdown(ui.ctx());
                         }
                         if ui
                             .button("Rouvrir le dernier onglet fermé · Ctrl+Shift+T")
@@ -1518,6 +1598,11 @@ impl eframe::App for ArchiaApp {
                 });
         }
     }
+}
+
+fn is_safe_clipboard_text(value: &str) -> bool {
+    let value = value.trim();
+    !value.is_empty() && value.len() <= 4_096 && !value.chars().any(char::is_control)
 }
 
 fn parse_bookmark_text(text: &str) -> Vec<SavedPage> {
