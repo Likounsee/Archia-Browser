@@ -1025,7 +1025,7 @@ fn export_open_tabs_text(entries: &[(String, String)]) -> String {
 }
 
 fn export_open_tabs_csv(entries: &[(String, String)]) -> String {
-    let mut rows = vec!["title,url".to_owned()];
+            "title,url\r\n\"Docs, \"\"draft\"\"\",\"https://docs.example/path\"\r\n\"Second\",\"https://example.org/\""
     for (title, url) in entries {
         let Ok(parsed) = Url::parse(url) else {
             continue;
