@@ -151,6 +151,7 @@ const ID_TAB_CONTEXT_CLOSE_LEFT: u32 = 3607;
 const ID_TAB_CONTEXT_CLOSE_SAME_SITE: u32 = 3608;
 const ID_TAB_CONTEXT_CLOSE_DUPLICATES: u32 = 3609;
 const ID_TAB_CONTEXT_COPY_SITE_URLS: u32 = 3610;
+const ID_TAB_CONTEXT_COPY_TITLE_URL: u32 = 3611;
 const GWLP_WNDPROC: i32 = -4;
 const WM_CTLCOLOREDIT: u32 = 0x0133;
 const DT_SINGLELINE: u32 = 0x0020;
@@ -2533,6 +2534,10 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
             ID_TAB_CONTEXT_COPY_SITE_URLS,
             "Copier les adresses de tous les onglets de ce site",
         ),
+        (
+            ID_TAB_CONTEXT_COPY_TITLE_URL,
+            "Copier le titre et l'adresse de cet onglet",
+        ),
     ] {
         let label = wide(label);
         let _ = AppendMenuW(menu, MF_STRING, id as usize, label.as_ptr());
@@ -2564,6 +2569,20 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
         ID_TAB_CONTEXT_COPY_URL => {
             if let Some(url) = duplicate_url.as_deref() {
                 let _ = copy_text_to_clipboard(hwnd, url);
+            }
+        }
+        ID_TAB_CONTEXT_COPY_TITLE_URL => {
+            if let Some(page) = state.browser.tabs().tab(tab_id).and_then(|tab| tab.page()) {
+                if let Some(url) = page.url() {
+                    let title = page
+                        .title()
+                        .filter(|title| !title.trim().is_empty())
+                        .unwrap_or_else(|| url.to_string());
+                    let _ = copy_text_to_clipboard(
+                        hwnd,
+                        &format!("{title}\\r\\n{url}"),
+                    );
+                }
             }
         }
         ID_TAB_CONTEXT_COPY_SITE_URLS => {
