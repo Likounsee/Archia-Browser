@@ -1544,7 +1544,7 @@ unsafe fn activate_link_at(state: &mut AppState, hwnd: Hwnd, client_x: i32, clie
                 );
             }
         }
-        navigate(state, url);
+        navigate(state, &url);
     }
 }
 
