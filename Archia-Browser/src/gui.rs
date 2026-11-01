@@ -4108,7 +4108,7 @@ mod gui_address_tests {
     #[test]
     fn bookmark_import_accepts_both_tsv_column_orders_and_filters_unsafe_urls() {
         let imported = parse_imported_bookmarks(
-            "Docs\\thttps://docs.example/path\\nhttps://archia.example/\\tArchia\\nBad\\tfile:///etc/passwd\\nDuplicate\\thttps://docs.example/path\\nNo separator",
+            "Docs\thttps://docs.example/path\nhttps://archia.example/\tArchia\nBad\tfile:///etc/passwd\nDuplicate\thttps://docs.example/path\nNo separator",
         );
         assert_eq!(imported.len(), 2);
         assert_eq!(imported[0].title, "Docs");
