@@ -1574,6 +1574,18 @@ impl eframe::App for ArchiaApp {
             )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
+                    let (security_label, security_color) =
+                        match self.browser.current_url().map(Url::scheme) {
+                            Some("https") => ("HTTPS", self.palette.accent),
+                            Some("http") => ("HTTP", egui::Color32::from_rgb(235, 154, 92)),
+                            _ => ("LOCAL", self.palette.muted),
+                        };
+                    ui.label(
+                        egui::RichText::new(security_label)
+                            .strong()
+                            .small()
+                            .color(security_color),
+                    );
                     ui.label(egui::RichText::new("●").color(self.palette.accent));
                     ui.label(
                         egui::RichText::new(&self.status)
