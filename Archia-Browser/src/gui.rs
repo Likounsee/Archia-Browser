@@ -900,7 +900,9 @@ fn explicit_url_scheme(value: &str) -> Option<&str> {
             character.is_ascii_alphanumeric() || matches!(character, '+' | '-' | '.')
         })
         || (!remainder.is_empty()
-            && remainder.chars().all(|character| character.is_ascii_digit()))
+            && remainder
+                .chars()
+                .all(|character| character.is_ascii_digit()))
     {
         return None;
     }
@@ -913,9 +915,7 @@ fn clipboard_navigation_url(value: &str, provider: SearchProvider) -> Option<Url
         return None;
     }
     if let Some(scheme) = explicit_url_scheme(value) {
-        if !matches!(scheme, "http" | "https")
-            || !value[scheme.len() + 1..].starts_with("//")
-        {
+        if !matches!(scheme, "http" | "https") || !value[scheme.len() + 1..].starts_with("//") {
             return None;
         }
     }
@@ -925,7 +925,10 @@ fn clipboard_navigation_url(value: &str, provider: SearchProvider) -> Option<Url
 
 fn markdown_link(title: &str, url: &str) -> String {
     let label = if title.trim().is_empty() { url } else { title };
-    let escaped = label.replace('\\', "\\\\").replace('[', "\\[").replace(']', "\\]");
+    let escaped = label
+        .replace('\\', "\\\\")
+        .replace('[', "\\[")
+        .replace(']', "\\]");
     format!("[{escaped}]({url})")
 }
 
@@ -4586,8 +4589,12 @@ mod gui_address_tests {
         assert!(clipboard_navigation_url("javascript:alert(1)", SearchProvider::Google).is_none());
         assert!(clipboard_navigation_url("javascript:", SearchProvider::Google).is_none());
         assert!(clipboard_navigation_url("http:example.org", SearchProvider::Google).is_none());
-        assert!(clipboard_navigation_url("mailto:test@example.com", SearchProvider::Google).is_none());
-        assert!(clipboard_navigation_url("ftp://example.org/file", SearchProvider::Google).is_none());
+        assert!(
+            clipboard_navigation_url("mailto:test@example.com", SearchProvider::Google).is_none()
+        );
+        assert!(
+            clipboard_navigation_url("ftp://example.org/file", SearchProvider::Google).is_none()
+        );
         assert!(clipboard_navigation_url("file:///etc/passwd", SearchProvider::Google).is_none());
         assert!(clipboard_navigation_url(&"x".repeat(4_097), SearchProvider::Google).is_none());
         assert!(clipboard_navigation_url("hello\nworld", SearchProvider::Google).is_none());
