@@ -2921,7 +2921,10 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             ID_MENU_COPY_BOOKMARKS_HTML,
             "Copier les favoris au format HTML (Netscape)",
         ),
-        (ID_MENU_COPY_BOOKMARKS_MARKDOWN, "Copier les favoris au format Markdown"),
+        (
+            ID_MENU_COPY_BOOKMARKS_MARKDOWN,
+            "Copier les favoris au format Markdown",
+        ),
         (
             ID_MENU_PASTE_AND_GO,
             "Coller et ouvrir l’adresse ou rechercher le texte copié",
