@@ -392,7 +392,7 @@ impl eframe::App for ArchiaApp {
                             egui::RichText::new("ARCHIA")
                                 .size(18.0)
                                 .strong()
-                                .color(LIME)
+                                .color(LIME),
                         );
                         ui.add_space(12.0);
                         ui.label(
