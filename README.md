@@ -169,3 +169,10 @@ Les favoris peuvent aussi être exportés en Markdown depuis le menu Archia ou a
 - `Ctrl+Alt+Shift+T` rouvre en une fois les onglets récemment fermés, jusqu’à la limite globale de 100 onglets.
 - Le menu Archia propose aussi la restauration groupée.
 - `Ctrl+Alt+Shift+R` copie les adresses des onglets récemment fermés au format Markdown ; les entrées vides et les URL non HTTP(S) sont ignorées.
+
+
+### Restauration individuelle des onglets fermés
+
+- Le menu Archia affiche maintenant les 20 derniers onglets fermés, avec leur hôte et leur chemin.
+- Choisir une entrée rouvre précisément cet onglet, sans supprimer les autres entrées de la liste.
+- La restauration respecte la limite globale de 100 onglets.
