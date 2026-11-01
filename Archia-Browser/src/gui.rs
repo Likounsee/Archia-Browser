@@ -2059,6 +2059,27 @@ fn tab_indices_for_same_site(hosts: &[Option<String>], active_index: usize) -> V
         .collect()
 }
 
+fn urls_for_same_site(
+    hosts: &[Option<String>],
+    urls: &[Option<String>],
+    active_index: usize,
+) -> Vec<String> {
+    let Some(target_host) = hosts.get(active_index).and_then(Option::as_deref) else {
+        return Vec::new();
+    };
+    hosts
+        .iter()
+        .zip(urls.iter())
+        .filter_map(|(host, url)| {
+            (host
+                .as_deref()
+                .is_some_and(|host| host.eq_ignore_ascii_case(target_host)))
+            .then(|| url.as_ref().cloned())
+            .flatten()
+        })
+        .collect()
+}
+
 fn tab_indices_for_duplicate_urls(urls: &[Option<String>], active_index: usize) -> Vec<usize> {
     let Some(target_url) = urls.get(active_index).and_then(Option::as_deref) else {
         return Vec::new();
@@ -2546,32 +2567,35 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
             }
         }
         ID_TAB_CONTEXT_COPY_SITE_URLS => {
-            let target_host = state
-                .browser
-                .tabs()
-                .tab(tab_id)
-                .and_then(|tab| tab.page())
-                .and_then(|page| page.url())
-                .map(|url| url.host().to_owned());
-            if let Some(target_host) = target_host {
-                let urls = state
-                    .tabs
-                    .iter()
-                    .filter_map(|(id, _)| {
-                        let url = state
-                            .browser
-                            .tabs()
-                            .tab(*id)
-                            .and_then(|tab| tab.page())
-                            .and_then(|page| page.url())?;
-                        url.host()
-                            .eq_ignore_ascii_case(&target_host)
-                            .then(|| url.to_string())
-                    })
-                    .collect::<Vec<_>>();
-                if !urls.is_empty() {
-                    let _ = copy_text_to_clipboard(hwnd, &urls.join("\\r\\n"));
-                }
+            let hosts = state
+                .tabs
+                .iter()
+                .map(|(id, _)| {
+                    state
+                        .browser
+                        .tabs()
+                        .tab(*id)
+                        .and_then(|tab| tab.page())
+                        .and_then(|page| page.url())
+                        .map(|url| url.host().to_owned())
+                })
+                .collect::<Vec<_>>();
+            let urls = state
+                .tabs
+                .iter()
+                .map(|(id, _)| {
+                    state
+                        .browser
+                        .tabs()
+                        .tab(*id)
+                        .and_then(|tab| tab.page())
+                        .and_then(|page| page.url())
+                        .map(ToString::to_string)
+                })
+                .collect::<Vec<_>>();
+            let site_urls = urls_for_same_site(&hosts, &urls, index);
+            if !site_urls.is_empty() {
+                let _ = copy_text_to_clipboard(hwnd, &site_urls.join("\\r\\n"));
             }
         }
         ID_TAB_CONTEXT_CLOSE_DUPLICATES => {
@@ -4701,6 +4725,34 @@ mod gui_address_tests {
         assert_eq!(tab_indices_for_same_site(&hosts, 2), vec![4, 0]);
         assert!(tab_indices_for_same_site(&hosts, 3).is_empty());
         assert!(tab_indices_for_same_site(&hosts, 8).is_empty());
+    }
+
+    #[test]
+    fn copying_same_site_urls_keeps_tab_order_and_ignores_other_hosts() {
+        let hosts = vec![
+            Some("example.com".into()),
+            Some("other.test".into()),
+            Some("EXAMPLE.COM".into()),
+            None,
+            Some("example.com".into()),
+        ];
+        let urls = vec![
+            Some("https://example.com/first".into()),
+            Some("https://other.test/".into()),
+            Some("https://example.com/second".into()),
+            None,
+            Some("https://example.com/third".into()),
+        ];
+        assert_eq!(
+            urls_for_same_site(&hosts, &urls, 2),
+            vec![
+                "https://example.com/first",
+                "https://example.com/second",
+                "https://example.com/third",
+            ]
+        );
+        assert!(urls_for_same_site(&hosts, &urls, 3).is_empty());
+        assert!(urls_for_same_site(&hosts, &urls, 9).is_empty());
     }
 
     #[test]
