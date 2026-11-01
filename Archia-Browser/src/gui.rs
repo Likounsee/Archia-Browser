@@ -140,6 +140,7 @@ const ID_TAB_CONTEXT_CLOSE_OTHERS: u32 = 3603;
 const ID_TAB_CONTEXT_CLOSE_RIGHT: u32 = 3604;
 const ID_TAB_CONTEXT_COPY_URL: u32 = 3605;
 const ID_TAB_CONTEXT_RELOAD: u32 = 3606;
+const ID_TAB_CONTEXT_CLOSE_LEFT: u32 = 3607;
 const GWLP_WNDPROC: i32 = -4;
 const WM_CTLCOLOREDIT: u32 = 0x0133;
 const DT_SINGLELINE: u32 = 0x0020;
@@ -1900,6 +1901,33 @@ unsafe fn close_active_tab(state: &mut AppState) {
     close_tab_at(state, index);
 }
 
+fn tab_indices_to_close(active_index: usize, tab_count: usize, close_left: bool) -> Vec<usize> {
+    if active_index >= tab_count {
+        return Vec::new();
+    }
+    if close_left {
+        (0..active_index).rev().collect()
+    } else {
+        (active_index + 1..tab_count).rev().collect()
+    }
+}
+
+unsafe fn close_tabs_on_side(state: &mut AppState, close_left: bool) {
+    let Some(active_id) = state.browser.active_tab_id() else {
+        return;
+    };
+    let Some(active_index) = state.tabs.iter().position(|(id, _)| *id == active_id) else {
+        return;
+    };
+    let indices = tab_indices_to_close(active_index, state.tabs.len(), close_left);
+    for index in indices {
+        close_tab_at(state, index);
+    }
+    if let Some(index) = state.tabs.iter().position(|(id, _)| *id == active_id) {
+        select_tab_index(state, index);
+    }
+}
+
 unsafe fn reopen_closed_tab(state: &mut AppState, hwnd: Hwnd) {
     let Some(closed_url) = state.closed_tabs.pop() else {
         return;
@@ -1921,6 +1949,10 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
     let control = GetKeyState(VK_CONTROL) < 0;
     let alt = GetKeyState(VK_MENU) < 0;
     if control {
+        if alt && (key == VK_LEFT || key == VK_RIGHT) {
+            close_tabs_on_side(state, key == VK_LEFT);
+            return true;
+        }
         if (key == VK_TAB || key == VK_PRIOR || key == VK_NEXT) && !state.tabs.is_empty() {
             let active_index = state
                 .browser
@@ -2170,6 +2202,7 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
         (ID_TAB_CONTEXT_COPY_URL, "Copier l'adresse de l'onglet"),
         (ID_TAB_CONTEXT_CLOSE_OTHERS, "Fermer les autres onglets"),
         (ID_TAB_CONTEXT_CLOSE_RIGHT, "Fermer les onglets à droite"),
+        (ID_TAB_CONTEXT_CLOSE_LEFT, "Fermer les onglets à gauche"),
     ] {
         let label = wide(label);
         let _ = AppendMenuW(menu, MF_STRING, id as usize, label.as_ptr());
@@ -2203,8 +2236,9 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
                 let _ = copy_text_to_clipboard(hwnd, url);
             }
         }
-        ID_TAB_CONTEXT_CLOSE_RIGHT => {
-            for other_index in (index + 1..state.tabs.len()).rev() {
+        ID_TAB_CONTEXT_CLOSE_RIGHT | ID_TAB_CONTEXT_CLOSE_LEFT => {
+            let close_left = selected == ID_TAB_CONTEXT_CLOSE_LEFT;
+            for other_index in tab_indices_to_close(index, state.tabs.len(), close_left) {
                 close_tab_at(state, other_index);
             }
             if let Some(active_index) = state.tabs.iter().position(|(id, _)| *id == tab_id) {
@@ -4464,6 +4498,15 @@ mod gui_address_tests {
             "Archia\thttps://archia.example/\nDocs\thttps://docs.example/"
         );
         assert!(export_open_tabs_text(&[]).is_empty());
+    }
+
+    #[test]
+    fn close_tab_ranges_exclude_active_tab_and_close_in_reverse_order() {
+        assert_eq!(tab_indices_to_close(2, 5, true), vec![1, 0]);
+        assert_eq!(tab_indices_to_close(2, 5, false), vec![4, 3]);
+        assert!(tab_indices_to_close(0, 1, true).is_empty());
+        assert!(tab_indices_to_close(4, 5, false).is_empty());
+        assert!(tab_indices_to_close(5, 5, false).is_empty());
     }
 
     #[test]
