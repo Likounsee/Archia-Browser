@@ -2111,57 +2111,32 @@ fn parse_bookmark_text(text: &str) -> Vec<SavedPage> {
     if text.to_ascii_lowercase().contains("<a ") {
         return parse_netscape_bookmarks(text);
     }
-    if text.contains("](") {
-        return parse_markdown_bookmarks(text);
-    }
     let mut imported = Vec::new();
     for line in text.lines().take(500) {
         let line = line.trim();
-        if line.is_empty() {
+        if line.is_empty() { continue; }
+        if line.contains("](") {
+            imported.extend(parse_markdown_bookmarks(line));
             continue;
         }
         let Some((first, second)) = line.split_once('\t') else {
             if let Ok(url) = Url::parse(line) {
                 if matches!(url.scheme(), "http" | "https") {
-                    imported.push(SavedPage {
-                        title: url.host().to_owned(),
-                        url: url.to_string(),
-                    });
+                    imported.push(SavedPage { title: url.host().to_owned(), url: url.to_string() });
                 }
             }
             continue;
         };
         let first = first.trim();
         let second = second.trim();
-        let first_is_url =
-            Url::parse(first).is_ok_and(|url| matches!(url.scheme(), "http" | "https"));
-        let second_is_url =
-            Url::parse(second).is_ok_and(|url| matches!(url.scheme(), "http" | "https"));
-        let (title, raw_url) = if first_is_url {
-            (second, first)
-        } else if second_is_url {
-            (first, second)
-        } else {
-            continue;
-        };
-        let Ok(url) = Url::parse(raw_url) else {
-            continue;
-        };
-        let title = if title.is_empty() {
-            url.host().to_owned()
-        } else {
-            title.to_owned()
-        };
-        if !imported
-            .iter()
-            .any(|item: &SavedPage| item.url == url.to_string())
-        {
-            imported.push(SavedPage {
-                title,
-                url: url.to_string(),
-            });
-        }
+        let first_is_url = Url::parse(first).is_ok_and(|url| matches!(url.scheme(), "http" | "https"));
+        let second_is_url = Url::parse(second).is_ok_and(|url| matches!(url.scheme(), "http" | "https"));
+        let (title, raw_url) = if first_is_url { (second, first) } else if second_is_url { (first, second) } else { continue };
+        let Ok(url) = Url::parse(raw_url) else { continue };
+        let title = if title.is_empty() { url.host().to_owned() } else { title.to_owned() };
+        imported.push(SavedPage { title, url: url.to_string() });
     }
+    deduplicate_saved_pages(&mut imported);
     imported
 }
 
