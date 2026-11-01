@@ -250,43 +250,6 @@ impl UiPalette {
     }
 }
 
-fn load_inter_font(ctx: &egui::Context) {
-    // egui's font loader expects a single-face TrueType/OpenType font. A
-    // Windows .ttc collection can expose collection-wide metrics that cause
-    // egui's managed glyph atlas to grow beyond common GPU texture limits.
-    // Prefer a standalone Inter .ttf file and retain egui's bundled fonts as
-    // the safe fallback when only a .ttc collection is installed.
-    let mut candidates = Vec::new();
-    if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
-        candidates.push(PathBuf::from(local_app_data).join("Microsoft/Windows/Fonts/Inter.ttf"));
-    }
-    if let Some(home) = std::env::var_os("HOME") {
-        let home = PathBuf::from(home);
-        candidates.push(home.join(".local/share/fonts/Inter.ttf"));
-        candidates.push(home.join(".fonts/Inter.ttf"));
-    }
-    candidates.push(PathBuf::from("/usr/share/fonts/truetype/inter/Inter.ttf"));
-    candidates.push(PathBuf::from("/usr/local/share/fonts/Inter.ttf"));
-
-    for path in candidates {
-        let Ok(bytes) = std::fs::read(path) else {
-            continue;
-        };
-        let mut fonts = egui::FontDefinitions::default();
-        fonts.font_data.insert(
-            "archia-inter".to_owned(),
-            egui::FontData::from_owned(bytes).into(),
-        );
-        fonts
-            .families
-            .entry(egui::FontFamily::Proportional)
-            .or_default()
-            .insert(0, "archia-inter".to_owned());
-        ctx.set_fonts(fonts);
-        break;
-    }
-}
-
 fn parse_theme_color(value: &str) -> Option<egui::Color32> {
     let value = value.strip_prefix('#')?;
     if value.len() != 6 {
@@ -404,7 +367,7 @@ impl ArchiaApp {
             .map(|manager| UiPalette::from_manifest(&manager.active_theme().manifest))
             .unwrap_or_default();
         apply_palette(&cc.egui_ctx, palette);
-        load_inter_font(&cc.egui_ctx);
+        // Keep egui's bundled fonts: custom font collections can create an oversized GPU atlas.
         let mut bookmarks = load_saved_pages(&data_dir.join("bookmarks.tsv"));
         deduplicate_saved_pages(&mut bookmarks);
         let mut history_items = load_saved_pages(&data_dir.join("history.tsv"));
