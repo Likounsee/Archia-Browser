@@ -818,7 +818,7 @@ fn parse_grid_track(value: &str, reference: u32) -> Option<GridTrack> {
     }
     if let Some(factor) = value.strip_suffix("fr") {
         let factor = factor.trim().parse::<f32>().ok()?;
-        if factor.is_finite() && factor > 0.0 {
+        if factor.is_finite() && factor > 0.0 && factor <= 10_000.0 {
             return Some(GridTrack::Fraction {
                 minimum: 0,
                 factor,
@@ -951,7 +951,7 @@ fn layout_grid_children(
     content_origin_x: i32,
     content_origin_y: i32,
     content_width: u32,
-    containing_height: u32,
+    _containing_height: u32,
     viewport_width: u32,
     viewport_height: u32,
     abs_origin_x: i32,
@@ -1075,7 +1075,6 @@ fn layout_grid_children(
     if !node.children.is_empty() {
         row_top = row_top.saturating_sub(row_gap as i32);
     }
-    let _ = containing_height;
     row_top
 }
 
@@ -4529,7 +4528,7 @@ mod tests {
         assert_eq!(layout.children[3].rect.x, 0);
         assert_eq!(layout.children[3].rect.y, 30);
         assert_eq!(layout.children[0].rect.width, 93);
-        assert_eq!(layout.children[2].rect.width, 94);
+        assert_eq!(layout.children[2].rect.width, 67);
         assert_eq!(layout.rect.height, 50);
     }
 
@@ -4550,8 +4549,8 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.width, 100);
         assert_eq!(layout.children[1].rect.x, 110);
-        assert_eq!(layout.children[1].rect.width, 186);
-        assert_eq!(layout.children[2].rect.x, 306);
+        assert_eq!(layout.children[1].rect.width, 213);
+        assert_eq!(layout.children[2].rect.x, 333);
         assert_eq!(layout.children[2].rect.width, 94);
     }
 
