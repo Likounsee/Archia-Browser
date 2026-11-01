@@ -176,3 +176,10 @@ Les favoris peuvent aussi être exportés en Markdown depuis le menu Archia ou a
 - Le menu Archia affiche maintenant les 20 derniers onglets fermés, avec leur hôte et leur chemin.
 - Choisir une entrée rouvre précisément cet onglet, sans supprimer les autres entrées de la liste.
 - La restauration respecte la limite globale de 100 onglets.
+
+
+### Nettoyage avancé des onglets
+
+- Le menu contextuel d'un onglet permet de fermer tous les autres onglets du même site (même hôte), en conservant l'onglet choisi.
+- `Ctrl+Alt+Shift+X` vide la liste des onglets récemment fermés sans toucher aux onglets actuellement ouverts.
+- Le menu Archia propose également « Vider la liste des onglets fermés ».
