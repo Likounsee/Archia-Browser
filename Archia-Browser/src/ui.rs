@@ -2027,6 +2027,48 @@ impl eframe::App for ArchiaApp {
                                 } else {
                                     response
                                 };
+                                let context_pointer = response.interact_pointer_pos();
+                                let context_link = context_pointer.and_then(|pointer| {
+                                    let x = (pointer.x - response.rect.min.x).floor() as i32;
+                                    let y = (pointer.y - response.rect.min.y).floor() as i32;
+                                    self.link_target_at(x, y)
+                                });
+                                let page_url = self.browser.current_url().map(ToString::to_string);
+                                let page_title = self.browser.current_page()
+                                    .and_then(|page| page.title())
+                                    .map(str::to_owned);
+                                response.context_menu(|ui| {
+                                    if let Some(link) = context_link.as_ref() {
+                                        if ui.button("Ouvrir le lien dans un nouvel onglet").clicked() {
+                                            if let Some(base) = self.browser.current_url().cloned() {
+                                                if let Ok(url) = base.resolve(link) {
+                                                    self.new_tab();
+                                                    self.navigate(&url.to_string());
+                                                }
+                                            }
+                                        }
+                                        if ui.button("Copier l'adresse du lien").clicked() {
+                                            ui.ctx().copy_text(link.clone());
+                                            self.status = "Adresse du lien copiée".to_owned();
+                                        }
+                                        ui.separator();
+                                    }
+                                    if let Some(url) = page_url.as_ref() {
+                                        if ui.button("Copier l'adresse de la page").clicked() {
+                                            ui.ctx().copy_text(url.clone());
+                                            self.status = "Adresse de la page copiée".to_owned();
+                                        }
+                                    }
+                                    if let Some(title) = page_title.as_ref() {
+                                        if ui.button("Copier le titre de la page").clicked() {
+                                            ui.ctx().copy_text(title.clone());
+                                            self.status = "Titre de la page copié".to_owned();
+                                        }
+                                    }
+                                    if ui.button("Actualiser").clicked() {
+                                        self.reload();
+                                    }
+                                });
                                 if response.clicked() {
                                     if let Some(pointer) = response.interact_pointer_pos() {
                                         let x = (pointer.x - response.rect.min.x).floor() as i32;
