@@ -1,0 +1,21 @@
+id = "archia"
+name = "Archia"
+description = "The official Archia Browser interface: graphite surfaces, lime accent and a compact, sharp toolbar."
+version = "1.2.0"
+author = "Archia Browser"
+layout = "archia"
+tab_position = "top"
+sidebar = false
+
+[colors]
+window_background = "#1B1D22"
+toolbar_background = "#0C0D0F"
+tab_active_background = "#1B1D22"
+tab_inactive_background = "#262930"
+address_background = "#0C0D0F"
+address_text = "#F1F2F4"
+text = "#F1F2F4"
+muted_text = "#A7ABB5"
+accent = "#C6F24E"
+border = "#353842"
+page_background = "#FFFFFF"
