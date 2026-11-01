@@ -84,6 +84,7 @@ const ID_MENU_SORT_BOOKMARKS_TITLE: u32 = 3027;
 const ID_MENU_SORT_BOOKMARKS_DOMAIN: u32 = 3028;
 const ID_MENU_DEDUPLICATE_BOOKMARKS: u32 = 3029;
 const ID_MENU_COPY_BOOKMARKS: u32 = 3030;
+const ID_MENU_COPY_HISTORY: u32 = 3031;
 const ID_RECENT_DOWNLOAD_BASE: u32 = 3700;
 const ID_RECENT_DOWNLOAD_REVEAL_BASE: u32 = 3720;
 const ID_RECENT_DOWNLOAD_COPY_BASE: u32 = 3740;
@@ -759,7 +760,7 @@ fn load_persistent_history(path: &std::path::Path) -> Vec<Bookmark> {
     let Ok(contents) = std::fs::read_to_string(path) else {
         return Vec::new();
     };
-    contents
+    let mut history = contents
         .lines()
         .filter_map(|line| {
             let (url, title) = line.split_once('\t')?;
@@ -777,7 +778,16 @@ fn load_persistent_history(path: &std::path::Path) -> Vec<Bookmark> {
         .collect::<Vec<_>>()
         .into_iter()
         .rev()
-        .collect()
+        .collect::<Vec<_>>();
+    deduplicate_history_keep_latest(&mut history);
+    history
+}
+
+fn deduplicate_history_keep_latest(history: &mut Vec<Bookmark>) {
+    let mut seen = std::collections::HashSet::new();
+    history.reverse();
+    history.retain(|entry| seen.insert(entry.url.clone()));
+    history.reverse();
 }
 
 fn load_session(path: &std::path::Path) -> Vec<String> {
@@ -2128,6 +2138,7 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         (ID_MENU_SORT_BOOKMARKS_DOMAIN, "Trier les favoris par site"),
         (ID_MENU_DEDUPLICATE_BOOKMARKS, "Supprimer les favoris en double"),
         (ID_MENU_COPY_BOOKMARKS, "Copier tous les favoris"),
+        (ID_MENU_COPY_HISTORY, "Copier l'historique"),
         (
             ID_MENU_TOGGLE_SESSION,
             if state.settings.restore_session {
@@ -2283,6 +2294,12 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         }
         ID_MENU_COPY_BOOKMARKS => {
             let text = export_bookmarks_text(&state.bookmarks);
+            if !text.is_empty() {
+                let _ = copy_text_to_clipboard(hwnd, &text);
+            }
+        }
+        ID_MENU_COPY_HISTORY => {
+            let text = export_bookmarks_text(&state.persistent_history);
             if !text.is_empty() {
                 let _ = copy_text_to_clipboard(hwnd, &text);
             }
@@ -3600,6 +3617,19 @@ mod gui_address_tests {
             export_bookmarks_text(&bookmarks),
             "First title\thttps://example.org/\nOther\thttps://other.example/"
         );
+    }
+
+    #[test]
+    fn history_deduplication_keeps_the_latest_visit_and_order() {
+        let mut history = vec![
+            Bookmark { title: "Old title".into(), url: "https://same.example/".into() },
+            Bookmark { title: "Middle".into(), url: "https://middle.example/".into() },
+            Bookmark { title: "Latest title".into(), url: "https://same.example/".into() },
+        ];
+        deduplicate_history_keep_latest(&mut history);
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].title, "Middle");
+        assert_eq!(history[1].title, "Latest title");
     }
 
     #[test]
