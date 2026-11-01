@@ -2062,7 +2062,7 @@ impl eframe::App for ArchiaApp {
                                                     .small(),
                                             )
                                             .fill(self.palette.address)
-                                            .stroke(egui::Stroke::new(0.5, self.palette.muted)),
+                                            .stroke(egui::Stroke::new(0.5_f32, self.palette.muted)),
                                         )
                                         .on_hover_text(&item.url)
                                         .clicked()
@@ -2976,7 +2976,7 @@ mod tests {
         assert!(
             super::clipboard_navigation_url("rust browser engine", provider)
                 .unwrap()
-                .as_str()
+                .to_string()
                 .contains("duckduckgo.com")
         );
         assert!(super::clipboard_navigation_url("file:///etc/passwd", provider).is_none());

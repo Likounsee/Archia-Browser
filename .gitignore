@@ -1,0 +1,15 @@
+# Rust build output
+/target/
+/**/target/
+/fuzz/target/
+
+# Rust and application diagnostics
+*.log
+*.profraw
+
+# OS/editor temporary files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
