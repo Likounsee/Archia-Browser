@@ -46,6 +46,7 @@ const VK_C: usize = 0x43;
 const VK_H: usize = 0x48;
 const VK_J: usize = 0x4A;
 const VK_K: usize = 0x4B;
+const VK_O: usize = 0x4F;
 const VK_F5: usize = 0x74;
 const VK_CONTROL: i32 = 0x11;
 const VK_MENU: i32 = 0x12;
@@ -91,10 +92,12 @@ const ID_MENU_THEME_CHROME: u32 = 3011;
 const ID_MENU_THEME_FIREFOX: u32 = 3012;
 const ID_MENU_THEME_EDGE: u32 = 3013;
 const ID_MENU_HISTORY_BASE: u32 = 3200;
+const ID_MENU_HISTORY_NEW_TAB_BASE: u32 = 3210;
 const MAX_MENU_HISTORY_ITEMS: usize = 8;
 const MAX_PERSISTED_HISTORY_ITEMS: usize = 500;
 const MAX_RESTORED_TABS: usize = 20;
 const ID_MENU_BOOKMARK_BASE: u32 = 3300;
+const ID_MENU_BOOKMARK_NEW_TAB_BASE: u32 = 3320;
 const MAX_MENU_BOOKMARK_ITEMS: usize = 16;
 const ID_BOOKMARK_OPEN: u32 = 3501;
 const ID_BOOKMARK_OPEN_NEW_TAB: u32 = 3502;
@@ -1447,6 +1450,37 @@ unsafe fn paint_label(
     }
 }
 
+unsafe fn open_all_bookmarks(state: &mut AppState, hwnd: Hwnd) {
+    let urls = state
+        .bookmarks
+        .iter()
+        .take(MAX_RESTORED_TABS)
+        .map(|bookmark| bookmark.url.clone())
+        .collect::<Vec<_>>();
+    for (index, url) in urls.iter().enumerate() {
+        if index > 0 {
+            create_new_tab(state, hwnd);
+        }
+        navigate(state, url);
+    }
+}
+
+unsafe fn open_recent_history_in_tabs(state: &mut AppState, hwnd: Hwnd) {
+    let urls = state
+        .persistent_history
+        .iter()
+        .rev()
+        .take(MAX_MENU_HISTORY_ITEMS)
+        .map(|entry| entry.url.clone())
+        .collect::<Vec<_>>();
+    for (index, url) in urls.iter().enumerate() {
+        if index > 0 {
+            create_new_tab(state, hwnd);
+        }
+        navigate(state, &url);
+    }
+}
+
 unsafe fn create_new_tab(state: &mut AppState, hwnd: Hwnd) {
     if state.tabs.len() >= MAX_GUI_TABS {
         return;
@@ -1563,6 +1597,18 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             if let Some(url) = current_page_url(state) {
                 open_link_in_new_tab(state, hwnd, &url);
             }
+            return true;
+        }
+        if key == VK_H && GetKeyState(VK_SHIFT) < 0 {
+            open_recent_history_in_tabs(state, hwnd);
+            return true;
+        }
+        if key == VK_J && GetKeyState(VK_SHIFT) < 0 {
+            show_recent_downloads(state, hwnd);
+            return true;
+        }
+        if key == VK_O && GetKeyState(VK_SHIFT) < 0 {
+            open_all_bookmarks(state, hwnd);
             return true;
         }
         match key {
@@ -1703,7 +1749,11 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
         ID_TAB_CONTEXT_CLOSE => close_tab_at(state, index),
         ID_TAB_CONTEXT_RELOAD => {
             state.browser.select_tab(tab_id);
-            if state.browser.reload(&state.loader, current_viewport(state)).is_ok() {
+            if state
+                .browser
+                .reload(&state.loader, current_viewport(state))
+                .is_ok()
+            {
                 refresh_page(state);
             }
         }
@@ -2015,16 +2065,20 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         .enumerate()
     {
         let title = entry.title.as_str();
-        let label = wide(&format!(
-            "{} — {}",
-            index + 1,
-            title.chars().take(42).collect::<String>()
-        ));
+        let short_title = title.chars().take(42).collect::<String>();
+        let label = wide(&format!("{} — {}", index + 1, short_title));
+        let new_tab_label = wide(&format!("↗ {}", short_title));
         let _ = AppendMenuW(
             menu,
             MF_STRING,
             (ID_MENU_HISTORY_BASE as usize) + index,
             label.as_ptr(),
+        );
+        let _ = AppendMenuW(
+            menu,
+            MF_STRING,
+            (ID_MENU_HISTORY_NEW_TAB_BASE as usize) + index,
+            new_tab_label.as_ptr(),
         );
     }
     if !state.bookmarks.is_empty() {
@@ -2037,15 +2091,20 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             .take(MAX_MENU_BOOKMARK_ITEMS)
             .enumerate()
         {
-            let label = wide(&format!(
-                "★ {}",
-                bookmark.title.chars().take(38).collect::<String>()
-            ));
+            let short_title = bookmark.title.chars().take(38).collect::<String>();
+            let label = wide(&format!("★ {}", short_title));
+            let new_tab_label = wide(&format!("↗ {}", short_title));
             let _ = AppendMenuW(
                 menu,
                 MF_STRING,
                 (ID_MENU_BOOKMARK_BASE as usize) + index,
                 label.as_ptr(),
+            );
+            let _ = AppendMenuW(
+                menu,
+                MF_STRING,
+                (ID_MENU_BOOKMARK_NEW_TAB_BASE as usize) + index,
+                new_tab_label.as_ptr(),
             );
         }
     }
@@ -2107,20 +2166,7 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             }
             let _ = state.settings.save(&state.settings_path);
         }
-        ID_MENU_OPEN_ALL_BOOKMARKS => {
-            let urls = state
-                .bookmarks
-                .iter()
-                .take(MAX_RESTORED_TABS)
-                .map(|bookmark| bookmark.url.clone())
-                .collect::<Vec<_>>();
-            for (index, url) in urls.iter().enumerate() {
-                if index > 0 {
-                    create_new_tab(state, hwnd);
-                }
-                navigate(state, url);
-            }
-        }
+        ID_MENU_OPEN_ALL_BOOKMARKS => open_all_bookmarks(state, hwnd),
         ID_MENU_THEME_ARCHIA
         | ID_MENU_THEME_CHROME
         | ID_MENU_THEME_FIREFOX
@@ -2160,6 +2206,21 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
                 navigate(state, &url);
             }
         }
+        history_id
+            if (ID_MENU_HISTORY_NEW_TAB_BASE
+                ..ID_MENU_HISTORY_NEW_TAB_BASE + MAX_MENU_HISTORY_ITEMS as u32)
+                .contains(&history_id) =>
+        {
+            let index = (history_id - ID_MENU_HISTORY_NEW_TAB_BASE) as usize;
+            if let Some(url) = history_entries
+                .iter()
+                .rev()
+                .nth(index)
+                .map(|entry| entry.url.clone())
+            {
+                open_link_in_new_tab(state, hwnd, &url);
+            }
+        }
         bookmark_id
             if (ID_MENU_BOOKMARK_BASE..ID_MENU_BOOKMARK_BASE + MAX_MENU_BOOKMARK_ITEMS as u32)
                 .contains(&bookmark_id) =>
@@ -2168,6 +2229,17 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             if let Some(bookmark) = state.bookmarks.get(index) {
                 let url = bookmark.url.clone();
                 navigate(state, &url);
+            }
+        }
+        bookmark_id
+            if (ID_MENU_BOOKMARK_NEW_TAB_BASE
+                ..ID_MENU_BOOKMARK_NEW_TAB_BASE + MAX_MENU_BOOKMARK_ITEMS as u32)
+                .contains(&bookmark_id) =>
+        {
+            let index = (bookmark_id - ID_MENU_BOOKMARK_NEW_TAB_BASE) as usize;
+            if let Some(bookmark) = state.bookmarks.get(index) {
+                let url = bookmark.url.clone();
+                open_link_in_new_tab(state, hwnd, &url);
             }
         }
         ID_MENU_QUIT => {
