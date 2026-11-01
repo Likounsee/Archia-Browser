@@ -2184,7 +2184,10 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         ),
         (ID_MENU_SORT_BOOKMARKS_TITLE, "Trier les favoris par nom"),
         (ID_MENU_SORT_BOOKMARKS_DOMAIN, "Trier les favoris par site"),
-        (ID_MENU_DEDUPLICATE_BOOKMARKS, "Supprimer les favoris en double"),
+        (
+            ID_MENU_DEDUPLICATE_BOOKMARKS,
+            "Supprimer les favoris en double",
+        ),
         (ID_MENU_COPY_BOOKMARKS, "Copier tous les favoris"),
         (ID_MENU_COPY_HISTORY, "Copier l'historique"),
         (
@@ -3658,13 +3661,25 @@ mod gui_address_tests {
     #[test]
     fn bookmarks_sort_by_title_without_losing_urls() {
         let mut bookmarks = vec![
-            Bookmark { title: "Zulu".into(), url: "https://z.example/".into() },
-            Bookmark { title: "alpha".into(), url: "https://a.example/".into() },
-            Bookmark { title: "Beta".into(), url: "https://b.example/".into() },
+            Bookmark {
+                title: "Zulu".into(),
+                url: "https://z.example/".into(),
+            },
+            Bookmark {
+                title: "alpha".into(),
+                url: "https://a.example/".into(),
+            },
+            Bookmark {
+                title: "Beta".into(),
+                url: "https://b.example/".into(),
+            },
         ];
         sort_bookmarks_by_title(&mut bookmarks);
         assert_eq!(
-            bookmarks.iter().map(|bookmark| bookmark.title.as_str()).collect::<Vec<_>>(),
+            bookmarks
+                .iter()
+                .map(|bookmark| bookmark.title.as_str())
+                .collect::<Vec<_>>(),
             vec!["alpha", "Beta", "Zulu"]
         );
         assert_eq!(bookmarks[0].url, "https://a.example/");
@@ -3673,9 +3688,18 @@ mod gui_address_tests {
     #[test]
     fn bookmarks_sort_by_site_then_title() {
         let mut bookmarks = vec![
-            Bookmark { title: "Z page".into(), url: "https://z.example/".into() },
-            Bookmark { title: "B page".into(), url: "https://a.example/b".into() },
-            Bookmark { title: "A page".into(), url: "https://a.example/a".into() },
+            Bookmark {
+                title: "Z page".into(),
+                url: "https://z.example/".into(),
+            },
+            Bookmark {
+                title: "B page".into(),
+                url: "https://a.example/b".into(),
+            },
+            Bookmark {
+                title: "A page".into(),
+                url: "https://a.example/a".into(),
+            },
         ];
         sort_bookmarks_by_domain(&mut bookmarks);
         assert_eq!(
@@ -3687,9 +3711,18 @@ mod gui_address_tests {
     #[test]
     fn duplicate_bookmarks_keep_the_first_entry_and_export_as_tsv() {
         let mut bookmarks = vec![
-            Bookmark { title: "First title".into(), url: "https://example.org/".into() },
-            Bookmark { title: "Duplicate".into(), url: "https://example.org/".into() },
-            Bookmark { title: "Other".into(), url: "https://other.example/".into() },
+            Bookmark {
+                title: "First title".into(),
+                url: "https://example.org/".into(),
+            },
+            Bookmark {
+                title: "Duplicate".into(),
+                url: "https://example.org/".into(),
+            },
+            Bookmark {
+                title: "Other".into(),
+                url: "https://other.example/".into(),
+            },
         ];
         deduplicate_bookmarks(&mut bookmarks);
         assert_eq!(bookmarks.len(), 2);
@@ -3703,9 +3736,18 @@ mod gui_address_tests {
     #[test]
     fn history_deduplication_keeps_the_latest_visit_and_order() {
         let mut history = vec![
-            Bookmark { title: "Old title".into(), url: "https://same.example/".into() },
-            Bookmark { title: "Middle".into(), url: "https://middle.example/".into() },
-            Bookmark { title: "Latest title".into(), url: "https://same.example/".into() },
+            Bookmark {
+                title: "Old title".into(),
+                url: "https://same.example/".into(),
+            },
+            Bookmark {
+                title: "Middle".into(),
+                url: "https://middle.example/".into(),
+            },
+            Bookmark {
+                title: "Latest title".into(),
+                url: "https://same.example/".into(),
+            },
         ];
         deduplicate_history_keep_latest(&mut history);
         assert_eq!(history.len(), 2);
