@@ -1,7 +1,8 @@
 name: Archia Browser CI
 
+# CI only reads source and dependencies; do not grant repository write access.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: archia-browser-ci-${{ github.ref }}
@@ -24,32 +25,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Resolve the new shared GPU UI dependency graph
-        run: cargo generate-lockfile
-      - name: Preserve resolved lockfile for pinning
-        if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: archia-browser-wgpu-lockfile
-          path: Cargo.lock
-          if-no-files-found: error
-          retention-days: 1
-      - name: Commit resolved lockfile for the shared GPU UI
-        if: runner.os == 'Linux' && github.event_name == 'push'
-        run: |
-          if ! git diff --quiet -- Cargo.lock; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add Cargo.lock
-            git commit -m "Pin shared wgpu UI dependency graph"
-            git push origin HEAD:Archia-Browser
-          fi
-      - name: Verify dependency resolution
-        run: cargo metadata --format-version 1 --no-deps
+      - name: Verify pinned dependency resolution
+        run: cargo metadata --locked --format-version 1 --no-deps
       - run: cargo fmt --all -- --check
-      - run: cargo test --workspace
-      - run: cargo build --workspace
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace --locked
+      - run: cargo build --workspace --locked
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Audit Rust dependencies against RustSec advisories
         if: runner.os == 'Linux'
         run: |
