@@ -147,6 +147,7 @@ Use Ctrl+Shift+U or the browser menu to copy all currently open tab titles and U
 - `Ctrl+Alt+U` exporte les onglets ouverts au format HTML Netscape, importable comme favoris dans les navigateurs compatibles.
 - `Ctrl+Shift+M` lit les URL ou favoris Netscape/TSV présents dans le presse-papiers et ouvre les liens dans des onglets séparés.
 - `Ctrl+Alt+Left` ferme les onglets situés à gauche de l'onglet actif ; `Ctrl+Alt+Right` ferme ceux situés à droite. L'onglet actif est conservé.
+- `Ctrl+Alt+Shift+W` ferme tous les autres onglets et conserve uniquement l'onglet actif.
 - `Ctrl+Alt+D` et `Ctrl+Shift+D` dupliquent la page actuelle dans un nouvel onglet.
 - `Ctrl+Alt+C` copie le titre et l'adresse de la page au format TSV (`titre\tURL`), prêt à coller dans un tableur ou à réimporter.
 - `Ctrl+Alt+M` copie la page actuelle sous forme de lien Markdown (`[titre](<URL>)`), pratique pour les notes et les issues.
