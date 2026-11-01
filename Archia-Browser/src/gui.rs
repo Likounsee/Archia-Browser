@@ -4685,7 +4685,7 @@ mod gui_address_tests {
         ];
         assert_eq!(
             export_open_tabs_markdown(&entries),
-            "- [Docs \\[draft\\]](https://docs.example/)\n- [Archia](https://archia.example/)"
+            "- [Docs \\[draft\\]](<https://docs.example/>)\n- [Archia](<https://archia.example/>)"
         );
         assert!(export_open_tabs_markdown(&[]).is_empty());
     }
