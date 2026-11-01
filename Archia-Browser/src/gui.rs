@@ -731,17 +731,14 @@ fn parse_imported_bookmarks(text: &str) -> Vec<Bookmark> {
         };
         let first = first.trim();
         let second = second.trim();
-        let (title, raw_url) = if Url::parse(first)
-            .is_ok_and(|url| matches!(url.scheme(), "http" | "https"))
-        {
-            (second, first)
-        } else if Url::parse(second)
-            .is_ok_and(|url| matches!(url.scheme(), "http" | "https"))
-        {
-            (first, second)
-        } else {
-            continue;
-        };
+        let (title, raw_url) =
+            if Url::parse(first).is_ok_and(|url| matches!(url.scheme(), "http" | "https")) {
+                (second, first)
+            } else if Url::parse(second).is_ok_and(|url| matches!(url.scheme(), "http" | "https")) {
+                (first, second)
+            } else {
+                continue;
+            };
         let Ok(url) = Url::parse(raw_url) else {
             continue;
         };
@@ -749,7 +746,11 @@ fn parse_imported_bookmarks(text: &str) -> Vec<Bookmark> {
             continue;
         }
         imported.push(Bookmark {
-            title: if title.is_empty() { url.host().to_owned() } else { title.to_owned() },
+            title: if title.is_empty() {
+                url.host().to_owned()
+            } else {
+                title.to_owned()
+            },
             url: url.to_string(),
         });
     }
@@ -2396,7 +2397,10 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             "Supprimer les favoris en double",
         ),
         (ID_MENU_COPY_BOOKMARKS, "Copier tous les favoris"),
-        (ID_MENU_IMPORT_BOOKMARKS, "Importer les favoris depuis le presse-papiers"),
+        (
+            ID_MENU_IMPORT_BOOKMARKS,
+            "Importer les favoris depuis le presse-papiers",
+        ),
         (ID_MENU_COPY_HISTORY, "Copier l'historique"),
         (
             ID_MENU_COPY_OPEN_TABS,
