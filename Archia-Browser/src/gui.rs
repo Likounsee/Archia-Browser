@@ -42,6 +42,7 @@ const VK_T: usize = 0x54;
 const VK_W: usize = 0x57;
 const VK_R: usize = 0x52;
 const VK_D: usize = 0x44;
+const VK_E: usize = 0x45;
 const VK_C: usize = 0x43;
 const VK_H: usize = 0x48;
 const VK_J: usize = 0x4A;
@@ -90,6 +91,7 @@ const ID_MENU_UA_CHROMIUM: u32 = 3033;
 const ID_MENU_UA_FIREFOX: u32 = 3034;
 const ID_MENU_COPY_PAGE_TEXT: u32 = 3035;
 const ID_MENU_COPY_PAGE_TITLE: u32 = 3036;
+const ID_MENU_OPEN_EXTERNAL: u32 = 3037;
 const ID_RECENT_DOWNLOAD_BASE: u32 = 3700;
 const ID_RECENT_DOWNLOAD_REVEAL_BASE: u32 = 3720;
 const ID_RECENT_DOWNLOAD_COPY_BASE: u32 = 3740;
@@ -1752,6 +1754,12 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             copy_current_page_text(state, hwnd);
             return true;
         }
+        if key == VK_E && GetKeyState(VK_SHIFT) < 0 {
+            if let Some(url) = current_page_url(state) {
+                open_url_externally(hwnd, &url);
+            }
+            return true;
+        }
         if key == VK_K && GetKeyState(VK_SHIFT) < 0 {
             if let Some(url) = current_page_url(state) {
                 open_link_in_new_tab(state, hwnd, &url);
@@ -2001,6 +2009,29 @@ unsafe fn copy_current_page_title(state: &AppState, hwnd: Hwnd) {
     }
 }
 
+unsafe fn open_url_externally(hwnd: Hwnd, value: &str) {
+    let Ok(url) = Url::parse(value) else {
+        return;
+    };
+    if !matches!(url.scheme(), "http" | "https") {
+        return;
+    }
+    let operation = wide("open");
+    let target = wide(url.as_str());
+    let result = ShellExecuteW(
+        hwnd,
+        operation.as_ptr(),
+        target.as_ptr(),
+        ptr::null(),
+        ptr::null(),
+        SW_SHOW,
+    );
+    if (result as isize) <= 32 {
+        let caption = wide("Impossible d’ouvrir cette adresse dans le navigateur externe — Archia Browser");
+        let _ = SetWindowTextW(hwnd, caption.as_ptr());
+    }
+}
+
 unsafe fn copy_text_to_clipboard(hwnd: Hwnd, value: &str) -> bool {
     const GMEM_MOVEABLE: u32 = 0x0002;
     const CF_UNICODETEXT: u32 = 13;
@@ -2115,6 +2146,7 @@ unsafe fn show_page_context_menu(state: &mut AppState, hwnd: Hwnd) {
         (ID_MENU_COPY_PAGE_URL, "Copier l’adresse de la page"),
         (ID_MENU_COPY_PAGE_TITLE, "Copier le titre de la page"),
         (ID_MENU_COPY_PAGE_TEXT, "Copier le texte visible de la page"),
+        (ID_MENU_OPEN_EXTERNAL, "Ouvrir dans le navigateur par défaut"),
         (
             ID_MENU_BOOKMARK_PAGE,
             if state.bookmarks.iter().any(|bookmark| bookmark.url == url) {
@@ -2147,6 +2179,7 @@ unsafe fn show_page_context_menu(state: &mut AppState, hwnd: Hwnd) {
         }
         ID_MENU_COPY_PAGE_TITLE => copy_current_page_title(state, hwnd),
         ID_MENU_COPY_PAGE_TEXT => copy_current_page_text(state, hwnd),
+        ID_MENU_OPEN_EXTERNAL => open_url_externally(hwnd, &url),
         ID_MENU_BOOKMARK_PAGE => toggle_current_bookmark(state),
         ID_MENU_RELOAD => navigate(state, &url),
         ID_MENU_DOWNLOAD_PAGE => download_current_page(state),
