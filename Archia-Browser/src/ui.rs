@@ -376,7 +376,7 @@ impl ArchiaApp {
                 .map(|(title, url)| format!("{}\t{}", title.replace(['\t', '\r', '\n'], " "), url))
                 .collect::<Vec<_>>().join("\n"),
             ExportFormat::Markdown => entries.iter()
-                .map(|(title, url)| format!("- [{}](<{}>)", title.replace('[', "\\\\[").replace(']', "\\\\]"), url))
+                            let text = self.bookmarks.iter().map(|item| format!("- [{}](<{}>)", item.title.replace('[', "\\[").replace(']', "\\]"), item.url)).collect::<Vec<_>>().join("\n");
                 .collect::<Vec<_>>().join("\n"),
         };
         ctx.copy_text(exported);
@@ -830,7 +830,7 @@ impl eframe::App for ArchiaApp {
                             self.bookmark_import_open = true;
                         }
                         if ui.button("Exporter les favoris (TSV)").clicked() {
-                            let text = self.bookmarks.iter().map(|item| format!("{}\\t{}", item.title, item.url)).collect::<Vec<_>>().join("\\n");
+                            let text = self.bookmarks.iter().map(|item| format!("{}\t{}", item.title, item.url)).collect::<Vec<_>>().join("\n");
                             ui.ctx().copy_text(text);
                             self.status = "Favoris exportés en TSV".to_owned();
                         }
@@ -1095,11 +1095,11 @@ fn parse_bookmark_text(text: &str) -> Vec<SavedPage> {
         if line.is_empty() { continue; }
         let (title, raw_url) = if let Some(rest) = line.strip_prefix("- [") {
             if let Some((label, target)) = rest.split_once("](<") {
-                (label.trim_end_matches(']').replace("\\\\[", "[").replace("\\\\]", "]"), target.trim_end_matches("> )").trim_end_matches(')'))
+                (label.trim_end_matches(']').replace("\\[", "[").replace("\\]", "]"), target.trim_end_matches(')').trim_end_matches('>'))
             } else {
                 (String::new(), line)
             }
-        } else if let Some((first, second)) = line.split_once('\\t') {
+        } else if let Some((first, second)) = line.split_once('\t') {
             if Url::parse(first.trim()).is_ok() { (second.trim().to_owned(), first.trim()) }
             else { (first.trim().to_owned(), second.trim()) }
         } else {
