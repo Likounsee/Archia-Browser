@@ -929,7 +929,7 @@ fn markdown_link(title: &str, url: &str) -> String {
         .replace('\\', "\\\\")
         .replace('[', "\\[")
         .replace(']', "\\]");
-    format!("[{escaped}]({url})")
+    format!("[{escaped}](<{url}>)")
 }
 
 fn export_bookmarks_text(bookmarks: &[Bookmark]) -> String {
@@ -2027,6 +2027,15 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
         }
         if alt && key == 0x4D {
             copy_current_page_markdown_link(state, hwnd);
+            return true;
+        }
+        if key == VK_D && GetKeyState(VK_SHIFT) < 0 {
+            if let Some(url) = current_page_url(state) {
+                if state.tabs.len() < MAX_GUI_TABS {
+                    create_new_tab(state, hwnd);
+                    navigate(state, &url);
+                }
+            }
             return true;
         }
         if (key == VK_TAB || key == VK_PRIOR || key == VK_NEXT) && !state.tabs.is_empty() {
@@ -4656,18 +4665,21 @@ mod gui_address_tests {
     fn markdown_link_escapes_label_delimiters_and_falls_back_to_url() {
         assert_eq!(
             markdown_link("Docs [draft]", "https://example.org/docs"),
-            "[Docs \\[draft\\]](https://example.org/docs)"
+            "[Docs \\[draft\\]](<https://example.org/docs>)"
         );
         assert_eq!(
             markdown_link("", "https://example.org/"),
-            "[https://example.org/](https://example.org/)"
+            "[https://example.org/](<https://example.org/>)"
         );
     }
 
     #[test]
     fn open_tabs_markdown_export_preserves_order_and_filters_unsafe_urls() {
         let entries = vec![
-            ("Docs [draft]".to_owned(), "https://docs.example/".to_owned()),
+            (
+                "Docs [draft]".to_owned(),
+                "https://docs.example/".to_owned(),
+            ),
             ("Unsafe".to_owned(), "javascript:alert(1)".to_owned()),
             ("Archia".to_owned(), "https://archia.example/".to_owned()),
         ];
