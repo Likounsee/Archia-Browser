@@ -2377,6 +2377,7 @@ fn is_safe_bookmark_import(value: &str) -> bool {
     let value = value.trim();
     !value.is_empty()
         && value.len() <= 128 * 1024
+        && !value.contains("\\0")
         && !value
             .chars()
             .any(|character| character.is_control() && !matches!(character, '\t' | '\r' | '\n'))
