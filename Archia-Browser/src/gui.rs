@@ -3887,7 +3887,15 @@ unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i
     let content_width = width.min(1040);
     let left = (width - content_width) / 2;
     let panel_bottom = height.min(700).max(500);
-    paint_round_fill(hdc, left, 148, left + content_width, panel_bottom, border, 24);
+    paint_round_fill(
+        hdc,
+        left,
+        148,
+        left + content_width,
+        panel_bottom,
+        border,
+        24,
+    );
     paint_round_fill(
         hdc,
         left + 1,
@@ -4021,7 +4029,15 @@ unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i
             let x = left + 40 + column as i32 * (card_width + gap);
             let y = card_top + row as i32 * 82;
             paint_round_fill(hdc, x, y, x + card_width, y + 68, border, 14);
-            paint_round_fill(hdc, x + 1, y + 1, x + card_width - 1, y + 67, background, 13);
+            paint_round_fill(
+                hdc,
+                x + 1,
+                y + 1,
+                x + card_width - 1,
+                y + 67,
+                background,
+                13,
+            );
             paint_round_fill(hdc, x + 12, y + 13, x + 48, y + 49, accent, 10);
             let initial = bookmark
                 .title
