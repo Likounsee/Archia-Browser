@@ -415,7 +415,10 @@ impl ArchiaApp {
             .filter_map(|id| {
                 let entry = self.browser.tabs().tab(*id)?.history().current()?;
                 Some(SavedPage {
-                    title: entry.title().map(str::to_owned).unwrap_or_else(|| entry.url().to_string()),
+                    title: entry
+                        .title()
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| entry.url().to_string()),
                     url: entry.url().to_string(),
                 })
             })
@@ -691,7 +694,10 @@ impl ArchiaApp {
             .filter_map(|id| {
                 let entry = self.browser.tabs().tab(*id)?.history().current()?;
                 Some((
-                    entry.title().map(str::to_owned).unwrap_or_else(|| entry.url().to_string()),
+                    entry
+                        .title()
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| entry.url().to_string()),
                     entry.url().to_string(),
                 ))
             })
