@@ -4498,6 +4498,9 @@ pub fn run() {
 }
 
 #[cfg(test)]
+mod gui_address_tests {
+    use super::*;
+
     #[test]
     fn closed_tabs_markdown_export_filters_invalid_urls_and_keeps_order() {
         let closed = vec![
@@ -4512,10 +4515,6 @@ pub fn run() {
         assert_eq!(bookmarks[1].url, "https://example.org/second");
         assert!(export_bookmarks_markdown(&bookmarks).contains("example.com/first"));
     }
-
-
-mod gui_address_tests {
-    use super::*;
 
     #[test]
     fn plain_words_use_the_search_provider() {
