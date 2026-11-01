@@ -928,7 +928,10 @@ fn export_bookmarks_markdown(bookmarks: &[Bookmark]) -> String {
             if !matches!(url.scheme(), "http" | "https") {
                 return None;
             }
-            Some(format!("- {}", markdown_link(&bookmark.title, &url.to_string())))
+            Some(format!(
+                "- {}",
+                markdown_link(&bookmark.title, &url.to_string())
+            ))
         })
         .collect::<Vec<_>>()
         .join("\n")
@@ -1954,7 +1957,7 @@ unsafe fn open_recent_history_in_tabs(state: &mut AppState, hwnd: Hwnd) {
         if index > 0 {
             create_new_tab(state, hwnd);
         }
-        navigate(state, &url);
+        navigate(state, url);
     }
 }
 
