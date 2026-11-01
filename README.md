@@ -129,4 +129,4 @@ These are foundations, not a claim of full browser compatibility. A successful H
 License to be defined.
 
 
-Use Ctrl+Shift+U or the browser menu to copy all currently open tab titles and URLs as tab-separated text. Ctrl+S downloads the current page; Ctrl+Shift+R performs a hard reload by clearing only the HTTP response cache first.
+Use Ctrl+Shift+U or the browser menu to copy all currently open tab titles and URLs as tab-separated text. Ctrl+S downloads the current page; Ctrl+Shift+R performs a hard reload by clearing only the HTTP response cache first. The bookmark tools can import tab-separated bookmark data from the Windows clipboard; both `title<TAB>URL` and `URL<TAB>title` rows are accepted, invalid schemes are ignored and duplicate URLs are removed.
