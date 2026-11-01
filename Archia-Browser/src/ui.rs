@@ -2169,60 +2169,131 @@ impl eframe::App for ArchiaApp {
                     }
                 } else {
                     ui.vertical_centered(|ui| {
-                        ui.add_space((ui.available_height() * 0.20).max(48.0));
-                        ui.label(
-                            egui::RichText::new("ARCHIA")
-                                .size(18.0)
-                                .strong()
-                                .color(self.palette.accent),
-                        );
-                        ui.add_space(12.0);
-                        ui.label(
-                            egui::RichText::new("Le web, à votre façon.")
-                                .size(34.0)
-                                .strong()
-                                .color(self.palette.text),
-                        );
-                        ui.add_space(8.0);
-                        ui.label(
-                            egui::RichText::new(
-                                "Un navigateur indépendant, construit autour du moteur Archia.",
-                            )
-                            .size(15.0)
-                            .color(self.palette.muted),
-                        );
+                        ui.add_space((ui.available_height() * 0.12).max(36.0));
+                        egui::Frame::new()
+                            .fill(self.palette.toolbar)
+                            .inner_margin(egui::Margin::symmetric(34, 30))
+                            .show(ui, |ui| {
+                                ui.set_max_width(760.0);
+                                ui.vertical_centered(|ui| {
+                                    ui.label(
+                                        egui::RichText::new("A R C H I A")
+                                            .size(15.0)
+                                            .strong()
+                                            .color(self.palette.accent),
+                                    );
+                                    ui.add_space(14.0);
+                                    ui.label(
+                                        egui::RichText::new("Le web, à votre façon.")
+                                            .size(36.0)
+                                            .strong()
+                                            .color(self.palette.text),
+                                    );
+                                    ui.add_space(8.0);
+                                    ui.label(
+                                        egui::RichText::new("Un navigateur indépendant. Une expérience qui vous appartient.")
+                                            .size(14.0)
+                                            .color(self.palette.muted),
+                                    );
+                                    ui.add_space(28.0);
+                                    ui.horizontal(|ui| {
+                                        let available = ui.available_width();
+                                        let response = ui.add_sized(
+                                            [available, 48.0],
+                                            egui::TextEdit::singleline(&mut self.home_query)
+                                                .font(egui::TextStyle::Body)
+                                                .hint_text("Rechercher sur le web ou saisir une adresse…"),
+                                        );
+                                        if self.focus_address {
+                                            response.request_focus();
+                                            self.focus_address = false;
+                                        }
+                                        if response.lost_focus()
+                                            && ui.input(|input| input.key_pressed(egui::Key::Enter))
+                                        {
+                                            let target = self.home_query.clone();
+                                            self.address = target.clone();
+                                            self.navigate(&target);
+                                        }
+                                    });
+                                    ui.add_space(12.0);
+                                    if ui.add_sized(
+                                        [180.0, 38.0],
+                                        egui::Button::new(
+                                            egui::RichText::new("Rechercher  →")
+                                                .color(self.palette.window)
+                                                .strong(),
+                                        )
+                                        .fill(self.palette.accent),
+                                    ).clicked() {
+                                        let target = self.home_query.clone();
+                                        self.address = target.clone();
+                                        self.navigate(&target);
+                                    }
+                                });
+                            });
                         ui.add_space(28.0);
-                        ui.horizontal(|ui| {
-                            let width = ui.available_width().min(620.0);
-                            let response = ui.add_sized(
-                                [width, 42.0],
-                                egui::TextEdit::singleline(&mut self.home_query)
-                                    .hint_text("Rechercher sur le web ou saisir une adresse"),
-                            );
-                            if response.lost_focus()
-                                && ui.input(|input| input.key_pressed(egui::Key::Enter))
-                            {
-                                let target = self.home_query.clone();
-                                self.address = target.clone();
-                                self.navigate(&target);
-                            }
-                        });
-                        ui.add_space(12.0);
-                        if ui
-                            .add(
-                                egui::Button::new(
-                                    egui::RichText::new("Rechercher  →")
-                                        .color(self.palette.window)
-                                        .strong(),
-                                )
-                                .fill(self.palette.accent),
-                            )
-                            .clicked()
-                        {
-                            let target = self.home_query.clone();
-                            self.address = target.clone();
-                            self.navigate(&target);
-                        }
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(ui.available_width().min(760.0), 0.0),
+                            egui::Layout::top_down(egui::Align::Min),
+                            |ui| {
+                                ui.horizontal(|ui| {
+                                    ui.label(
+                                        egui::RichText::new("ACCÈS RAPIDES")
+                                            .small()
+                                            .strong()
+                                            .color(self.palette.muted),
+                                    );
+                                    ui.separator();
+                                    ui.label(
+                                        egui::RichText::new(format!("{} favoris enregistrés", self.bookmarks.len()))
+                                            .small()
+                                            .color(self.palette.muted),
+                                    );
+                                });
+                                ui.add_space(10.0);
+                                let quick_links = self.bookmarks.iter().take(6).cloned().collect::<Vec<_>>();
+                                if quick_links.is_empty() {
+                                    ui.label(
+                                        egui::RichText::new("Tes favoris apparaîtront ici. Utilise ☆ pour enregistrer un site.")
+                                            .color(self.palette.muted),
+                                    );
+                                } else {
+                                    ui.horizontal_wrapped(|ui| {
+                                        for item in quick_links {
+                                            egui::Frame::new()
+                                                .fill(self.palette.toolbar)
+                                                .inner_margin(egui::Margin::symmetric(12, 10))
+                                                .show(ui, |ui| {
+                                                    let label = if item.title.chars().count() > 24 {
+                                                        format!("{}…", item.title.chars().take(23).collect::<String>())
+                                                    } else {
+                                                        item.title.clone()
+                                                    };
+                                                    if ui.add(
+                                                        egui::Button::new(
+                                                            egui::RichText::new(label)
+                                                                .color(self.palette.text)
+                                                                .strong(),
+                                                        )
+                                                        .fill(egui::Color32::TRANSPARENT)
+                                                        .stroke(egui::Stroke::NONE),
+                                                    ).on_hover_text(&item.url).clicked() {
+                                                        self.navigate(&item.url);
+                                                    }
+                                                    ui.label(
+                                                        egui::RichText::new(
+                                                            Url::parse(&item.url).map(|url| url.host().to_owned()).unwrap_or_default()
+                                                        )
+                                                        .small()
+                                                        .color(self.palette.muted),
+                                                    );
+                                                });
+                                        }
+                                    });
+                                }
+                            },
+                        );
                     });
                 }
             });
