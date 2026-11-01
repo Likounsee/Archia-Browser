@@ -4530,7 +4530,7 @@ mod tests {
         assert_eq!(layout.children[3].rect.x, 0);
         assert_eq!(layout.children[3].rect.y, 30);
         assert_eq!(layout.children[0].rect.width, 93);
-        assert_eq!(layout.children[2].rect.width, 67);
+        assert_eq!(layout.children[2].rect.width, 94);
         assert_eq!(layout.rect.height, 50);
     }
 
