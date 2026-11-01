@@ -611,13 +611,34 @@ impl ArchiaApp {
     }
 
     fn reopen_closed_tab(&mut self) {
-        if let Some(url) = self.closed_tabs.pop() {
-            self.new_tab();
-            self.navigate(&url);
-            self.status = "Dernier onglet restauré".to_owned();
-        } else {
+        self.reopen_closed_tab_at(0);
+    }
+
+    fn reopen_closed_tab_at(&mut self, recent_index: usize) {
+        let Some(storage_index) = self.closed_tabs.len().checked_sub(recent_index + 1) else {
             self.status = "Aucun onglet récemment fermé".to_owned();
-        }
+            return;
+        };
+        let url = self.closed_tabs.remove(storage_index);
+        self.new_tab();
+        self.navigate(&url);
+        self.status = "Onglet restauré".to_owned();
+    }
+
+    fn clear_closed_tabs(&mut self) {
+        let count = self.closed_tabs.len();
+        self.closed_tabs.clear();
+        self.status = format!("{count} onglet(s) retiré(s) de la liste récente");
+    }
+
+    fn copy_closed_tabs_markdown(&mut self, ctx: &egui::Context) {
+        let exported = self.closed_tabs.iter().rev().filter_map(|raw_url| {
+            let url = Url::parse(raw_url).ok()?;
+            if !matches!(url.scheme(), "http" | "https") { return None; }
+            Some(format!("- {}", markdown_link(url.host(), &url.to_string())))
+        }).collect::<Vec<_>>().join("\n");
+        ctx.copy_text(exported);
+        self.status = "Onglets fermés exportés".to_owned();
     }
 
     fn open_homepage(&mut self) {
@@ -1389,6 +1410,25 @@ impl eframe::App for ArchiaApp {
                             }
                         }
                     });
+                    ui.menu_button("Fermés récemment", |ui| {
+                        if self.closed_tabs.is_empty() {
+                            ui.label("Aucun onglet fermé récemment");
+                        } else {
+                            if ui.button("Effacer la liste").clicked() {
+                                self.clear_closed_tabs();
+                            }
+                            if ui.button("Copier la liste en Markdown").clicked() {
+                                self.copy_closed_tabs_markdown(ui.ctx());
+                            }
+                            ui.separator();
+                            let recent = self.closed_tabs.iter().rev().cloned().collect::<Vec<_>>();
+                            for (index, url) in recent.into_iter().enumerate() {
+                                if ui.button(format!("{} · {}", index + 1, url)).clicked() {
+                                    self.reopen_closed_tab_at(index);
+                                }
+                            }
+                        }
+                    });
                     ui.menu_button("Liens", |ui| {
                         let links = self.current_links();
                         if links.is_empty() {
@@ -1483,6 +1523,12 @@ impl eframe::App for ArchiaApp {
                             .clicked()
                         {
                             self.reopen_closed_tab();
+                        }
+                        if ui.button("Effacer les onglets fermés récemment").clicked() {
+                            self.clear_closed_tabs();
+                        }
+                        if ui.button("Copier les onglets fermés (Markdown)").clicked() {
+                            self.copy_closed_tabs_markdown(ui.ctx());
                         }
                         if ui
                             .button("Ouvrir tous les favoris · Ctrl+Shift+O")
