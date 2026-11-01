@@ -80,6 +80,8 @@ const ID_MENU_DOWNLOAD_PAGE: u32 = 3017;
 const ID_MENU_OPEN_DOWNLOADS: u32 = 3018;
 const ID_MENU_RECENT_DOWNLOADS: u32 = 3025;
 const ID_RECENT_DOWNLOAD_BASE: u32 = 3700;
+const ID_RECENT_DOWNLOAD_REVEAL_BASE: u32 = 3720;
+const ID_RECENT_DOWNLOAD_COPY_BASE: u32 = 3740;
 const MAX_RECENT_DOWNLOADS: usize = 12;
 const ID_MENU_REOPEN_CLOSED_TAB: u32 = 3019;
 const ID_MENU_COPY_PAGE_URL: u32 = 3020;
@@ -888,12 +890,27 @@ unsafe fn show_recent_downloads(state: &mut AppState, hwnd: Hwnd) {
     } else {
         for (index, (_, path)) in files.iter().enumerate() {
             let name = path.file_name().unwrap_or_default().to_string_lossy();
-            let label = wide(&format!("{}", name.chars().take(58).collect::<String>()));
+            let short_name = name.chars().take(48).collect::<String>();
+            let open_label = wide(&format!("Ouvrir — {short_name}"));
+            let reveal_label = wide(&format!("Afficher dans l'Explorateur — {short_name}"));
+            let copy_label = wide(&format!("Copier le chemin — {short_name}"));
             let _ = AppendMenuW(
                 menu,
                 MF_STRING,
                 (ID_RECENT_DOWNLOAD_BASE + index as u32) as usize,
-                label.as_ptr(),
+                open_label.as_ptr(),
+            );
+            let _ = AppendMenuW(
+                menu,
+                MF_STRING,
+                (ID_RECENT_DOWNLOAD_REVEAL_BASE + index as u32) as usize,
+                reveal_label.as_ptr(),
+            );
+            let _ = AppendMenuW(
+                menu,
+                MF_STRING,
+                (ID_RECENT_DOWNLOAD_COPY_BASE + index as u32) as usize,
+                copy_label.as_ptr(),
             );
         }
     }
@@ -934,6 +951,30 @@ unsafe fn show_recent_downloads(state: &mut AppState, hwnd: Hwnd) {
                 ptr::null(),
                 SW_SHOW,
             );
+        }
+    } else if selected >= ID_RECENT_DOWNLOAD_REVEAL_BASE as usize
+        && selected < (ID_RECENT_DOWNLOAD_REVEAL_BASE + files.len() as u32) as usize
+    {
+        let index = selected - ID_RECENT_DOWNLOAD_REVEAL_BASE as usize;
+        if let Some((_, path)) = files.get(index) {
+            let operation = wide("open");
+            let target = wide("explorer.exe");
+            let arguments = wide(&format!("/select,\"{}\"", path.display()));
+            let _ = ShellExecuteW(
+                hwnd,
+                operation.as_ptr(),
+                target.as_ptr(),
+                arguments.as_ptr(),
+                ptr::null(),
+                SW_SHOW,
+            );
+        }
+    } else if selected >= ID_RECENT_DOWNLOAD_COPY_BASE as usize
+        && selected < (ID_RECENT_DOWNLOAD_COPY_BASE + files.len() as u32) as usize
+    {
+        let index = selected - ID_RECENT_DOWNLOAD_COPY_BASE as usize;
+        if let Some((_, path)) = files.get(index) {
+            let _ = copy_text_to_clipboard(hwnd, &path.to_string_lossy());
         }
     }
 }
