@@ -149,6 +149,7 @@ const ID_TAB_CONTEXT_COPY_URL: u32 = 3605;
 const ID_TAB_CONTEXT_RELOAD: u32 = 3606;
 const ID_TAB_CONTEXT_CLOSE_LEFT: u32 = 3607;
 const ID_TAB_CONTEXT_CLOSE_SAME_SITE: u32 = 3608;
+const ID_TAB_CONTEXT_CLOSE_DUPLICATES: u32 = 3609;
 const GWLP_WNDPROC: i32 = -4;
 const WM_CTLCOLOREDIT: u32 = 0x0133;
 const DT_SINGLELINE: u32 = 0x0020;
@@ -2057,6 +2058,19 @@ fn tab_indices_for_same_site(hosts: &[Option<String>], active_index: usize) -> V
         .collect()
 }
 
+fn tab_indices_for_duplicate_urls(urls: &[Option<String>], active_index: usize) -> Vec<usize> {
+    let Some(target_url) = urls.get(active_index).and_then(Option::as_deref) else {
+        return Vec::new();
+    };
+    urls.iter()
+        .enumerate()
+        .rev()
+        .filter_map(|(index, url)| {
+            (index != active_index && url.as_deref() == Some(target_url)).then_some(index)
+        })
+        .collect()
+}
+
 fn tab_indices_to_close_except(active_index: usize, tab_count: usize) -> Vec<usize> {
     if active_index >= tab_count {
         return Vec::new();
@@ -2489,6 +2503,10 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
             ID_TAB_CONTEXT_CLOSE_SAME_SITE,
             "Fermer les autres onglets de ce site",
         ),
+        (
+            ID_TAB_CONTEXT_CLOSE_DUPLICATES,
+            "Fermer les onglets avec la même adresse",
+        ),
     ] {
         let label = wide(label);
         let _ = AppendMenuW(menu, MF_STRING, id as usize, label.as_ptr());
@@ -2520,6 +2538,27 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
         ID_TAB_CONTEXT_COPY_URL => {
             if let Some(url) = duplicate_url.as_deref() {
                 let _ = copy_text_to_clipboard(hwnd, url);
+            }
+        }
+        ID_TAB_CONTEXT_CLOSE_DUPLICATES => {
+            let urls = state
+                .tabs
+                .iter()
+                .map(|(id, _)| {
+                    state
+                        .browser
+                        .tabs()
+                        .tab(*id)
+                        .and_then(|tab| tab.page())
+                        .and_then(|page| page.url())
+                        .map(ToString::to_string)
+                })
+                .collect::<Vec<_>>();
+            for duplicate_index in tab_indices_for_duplicate_urls(&urls, index) {
+                close_tab_at(state, duplicate_index);
+            }
+            if let Some(active_index) = state.tabs.iter().position(|(id, _)| *id == tab_id) {
+                select_tab_index(state, active_index);
             }
         }
         ID_TAB_CONTEXT_CLOSE_SAME_SITE => {
@@ -3027,7 +3066,10 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             ID_MENU_COPY_CLOSED_TABS_MARKDOWN,
             "Copier les onglets fermés au format Markdown",
         ),
-        (ID_MENU_CLEAR_CLOSED_TABS, "Vider la liste des onglets fermés"),
+        (
+            ID_MENU_CLEAR_CLOSED_TABS,
+            "Vider la liste des onglets fermés",
+        ),
         (ID_MENU_SEARCH_GOOGLE, "Recherche : Google"),
         (ID_MENU_SEARCH_BING, "Recherche : Bing"),
         (ID_MENU_SEARCH_DDG, "Recherche : DuckDuckGo"),
@@ -4625,6 +4667,20 @@ mod gui_address_tests {
         assert_eq!(tab_indices_for_same_site(&hosts, 2), vec![4, 0]);
         assert!(tab_indices_for_same_site(&hosts, 3).is_empty());
         assert!(tab_indices_for_same_site(&hosts, 8).is_empty());
+    }
+
+    #[test]
+    fn close_duplicate_urls_keeps_selected_tab_and_preserves_distinct_pages() {
+        let urls = vec![
+            Some("https://example.com/page".into()),
+            Some("https://example.com/other".into()),
+            Some("https://example.com/page".into()),
+            None,
+            Some("https://example.com/page".into()),
+        ];
+        assert_eq!(tab_indices_for_duplicate_urls(&urls, 2), vec![4, 0]);
+        assert!(tab_indices_for_duplicate_urls(&urls, 3).is_empty());
+        assert!(tab_indices_for_duplicate_urls(&urls, 8).is_empty());
     }
 
     #[test]
