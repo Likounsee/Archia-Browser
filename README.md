@@ -130,3 +130,12 @@ License to be defined.
 
 
 Use Ctrl+Shift+U or the browser menu to copy all currently open tab titles and URLs as tab-separated text. Ctrl+S downloads the current page; Ctrl+Shift+R performs a hard reload by clearing only the HTTP response cache first. The bookmark tools can import bookmark data from the Windows clipboard: tab-separated `title<TAB>URL` and `URL<TAB>title` rows are accepted, as are plain HTTP/HTTPS URL lists (one per line). Invalid schemes are ignored and duplicate URLs are removed. Ctrl+Shift+I runs the same bookmark import directly, and Ctrl+Shift+Y copies the browsing history as tab-separated text.
+
+
+### Presse-papiers et navigation rapide
+
+- `Ctrl+Shift+V` colle le contenu texte du presse-papiers dans la barre d’adresse logique : une URL HTTP(S) est ouverte directement, sinon le texte est recherché avec le moteur configuré.
+- `Ctrl+Shift+F` lance cette même navigation dans un nouvel onglet.
+- Le menu Archia propose également ces deux actions.
+- `Ctrl+Shift+G` copie l’historique au format HTML Netscape, importable dans les navigateurs compatibles.
+- Les entrées vides, trop longues, contenant des caractères de contrôle ou utilisant un schéma autre que HTTP(S) sont rejetées.
