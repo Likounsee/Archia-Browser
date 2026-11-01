@@ -111,6 +111,8 @@ const ID_MENU_COPY_BOOKMARKS_MARKDOWN: u32 = 3048;
 const ID_MENU_COPY_HISTORY_MARKDOWN: u32 = 3049;
 const ID_MENU_REOPEN_ALL_CLOSED_TABS: u32 = 3050;
 const ID_MENU_COPY_CLOSED_TABS_MARKDOWN: u32 = 3051;
+const ID_MENU_CLOSED_TAB_BASE: u32 = 3800;
+const MAX_MENU_CLOSED_TABS: usize = 20;
 const MAX_IMPORTED_BOOKMARKS: usize = 5_000;
 const MAX_CLIPBOARD_BYTES: usize = 2 * 1024 * 1024;
 const ID_RECENT_DOWNLOAD_BASE: u32 = 3700;
@@ -2092,6 +2094,18 @@ unsafe fn reopen_all_closed_tabs(state: &mut AppState, hwnd: Hwnd) {
     }
 }
 
+unsafe fn reopen_closed_tab_at(state: &mut AppState, hwnd: Hwnd, recent_index: usize) {
+    if recent_index >= state.closed_tabs.len() || state.tabs.len() >= MAX_GUI_TABS {
+        return;
+    }
+    let storage_index = state.closed_tabs.len() - 1 - recent_index;
+    let closed_url = state.closed_tabs.remove(storage_index);
+    create_new_tab(state, hwnd);
+    if let Some(url) = closed_url {
+        navigate(state, &url);
+    }
+}
+
 fn closed_tabs_as_bookmarks(closed_tabs: &[Option<String>]) -> Vec<Bookmark> {
     closed_tabs
         .iter()
@@ -3068,6 +3082,27 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         ID_MENU_REOPEN_CLOSED_TAB as usize,
         reopen_label.as_ptr(),
     );
+    for (recent_index, entry) in state
+        .closed_tabs
+        .iter()
+        .rev()
+        .take(MAX_MENU_CLOSED_TABS)
+        .enumerate()
+    {
+        let label = entry
+            .as_deref()
+            .and_then(|value| Url::parse(value).ok())
+            .map(|url| format!("{} — {}", url.host(), url.path()))
+            .unwrap_or_else(|| "Adresse indisponible".to_owned());
+        let label = label.chars().take(58).collect::<String>();
+        let label = wide(&format!("Rouvrir : {label}"));
+        let _ = AppendMenuW(
+            menu,
+            MF_STRING,
+            (ID_MENU_CLOSED_TAB_BASE + recent_index as u32) as usize,
+            label.as_ptr(),
+        );
+    }
     let _ = AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
     let history_heading = wide("Pages récemment visitées");
     let _ = AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, history_heading.as_ptr());
@@ -3158,6 +3193,9 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         ID_MENU_CLOSE_TAB => close_active_tab(state),
         ID_MENU_REOPEN_CLOSED_TAB => reopen_closed_tab(state, hwnd),
         ID_MENU_REOPEN_ALL_CLOSED_TABS => reopen_all_closed_tabs(state, hwnd),
+        id if (ID_MENU_CLOSED_TAB_BASE..ID_MENU_CLOSED_TAB_BASE + MAX_MENU_CLOSED_TABS as u32).contains(&id) => {
+            reopen_closed_tab_at(state, hwnd, (id - ID_MENU_CLOSED_TAB_BASE) as usize);
+        }
         ID_MENU_COPY_CLOSED_TABS_MARKDOWN => {
             let markdown = export_bookmarks_markdown(&closed_tabs_as_bookmarks(&state.closed_tabs));
             if !markdown.is_empty() {
