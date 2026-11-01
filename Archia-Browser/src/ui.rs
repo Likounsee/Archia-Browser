@@ -43,7 +43,9 @@ enum PasteAction {
 #[derive(Clone, Copy)]
 enum ExportFormat {
     Tsv,
+    Csv,
     Markdown,
+    Html,
 }
 
 #[derive(Clone)]
@@ -641,6 +643,11 @@ impl ArchiaApp {
                 .map(|(title, url)| format!("{}\t{}", title.replace(['\t', '\r', '\n'], " "), url))
                 .collect::<Vec<_>>()
                 .join("\n"),
+            ExportFormat::Csv => entries
+                .iter()
+                .map(|(title, url)| format!("{},{}", escape_csv(title), escape_csv(url)))
+                .collect::<Vec<_>>()
+                .join("\n"),
             ExportFormat::Markdown => entries
                 .iter()
                 .map(|(title, url)| {
@@ -652,6 +659,13 @@ impl ArchiaApp {
                 })
                 .collect::<Vec<_>>()
                 .join("\n"),
+            ExportFormat::Html => {
+                let bookmarks = entries.iter().map(|(title, url)| SavedPage {
+                    title: title.clone(),
+                    url: url.clone(),
+                }).collect::<Vec<_>>();
+                export_bookmarks_html(&bookmarks)
+            }
         };
         ctx.copy_text(exported);
         self.status = "Liste des onglets copiée".to_owned();
@@ -1046,6 +1060,8 @@ impl eframe::App for ArchiaApp {
                 ctrl && shift && input.key_pressed(egui::Key::M),
                 ctrl && alt && shift && input.key_pressed(egui::Key::M),
                 ctrl && alt && shift && input.key_pressed(egui::Key::H),
+                ctrl && alt && shift && input.key_pressed(egui::Key::U),
+                ctrl && alt && shift && input.key_pressed(egui::Key::C),
             )
         });
         let (
@@ -1070,6 +1086,8 @@ impl eframe::App for ArchiaApp {
             paste_bookmarks,
             export_tabs_markdown,
             export_history_markdown,
+            export_tabs_html,
+            export_tabs_csv,
         ) = shortcuts;
         if ctrl_t {
             self.new_tab();
@@ -1108,6 +1126,12 @@ impl eframe::App for ArchiaApp {
         }
         if export_history_markdown {
             self.copy_history_markdown(ctx);
+        }
+        if export_tabs_html {
+            self.copy_open_tabs(ctx, ExportFormat::Html);
+        }
+        if export_tabs_csv {
+            self.copy_open_tabs(ctx, ExportFormat::Csv);
         }
         if paste_navigate || paste_new_tab || paste_bookmarks {
             self.pending_paste = Some(if paste_bookmarks {
@@ -1435,6 +1459,12 @@ impl eframe::App for ArchiaApp {
                         }
                         if ui.button("Copier les onglets (Markdown)").clicked() {
                             self.copy_open_tabs(ui.ctx(), ExportFormat::Markdown);
+                        }
+                        if ui.button("Copier les onglets (CSV)").clicked() {
+                            self.copy_open_tabs(ui.ctx(), ExportFormat::Csv);
+                        }
+                        if ui.button("Copier les onglets (HTML Netscape)").clicked() {
+                            self.copy_open_tabs(ui.ctx(), ExportFormat::Html);
                         }
                         if ui.button("Copier l'historique · Ctrl+Shift+Y").clicked() {
                             self.copy_history(ui.ctx());
@@ -1835,6 +1865,10 @@ fn parse_netscape_bookmarks(text: &str) -> Vec<SavedPage> {
         cursor = close_start + 4;
     }
     imported
+}
+
+fn escape_csv(value: &str) -> String {
+    format!("\"{}\"", value.replace('"', "\"\""))
 }
 
 fn escape_bookmark_html(value: &str) -> String {
