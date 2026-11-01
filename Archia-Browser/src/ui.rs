@@ -1130,7 +1130,10 @@ impl ArchiaApp {
             return;
         };
 
-        if self\n            .browser\n            .render_current_page_at(&mut surface, tile_offset)\n        {
+        if self
+            .browser
+            .render_current_page_at(&mut surface, tile_offset)
+        {
             let image = egui::ColorImage::from_rgba_unmultiplied(
                 [width as usize, height as usize],
                 surface.pixels(),
