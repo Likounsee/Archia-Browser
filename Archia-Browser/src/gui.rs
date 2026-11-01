@@ -94,6 +94,7 @@ const ID_MENU_COPY_PAGE_TITLE: u32 = 3036;
 const ID_MENU_OPEN_EXTERNAL: u32 = 3037;
 const ID_MENU_CLEAR_SITE_DATA: u32 = 3038;
 const ID_MENU_COPY_OPEN_TABS: u32 = 3039;
+const ID_MENU_HARD_RELOAD: u32 = 3040;
 const ID_RECENT_DOWNLOAD_BASE: u32 = 3700;
 const ID_RECENT_DOWNLOAD_REVEAL_BASE: u32 = 3720;
 const ID_RECENT_DOWNLOAD_COPY_BASE: u32 = 3740;
@@ -1827,6 +1828,9 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
                 return true;
             }
             VK_R => {
+                if GetKeyState(VK_SHIFT) < 0 {
+                    let _ = state.loader.clear_cache();
+                }
                 if state
                     .browser
                     .reload(&state.loader, current_viewport(state))
@@ -2272,6 +2276,7 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
     }
     for (id, label) in [
         (ID_MENU_RELOAD, "Recharger"),
+        (ID_MENU_HARD_RELOAD, "Recharger sans utiliser le cache"),
         (ID_MENU_NEW_TAB, "Nouvel onglet"),
         (ID_MENU_CLOSE_TAB, "Fermer l'onglet"),
         (ID_MENU_CLEAR_HISTORY, "Effacer l'historique"),
@@ -2434,6 +2439,16 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
                 refresh_page(state);
             }
         }
+        ID_MENU_HARD_RELOAD => {
+            let _ = state.loader.clear_cache();
+            if state
+                .browser
+                .reload(&state.loader, current_viewport(state))
+                .is_ok()
+            {
+                refresh_page(state);
+            }
+        }
         ID_MENU_NEW_TAB => create_new_tab(state, hwnd),
         ID_MENU_CLOSE_TAB => close_active_tab(state),
         ID_MENU_REOPEN_CLOSED_TAB => reopen_closed_tab(state, hwnd),
@@ -2510,7 +2525,9 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
                 })
                 .collect::<Vec<_>>();
             let text = export_open_tabs_text(&entries);
-            if !text.is_empty() { let _ = copy_text_to_clipboard(hwnd, &text); }
+            if !text.is_empty() {
+                let _ = copy_text_to_clipboard(hwnd, &text);
+            }
         }
         ID_MENU_UA_ARCHIA | ID_MENU_UA_CHROMIUM | ID_MENU_UA_FIREFOX => {
             state.settings.user_agent = match selected {
