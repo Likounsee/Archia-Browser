@@ -34,7 +34,11 @@ impl RequestPolicyEngine for BrowserPolicy {
 type Loader = DocumentLoader<BrowserPolicy, HttpTransport>;
 
 #[derive(Clone, Copy)]
-enum PasteAction { Navigate, NewTab, ImportBookmarks }
+enum PasteAction {
+    Navigate,
+    NewTab,
+    ImportBookmarks,
+}
 
 #[derive(Clone, Copy)]
 enum ExportFormat {
@@ -531,41 +535,77 @@ impl ArchiaApp {
     }
 
     fn close_tabs_left_of(&mut self, target: archia_browser::core::tabs::TabId) {
-        let Some(index) = self.tabs.iter().position(|id| *id == target) else { return };
+        let Some(index) = self.tabs.iter().position(|id| *id == target) else {
+            return;
+        };
         let ids = self.tabs[..index].to_vec();
-        for id in ids { self.close_tab(id); }
+        for id in ids {
+            self.close_tab(id);
+        }
     }
 
     fn close_tabs_right_of(&mut self, target: archia_browser::core::tabs::TabId) {
-        let Some(index) = self.tabs.iter().position(|id| *id == target) else { return };
+        let Some(index) = self.tabs.iter().position(|id| *id == target) else {
+            return;
+        };
         let ids = self.tabs[index + 1..].to_vec();
-        for id in ids { self.close_tab(id); }
+        for id in ids {
+            self.close_tab(id);
+        }
     }
 
     fn close_duplicate_tabs(&mut self, target: archia_browser::core::tabs::TabId) {
-        let target_url = self.browser.tabs().tab(target)
+        let target_url = self
+            .browser
+            .tabs()
+            .tab(target)
             .and_then(|tab| tab.history().current())
             .map(|entry| entry.url().to_string());
         let Some(target_url) = target_url else { return };
-        let ids = self.tabs.iter().copied().filter(|id| {
-            *id != target && self.browser.tabs().tab(*id)
-                .and_then(|tab| tab.history().current())
-                .is_some_and(|entry| entry.url().to_string() == target_url)
-        }).collect::<Vec<_>>();
-        for id in ids { self.close_tab(id); }
+        let ids = self
+            .tabs
+            .iter()
+            .copied()
+            .filter(|id| {
+                *id != target
+                    && self
+                        .browser
+                        .tabs()
+                        .tab(*id)
+                        .and_then(|tab| tab.history().current())
+                        .is_some_and(|entry| entry.url().to_string() == target_url)
+            })
+            .collect::<Vec<_>>();
+        for id in ids {
+            self.close_tab(id);
+        }
     }
 
     fn close_same_site_tabs(&mut self, target: archia_browser::core::tabs::TabId) {
-        let host = self.browser.tabs().tab(target)
+        let host = self
+            .browser
+            .tabs()
+            .tab(target)
             .and_then(|tab| tab.history().current())
             .map(|entry| entry.url().host().to_ascii_lowercase());
         let Some(host) = host else { return };
-        let ids = self.tabs.iter().copied().filter(|id| {
-            *id != target && self.browser.tabs().tab(*id)
-                .and_then(|tab| tab.history().current())
-                .is_some_and(|entry| entry.url().host().eq_ignore_ascii_case(&host))
-        }).collect::<Vec<_>>();
-        for id in ids { self.close_tab(id); }
+        let ids = self
+            .tabs
+            .iter()
+            .copied()
+            .filter(|id| {
+                *id != target
+                    && self
+                        .browser
+                        .tabs()
+                        .tab(*id)
+                        .and_then(|tab| tab.history().current())
+                        .is_some_and(|entry| entry.url().host().eq_ignore_ascii_case(&host))
+            })
+            .collect::<Vec<_>>();
+        for id in ids {
+            self.close_tab(id);
+        }
     }
 
     fn reopen_closed_tab(&mut self) {
@@ -635,8 +675,16 @@ impl ArchiaApp {
     }
 
     fn copy_history_markdown(&mut self, ctx: &egui::Context) {
-        let exported = self.history_items.iter()
-            .map(|item| format!("- [{}](<{}>)", item.title.replace('[', "\\[").replace(']', "\\]"), item.url))
+        let exported = self
+            .history_items
+            .iter()
+            .map(|item| {
+                format!(
+                    "- [{}](<{}>)",
+                    item.title.replace('[', "\\[").replace(']', "\\]"),
+                    item.url
+                )
+            })
             .collect::<Vec<_>>()
             .join("\n");
         ctx.copy_text(exported);
@@ -1071,9 +1119,15 @@ impl eframe::App for ArchiaApp {
             });
             ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
         }
-        let pasted = ctx.input(|input| input.events.iter().find_map(|event| {
-            if let egui::Event::Paste(text) = event { Some(text.clone()) } else { None }
-        }));
+        let pasted = ctx.input(|input| {
+            input.events.iter().find_map(|event| {
+                if let egui::Event::Paste(text) = event {
+                    Some(text.clone())
+                } else {
+                    None
+                }
+            })
+        });
         if let Some(text) = pasted {
             self.handle_pasted_text(text);
         }
@@ -1346,17 +1400,29 @@ impl eframe::App for ArchiaApp {
                         }
                     });
                     ui.menu_button("Outils", |ui| {
-                        if ui.button("Coller une adresse/recherche · Ctrl+Shift+V").clicked() {
+                        if ui
+                            .button("Coller une adresse/recherche · Ctrl+Shift+V")
+                            .clicked()
+                        {
                             self.pending_paste = Some(PasteAction::Navigate);
-                            ui.ctx().send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                            ui.ctx()
+                                .send_viewport_cmd(egui::ViewportCommand::RequestPaste);
                         }
-                        if ui.button("Coller dans un nouvel onglet · Ctrl+Shift+F").clicked() {
+                        if ui
+                            .button("Coller dans un nouvel onglet · Ctrl+Shift+F")
+                            .clicked()
+                        {
                             self.pending_paste = Some(PasteAction::NewTab);
-                            ui.ctx().send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                            ui.ctx()
+                                .send_viewport_cmd(egui::ViewportCommand::RequestPaste);
                         }
-                        if ui.button("Importer depuis le presse-papiers · Ctrl+Shift+M").clicked() {
+                        if ui
+                            .button("Importer depuis le presse-papiers · Ctrl+Shift+M")
+                            .clicked()
+                        {
                             self.pending_paste = Some(PasteAction::ImportBookmarks);
-                            ui.ctx().send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                            ui.ctx()
+                                .send_viewport_cmd(egui::ViewportCommand::RequestPaste);
                         }
                         if ui.button("Télécharger la page actuelle").clicked() {
                             self.start_download();
@@ -1373,7 +1439,10 @@ impl eframe::App for ArchiaApp {
                         if ui.button("Copier l'historique · Ctrl+Shift+Y").clicked() {
                             self.copy_history(ui.ctx());
                         }
-                        if ui.button("Copier l'historique (Markdown) · Ctrl+Alt+Shift+H").clicked() {
+                        if ui
+                            .button("Copier l'historique (Markdown) · Ctrl+Alt+Shift+H")
+                            .clicked()
+                        {
                             self.copy_history_markdown(ui.ctx());
                         }
                         if ui
