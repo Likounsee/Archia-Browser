@@ -2580,7 +2580,7 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
                         .unwrap_or_else(|| url.to_string());
                     let _ = copy_text_to_clipboard(
                         hwnd,
-                        &format!("{title}\\r\\n{url}"),
+                        &format!("{title}\r\n{url}"),
                     );
                 }
             }
@@ -2614,7 +2614,7 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
                 .collect::<Vec<_>>();
             let site_urls = urls_for_same_site(&hosts, &urls, index);
             if !site_urls.is_empty() {
-                let _ = copy_text_to_clipboard(hwnd, &site_urls.join("\\r\\n"));
+                let _ = copy_text_to_clipboard(hwnd, &site_urls.join("\r\n"));
             }
         }
         ID_TAB_CONTEXT_CLOSE_DUPLICATES => {
