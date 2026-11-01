@@ -111,6 +111,7 @@ const ID_MENU_COPY_BOOKMARKS_MARKDOWN: u32 = 3048;
 const ID_MENU_COPY_HISTORY_MARKDOWN: u32 = 3049;
 const ID_MENU_REOPEN_ALL_CLOSED_TABS: u32 = 3050;
 const ID_MENU_COPY_CLOSED_TABS_MARKDOWN: u32 = 3051;
+const ID_MENU_CLEAR_CLOSED_TABS: u32 = 3052;
 const ID_MENU_CLOSED_TAB_BASE: u32 = 3800;
 const MAX_MENU_CLOSED_TABS: usize = 20;
 const MAX_IMPORTED_BOOKMARKS: usize = 5_000;
@@ -2132,6 +2133,12 @@ fn closed_tab_storage_index(closed_tab_count: usize, recent_index: usize) -> Opt
     (recent_index < closed_tab_count).then(|| closed_tab_count - 1 - recent_index)
 }
 
+fn clear_closed_tabs(closed_tabs: &mut Vec<Option<String>>) -> usize {
+    let removed = closed_tabs.len();
+    closed_tabs.clear();
+    removed
+}
+
 fn closed_tabs_as_bookmarks(closed_tabs: &[Option<String>]) -> Vec<Bookmark> {
     closed_tabs
         .iter()
@@ -2169,6 +2176,10 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             if !markdown.is_empty() {
                 let _ = copy_text_to_clipboard(hwnd, &markdown);
             }
+            return true;
+        }
+        if alt && GetKeyState(VK_SHIFT) < 0 && key == 0x58 {
+            clear_closed_tabs(&mut state.closed_tabs);
             return true;
         }
         if alt && (key == VK_LEFT || key == VK_RIGHT) {
@@ -3016,6 +3027,7 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             ID_MENU_COPY_CLOSED_TABS_MARKDOWN,
             "Copier les onglets fermés au format Markdown",
         ),
+        (ID_MENU_CLEAR_CLOSED_TABS, "Vider la liste des onglets fermés"),
         (ID_MENU_SEARCH_GOOGLE, "Recherche : Google"),
         (ID_MENU_SEARCH_BING, "Recherche : Bing"),
         (ID_MENU_SEARCH_DDG, "Recherche : DuckDuckGo"),
@@ -3244,6 +3256,9 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         ID_MENU_CLOSE_TAB => close_active_tab(state),
         ID_MENU_REOPEN_CLOSED_TAB => reopen_closed_tab(state, hwnd),
         ID_MENU_REOPEN_ALL_CLOSED_TABS => reopen_all_closed_tabs(state, hwnd),
+        ID_MENU_CLEAR_CLOSED_TABS => {
+            clear_closed_tabs(&mut state.closed_tabs);
+        }
         id if (ID_MENU_CLOSED_TAB_BASE..ID_MENU_CLOSED_TAB_BASE + MAX_MENU_CLOSED_TABS as u32)
             .contains(&id) =>
         {
@@ -4610,6 +4625,14 @@ mod gui_address_tests {
         assert_eq!(tab_indices_for_same_site(&hosts, 2), vec![4, 0]);
         assert!(tab_indices_for_same_site(&hosts, 3).is_empty());
         assert!(tab_indices_for_same_site(&hosts, 8).is_empty());
+    }
+
+    #[test]
+    fn clearing_recently_closed_tabs_returns_count_and_empties_list() {
+        let mut closed = vec![Some("https://one.example/".into()), None];
+        assert_eq!(clear_closed_tabs(&mut closed), 2);
+        assert!(closed.is_empty());
+        assert_eq!(clear_closed_tabs(&mut closed), 0);
     }
 
     #[test]
