@@ -105,6 +105,8 @@ const ID_MENU_COPY_BOOKMARKS_HTML: u32 = 3042;
 const ID_MENU_PASTE_AND_GO: u32 = 3043;
 const ID_MENU_SEARCH_CLIPBOARD_NEW_TAB: u32 = 3044;
 const ID_MENU_COPY_HISTORY_HTML: u32 = 3045;
+const ID_MENU_COPY_OPEN_TABS_HTML: u32 = 3046;
+const ID_MENU_OPEN_CLIPBOARD_LINKS: u32 = 3047;
 const MAX_IMPORTED_BOOKMARKS: usize = 5_000;
 const MAX_CLIPBOARD_BYTES: usize = 2 * 1024 * 1024;
 const ID_RECENT_DOWNLOAD_BASE: u32 = 3700;
@@ -903,6 +905,23 @@ fn export_open_tabs_text(entries: &[(String, String)]) -> String {
         .map(|(title, url)| format!("{title}\t{url}"))
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn export_open_tabs_html(entries: &[(String, String)]) -> String {
+    let bookmarks = entries
+        .iter()
+        .filter_map(|(title, url)| {
+            let parsed = Url::parse(url).ok()?;
+            if !matches!(parsed.scheme(), "http" | "https") {
+                return None;
+            }
+            Some(Bookmark {
+                title: if title.trim().is_empty() { parsed.host().to_owned() } else { title.clone() },
+                url: parsed.to_string(),
+            })
+        })
+        .collect::<Vec<_>>();
+    export_bookmarks_html(&bookmarks)
 }
 
 fn browser_data_directory() -> std::path::PathBuf {
@@ -1973,6 +1992,14 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             navigate_from_clipboard(state, hwnd, true);
             return true;
         }
+        if key == 0x4D && GetKeyState(VK_SHIFT) < 0 {
+            open_links_from_clipboard(state, hwnd);
+            return true;
+        }
+        if key == 0x55 && GetKeyState(VK_SHIFT) < 0 {
+            copy_open_tabs_html(state, hwnd);
+            return true;
+        }
         if key == 0x47 && GetKeyState(VK_SHIFT) < 0 {
             let html = export_bookmarks_html(&state.persistent_history);
             if !state.persistent_history.is_empty() {
@@ -2327,6 +2354,38 @@ unsafe fn navigate_from_clipboard(state: &mut AppState, hwnd: Hwnd, new_tab: boo
     navigate(state, &url.to_string());
 }
 
+unsafe fn open_links_from_clipboard(state: &mut AppState, hwnd: Hwnd) {
+    let Some(text) = read_text_from_clipboard(hwnd) else {
+        return;
+    };
+    let links = parse_imported_bookmarks(&text)
+        .into_iter()
+        .take(MAX_RESTORED_TABS.min(MAX_GUI_TABS))
+        .map(|bookmark| bookmark.url)
+        .collect::<Vec<_>>();
+    if links.is_empty() || state.tabs.is_empty() {
+        return;
+    }
+    let capacity = state.tabs.len().saturating_add(links.len().saturating_sub(1)).min(MAX_GUI_TABS);
+    for (index, url) in links.into_iter().take(capacity.saturating_sub(state.tabs.len()).saturating_add(1)).enumerate() {
+        if index > 0 {
+            create_new_tab(state, hwnd);
+        }
+        navigate(state, &url);
+    }
+}
+
+unsafe fn copy_open_tabs_html(state: &AppState, hwnd: Hwnd) {
+    let entries = state.tabs.iter().filter_map(|(id, _)| {
+        let page = state.browser.tabs().tab(*id)?.page()?;
+        Some((page.title().unwrap_or_else(|| "(sans titre)".to_owned()), page.url()?.to_string()))
+    }).collect::<Vec<_>>();
+    if !entries.is_empty() {
+        let html = export_open_tabs_html(&entries);
+        let _ = copy_text_to_clipboard(hwnd, &html);
+    }
+}
+
 unsafe fn import_bookmarks_from_clipboard(state: &mut AppState, hwnd: Hwnd) {
     let Some(text) = read_text_from_clipboard(hwnd) else {
         return;
@@ -2586,6 +2645,8 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         (ID_MENU_PASTE_AND_GO, "Coller et ouvrir l’adresse ou rechercher le texte copié"),
         (ID_MENU_SEARCH_CLIPBOARD_NEW_TAB, "Rechercher le texte copié dans un nouvel onglet"),
         (ID_MENU_COPY_HISTORY_HTML, "Copier l’historique au format HTML (Netscape)"),
+        (ID_MENU_COPY_OPEN_TABS_HTML, "Exporter les onglets ouverts en HTML (Netscape)"),
+        (ID_MENU_OPEN_CLIPBOARD_LINKS, "Ouvrir les liens du presse-papiers dans des onglets"),
         (
             ID_MENU_IMPORT_BOOKMARKS,
             "Importer les favoris depuis le presse-papiers",
@@ -2806,6 +2867,8 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
                 let _ = copy_text_to_clipboard(hwnd, &html);
             }
         }
+        ID_MENU_COPY_OPEN_TABS_HTML => copy_open_tabs_html(state, hwnd),
+        ID_MENU_OPEN_CLIPBOARD_LINKS => open_links_from_clipboard(state, hwnd),
         ID_MENU_COPY_HISTORY => {
             let text = export_bookmarks_text(&state.persistent_history);
             if !text.is_empty() {
@@ -4376,6 +4439,18 @@ mod gui_address_tests {
         assert!(clipboard_navigation_url("file:///etc/passwd", SearchProvider::Google).is_none());
         assert!(clipboard_navigation_url(&"x".repeat(4_097), SearchProvider::Google).is_none());
         assert!(clipboard_navigation_url("hello\nworld", SearchProvider::Google).is_none());
+    }
+
+    #[test]
+    fn open_tabs_html_export_is_netscape_compatible_and_escapes_titles() {
+        let entries = vec![
+            ("A & B <Docs>".to_owned(), "https://example.org/docs".to_owned()),
+            ("Unsafe".to_owned(), "javascript:alert(1)".to_owned()),
+        ];
+        let html = export_open_tabs_html(&entries);
+        assert!(html.contains("A &amp; B &lt;Docs&gt;"));
+        assert!(html.contains("HREF=\"https://example.org/docs\""));
+        assert!(!html.contains("javascript:"));
     }
 
     #[test]
