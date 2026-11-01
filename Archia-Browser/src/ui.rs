@@ -1024,8 +1024,6 @@ impl eframe::App for ArchiaApp {
     }
 }
 
-#[cfg(windows)]
-
 fn downloads_directory() -> PathBuf {
     let base = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
         .map(PathBuf::from)
@@ -1087,6 +1085,7 @@ fn open_local_path(path: &Path) {
     let _ = result;
 }
 
+#[cfg(windows)]
 fn browser_data_directory() -> std::path::PathBuf {
     std::env::var_os("APPDATA")
         .map(std::path::PathBuf::from)
@@ -1229,5 +1228,28 @@ mod tests {
     fn saved_page_fields_round_trip_utf8_and_delimiters() {
         let value = "Été\tArchia Browser";
         assert_eq!(super::decode_field(&encode_query(value)), value);
+    }
+
+    #[test]
+    fn settings_round_trip_and_reject_unsafe_homepages() {
+        let path = std::env::temp_dir().join(format!("archia-settings-{}.ini", std::process::id()));
+        let mut settings = super::BrowserSettings::default();
+        settings.search_provider = super::SearchProvider::DuckDuckGo;
+        settings.user_agent = super::UserAgentProfile::ChromiumCompatible;
+        settings.homepage = "https://example.org/".to_owned();
+        settings.restore_session = false;
+        settings.save(&path);
+        let loaded = super::BrowserSettings::load(&path);
+        assert_eq!(loaded, settings);
+        std::fs::write(&path, "homepage=file:///etc/passwd\n").unwrap();
+        let rejected = super::BrowserSettings::load(&path);
+        assert_eq!(rejected.homepage, super::BrowserSettings::default().homepage);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn download_filename_sanitization_removes_path_and_reserved_characters() {
+        assert_eq!(super::safe_download_filename("../../bad:name?.txt"), "badname.txt");
+        assert_eq!(super::safe_download_filename("..."), "download.bin");
     }
 }
