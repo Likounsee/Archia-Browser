@@ -315,6 +315,7 @@ struct ArchiaApp {
     status: String,
     page_texture: Option<egui::TextureHandle>,
     page_texture_size: egui::Vec2,
+    page_texture_offset: u32,
     page_dirty: bool,
     last_viewport_width: u32,
     bookmarks: Vec<SavedPage>,
@@ -396,6 +397,7 @@ impl ArchiaApp {
             status: "Prêt".to_owned(),
             page_texture: None,
             page_texture_size: egui::Vec2::ZERO,
+            page_texture_offset: 0,
             page_dirty: true,
             last_viewport_width: 0,
             bookmarks,
@@ -1083,33 +1085,52 @@ impl ArchiaApp {
             .unwrap_or_default();
     }
 
-    fn update_page_texture(&mut self, ctx: &egui::Context, viewport_width: u32) {
-        if !self.page_dirty || self.browser.current_page().is_none() {
-            return;
-        }
-
+    fn update_page_texture(
+        &mut self,
+        ctx: &egui::Context,
+        viewport_width: u32,
+        scroll_y: u32,
+        viewport_height: u32,
+    ) {
         let Some(page) = self.browser.current_page() else {
             self.page_texture = None;
+            self.page_texture_size = egui::Vec2::ZERO;
+            self.page_texture_offset = 0;
             self.page_dirty = false;
             return;
         };
 
+        // Render only a viewport-sized band. The software renderer translates the
+        // document by this offset, so no GPU texture ever needs the full page height.
+        const PAGE_TILE_HEIGHT: u32 = 4096;
+        const PAGE_TILE_STEP: u32 = 2048;
         let width = viewport_width.clamp(480, 2400);
+        let page_height = page.layout.rect.height.max(760);
+        let tile_offset = (scroll_y / PAGE_TILE_STEP) * PAGE_TILE_STEP;
         let max_height = (64 * 1024 * 1024 / (width as usize * 4)) as u32;
-        let height = page
-            .layout
-            .rect
-            .height
-            .max(760)
+        let wanted_height = viewport_height
+            .saturating_add(scroll_y.saturating_sub(tile_offset))
+            .max(760);
+        let height = wanted_height
+            .min(PAGE_TILE_HEIGHT)
             .min(max_height.max(760))
-            .min(MAX_PAGE_TEXTURE_DIMENSION);
+            .min(MAX_PAGE_TEXTURE_DIMENSION)
+            .min(page_height.saturating_sub(tile_offset).max(1));
+        let needs_render = self.page_dirty
+            || self.page_texture.is_none()
+            || self.page_texture_offset != tile_offset
+            || self.page_texture_size != egui::vec2(width as f32, height as f32);
+        if !needs_render {
+            return;
+        }
+
         let Some(mut surface) = SoftwareSurface::try_new(width, height) else {
             self.status = "Mémoire insuffisante pour afficher cette page.".to_owned();
             self.page_dirty = false;
             return;
         };
 
-        if self.browser.render_current_page(&mut surface) {
+        if self.browser.render_current_page_at(&mut surface, tile_offset) {
             let image = egui::ColorImage::from_rgba_unmultiplied(
                 [width as usize, height as usize],
                 surface.pixels(),
@@ -1121,6 +1142,7 @@ impl ArchiaApp {
                     Some(ctx.load_texture("archia-page", image, egui::TextureOptions::LINEAR));
             }
             self.page_texture_size = egui::vec2(width as f32, height as f32);
+            self.page_texture_offset = tile_offset;
         }
         self.page_dirty = false;
     }
@@ -2289,83 +2311,102 @@ impl eframe::App for ArchiaApp {
                 }
 
                 if self.browser.current_page().is_some() {
-                    self.update_page_texture(ctx, width);
-                    if let Some(texture) = self.page_texture.as_ref() {
-                        let texture_id = texture.id();
-                        let image_size = self.page_texture_size;
-                        egui::ScrollArea::both()
-                            .auto_shrink([false, false])
-                            .show(ui, |ui| {
-                                let response = ui.add(
-                                    egui::Image::new((texture_id, image_size))
-                                        .sense(egui::Sense::click_and_drag()),
+                    egui::ScrollArea::both()
+                        .auto_shrink([false, false])
+                        .show_viewport(ui, |ui, viewport| {
+                            let page_height = self
+                                .browser
+                                .current_page()
+                                .map(|page| page.layout.rect.height.max(760))
+                                .unwrap_or(760);
+                            let page_size = egui::vec2(width as f32, page_height as f32);
+                            let scroll_y = viewport.min.y.max(0.0).floor() as u32;
+                            let viewport_height = viewport.height().ceil().max(1.0) as u32;
+                            self.update_page_texture(ctx, width, scroll_y, viewport_height);
+
+                            let response =
+                                ui.allocate_response(page_size, egui::Sense::click_and_drag());
+                            if let Some(texture) = self.page_texture.as_ref() {
+                                let tile_rect = egui::Rect::from_min_size(
+                                    response.rect.min
+                                        + egui::vec2(0.0, self.page_texture_offset as f32),
+                                    self.page_texture_size,
                                 );
-                                let response = if let Some(pointer) = response.hover_pos() {
-                                    let x = (pointer.x - response.rect.min.x).floor() as i32;
-                                    let y = (pointer.y - response.rect.min.y).floor() as i32;
-                                    if self.link_target_at(x, y).is_some() {
-                                        response.on_hover_cursor(egui::CursorIcon::PointingHand)
-                                    } else {
-                                        response
-                                    }
+                                ui.painter().image(
+                                    texture.id(),
+                                    tile_rect,
+                                    egui::Rect::from_min_max(
+                                        egui::Pos2::ZERO,
+                                        egui::pos2(1.0, 1.0),
+                                    ),
+                                    egui::Color32::WHITE,
+                                );
+                            }
+
+                            let response = if let Some(pointer) = response.hover_pos() {
+                                let x = (pointer.x - response.rect.min.x).floor() as i32;
+                                let y = (pointer.y - response.rect.min.y).floor() as i32;
+                                if self.link_target_at(x, y).is_some() {
+                                    response.on_hover_cursor(egui::CursorIcon::PointingHand)
                                 } else {
                                     response
-                                };
-                                let context_pointer = response.interact_pointer_pos();
-                                let context_link = context_pointer.and_then(|pointer| {
-                                    let x = (pointer.x - response.rect.min.x).floor() as i32;
-                                    let y = (pointer.y - response.rect.min.y).floor() as i32;
-                                    self.link_target_at(x, y)
-                                });
-                                let page_url = self.browser.current_url().map(ToString::to_string);
-                                let page_title =
-                                    self.browser.current_page().and_then(|page| page.title());
-                                response.context_menu(|ui| {
-                                    if let Some(link) = context_link.as_ref() {
-                                        if ui
-                                            .button("Ouvrir le lien dans un nouvel onglet")
-                                            .clicked()
-                                        {
-                                            if let Some(base) = self.browser.current_url().cloned()
-                                            {
-                                                if let Ok(url) = base.resolve(link) {
-                                                    self.new_tab();
-                                                    self.navigate(&url.to_string());
-                                                }
+                                }
+                            } else {
+                                response
+                            };
+                            let context_pointer = response.interact_pointer_pos();
+                            let context_link = context_pointer.and_then(|pointer| {
+                                let x = (pointer.x - response.rect.min.x).floor() as i32;
+                                let y = (pointer.y - response.rect.min.y).floor() as i32;
+                                self.link_target_at(x, y)
+                            });
+                            let page_url = self.browser.current_url().map(ToString::to_string);
+                            let page_title =
+                                self.browser.current_page().and_then(|page| page.title());
+                            response.context_menu(|ui| {
+                                if let Some(link) = context_link.as_ref() {
+                                    if ui
+                                        .button("Ouvrir le lien dans un nouvel onglet")
+                                        .clicked()
+                                    {
+                                        if let Some(base) = self.browser.current_url().cloned() {
+                                            if let Ok(url) = base.resolve(link) {
+                                                self.new_tab();
+                                                self.navigate(&url.to_string());
                                             }
                                         }
-                                        if ui.button("Copier l'adresse du lien").clicked() {
-                                            ui.ctx().copy_text(link.clone());
-                                            self.status = "Adresse du lien copiée".to_owned();
-                                        }
-                                        ui.separator();
                                     }
-                                    if let Some(url) = page_url.as_ref() {
-                                        if ui.button("Copier l'adresse de la page").clicked() {
-                                            ui.ctx().copy_text(url.clone());
-                                            self.status = "Adresse de la page copiée".to_owned();
-                                        }
+                                    if ui.button("Copier l'adresse du lien").clicked() {
+                                        ui.ctx().copy_text(link.clone());
+                                        self.status = "Adresse du lien copiée".to_owned();
                                     }
-                                    if let Some(title) = page_title.as_ref() {
-                                        if ui.button("Copier le titre de la page").clicked() {
-                                            ui.ctx().copy_text(title.clone());
-                                            self.status = "Titre de la page copié".to_owned();
-                                        }
-                                    }
-                                    if ui.button("Actualiser").clicked() {
-                                        self.reload();
-                                    }
-                                });
-                                if response.clicked() {
-                                    if let Some(pointer) = response.interact_pointer_pos() {
-                                        let x = (pointer.x - response.rect.min.x).floor() as i32;
-                                        let y = (pointer.y - response.rect.min.y).floor() as i32;
-                                        let new_tab = ctx.input(|input| input.modifiers.ctrl);
-                                        self.open_link_at(x, y, new_tab);
+                                    ui.separator();
+                                }
+                                if let Some(url) = page_url.as_ref() {
+                                    if ui.button("Copier l'adresse de la page").clicked() {
+                                        ui.ctx().copy_text(url.clone());
+                                        self.status = "Adresse de la page copiée".to_owned();
                                     }
                                 }
+                                if let Some(title) = page_title.as_ref() {
+                                    if ui.button("Copier le titre de la page").clicked() {
+                                        ui.ctx().copy_text(title.clone());
+                                        self.status = "Titre de la page copié".to_owned();
+                                    }
+                                }
+                                if ui.button("Actualiser").clicked() {
+                                    self.reload();
+                                }
                             });
-                    }
+                            if response.clicked() {
+                                if let Some(pointer) = response.interact_pointer_pos() {
+                                    let x = (pointer.x - response.rect.min.x).floor() as i32;
+                                    let y = (pointer.y - response.rect.min.y).floor() as i32;
+                                    let new_tab = ctx.input(|input| input.modifiers.ctrl);
+                                    self.open_link_at(x, y, new_tab);
+                                }
+                            }
+                        });
                 } else {
                     ui.vertical_centered(|ui| {
                         ui.add_space((ui.available_height() * 0.12).max(36.0));
