@@ -7,6 +7,7 @@ pub enum Display {
     Inline,
     InlineBlock,
     Flex,
+    Grid,
     None,
 }
 
@@ -17,6 +18,7 @@ impl Display {
             Some("inline") => Self::Inline,
             Some("inline-block") => Self::InlineBlock,
             Some("flex") | Some("inline-flex") => Self::Flex,
+            Some("grid") | Some("inline-grid") => Self::Grid,
             Some("block") | Some("flow-root") => Self::Block,
             _ => Self::Block,
         }
@@ -288,6 +290,29 @@ fn layout_styled_node(
 
     if display == Display::Flex {
         cursor_y = layout_flex_children(
+            node,
+            &mut output,
+            content_origin_x,
+            content_origin_y,
+            content_width,
+            explicit_height
+                .map(|height| {
+                    if border_box {
+                        height.saturating_sub(padding_border_y)
+                    } else {
+                        height
+                    }
+                })
+                .unwrap_or(viewport_height),
+            viewport_width,
+            viewport_height,
+            child_abs_origin_x,
+            child_abs_origin_y,
+            child_abs_width,
+            child_abs_height,
+        );
+    } else if display == Display::Grid {
+        cursor_y = layout_grid_children(
             node,
             &mut output,
             content_origin_x,
@@ -751,6 +776,307 @@ fn parse_gap_shorthand(value: Option<&str>, reference: u32, column_gap: bool) ->
         (_, _) => first,
     };
     parse_length(Some(selected), reference)
+}
+
+#[derive(Debug, Clone, Copy)]
+enum GridTrack {
+    Fixed(u32),
+    Fraction { minimum: u32, factor: f32 },
+    Auto,
+}
+
+fn split_grid_track_list(value: &str) -> Vec<String> {
+    let mut tracks = Vec::new();
+    let mut depth = 0usize;
+    let mut start = None;
+    for (index, character) in value.char_indices() {
+        if character.is_whitespace() && depth == 0 {
+            if let Some(begin) = start.take() {
+                tracks.push(value[begin..index].to_owned());
+            }
+            continue;
+        }
+        if start.is_none() {
+            start = Some(index);
+        }
+        match character {
+            '(' => depth = depth.saturating_add(1),
+            ')' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    if let Some(begin) = start {
+        tracks.push(value[begin..].to_owned());
+    }
+    tracks
+}
+
+fn parse_grid_track(value: &str, reference: u32) -> Option<GridTrack> {
+    let value = value.trim().to_ascii_lowercase();
+    if value == "auto" || value == "min-content" || value == "max-content" {
+        return Some(GridTrack::Auto);
+    }
+    if let Some(factor) = value.strip_suffix("fr") {
+        let factor = factor.trim().parse::<f32>().ok()?;
+        if factor.is_finite() && factor > 0.0 {
+            return Some(GridTrack::Fraction {
+                minimum: 0,
+                factor,
+            });
+        }
+        return None;
+    }
+    if value.starts_with("minmax(") && value.ends_with(')') {
+        let inner = &value[7..value.len() - 1];
+        let (minimum, maximum) = inner.split_once(',')?;
+        let minimum = parse_length(Some(minimum.trim()), reference).unwrap_or(0);
+        if let Some(factor) = maximum.trim().strip_suffix("fr") {
+            let factor = factor.trim().parse::<f32>().ok()?;
+            if factor.is_finite() && factor > 0.0 {
+                return Some(GridTrack::Fraction { minimum, factor });
+            }
+            return None;
+        }
+        if maximum.trim() == "auto" {
+            return Some(GridTrack::Fraction {
+                minimum,
+                factor: 1.0,
+            });
+        }
+        return parse_length(Some(maximum.trim()), reference)
+            .map(|maximum| GridTrack::Fixed(maximum.max(minimum)));
+    }
+    parse_length(Some(&value), reference).map(GridTrack::Fixed)
+}
+
+fn parse_grid_tracks(value: Option<&str>, reference: u32) -> Vec<GridTrack> {
+    const MAX_GRID_TRACKS: usize = 16;
+    let mut tracks = Vec::new();
+    let Some(value) = value else {
+        return vec![GridTrack::Auto];
+    };
+    for token in split_grid_track_list(value) {
+        if let Some(inner) = token.strip_prefix("repeat(").and_then(|v| v.strip_suffix(')')) {
+            let Some((count, repeated)) = inner.split_once(',') else {
+                continue;
+            };
+            let Ok(count) = count.trim().parse::<usize>() else {
+                continue;
+            };
+            if count == 0 || count > MAX_GRID_TRACKS {
+                continue;
+            }
+            let repeated_tracks = split_grid_track_list(repeated);
+            if repeated_tracks.is_empty()
+                || tracks.len().saturating_add(repeated_tracks.len().saturating_mul(count))
+                    > MAX_GRID_TRACKS
+            {
+                continue;
+            }
+            for _ in 0..count {
+                for repeated_track in &repeated_tracks {
+                    if let Some(track) = parse_grid_track(repeated_track, reference) {
+                        tracks.push(track);
+                    }
+                }
+            }
+        } else if tracks.len() < MAX_GRID_TRACKS {
+            if let Some(track) = parse_grid_track(&token, reference) {
+                tracks.push(track);
+            }
+        }
+    }
+    if tracks.is_empty() {
+        tracks.push(GridTrack::Auto);
+    }
+    tracks
+}
+
+fn resolve_grid_track_sizes(tracks: &[GridTrack], available: u32, gap: u32) -> Vec<u32> {
+    let gaps = gap.saturating_mul(tracks.len().saturating_sub(1) as u32);
+    let mut fixed = 0_u32;
+    let mut fractional_minimum = 0_u32;
+    let mut fraction_total = 0.0_f32;
+    let mut auto_count = 0_u32;
+    for track in tracks {
+        match track {
+            GridTrack::Fixed(width) => fixed = fixed.saturating_add(*width),
+            GridTrack::Fraction { minimum, factor } => {
+                fractional_minimum = fractional_minimum.saturating_add(*minimum);
+                fraction_total += *factor;
+            }
+            GridTrack::Auto => auto_count = auto_count.saturating_add(1),
+        }
+    }
+    let remaining = available
+        .saturating_sub(gaps)
+        .saturating_sub(fixed)
+        .saturating_sub(fractional_minimum);
+    let auto_width = if fraction_total == 0.0 && auto_count > 0 {
+        remaining / auto_count
+    } else {
+        0
+    };
+    let mut fraction_used = 0_u32;
+    let mut fraction_index = 0_u32;
+    let fraction_count = tracks
+        .iter()
+        .filter(|track| matches!(track, GridTrack::Fraction { .. }))
+        .count() as u32;
+    let mut widths = Vec::with_capacity(tracks.len());
+    for track in tracks {
+        let width = match track {
+            GridTrack::Fixed(width) => *width,
+            GridTrack::Auto => auto_width,
+            GridTrack::Fraction { minimum, factor } => {
+                fraction_index = fraction_index.saturating_add(1);
+                let distributed = if fraction_index == fraction_count {
+                    remaining.saturating_sub(fraction_used)
+                } else {
+                    (remaining as f32 * *factor / fraction_total).floor() as u32
+                };
+                fraction_used = fraction_used.saturating_add(distributed);
+                minimum.saturating_add(distributed)
+            }
+        };
+        widths.push(width);
+    }
+    widths
+}
+
+#[allow(clippy::too_many_arguments)]
+fn layout_grid_children(
+    node: &crate::style_tree::StyledNode,
+    output: &mut LayoutNode,
+    content_origin_x: i32,
+    content_origin_y: i32,
+    content_width: u32,
+    containing_height: u32,
+    viewport_width: u32,
+    viewport_height: u32,
+    abs_origin_x: i32,
+    abs_origin_y: i32,
+    abs_width: u32,
+    abs_height: u32,
+) -> i32 {
+    let column_gap = parse_length(node.style.get("column-gap"), content_width)
+        .or_else(|| parse_gap_shorthand(node.style.get("gap"), content_width, true))
+        .unwrap_or(0);
+    let row_gap = parse_length(node.style.get("row-gap"), content_width)
+        .or_else(|| parse_gap_shorthand(node.style.get("gap"), content_width, false))
+        .unwrap_or(0);
+    let tracks = parse_grid_tracks(node.style.get("grid-template-columns"), content_width);
+    let widths = resolve_grid_track_sizes(&tracks, content_width, column_gap);
+    let columns = widths.len().max(1);
+    let mut laid_out = Vec::with_capacity(node.children.len());
+    laid_out.resize_with(node.children.len(), || None);
+    let mut row_top = 0_i32;
+
+    for row_start in (0..node.children.len()).step_by(columns) {
+        let row_end = (row_start + columns).min(node.children.len());
+        let mut row_height = 0_u32;
+        let mut column_left = 0_u32;
+
+        for child_index in row_start..row_end {
+            let child = &node.children[child_index];
+            let child_display = display_for_styled_node(child);
+            if child_display == Display::None {
+                laid_out[child_index] = Some(LayoutNode::new(Display::None));
+                column_left = column_left
+                    .saturating_add(widths[child_index - row_start])
+                    .saturating_add(column_gap);
+                continue;
+            }
+
+            let fixed = is_fixed_positioned(child);
+            let absolute = is_absolute_positioned(child) || fixed;
+            if absolute {
+                let child_x = positioned_child_x(
+                    child,
+                    if fixed { 0 } else { abs_origin_x },
+                    if fixed { viewport_width } else { abs_width },
+                    viewport_width,
+                    fixed,
+                );
+                let child_y = positioned_child_y(
+                    child,
+                    if fixed { 0 } else { abs_origin_y },
+                    row_top,
+                    if fixed { viewport_width } else { abs_width },
+                    if fixed { viewport_height } else { abs_height },
+                    viewport_height,
+                    fixed,
+                );
+                laid_out[child_index] = Some(layout_styled_node(
+                    child,
+                    child_x,
+                    child_y,
+                    content_width,
+                    viewport_width,
+                    viewport_height,
+                    abs_origin_x,
+                    abs_origin_y,
+                    abs_width,
+                    abs_height,
+                ));
+                column_left = column_left
+                    .saturating_add(widths[child_index - row_start])
+                    .saturating_add(column_gap);
+                continue;
+            }
+
+            let area_width = widths[child_index - row_start];
+            let child_box = box_model_from_style(&child.style, content_width);
+            let content_cell_width = area_width.saturating_sub(child_box.horizontal_outer());
+            let mut grid_child = child.clone();
+            if is_auto_dimension(grid_child.style.get("width")) {
+                grid_child
+                    .style
+                    .set("width", format!("{content_cell_width}px"));
+            }
+            let child_layout = layout_styled_node(
+                &grid_child,
+                content_origin_x
+                    .saturating_add(column_left as i32)
+                    .saturating_add(child_box.margin_left as i32),
+                content_origin_y
+                    .saturating_add(row_top)
+                    .saturating_add(child_box.margin_top as i32),
+                content_cell_width,
+                viewport_width,
+                viewport_height,
+                abs_origin_x,
+                abs_origin_y,
+                abs_width,
+                abs_height,
+            );
+            row_height = row_height.max(
+                child_layout
+                    .rect
+                    .height
+                    .saturating_add(child_layout.box_model.vertical_outer()),
+            );
+            laid_out[child_index] = Some(child_layout);
+            column_left = column_left
+                .saturating_add(area_width)
+                .saturating_add(column_gap);
+        }
+
+        row_top = row_top
+            .saturating_add(row_height as i32)
+            .saturating_add(row_gap as i32);
+    }
+
+    for child in laid_out {
+        output
+            .children
+            .push(child.unwrap_or_else(|| LayoutNode::new(Display::None)));
+    }
+    if !node.children.is_empty() {
+        row_top = row_top.saturating_sub(row_gap as i32);
+    }
+    let _ = containing_height;
+    row_top
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -4178,4 +4504,55 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.width, 100);
     }
+    #[test]
+    fn grid_layout_places_items_in_rows_and_distributes_fractional_columns() {
+        let mut root = Node::element("section");
+        root.set_attribute(
+            "style",
+            "display: grid; width: 300px; grid-template-columns: repeat(3, 1fr); gap: 10px;",
+        );
+        for _ in 0..4 {
+            let mut child = Node::element("div");
+            child.set_attribute("style", "height: 20px;");
+            root.append(child);
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(300, 120));
+
+        assert_eq!(layout.display, Display::Grid);
+        assert_eq!(layout.children.len(), 4);
+        assert_eq!(layout.children[0].rect.x, 0);
+        assert_eq!(layout.children[1].rect.x, 103);
+        assert_eq!(layout.children[2].rect.x, 206);
+        assert_eq!(layout.children[3].rect.x, 0);
+        assert_eq!(layout.children[3].rect.y, 30);
+        assert_eq!(layout.children[0].rect.width, 93);
+        assert_eq!(layout.children[2].rect.width, 94);
+        assert_eq!(layout.rect.height, 50);
+    }
+
+    #[test]
+    fn grid_layout_supports_fixed_fractional_and_minmax_tracks() {
+        let mut root = Node::element("section");
+        root.set_attribute(
+            "style",
+            "display: grid; width: 400px; grid-template-columns: 100px minmax(80px, 2fr) 1fr; column-gap: 10px;",
+        );
+        for _ in 0..3 {
+            root.append(Node::element("div"));
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(400, 100));
+
+        assert_eq!(layout.children[0].rect.width, 100);
+        assert_eq!(layout.children[1].rect.x, 110);
+        assert_eq!(layout.children[1].rect.width, 186);
+        assert_eq!(layout.children[2].rect.x, 306);
+        assert_eq!(layout.children[2].rect.width, 94);
+    }
+
 }
