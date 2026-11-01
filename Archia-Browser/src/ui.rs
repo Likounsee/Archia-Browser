@@ -393,7 +393,6 @@ impl eframe::App for ArchiaApp {
                                 .size(18.0)
                                 .strong()
                                 .color(LIME)
-                                .letter_spacing(3.0),
                         );
                         ui.add_space(12.0);
                         ui.label(
