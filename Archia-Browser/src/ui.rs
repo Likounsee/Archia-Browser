@@ -251,17 +251,22 @@ impl UiPalette {
 }
 
 fn load_inter_font(ctx: &egui::Context) {
+    // egui's font loader expects a single-face TrueType/OpenType font. A
+    // Windows .ttc collection can expose collection-wide metrics that cause
+    // egui's managed glyph atlas to grow beyond common GPU texture limits.
+    // Prefer a standalone Inter .ttf file and retain egui's bundled fonts as
+    // the safe fallback when only a .ttc collection is installed.
     let mut candidates = Vec::new();
     if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
-        candidates.push(PathBuf::from(local_app_data).join("Microsoft/Windows/Fonts/Inter.ttc"));
+        candidates.push(PathBuf::from(local_app_data).join("Microsoft/Windows/Fonts/Inter.ttf"));
     }
     if let Some(home) = std::env::var_os("HOME") {
         let home = PathBuf::from(home);
-        candidates.push(home.join(".local/share/fonts/Inter.ttc"));
-        candidates.push(home.join(".fonts/Inter.ttc"));
+        candidates.push(home.join(".local/share/fonts/Inter.ttf"));
+        candidates.push(home.join(".fonts/Inter.ttf"));
     }
-    candidates.push(PathBuf::from("/usr/share/fonts/truetype/inter/Inter.ttc"));
-    candidates.push(PathBuf::from("/usr/local/share/fonts/Inter.ttc"));
+    candidates.push(PathBuf::from("/usr/share/fonts/truetype/inter/Inter.ttf"));
+    candidates.push(PathBuf::from("/usr/local/share/fonts/Inter.ttf"));
 
     for path in candidates {
         let Ok(bytes) = std::fs::read(path) else {
