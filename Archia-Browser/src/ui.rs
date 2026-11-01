@@ -730,19 +730,24 @@ impl ArchiaApp {
     }
 
     fn handle_pasted_text(&mut self, text: String) {
-        if !is_safe_clipboard_text(&text) {
-            self.status = "Presse-papiers vide, trop long ou invalide".to_owned();
-            return;
-        }
         match self.pending_paste.take() {
-            Some(PasteAction::Navigate) => self.navigate(&text),
-            Some(PasteAction::NewTab) => {
-                self.new_tab();
-                self.navigate(&text);
-            }
             Some(PasteAction::ImportBookmarks) => {
+                if !is_safe_bookmark_import(&text) {
+                    self.status = "Contenu de favoris vide, trop volumineux ou invalide".to_owned();
+                    return;
+                }
                 self.bookmark_import_text = text;
                 self.bookmark_import_open = true;
+            }
+            Some(action @ (PasteAction::Navigate | PasteAction::NewTab)) => {
+                let Some(url) = clipboard_navigation_url(&text, self.settings.search_provider) else {
+                    self.status = "Le presse-papiers ne contient pas une adresse ou recherche autorisée".to_owned();
+                    return;
+                };
+                if matches!(action, PasteAction::NewTab) {
+                    self.new_tab();
+                }
+                self.navigate(&url.to_string());
             }
             None => {}
         }
@@ -1814,9 +1819,55 @@ impl eframe::App for ArchiaApp {
     }
 }
 
-fn is_safe_clipboard_text(value: &str) -> bool {
+fn is_safe_bookmark_import(value: &str) -> bool {
     let value = value.trim();
-    !value.is_empty() && value.len() <= 4_096 && !value.chars().any(char::is_control)
+    !value.is_empty()
+        && value.len() <= 128 * 1024
+        && !value
+            .chars()
+            .any(|character| character.is_control() && !matches!(character, '\t' | '\r' | '\n'))
+}
+
+fn explicit_url_scheme(value: &str) -> Option<&str> {
+    let (scheme, remainder) = value.split_once(':')?;
+    let mut characters = scheme.chars();
+    if !characters.next()?.is_ascii_alphabetic()
+        || !characters.all(|character| character.is_ascii_alphanumeric() || matches!(character, '+' | '-' | '.'))
+        || (!remainder.is_empty() && remainder.chars().all(|character| character.is_ascii_digit()))
+    {
+        return None;
+    }
+    Some(scheme)
+}
+
+fn clipboard_navigation_url(value: &str, provider: SearchProvider) -> Option<Url> {
+    let value = value.trim();
+    if value.is_empty() || value.len() > 4_096 || value.chars().any(char::is_control) {
+        return None;
+    }
+    if let Some(scheme) = explicit_url_scheme(value) {
+        if !matches!(scheme, "http" | "https") || !value[scheme.len() + 1..].starts_with("//") {
+            return None;
+        }
+        let url = Url::parse(value).ok()?;
+        return matches!(url.scheme(), "http" | "https").then_some(url);
+    }
+    let target = if value.chars().any(char::is_whitespace) || !looks_like_host(value) {
+        provider.search_url(value)
+    } else {
+        format!("https://{value}")
+    };
+    let url = Url::parse(&target).ok()?;
+    matches!(url.scheme(), "http" | "https").then_some(url)
+}
+
+fn markdown_link(title: &str, url: &str) -> String {
+    let label = if title.trim().is_empty() { url } else { title };
+    let escaped = label
+        .replace('\\', "\\\\")
+        .replace('[', "\\[")
+        .replace(']', "\\]");
+    format!("[{escaped}](<{url}>)")
 }
 
 fn decode_bookmark_html_text(value: &str) -> String {
@@ -1949,54 +2000,59 @@ fn export_bookmarks_html(bookmarks: &[SavedPage]) -> String {
     )
 }
 
+fn parse_markdown_bookmarks(text: &str) -> Vec<SavedPage> {
+    let mut imported = Vec::new();
+    for line in text.lines().take(500) {
+        let line = line.trim().trim_start_matches(['-', '*']).trim();
+        let Some(label_start) = line.find('[') else { continue };
+        let Some(label_end) = line[label_start + 1..].find("](") else { continue };
+        let label_end = label_start + 1 + label_end;
+        let raw_label = &line[label_start + 1..label_end];
+        let raw_target = line[label_end + 2..].trim();
+        let target = raw_target.strip_suffix(')').unwrap_or(raw_target).trim();
+        let target = target.strip_prefix('<').and_then(|value| value.strip_suffix('>')).unwrap_or(target);
+        let Ok(url) = Url::parse(target) else { continue };
+        if !matches!(url.scheme(), "http" | "https") { continue; }
+        let title = raw_label
+            .replace("\\[", "[")
+            .replace("\\]", "]")
+            .replace("\\\\", "\\");
+        let title = if title.trim().is_empty() { url.host().to_owned() } else { title };
+        if !imported.iter().any(|item: &SavedPage| item.url == url.to_string()) {
+            imported.push(SavedPage { title, url: url.to_string() });
+        }
+    }
+    imported
+}
+
 fn parse_bookmark_text(text: &str) -> Vec<SavedPage> {
     if text.to_ascii_lowercase().contains("<a ") {
         return parse_netscape_bookmarks(text);
     }
+    if text.contains("](") {
+        return parse_markdown_bookmarks(text);
+    }
     let mut imported = Vec::new();
     for line in text.lines().take(500) {
         let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        let (title, raw_url) = if let Some(rest) = line.strip_prefix("- [") {
-            if let Some((label, target)) = rest.split_once("](<") {
-                (
-                    label
-                        .trim_end_matches(']')
-                        .replace("\\[", "[")
-                        .replace("\\]", "]"),
-                    target.trim_end_matches(')').trim_end_matches('>'),
-                )
-            } else {
-                (String::new(), line)
-            }
-        } else if let Some((first, second)) = line.split_once('\t') {
-            if Url::parse(first.trim()).is_ok() {
-                (second.trim().to_owned(), first.trim())
-            } else {
-                (first.trim().to_owned(), second.trim())
-            }
-        } else {
-            (String::new(), line)
-        };
-        if let Ok(url) = Url::parse(raw_url.trim()) {
-            if matches!(url.scheme(), "http" | "https") {
-                let title = if title.trim().is_empty() {
-                    url.host().to_owned()
-                } else {
-                    title
-                };
-                if !imported
-                    .iter()
-                    .any(|item: &SavedPage| item.url == url.to_string())
-                {
-                    imported.push(SavedPage {
-                        title,
-                        url: url.to_string(),
-                    });
+        if line.is_empty() { continue; }
+        let Some((first, second)) = line.split_once('\t') else {
+            if let Ok(url) = Url::parse(line) {
+                if matches!(url.scheme(), "http" | "https") {
+                    imported.push(SavedPage { title: url.host().to_owned(), url: url.to_string() });
                 }
             }
+            continue;
+        };
+        let first = first.trim();
+        let second = second.trim();
+        let first_is_url = Url::parse(first).is_ok_and(|url| matches!(url.scheme(), "http" | "https"));
+        let second_is_url = Url::parse(second).is_ok_and(|url| matches!(url.scheme(), "http" | "https"));
+        let (title, raw_url) = if first_is_url { (second, first) } else if second_is_url { (first, second) } else { continue };
+        let Ok(url) = Url::parse(raw_url) else { continue };
+        let title = if title.is_empty() { url.host().to_owned() } else { title.to_owned() };
+        if !imported.iter().any(|item: &SavedPage| item.url == url.to_string()) {
+            imported.push(SavedPage { title, url: url.to_string() });
         }
     }
     imported
