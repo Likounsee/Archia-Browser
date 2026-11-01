@@ -127,3 +127,6 @@ These are foundations, not a claim of full browser compatibility. A successful H
 ## License
 
 License to be defined.
+
+
+Use Ctrl+Shift+U or the browser menu to copy all currently open tab titles and URLs as tab-separated text.
