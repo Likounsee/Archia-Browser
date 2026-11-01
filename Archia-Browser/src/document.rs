@@ -1171,17 +1171,21 @@ b</textarea></form>"#,
             LayoutViewport::new(1280, 800),
         );
 
-        let narrow_main = narrow.document.find_first_element("main").unwrap();
-        let wide_main = wide.document.find_first_element("main").unwrap();
-        let narrow_style = narrow.styled.children[0].children[1].children[0]
-            .style
-            .get("width");
-        let wide_style = wide.styled.children[0].children[1].children[0]
-            .style
-            .get("width");
-        assert_eq!(narrow_style, Some("100%"));
-        assert_eq!(wide_style, Some("720px"));
-        assert_eq!(narrow_main.tag_name(), Some("main"));
-        assert_eq!(wide_main.tag_name(), Some("main"));
+        fn find_styled<'a>(
+            node: &'a crate::style_tree::StyledNode,
+            tag: &str,
+        ) -> Option<&'a crate::style_tree::StyledNode> {
+            if node.node.tag_name() == Some(tag) {
+                return Some(node);
+            }
+            node.children
+                .iter()
+                .find_map(|child| find_styled(child, tag))
+        }
+
+        let narrow_main = find_styled(&narrow.styled, "main").unwrap();
+        let wide_main = find_styled(&wide.styled, "main").unwrap();
+        assert_eq!(narrow_main.style.get("width"), Some("100%"));
+        assert_eq!(wide_main.style.get("width"), Some("720px"));
     }
 }
