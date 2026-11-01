@@ -52,6 +52,7 @@ const VK_O: usize = 0x4F;
 const VK_I: usize = 0x49;
 const VK_Y: usize = 0x59;
 const VK_F5: usize = 0x74;
+const VK_F6: usize = 0x75;
 const VK_CONTROL: i32 = 0x11;
 const VK_MENU: i32 = 0x12;
 const VK_SHIFT: i32 = 0x10;
@@ -1934,6 +1935,11 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             }
             _ => {}
         }
+    }
+    if key == VK_F6 {
+        let _ = SetFocus(state.address);
+        let _ = SendMessageW(state.address, 0x00B1, 0, -1); // EM_SETSEL
+        return true;
     }
     if key == VK_F5 {
         if state
