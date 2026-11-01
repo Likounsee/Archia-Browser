@@ -213,6 +213,14 @@ struct Rect {
 }
 
 #[repr(C)]
+struct GdiplusStartupInput {
+    gdiplus_version: u32,
+    debug_event_callback: *mut c_void,
+    suppress_background_thread: i32,
+    suppress_external_codecs: i32,
+}
+
+#[repr(C)]
 struct PaintStruct {
     hdc: Handle,
     erase: i32,
@@ -420,6 +428,43 @@ unsafe extern "system" {
         info: *const BitmapInfo,
         usage: u32,
     ) -> i32;
+}
+
+#[link(name = "gdiplus")]
+unsafe extern "system" {
+    fn GdiplusStartup(
+        token: *mut usize,
+        input: *const GdiplusStartupInput,
+        output: *mut c_void,
+    ) -> i32;
+    fn GdiplusShutdown(token: usize);
+    fn GdipCreateFromHDC(hdc: Handle, graphics: *mut Handle) -> i32;
+    fn GdipDeleteGraphics(graphics: Handle) -> i32;
+    fn GdipSetSmoothingMode(graphics: Handle, mode: i32) -> i32;
+    fn GdipSetPixelOffsetMode(graphics: Handle, mode: i32) -> i32;
+    fn GdipCreateSolidFill(color: u32, brush: *mut Handle) -> i32;
+    fn GdipDeleteBrush(brush: Handle) -> i32;
+    fn GdipFillRectangle(
+        graphics: Handle,
+        brush: Handle,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    ) -> i32;
+    fn GdipCreatePath(fill_mode: i32, path: *mut Handle) -> i32;
+    fn GdipAddPathArc(
+        path: Handle,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        start_angle: f32,
+        sweep_angle: f32,
+    ) -> i32;
+    fn GdipClosePathFigure(path: Handle) -> i32;
+    fn GdipFillPath(graphics: Handle, brush: Handle, path: Handle) -> i32;
+    fn GdipDeletePath(path: Handle) -> i32;
 }
 
 #[link(name = "shell32")]
@@ -1853,6 +1898,22 @@ unsafe fn activate_link_at(state: &mut AppState, hwnd: Hwnd, client_x: i32, clie
     }
 }
 
+fn gdiplus_argb(color: u32) -> u32 {
+    0xFF00_0000 | ((color & 0x0000_00FF) << 16) | (color & 0x0000_FF00) | ((color >> 16) & 0x0000_00FF)
+}
+
+unsafe fn create_antialiased_graphics(hdc: Handle) -> Handle {
+    let mut graphics = ptr::null_mut();
+    if GdipCreateFromHDC(hdc, &mut graphics) == 0 && !graphics.is_null() {
+        // GDI+ AntiAlias + high-quality pixel offset remove the jagged region edges.
+        let _ = GdipSetSmoothingMode(graphics, 4);
+        let _ = GdipSetPixelOffsetMode(graphics, 2);
+        graphics
+    } else {
+        ptr::null_mut()
+    }
+}
+
 unsafe fn paint_round_fill(
     hdc: Handle,
     left: i32,
@@ -1865,6 +1926,66 @@ unsafe fn paint_round_fill(
     if right <= left || bottom <= top {
         return;
     }
+
+    let graphics = create_antialiased_graphics(hdc);
+    if !graphics.is_null() {
+        let mut brush = ptr::null_mut();
+        let mut path = ptr::null_mut();
+        let width = (right - left) as f32;
+        let height = (bottom - top) as f32;
+        let diameter = (radius.max(0) * 2).min((right - left).min(bottom - top)) as f32;
+        let rounded = diameter >= 2.0
+            && GdipCreateSolidFill(gdiplus_argb(color), &mut brush) == 0
+            && GdipCreatePath(0, &mut path) == 0;
+        if rounded {
+            let left_f = left as f32;
+            let top_f = top as f32;
+            let right_f = right as f32;
+            let bottom_f = bottom as f32;
+            let _ = GdipAddPathArc(path, left_f, top_f, diameter, diameter, 180.0, 90.0);
+            let _ = GdipAddPathArc(
+                path,
+                right_f - diameter,
+                top_f,
+                diameter,
+                diameter,
+                270.0,
+                90.0,
+            );
+            let _ = GdipAddPathArc(
+                path,
+                right_f - diameter,
+                bottom_f - diameter,
+                diameter,
+                diameter,
+                0.0,
+                90.0,
+            );
+            let _ = GdipAddPathArc(
+                path,
+                left_f,
+                bottom_f - diameter,
+                diameter,
+                diameter,
+                90.0,
+                90.0,
+            );
+            let _ = GdipClosePathFigure(path);
+            let _ = GdipFillPath(graphics, brush, path);
+        } else if !brush.is_null() {
+            let _ = GdipFillRectangle(graphics, brush, left as f32, top as f32, width, height);
+        }
+        if !path.is_null() {
+            let _ = GdipDeletePath(path);
+        }
+        if !brush.is_null() {
+            let _ = GdipDeleteBrush(brush);
+        }
+        let _ = GdipDeleteGraphics(graphics);
+        return;
+    }
+
+    // Safe fallback if GDI+ cannot create a drawing context.
     let region = CreateRoundRectRgn(left, top, right + 1, bottom + 1, radius * 2, radius * 2);
     let brush = CreateSolidBrush(color);
     if !region.is_null() && !brush.is_null() {
@@ -1879,6 +2000,26 @@ unsafe fn paint_round_fill(
 }
 
 unsafe fn paint_fill(hdc: Handle, left: i32, top: i32, right: i32, bottom: i32, color: u32) {
+    if right <= left || bottom <= top {
+        return;
+    }
+    let graphics = create_antialiased_graphics(hdc);
+    if !graphics.is_null() {
+        let mut brush = ptr::null_mut();
+        if GdipCreateSolidFill(gdiplus_argb(color), &mut brush) == 0 && !brush.is_null() {
+            let _ = GdipFillRectangle(
+                graphics,
+                brush,
+                left as f32,
+                top as f32,
+                (right - left) as f32,
+                (bottom - top) as f32,
+            );
+            let _ = GdipDeleteBrush(brush);
+        }
+        let _ = GdipDeleteGraphics(graphics);
+        return;
+    }
     let rect = Rect {
         left,
         top,
@@ -4746,6 +4887,16 @@ unsafe extern "system" fn window_proc(
 
 pub fn run() {
     unsafe {
+        let gdiplus_input = GdiplusStartupInput {
+            gdiplus_version: 1,
+            debug_event_callback: ptr::null_mut(),
+            suppress_background_thread: 0,
+            suppress_external_codecs: 0,
+        };
+        let mut gdiplus_token = 0usize;
+        let gdiplus_started =
+            GdiplusStartup(&mut gdiplus_token, &gdiplus_input, ptr::null_mut()) == 0;
+
         let instance = GetModuleHandleW(ptr::null());
         let class_name = wide("ArchiaBrowserWindow");
         let window_title = wide("Archia Browser");
@@ -4763,6 +4914,9 @@ pub fn run() {
         };
         if RegisterClassW(&class) == 0 {
             eprintln!("Impossible d'enregistrer la fenêtre Archia Browser.");
+            if gdiplus_started {
+                GdiplusShutdown(gdiplus_token);
+            }
             return;
         }
 
@@ -4837,6 +4991,9 @@ pub fn run() {
         );
         if hwnd.is_null() {
             eprintln!("Impossible de créer la fenêtre Archia Browser.");
+            if gdiplus_started {
+                GdiplusShutdown(gdiplus_token);
+            }
             return;
         }
 
@@ -4844,6 +5001,9 @@ pub fn run() {
         while GetMessageW(&mut message, ptr::null_mut(), 0, 0) > 0 {
             let _ = TranslateMessage(&message);
             let _ = DispatchMessageW(&message);
+        }
+        if gdiplus_started {
+            GdiplusShutdown(gdiplus_token);
         }
     }
 }
