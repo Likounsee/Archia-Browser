@@ -948,6 +948,20 @@ fn export_open_tabs_text(entries: &[(String, String)]) -> String {
         .join("\n")
 }
 
+fn export_open_tabs_markdown(entries: &[(String, String)]) -> String {
+    entries
+        .iter()
+        .filter_map(|(title, url)| {
+            let parsed = Url::parse(url).ok()?;
+            if !matches!(parsed.scheme(), "http" | "https") {
+                return None;
+            }
+            Some(format!("- {}", markdown_link(title, &parsed.to_string())))
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn export_open_tabs_html(entries: &[(String, String)]) -> String {
     let bookmarks = entries
         .iter()
@@ -2007,6 +2021,10 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             copy_current_page_title_and_url(state, hwnd);
             return true;
         }
+        if alt && key == 0x4D && GetKeyState(VK_SHIFT) < 0 {
+            copy_open_tabs_markdown(state, hwnd);
+            return true;
+        }
         if alt && key == 0x4D {
             copy_current_page_markdown_link(state, hwnd);
             return true;
@@ -2516,6 +2534,24 @@ unsafe fn copy_open_tabs_html(state: &AppState, hwnd: Hwnd) {
     if !entries.is_empty() {
         let html = export_open_tabs_html(&entries);
         let _ = copy_text_to_clipboard(hwnd, &html);
+    }
+}
+
+unsafe fn copy_open_tabs_markdown(state: &AppState, hwnd: Hwnd) {
+    let entries = state
+        .tabs
+        .iter()
+        .filter_map(|(id, _)| {
+            let page = state.browser.tabs().tab(*id)?.page()?;
+            Some((
+                page.title().unwrap_or_else(|| "(sans titre)".to_owned()),
+                page.url()?.to_string(),
+            ))
+        })
+        .collect::<Vec<_>>();
+    let markdown = export_open_tabs_markdown(&entries);
+    if !markdown.is_empty() {
+        let _ = copy_text_to_clipboard(hwnd, &markdown);
     }
 }
 
@@ -4626,6 +4662,20 @@ mod gui_address_tests {
             markdown_link("", "https://example.org/"),
             "[https://example.org/](https://example.org/)"
         );
+    }
+
+    #[test]
+    fn open_tabs_markdown_export_preserves_order_and_filters_unsafe_urls() {
+        let entries = vec![
+            ("Docs [draft]".to_owned(), "https://docs.example/".to_owned()),
+            ("Unsafe".to_owned(), "javascript:alert(1)".to_owned()),
+            ("Archia".to_owned(), "https://archia.example/".to_owned()),
+        ];
+        assert_eq!(
+            export_open_tabs_markdown(&entries),
+            "- [Docs \\[draft\\]](https://docs.example/)\n- [Archia](https://archia.example/)"
+        );
+        assert!(export_open_tabs_markdown(&[]).is_empty());
     }
 
     #[test]
