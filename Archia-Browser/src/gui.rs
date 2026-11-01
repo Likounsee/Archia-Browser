@@ -2095,15 +2095,21 @@ unsafe fn reopen_all_closed_tabs(state: &mut AppState, hwnd: Hwnd) {
 }
 
 unsafe fn reopen_closed_tab_at(state: &mut AppState, hwnd: Hwnd, recent_index: usize) {
-    if recent_index >= state.closed_tabs.len() || state.tabs.len() >= MAX_GUI_TABS {
+    if state.tabs.len() >= MAX_GUI_TABS {
         return;
     }
-    let storage_index = state.closed_tabs.len() - 1 - recent_index;
+    let Some(storage_index) = closed_tab_storage_index(state.closed_tabs.len(), recent_index) else {
+        return;
+    };
     let closed_url = state.closed_tabs.remove(storage_index);
     create_new_tab(state, hwnd);
     if let Some(url) = closed_url {
         navigate(state, &url);
     }
+}
+
+fn closed_tab_storage_index(closed_tab_count: usize, recent_index: usize) -> Option<usize> {
+    (recent_index < closed_tab_count).then(|| closed_tab_count - 1 - recent_index)
 }
 
 fn closed_tabs_as_bookmarks(closed_tabs: &[Option<String>]) -> Vec<Bookmark> {
@@ -4544,6 +4550,15 @@ pub fn run() {
 #[cfg(test)]
 mod gui_address_tests {
     use super::*;
+
+    #[test]
+    fn recently_closed_tab_indices_map_newest_first_and_reject_out_of_range() {
+        assert_eq!(closed_tab_storage_index(3, 0), Some(2));
+        assert_eq!(closed_tab_storage_index(3, 1), Some(1));
+        assert_eq!(closed_tab_storage_index(3, 2), Some(0));
+        assert_eq!(closed_tab_storage_index(3, 3), None);
+        assert_eq!(closed_tab_storage_index(0, 0), None);
+    }
 
     #[test]
     fn closed_tabs_markdown_export_filters_invalid_urls_and_keeps_order() {
