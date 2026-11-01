@@ -1341,6 +1341,17 @@ mod tests {
     }
 
     #[test]
+    fn bookmark_import_accepts_urls_tsv_and_markdown_but_rejects_unsafe_schemes() {
+        let imported = super::parse_bookmark_text(
+            "https://example.org/\nExample\thttps://example.net/\n- [Docs](<https://docs.example.org/>)\nfile:///etc/passwd"
+        );
+        assert_eq!(imported.len(), 3);
+        assert_eq!(imported[0].url, "https://example.org/");
+        assert_eq!(imported[1].title, "Example");
+        assert_eq!(imported[2].title, "Docs");
+    }
+
+    #[test]
     fn download_filename_sanitization_removes_path_and_reserved_characters() {
         assert_eq!(super::safe_download_filename("../../bad:name?.txt"), "badname.txt");
         assert_eq!(super::safe_download_filename("..."), "download.bin");
