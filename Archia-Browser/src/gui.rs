@@ -102,6 +102,9 @@ const ID_MENU_COPY_OPEN_TABS: u32 = 3039;
 const ID_MENU_HARD_RELOAD: u32 = 3040;
 const ID_MENU_IMPORT_BOOKMARKS: u32 = 3041;
 const ID_MENU_COPY_BOOKMARKS_HTML: u32 = 3042;
+const ID_MENU_PASTE_AND_GO: u32 = 3043;
+const ID_MENU_SEARCH_CLIPBOARD_NEW_TAB: u32 = 3044;
+const ID_MENU_COPY_HISTORY_HTML: u32 = 3045;
 const MAX_IMPORTED_BOOKMARKS: usize = 5_000;
 const MAX_CLIPBOARD_BYTES: usize = 2 * 1024 * 1024;
 const ID_RECENT_DOWNLOAD_BASE: u32 = 3700;
@@ -875,6 +878,15 @@ fn export_bookmarks_html(bookmarks: &[Bookmark]) -> String {
     format!(
         "<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=UTF-8\">\n<TITLE>Archia Browser Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n<DL><p>\n{entries}\n</DL><p>\n"
     )
+}
+
+fn clipboard_navigation_url(value: &str, provider: SearchProvider) -> Option<Url> {
+    let value = value.trim();
+    if value.is_empty() || value.len() > 4_096 || value.chars().any(char::is_control) {
+        return None;
+    }
+    let url = parse_address_with_provider(value, provider).ok()?;
+    matches!(url.scheme(), "http" | "https").then_some(url)
 }
 
 fn export_bookmarks_text(bookmarks: &[Bookmark]) -> String {
@@ -1953,6 +1965,21 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             import_bookmarks_from_clipboard(state, hwnd);
             return true;
         }
+        if key == 0x56 && GetKeyState(VK_SHIFT) < 0 {
+            navigate_from_clipboard(state, hwnd, false);
+            return true;
+        }
+        if key == 0x46 && GetKeyState(VK_SHIFT) < 0 {
+            navigate_from_clipboard(state, hwnd, true);
+            return true;
+        }
+        if key == 0x47 && GetKeyState(VK_SHIFT) < 0 {
+            let html = export_bookmarks_html(&state.persistent_history);
+            if !state.persistent_history.is_empty() {
+                let _ = copy_text_to_clipboard(hwnd, &html);
+            }
+            return true;
+        }
         if key == VK_B && GetKeyState(VK_SHIFT) < 0 {
             let html = export_bookmarks_html(&state.bookmarks);
             if !state.bookmarks.is_empty() {
@@ -2284,6 +2311,22 @@ unsafe fn read_text_from_clipboard(hwnd: Hwnd) -> Option<String> {
     Some(value)
 }
 
+unsafe fn navigate_from_clipboard(state: &mut AppState, hwnd: Hwnd, new_tab: bool) {
+    let Some(text) = read_text_from_clipboard(hwnd) else {
+        return;
+    };
+    let Some(url) = clipboard_navigation_url(&text, state.settings.search_provider) else {
+        return;
+    };
+    if new_tab {
+        if state.tabs.len() >= MAX_GUI_TABS {
+            return;
+        }
+        create_new_tab(state, hwnd);
+    }
+    navigate(state, &url.to_string());
+}
+
 unsafe fn import_bookmarks_from_clipboard(state: &mut AppState, hwnd: Hwnd) {
     let Some(text) = read_text_from_clipboard(hwnd) else {
         return;
@@ -2540,6 +2583,9 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         ),
         (ID_MENU_COPY_BOOKMARKS, "Copier tous les favoris (texte)"),
         (ID_MENU_COPY_BOOKMARKS_HTML, "Copier les favoris au format HTML (Netscape)"),
+        (ID_MENU_PASTE_AND_GO, "Coller et ouvrir l’adresse ou rechercher le texte copié"),
+        (ID_MENU_SEARCH_CLIPBOARD_NEW_TAB, "Rechercher le texte copié dans un nouvel onglet"),
+        (ID_MENU_COPY_HISTORY_HTML, "Copier l’historique au format HTML (Netscape)"),
         (
             ID_MENU_IMPORT_BOOKMARKS,
             "Importer les favoris depuis le presse-papiers",
@@ -2752,6 +2798,14 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             }
         }
         ID_MENU_IMPORT_BOOKMARKS => import_bookmarks_from_clipboard(state, hwnd),
+        ID_MENU_PASTE_AND_GO => navigate_from_clipboard(state, hwnd, false),
+        ID_MENU_SEARCH_CLIPBOARD_NEW_TAB => navigate_from_clipboard(state, hwnd, true),
+        ID_MENU_COPY_HISTORY_HTML => {
+            let html = export_bookmarks_html(&state.persistent_history);
+            if !state.persistent_history.is_empty() {
+                let _ = copy_text_to_clipboard(hwnd, &html);
+            }
+        }
         ID_MENU_COPY_HISTORY => {
             let text = export_bookmarks_text(&state.persistent_history);
             if !text.is_empty() {
@@ -4297,6 +4351,31 @@ mod gui_address_tests {
         assert!(exported.contains("Docs &amp; Guides"));
         assert!(exported.contains("a=1&amp;b=2"));
         assert_eq!(parse_imported_bookmarks(&exported), bookmarks);
+    }
+
+    #[test]
+    fn clipboard_navigation_accepts_urls_and_searches_plain_text() {
+        assert_eq!(
+            clipboard_navigation_url("  https://example.org/docs  ", SearchProvider::Google)
+                .unwrap()
+                .to_string(),
+            "https://example.org/docs"
+        );
+        assert_eq!(
+            clipboard_navigation_url("archia browser", SearchProvider::DuckDuckGo)
+                .unwrap()
+                .to_string(),
+            "https://duckduckgo.com/?q=archia%20browser"
+        );
+    }
+
+    #[test]
+    fn clipboard_navigation_rejects_unsafe_empty_and_oversized_values() {
+        assert!(clipboard_navigation_url("", SearchProvider::Google).is_none());
+        assert!(clipboard_navigation_url("javascript:alert(1)", SearchProvider::Google).is_none());
+        assert!(clipboard_navigation_url("file:///etc/passwd", SearchProvider::Google).is_none());
+        assert!(clipboard_navigation_url(&"x".repeat(4_097), SearchProvider::Google).is_none());
+        assert!(clipboard_navigation_url("hello\nworld", SearchProvider::Google).is_none());
     }
 
     #[test]
