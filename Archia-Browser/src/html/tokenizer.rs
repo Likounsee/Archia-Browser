@@ -1188,7 +1188,7 @@ mod character_reference_tests {
 
 #[cfg(test)]
 mod eof_regression_tests {
-    use super::{HtmlToken, HtmlTokenizer};
+    use super::{decode_character_references, HtmlToken, HtmlTokenizer};
 
     #[test]
     fn unterminated_comment_is_preserved_as_a_comment_at_eof() {
