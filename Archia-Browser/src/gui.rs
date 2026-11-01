@@ -1904,7 +1904,7 @@ unsafe fn paint_label(
     align: u32,
 ) {
     let text = wide(label);
-    let face = wide("Segoe UI");
+    let face = wide("Inter");
     let mut rect = Rect {
         left,
         top,
@@ -1913,13 +1913,21 @@ unsafe fn paint_label(
     };
     let label_height = bottom.saturating_sub(top);
     let font_height = if label_height >= 56 {
-        28
+        30
     } else if label_height >= 40 {
-        20
+        21
+    } else if label_height >= 28 {
+        15
     } else {
-        14
+        13
     };
-    let weight = if label_height >= 56 { 600 } else { 400 };
+    let weight = if label_height >= 56 {
+        700
+    } else if label_height >= 40 {
+        600
+    } else {
+        500
+    };
     let font = CreateFontW(
         -font_height,
         0,
@@ -3683,21 +3691,21 @@ fn chrome_color(state: &AppState, select: fn(&ThemeColors) -> &str, fallback: u3
 }
 
 unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
-    // Cadre technique : bande d'onglets sombre, onglet actif fondu dans la barre
-    // d'outils avec un filet d'accent, onglets numérotés, angles vifs.
-    let strip = chrome_color(state, |colors| &colors.toolbar_background, 0x000F0D0C);
-    let window = chrome_color(state, |colors| &colors.window_background, 0x00221D1B);
-    let active_tab = chrome_color(state, |colors| &colors.tab_active_background, 0x00221D1B);
-    let inactive_tab = chrome_color(state, |colors| &colors.tab_inactive_background, 0x00302926);
+    // Chrome Archia : surfaces graphite, accent citron, contours doux et espaces réguliers.
+    let strip = chrome_color(state, |colors| &colors.toolbar_background, 0x0017100C);
+    let window = chrome_color(state, |colors| &colors.window_background, 0x001C1511);
+    let active_tab = chrome_color(state, |colors| &colors.tab_active_background, 0x002E221A);
+    let inactive_tab = chrome_color(state, |colors| &colors.tab_inactive_background, 0x00261C15);
     let accent = chrome_color(state, |colors| &colors.accent, 0x004EF2C6);
-    let text = chrome_color(state, |colors| &colors.text, 0x00F4F2F1);
-    let muted = chrome_color(state, |colors| &colors.muted_text, 0x00B5ABA7);
-    let address = chrome_color(state, |colors| &colors.address_background, 0x000F0D0C);
-    let border = chrome_color(state, |colors| &colors.border, 0x00423835);
+    let text = chrome_color(state, |colors| &colors.text, 0x00FBF7F4);
+    let muted = chrome_color(state, |colors| &colors.muted_text, 0x00B2A194);
+    let address = chrome_color(state, |colors| &colors.address_background, 0x001E140D);
+    let border = chrome_color(state, |colors| &colors.border, 0x0047362B);
 
-    paint_fill(hdc, 0, 0, width, 88, strip);
-    paint_fill(hdc, 0, 39, width, 90, window);
-    paint_fill(hdc, 0, 86, width, 89, border);
+    paint_fill(hdc, 0, 0, width, 42, strip);
+    paint_fill(hdc, 0, 42, width, 90, window);
+    paint_fill(hdc, 0, 90, width, 119, window);
+    paint_fill(hdc, 0, 119, width, 120, border);
 
     let tab_area = (width - 134).max(0);
     let tab_width = (tab_area / state.tabs.len().max(1) as i32).clamp(120, 220);
@@ -3711,10 +3719,10 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
         let selected = Some(*id) == active;
         if selected {
             // Fondu avec la barre d'outils (même couleur) jusqu'à y = 39.
-            paint_fill(hdc, left, 7, right, 39, active_tab);
-            paint_fill(hdc, left, 7, right, 9, accent);
+            paint_round_fill(hdc, left, 5, right, 39, active_tab, 10);
+            paint_round_fill(hdc, left + 10, 5, right - 10, 8, accent, 2);
         } else {
-            paint_fill(hdc, left, 11, right, 36, inactive_tab);
+            paint_round_fill(hdc, left, 9, right, 36, inactive_tab, 9);
         }
         let title = state
             .browser
@@ -3749,9 +3757,9 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
             paint_label(hdc, "×", right - 30, 9, right - 6, 36, muted, DT_CENTER);
         }
     }
-    paint_round_fill(hdc, width - 108, 7, width - 62, 36, inactive_tab, 3);
+    paint_round_fill(hdc, width - 108, 7, width - 62, 36, inactive_tab, 9);
     paint_label(hdc, "⋯", width - 108, 7, width - 62, 36, text, DT_CENTER);
-    paint_round_fill(hdc, width - 58, 7, width - 10, 36, inactive_tab, 3);
+    paint_round_fill(hdc, width - 58, 7, width - 10, 36, inactive_tab, 9);
     paint_label(hdc, "+", width - 58, 7, width - 10, 36, text, DT_CENTER);
 
     let can_go_back = state.browser.history().can_go_back();
@@ -3784,8 +3792,8 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
 
     // Champ d'adresse : liseré 1 px puis fond.
     let address_right = (width - 170).max(240);
-    paint_round_fill(hdc, 132, 48, address_right, 80, border, 3);
-    paint_round_fill(hdc, 133, 49, address_right - 1, 79, address, 3);
+    paint_round_fill(hdc, 132, 46, address_right, 82, border, 12);
+    paint_round_fill(hdc, 134, 48, address_right - 2, 80, address, 11);
 
     let current_url = state.browser.current_url().map(ToString::to_string);
     let bookmarked = current_url
@@ -3797,7 +3805,7 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
     } else {
         muted
     };
-    paint_round_fill(hdc, 140, 52, 186, 76, inactive_tab, 3);
+    paint_round_fill(hdc, 140, 52, 186, 76, inactive_tab, 8);
     paint_label(
         hdc,
         security_label,
@@ -3808,7 +3816,7 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
         security_color,
         DT_CENTER,
     );
-    paint_round_fill(hdc, width - 166, 48, width - 132, 80, inactive_tab, 3);
+    paint_round_fill(hdc, width - 166, 48, width - 132, 80, inactive_tab, 9);
     paint_label(
         hdc,
         if bookmarked { "★" } else { "☆" },
@@ -3819,7 +3827,7 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
         if bookmarked { accent } else { text },
         DT_CENTER,
     );
-    paint_round_fill(hdc, width - 122, 48, width - 10, 80, accent, 3);
+    paint_round_fill(hdc, width - 122, 48, width - 10, 80, accent, 10);
     paint_label(
         hdc,
         "Aller",
@@ -3850,7 +3858,7 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
         let visible = ((width - 24).max(0) / (item_width + 8)) as usize;
         for (index, bookmark) in state.bookmarks.iter().take(visible).enumerate() {
             let left = 12 + index as i32 * (item_width + 8);
-            paint_round_fill(hdc, left, 93, left + item_width, 115, inactive_tab, 3);
+            paint_round_fill(hdc, left, 92, left + item_width, 116, inactive_tab, 8);
             let label = bookmark.title.chars().take(20).collect::<String>();
             paint_label(
                 hdc,
@@ -3868,40 +3876,46 @@ unsafe fn paint_browser_chrome(state: &AppState, hdc: Handle, width: i32) {
 
 unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i32) {
     let top = 120;
-    let background = chrome_color(state, |colors| &colors.window_background, 0x00181513);
-    let card = chrome_color(state, |colors| &colors.tab_inactive_background, 0x00312B27);
-    let accent = chrome_color(state, |colors| &colors.accent, 0x00D78B55);
-    let text = chrome_color(state, |colors| &colors.text, 0x00F5F1ED);
-    let muted = chrome_color(state, |colors| &colors.muted_text, 0x00B8AEA6);
+    let background = chrome_color(state, |colors| &colors.window_background, 0x001C1511);
+    let card = chrome_color(state, |colors| &colors.tab_inactive_background, 0x00261C15);
+    let accent = chrome_color(state, |colors| &colors.accent, 0x004EF2C6);
+    let text = chrome_color(state, |colors| &colors.text, 0x00FBF7F4);
+    let muted = chrome_color(state, |colors| &colors.muted_text, 0x00B2A194);
+    let border = chrome_color(state, |colors| &colors.border, 0x0047362B);
+
     paint_fill(hdc, 0, top, width, height, background);
-    let content_width = width.min(980);
+    let content_width = width.min(1040);
     let left = (width - content_width) / 2;
+    let panel_bottom = height.min(700).max(500);
+    paint_round_fill(hdc, left, 148, left + content_width, panel_bottom, border, 24);
     paint_round_fill(
         hdc,
-        left,
-        150,
-        left + content_width,
-        height.min(690),
+        left + 1,
+        149,
+        left + content_width - 1,
+        panel_bottom - 1,
         card,
-        22,
+        23,
     );
+    paint_round_fill(hdc, left + 34, 166, left + 110, 170, accent, 2);
+    paint_round_fill(hdc, left + 34, 188, left + 350, 218, background, 15);
     paint_label(
         hdc,
-        "ARCHIA",
-        left + 30,
-        190,
-        left + content_width - 30,
-        232,
+        "ARCHIA  /  NAVIGATEUR INDÉPENDANT",
+        left + 48,
+        188,
+        left + 340,
+        218,
         accent,
-        DT_CENTER,
+        0,
     );
     paint_label(
         hdc,
         "Le web, à votre façon.",
         left + 30,
-        240,
+        232,
         left + content_width - 30,
-        300,
+        288,
         text,
         DT_CENTER,
     );
@@ -3909,17 +3923,17 @@ unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i
         hdc,
         "Un navigateur indépendant, construit autour du moteur Archia.",
         left + 30,
-        304,
+        294,
         left + content_width - 30,
-        340,
+        328,
         muted,
         DT_CENTER,
     );
     paint_label(
         hdc,
-        "Rechercher sur le Web ou saisir une adresse",
+        "RECHERCHER SUR LE WEB OU SAISIR UNE ADRESSE",
         left + 30,
-        344,
+        342,
         left + content_width - 30,
         370,
         muted,
@@ -3935,45 +3949,64 @@ unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i
         &state.bookmarks
     };
     if quick_links.is_empty() {
-        for (index, (title, detail)) in [
-            ("Navigation", "Une interface simple et directe"),
-            ("Indépendance", "Un moteur développé par Archia"),
-            ("Confidentialité", "Pas de moteur tiers embarqué"),
+        for (index, (number, title, detail)) in [
+            ("01", "Navigation", "Une interface simple et directe"),
+            ("02", "Indépendance", "Un moteur développé par Archia"),
+            ("03", "Confidentialité", "Vos données restent locales"),
         ]
         .iter()
         .enumerate()
         {
             let x = left + 40 + index as i32 * (card_width + gap);
-            paint_round_fill(hdc, x, card_top, x + card_width, card_top + 112, card, 14);
-            paint_fill(hdc, x, card_top, x + card_width, card_top + 3, accent);
+            paint_round_fill(hdc, x, card_top, x + card_width, card_top + 112, border, 15);
+            paint_round_fill(
+                hdc,
+                x + 1,
+                card_top + 1,
+                x + card_width - 1,
+                card_top + 111,
+                background,
+                14,
+            );
+            paint_round_fill(hdc, x + 16, card_top + 17, x + 54, card_top + 55, card, 12);
             paint_label(
                 hdc,
-                title,
-                x + 10,
-                card_top + 18,
-                x + card_width - 10,
-                card_top + 54,
-                text,
+                number,
+                x + 16,
+                card_top + 17,
+                x + 54,
+                card_top + 55,
+                accent,
                 DT_CENTER,
             );
             paint_label(
                 hdc,
-                detail,
-                x + 12,
-                card_top + 55,
+                title,
+                x + 66,
+                card_top + 18,
                 x + card_width - 12,
-                card_top + 94,
+                card_top + 52,
+                text,
+                0,
+            );
+            paint_label(
+                hdc,
+                detail,
+                x + 16,
+                card_top + 65,
+                x + card_width - 16,
+                card_top + 100,
                 muted,
-                DT_CENTER,
+                0,
             );
         }
     } else {
         paint_label(
             hdc,
             if state.bookmarks.is_empty() {
-                "Récemment consultés"
+                "RÉCEMMENT CONSULTÉS"
             } else {
-                "Accès rapides"
+                "VOS ACCÈS RAPIDES"
             },
             left + 40,
             430,
@@ -3987,7 +4020,8 @@ unsafe fn paint_home_screen(state: &AppState, hdc: Handle, width: i32, height: i
             let row = index / 3;
             let x = left + 40 + column as i32 * (card_width + gap);
             let y = card_top + row as i32 * 82;
-            paint_round_fill(hdc, x, y, x + card_width, y + 68, card, 14);
+            paint_round_fill(hdc, x, y, x + card_width, y + 68, border, 14);
+            paint_round_fill(hdc, x + 1, y + 1, x + card_width - 1, y + 67, background, 13);
             paint_round_fill(hdc, x + 12, y + 13, x + 48, y + 49, accent, 10);
             let initial = bookmark
                 .title
@@ -4133,7 +4167,7 @@ unsafe extern "system" fn window_proc(
                 |colors| &colors.address_background,
                 0x00F5F3F1,
             ));
-            let address_face = wide("Consolas");
+            let address_face = wide("Inter");
             state.address_font = CreateFontW(
                 -13,
                 0,
@@ -4152,6 +4186,7 @@ unsafe extern "system" fn window_proc(
             );
             if !state.address_font.is_null() {
                 let _ = SendMessageW(state.address, 0x0030, state.address_font as usize, 1);
+                let _ = SendMessageW(state.home_search, 0x0030, state.address_font as usize, 1);
             }
             state.address_proc = SetWindowLongPtrW(
                 state.address,
@@ -5269,11 +5304,10 @@ mod gui_address_tests {
             "title,url\r\n\"Docs, \"\"draft\"\"\",\"https://docs.example/path\"\r\n\"Second\",\"https://example.org/\""
         );
         assert!(export_open_tabs_csv(&[]).is_empty());
-        assert!(export_open_tabs_csv(&[(
-            "Unsafe".to_owned(),
-            "javascript:alert(1)".to_owned()
-        )])
-        .is_empty());
+        assert!(
+            export_open_tabs_csv(&[("Unsafe".to_owned(), "javascript:alert(1)".to_owned())])
+                .is_empty()
+        );
     }
 
     #[test]
