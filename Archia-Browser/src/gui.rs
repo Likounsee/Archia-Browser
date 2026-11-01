@@ -85,6 +85,9 @@ const ID_MENU_SORT_BOOKMARKS_DOMAIN: u32 = 3028;
 const ID_MENU_DEDUPLICATE_BOOKMARKS: u32 = 3029;
 const ID_MENU_COPY_BOOKMARKS: u32 = 3030;
 const ID_MENU_COPY_HISTORY: u32 = 3031;
+const ID_MENU_UA_ARCHIA: u32 = 3032;
+const ID_MENU_UA_CHROMIUM: u32 = 3033;
+const ID_MENU_UA_FIREFOX: u32 = 3034;
 const ID_RECENT_DOWNLOAD_BASE: u32 = 3700;
 const ID_RECENT_DOWNLOAD_REVEAL_BASE: u32 = 3720;
 const ID_RECENT_DOWNLOAD_COPY_BASE: u32 = 3740;
@@ -456,11 +459,52 @@ impl SearchProvider {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UserAgentProfile {
+    Archia,
+    ChromiumCompatible,
+    FirefoxCompatible,
+}
+
+impl UserAgentProfile {
+    fn id(self) -> &'static str {
+        match self {
+            Self::Archia => "archia",
+            Self::ChromiumCompatible => "chromium",
+            Self::FirefoxCompatible => "firefox",
+        }
+    }
+
+    fn from_id(value: &str) -> Option<Self> {
+        match value {
+            "archia" => Some(Self::Archia),
+            "chromium" => Some(Self::ChromiumCompatible),
+            "firefox" => Some(Self::FirefoxCompatible),
+            _ => None,
+        }
+    }
+
+    fn header(self, version: &str) -> String {
+        match self {
+            Self::Archia => format!(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ArchiaBrowser/{version}"
+            ),
+            Self::ChromiumCompatible => format!(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 ArchiaBrowser/{version}"
+            ),
+            Self::FirefoxCompatible => format!(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0 ArchiaBrowser/{version}"
+            ),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct BrowserSettings {
     search_provider: SearchProvider,
     homepage: String,
     restore_session: bool,
+    user_agent: UserAgentProfile,
 }
 
 impl Default for BrowserSettings {
@@ -469,6 +513,7 @@ impl Default for BrowserSettings {
             search_provider: SearchProvider::Google,
             homepage: "https://www.google.com/".into(),
             restore_session: true,
+            user_agent: UserAgentProfile::Archia,
         }
     }
 }
@@ -501,6 +546,11 @@ impl BrowserSettings {
                     "false" => settings.restore_session = false,
                     _ => {}
                 },
+                "user_agent" => {
+                    if let Some(profile) = UserAgentProfile::from_id(value.trim()) {
+                        settings.user_agent = profile;
+                    }
+                }
                 _ => {}
             }
         }
@@ -512,10 +562,11 @@ impl BrowserSettings {
             std::fs::create_dir_all(parent)?;
         }
         let contents = format!(
-            "search_provider={}\nhomepage={}\nrestore_session={}\n",
+            "search_provider={}\nhomepage={}\nrestore_session={}\nuser_agent={}\n",
             self.search_provider.id(),
             self.homepage.replace(['\r', '\n'], ""),
-            self.restore_session
+            self.restore_session,
+            self.user_agent.id()
         );
         let temporary = path.with_extension("tmp");
         std::fs::write(&temporary, contents)?;
@@ -1058,7 +1109,7 @@ unsafe fn download_url(state: &mut AppState, url: Url) {
     request.headers.insert("accept".into(), "*/*".into());
     request.headers.insert(
         "user-agent".into(),
-        format!("ArchiaBrowser/{}", state.browser.version()),
+        state.settings.user_agent.header(state.browser.version()),
     );
     let transport = HttpTransport::new().with_limits(64 * 1024 * 1024, 64 * 1024);
     match download_to_path(&transport, &request, &pending) {
@@ -1353,10 +1404,7 @@ unsafe fn navigate(state: &mut AppState, address: &str) {
         .insert("accept-language".into(), "fr-FR,fr;q=0.9,en;q=0.8".into());
     request.headers.insert(
         "user-agent".into(),
-        format!(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ArchiaBrowser/{}",
-            state.browser.version()
-        ),
+        state.settings.user_agent.header(state.browser.version()),
     );
     request.policy.resource_kind = ResourceKind::Document;
     request.policy.top_level_navigation = true;
@@ -2140,6 +2188,30 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         (ID_MENU_COPY_BOOKMARKS, "Copier tous les favoris"),
         (ID_MENU_COPY_HISTORY, "Copier l'historique"),
         (
+            ID_MENU_UA_ARCHIA,
+            if state.settings.user_agent == UserAgentProfile::Archia {
+                "✓ Agent utilisateur : Archia"
+            } else {
+                "Agent utilisateur : Archia"
+            },
+        ),
+        (
+            ID_MENU_UA_CHROMIUM,
+            if state.settings.user_agent == UserAgentProfile::ChromiumCompatible {
+                "✓ Agent utilisateur : compatible Chromium"
+            } else {
+                "Agent utilisateur : compatible Chromium"
+            },
+        ),
+        (
+            ID_MENU_UA_FIREFOX,
+            if state.settings.user_agent == UserAgentProfile::FirefoxCompatible {
+                "✓ Agent utilisateur : compatible Firefox"
+            } else {
+                "Agent utilisateur : compatible Firefox"
+            },
+        ),
+        (
             ID_MENU_TOGGLE_SESSION,
             if state.settings.restore_session {
                 "Désactiver la restauration de session"
@@ -2303,6 +2375,15 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             if !text.is_empty() {
                 let _ = copy_text_to_clipboard(hwnd, &text);
             }
+        }
+        ID_MENU_UA_ARCHIA | ID_MENU_UA_CHROMIUM | ID_MENU_UA_FIREFOX => {
+            state.settings.user_agent = match selected {
+                ID_MENU_UA_ARCHIA => UserAgentProfile::Archia,
+                ID_MENU_UA_CHROMIUM => UserAgentProfile::ChromiumCompatible,
+                ID_MENU_UA_FIREFOX => UserAgentProfile::FirefoxCompatible,
+                _ => unreachable!(),
+            };
+            let _ = state.settings.save(&state.settings_path);
         }
         ID_MENU_TOGGLE_SESSION => {
             state.settings.restore_session = !state.settings.restore_session;
@@ -3642,15 +3723,35 @@ mod gui_address_tests {
             search_provider: SearchProvider::DuckDuckGo,
             homepage: "https://example.org/start".into(),
             restore_session: false,
+            user_agent: UserAgentProfile::FirefoxCompatible,
         };
         settings.save(&path).unwrap();
         assert_eq!(BrowserSettings::load(&path), settings);
         std::fs::write(
             &path,
-            "search_provider=unknown\nhomepage=file:///etc/passwd\nrestore_session=maybe\n",
+            "search_provider=unknown\nhomepage=file:///etc/passwd\nrestore_session=maybe\nuser_agent=unknown\n",
         )
         .unwrap();
         assert_eq!(BrowserSettings::load(&path), BrowserSettings::default());
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn user_agent_profiles_are_distinct_and_persisted() {
+        assert!(UserAgentProfile::Archia.header("1.2").contains("ArchiaBrowser/1.2"));
+        assert!(UserAgentProfile::ChromiumCompatible.header("1.2").contains("Chrome/131.0.0.0"));
+        assert!(UserAgentProfile::FirefoxCompatible.header("1.2").contains("Firefox/128.0"));
+
+        let path = std::env::temp_dir().join(format!(
+            "archia-browser-user-agent-{}.ini",
+            std::process::id()
+        ));
+        let settings = BrowserSettings {
+            user_agent: UserAgentProfile::ChromiumCompatible,
+            ..BrowserSettings::default()
+        };
+        settings.save(&path).unwrap();
+        assert_eq!(BrowserSettings::load(&path), settings);
         let _ = std::fs::remove_file(path);
     }
 
