@@ -964,9 +964,10 @@ impl ArchiaApp {
     }
 
     fn clear_site_data(&mut self) {
-        match self.loader.clear_cookies_and_cache() {
-            Ok(()) => self.status = "Cookies et cache supprimés".to_owned(),
-            Err(error) => self.status = format!("Impossible de vider les données du site : {error:?}"),
+        if self.loader.clear_cookies_and_cache() {
+            self.status = "Cookies et cache supprimés".to_owned();
+        } else {
+            self.status = "Impossible de vider les cookies et le cache".to_owned();
         }
     }
 
@@ -1000,7 +1001,7 @@ impl ArchiaApp {
         }
         let mut opened = 0;
         for url in urls {
-            if self.browser.current_url().is_some_and(|current| current.as_str() == url) {
+            if self.browser.current_url().is_some_and(|current| current.to_string() == url) {
                 continue;
             }
             if opened > 0 || self.browser.current_url().is_some() {
