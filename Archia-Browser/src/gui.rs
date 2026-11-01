@@ -728,7 +728,19 @@ fn deduplicate_bookmarks(bookmarks: &mut Vec<Bookmark>) {
 fn parse_imported_bookmarks(text: &str) -> Vec<Bookmark> {
     let mut imported = Vec::new();
     for line in text.lines().take(MAX_IMPORTED_BOOKMARKS) {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
         let Some((first, second)) = line.split_once('\t') else {
+            if let Ok(url) = Url::parse(line) {
+                if matches!(url.scheme(), "http" | "https") {
+                    imported.push(Bookmark {
+                        title: url.host().to_owned(),
+                        url: url.to_string(),
+                    });
+                }
+            }
             continue;
         };
         let first = first.trim();
@@ -4132,6 +4144,13 @@ mod gui_address_tests {
         assert_eq!(imported[0].url, "https://docs.example/path");
         assert_eq!(imported[1].title, "Archia");
         assert_eq!(imported[1].url, "https://archia.example/");
+
+        let url_only = parse_imported_bookmarks(
+            "https://one.example/path\nmailto:test@example.com\nhttps://two.example/",
+        );
+        assert_eq!(url_only.len(), 2);
+        assert_eq!(url_only[0].title, "one.example");
+        assert_eq!(url_only[1].url, "https://two.example/");
     }
 
     #[test]
