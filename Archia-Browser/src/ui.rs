@@ -1582,7 +1582,29 @@ impl eframe::App for ArchiaApp {
                             ui.label("Aucun favori enregistré");
                         }
                         for item in items {
-                            if ui.button(&item.title).on_hover_text(&item.url).clicked() {
+                            let response = ui.button(&item.title).on_hover_text(&item.url);
+                            response.context_menu(|ui| {
+                                if ui.button("Ouvrir dans cet onglet").clicked() {
+                                    self.navigate(&item.url);
+                                }
+                                if ui.button("Ouvrir dans un nouvel onglet").clicked() {
+                                    self.new_tab();
+                                    self.navigate(&item.url);
+                                }
+                                if ui.button("Copier l'adresse").clicked() {
+                                    ui.ctx().copy_text(item.url.clone());
+                                    self.status = "Adresse du favori copiée".to_owned();
+                                }
+                                if ui.button("Supprimer des favoris").clicked() {
+                                    self.bookmarks.retain(|saved| saved.url != item.url);
+                                    save_saved_pages(
+                                        &browser_data_directory().join("bookmarks.tsv"),
+                                        &self.bookmarks,
+                                    );
+                                    self.status = "Favori supprimé".to_owned();
+                                }
+                            });
+                            if response.clicked() {
                                 self.navigate(&item.url);
                             }
                         }
@@ -1614,7 +1636,18 @@ impl eframe::App for ArchiaApp {
                             ui.label("Aucune navigation enregistrée");
                         }
                         for item in items.into_iter().take(30) {
-                            if ui.button(&item.title).on_hover_text(&item.url).clicked() {
+                            let response = ui.button(&item.title).on_hover_text(&item.url);
+                            response.context_menu(|ui| {
+                                if ui.button("Ouvrir dans un nouvel onglet").clicked() {
+                                    self.new_tab();
+                                    self.navigate(&item.url);
+                                }
+                                if ui.button("Copier l'adresse").clicked() {
+                                    ui.ctx().copy_text(item.url.clone());
+                                    self.status = "Adresse copiée depuis l'historique".to_owned();
+                                }
+                            });
+                            if response.clicked() {
                                 self.navigate(&item.url);
                             }
                         }
