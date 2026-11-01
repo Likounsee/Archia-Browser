@@ -376,7 +376,7 @@ impl ArchiaApp {
                 .map(|(title, url)| format!("{}\t{}", title.replace(['\t', '\r', '\n'], " "), url))
                 .collect::<Vec<_>>().join("\n"),
             ExportFormat::Markdown => entries.iter()
-                            let text = self.bookmarks.iter().map(|item| format!("- [{}](<{}>)", item.title.replace('[', "\\[").replace(']', "\\]"), item.url)).collect::<Vec<_>>().join("\n");
+                .map(|(title, url)| format!("- [{}](<{}>)", title.replace('[', "\\[").replace(']', "\\]"), url))
                 .collect::<Vec<_>>().join("\n"),
         };
         ctx.copy_text(exported);
@@ -835,7 +835,7 @@ impl eframe::App for ArchiaApp {
                             self.status = "Favoris exportés en TSV".to_owned();
                         }
                         if ui.button("Exporter les favoris (Markdown)").clicked() {
-                            let text = self.bookmarks.iter().map(|item| format!("- [{}](<{}>)", item.title.replace('[', "\\\\[").replace(']', "\\\\]"), item.url)).collect::<Vec<_>>().join("\\n");
+                            let text = self.bookmarks.iter().map(|item| format!("- [{}](<{}>)", item.title.replace('[', "\\[").replace(']', "\\]"), item.url)).collect::<Vec<_>>().join("\n");
                             ui.ctx().copy_text(text);
                             self.status = "Favoris exportés en Markdown".to_owned();
                         }
