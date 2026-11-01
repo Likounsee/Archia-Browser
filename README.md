@@ -129,7 +129,7 @@ These are foundations, not a claim of full browser compatibility. A successful H
 License to be defined.
 
 
-Use Ctrl+Shift+U or the browser menu to copy all currently open tab titles and URLs as tab-separated text. Ctrl+S downloads the current page; Ctrl+Shift+R performs a hard reload by clearing only the HTTP response cache first. The bookmark tools can import bookmark data from the Windows clipboard: tab-separated `title<TAB>URL` and `URL<TAB>title` rows are accepted, as are plain HTTP/HTTPS URL lists (one per line). Invalid schemes are ignored and duplicate URLs are removed. Ctrl+Shift+I runs the same bookmark import directly, and Ctrl+Shift+Y copies the browsing history as tab-separated text.
+Use Ctrl+Shift+U or the browser menu to copy all currently open tab titles and URLs as tab-separated text; Ctrl+Alt+U exports the same tabs as Netscape bookmark HTML. Ctrl+S downloads the current page; Ctrl+Shift+R performs a hard reload by clearing only the HTTP response cache first. The bookmark tools can import bookmark data from the Windows clipboard: tab-separated `title<TAB>URL` and `URL<TAB>title` rows are accepted, as are plain HTTP/HTTPS URL lists (one per line). Invalid schemes are ignored and duplicate URLs are removed. Ctrl+Shift+I runs the same bookmark import directly, and Ctrl+Shift+Y copies the browsing history as tab-separated text.
 
 
 ### Presse-papiers et navigation rapide
@@ -143,7 +143,10 @@ Use Ctrl+Shift+U or the browser menu to copy all currently open tab titles and U
 
 ### Gestion des onglets par le presse-papiers
 
-- `Ctrl+Shift+U` copie tous les onglets ouverts au format HTML Netscape, avec leurs titres et adresses. Le fichier HTML obtenu peut être importé comme favoris dans les navigateurs compatibles.
+- `Ctrl+Shift+U` copie les titres et adresses de tous les onglets ouverts au format texte TSV.
+- `Ctrl+Alt+U` exporte les onglets ouverts au format HTML Netscape, importable comme favoris dans les navigateurs compatibles.
 - `Ctrl+Shift+M` lit les URL ou favoris Netscape/TSV présents dans le presse-papiers et ouvre les liens dans des onglets séparés.
+- `Ctrl+Alt+Left` ferme les onglets situés à gauche de l'onglet actif ; `Ctrl+Alt+Right` ferme ceux situés à droite. L'onglet actif est conservé.
+- Le menu contextuel d'un onglet propose également de fermer les onglets à gauche ou à droite de celui-ci.
 - L'ouverture multiple est plafonnée à 20 liens par opération et respecte la limite globale de 100 onglets.
 - Les liens non HTTP(S) sont ignorés et les doublons sont supprimés par le parseur d'import.
