@@ -776,8 +776,11 @@ impl ArchiaApp {
                 self.bookmark_import_open = true;
             }
             Some(action @ (PasteAction::Navigate | PasteAction::NewTab)) => {
-                let Some(url) = clipboard_navigation_url(&text, self.settings.search_provider) else {
-                    self.status = "Le presse-papiers ne contient pas une adresse ou recherche autorisée".to_owned();
+                let Some(url) = clipboard_navigation_url(&text, self.settings.search_provider)
+                else {
+                    self.status =
+                        "Le presse-papiers ne contient pas une adresse ou recherche autorisée"
+                            .to_owned();
                     return;
                 };
                 if matches!(action, PasteAction::NewTab) {
@@ -1871,8 +1874,13 @@ fn explicit_url_scheme(value: &str) -> Option<&str> {
     let (scheme, remainder) = value.split_once(':')?;
     let mut characters = scheme.chars();
     if !characters.next()?.is_ascii_alphabetic()
-        || !characters.all(|character| character.is_ascii_alphanumeric() || matches!(character, '+' | '-' | '.'))
-        || (!remainder.is_empty() && remainder.chars().all(|character| character.is_ascii_digit()))
+        || !characters.all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '+' | '-' | '.')
+        })
+        || (!remainder.is_empty()
+            && remainder
+                .chars()
+                .all(|character| character.is_ascii_digit()))
     {
         return None;
     }
@@ -2043,22 +2051,43 @@ fn parse_markdown_bookmarks(text: &str) -> Vec<SavedPage> {
     let mut imported = Vec::new();
     for line in text.lines().take(500) {
         let line = line.trim().trim_start_matches(['-', '*']).trim();
-        let Some(label_start) = line.find('[') else { continue };
-        let Some(label_end) = line[label_start + 1..].find("](") else { continue };
+        let Some(label_start) = line.find('[') else {
+            continue;
+        };
+        let Some(label_end) = line[label_start + 1..].find("](") else {
+            continue;
+        };
         let label_end = label_start + 1 + label_end;
         let raw_label = &line[label_start + 1..label_end];
         let raw_target = line[label_end + 2..].trim();
         let target = raw_target.strip_suffix(')').unwrap_or(raw_target).trim();
-        let target = target.strip_prefix('<').and_then(|value| value.strip_suffix('>')).unwrap_or(target);
-        let Ok(url) = Url::parse(target) else { continue };
-        if !matches!(url.scheme(), "http" | "https") { continue; }
+        let target = target
+            .strip_prefix('<')
+            .and_then(|value| value.strip_suffix('>'))
+            .unwrap_or(target);
+        let Ok(url) = Url::parse(target) else {
+            continue;
+        };
+        if !matches!(url.scheme(), "http" | "https") {
+            continue;
+        }
         let title = raw_label
             .replace("\\[", "[")
             .replace("\\]", "]")
             .replace("\\\\", "\\");
-        let title = if title.trim().is_empty() { url.host().to_owned() } else { title };
-        if !imported.iter().any(|item: &SavedPage| item.url == url.to_string()) {
-            imported.push(SavedPage { title, url: url.to_string() });
+        let title = if title.trim().is_empty() {
+            url.host().to_owned()
+        } else {
+            title
+        };
+        if !imported
+            .iter()
+            .any(|item: &SavedPage| item.url == url.to_string())
+        {
+            imported.push(SavedPage {
+                title,
+                url: url.to_string(),
+            });
         }
     }
     imported
@@ -2074,24 +2103,49 @@ fn parse_bookmark_text(text: &str) -> Vec<SavedPage> {
     let mut imported = Vec::new();
     for line in text.lines().take(500) {
         let line = line.trim();
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
         let Some((first, second)) = line.split_once('\t') else {
             if let Ok(url) = Url::parse(line) {
                 if matches!(url.scheme(), "http" | "https") {
-                    imported.push(SavedPage { title: url.host().to_owned(), url: url.to_string() });
+                    imported.push(SavedPage {
+                        title: url.host().to_owned(),
+                        url: url.to_string(),
+                    });
                 }
             }
             continue;
         };
         let first = first.trim();
         let second = second.trim();
-        let first_is_url = Url::parse(first).is_ok_and(|url| matches!(url.scheme(), "http" | "https"));
-        let second_is_url = Url::parse(second).is_ok_and(|url| matches!(url.scheme(), "http" | "https"));
-        let (title, raw_url) = if first_is_url { (second, first) } else if second_is_url { (first, second) } else { continue };
-        let Ok(url) = Url::parse(raw_url) else { continue };
-        let title = if title.is_empty() { url.host().to_owned() } else { title.to_owned() };
-        if !imported.iter().any(|item: &SavedPage| item.url == url.to_string()) {
-            imported.push(SavedPage { title, url: url.to_string() });
+        let first_is_url =
+            Url::parse(first).is_ok_and(|url| matches!(url.scheme(), "http" | "https"));
+        let second_is_url =
+            Url::parse(second).is_ok_and(|url| matches!(url.scheme(), "http" | "https"));
+        let (title, raw_url) = if first_is_url {
+            (second, first)
+        } else if second_is_url {
+            (first, second)
+        } else {
+            continue;
+        };
+        let Ok(url) = Url::parse(raw_url) else {
+            continue;
+        };
+        let title = if title.is_empty() {
+            url.host().to_owned()
+        } else {
+            title.to_owned()
+        };
+        if !imported
+            .iter()
+            .any(|item: &SavedPage| item.url == url.to_string())
+        {
+            imported.push(SavedPage {
+                title,
+                url: url.to_string(),
+            });
         }
     }
     imported
@@ -2380,11 +2434,17 @@ mod tests {
     fn clipboard_navigation_uses_provider_and_rejects_non_web_schemes() {
         let provider = super::SearchProvider::DuckDuckGo;
         assert_eq!(
-            super::clipboard_navigation_url("example.org", provider).unwrap().as_str(),
+            super::clipboard_navigation_url("example.org", provider)
+                .unwrap()
+                .as_str(),
             "https://example.org/"
         );
-        assert!(super::clipboard_navigation_url("rust browser engine", provider)
-            .unwrap().as_str().contains("duckduckgo.com"));
+        assert!(
+            super::clipboard_navigation_url("rust browser engine", provider)
+                .unwrap()
+                .as_str()
+                .contains("duckduckgo.com")
+        );
         assert!(super::clipboard_navigation_url("file:///etc/passwd", provider).is_none());
         assert!(super::clipboard_navigation_url("javascript:alert(1)", provider).is_none());
         assert!(super::clipboard_navigation_url("https:example.org", provider).is_none());
