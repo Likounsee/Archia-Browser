@@ -1,10 +1,11 @@
+use ab_glyph::{point, Font, FontArc, PxScale, ScaleFont};
 use crate::{
     core::memory::{
         MemoryBudget, MemoryReservation, MemoryResourceSlot, MAX_LIVE_BUDGETED_OBJECTS,
     },
     html::{Node, NodeKind},
 };
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 const MAX_SOFTWARE_SURFACE_BYTES: usize = 64 * 1024 * 1024;
 
@@ -202,38 +203,7 @@ impl SoftwareSurface {
     }
 
     pub fn draw_text(&mut self, x: i32, y: i32, text: &str, color: Color) {
-        let mut cursor_x = x;
-        let mut cursor_y = y;
-        for ch in text.chars() {
-            if ch == '\r' {
-                continue;
-            }
-            if ch == '\n' {
-                cursor_x = x;
-                cursor_y = cursor_y.saturating_add(8);
-                continue;
-            }
-            if ch == '\t' {
-                cursor_x = cursor_x.saturating_add(24);
-                continue;
-            }
-            if let Some(glyph) = glyph(ch) {
-                for (row, bits) in glyph.iter().enumerate() {
-                    for column in 0..5 {
-                        if bits & (1 << (4 - column)) != 0 {
-                            self.fill_rect(
-                                cursor_x.saturating_add(column),
-                                cursor_y.saturating_add(row as i32),
-                                1,
-                                1,
-                                color,
-                            );
-                        }
-                    }
-                }
-            }
-            cursor_x = cursor_x.saturating_add(glyph_advance(ch));
-        }
+        draw_text_impl(self, x, y, text, color, None);
     }
 
     pub fn clear(&mut self, color: Color) {
@@ -417,40 +387,195 @@ impl SoftwareSurface {
         color: Color,
         clip: Option<crate::layout::Rect>,
     ) {
-        let mut cursor_x = x;
-        let mut cursor_y = y;
-        for ch in text.chars() {
-            if ch == '\r' {
+        draw_text_impl(self, x, y, text, color, clip);
+    }
+}
+
+
+fn inter_page_font() -> Option<&'static FontArc> {
+    static FONT: OnceLock<Option<FontArc>> = OnceLock::new();
+    FONT.get_or_init(|| {
+        let mut candidates = Vec::new();
+        if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
+            let base = std::path::PathBuf::from(local_app_data)
+                .join("Microsoft/Windows/Fonts");
+            candidates.push(base.join("Inter.ttc"));
+            candidates.push(base.join("Inter-Regular.ttf"));
+        }
+        if let Some(home) = std::env::var_os("HOME") {
+            let home = std::path::PathBuf::from(home);
+            let base = home.join(".local/share/fonts");
+            candidates.push(base.join("Inter.ttc"));
+            candidates.push(base.join("Inter-Regular.ttf"));
+            candidates.push(home.join(".fonts/Inter.ttc"));
+        }
+        candidates.push(std::path::PathBuf::from("/usr/share/fonts/truetype/inter/Inter.ttc"));
+        candidates.push(std::path::PathBuf::from("/usr/share/fonts/truetype/inter/Inter-Regular.ttf"));
+        candidates.into_iter().find_map(|path| {
+            let bytes = std::fs::read(path).ok()?;
+            FontArc::try_from_vec(bytes).ok()
+        })
+    }).as_ref()
+}
+
+fn draw_text_impl(
+    surface: &mut SoftwareSurface,
+    x: i32,
+    y: i32,
+    text: &str,
+    color: Color,
+    clip: Option<crate::layout::Rect>,
+) {
+    let Some(font) = inter_page_font() else {
+        draw_bitmap_text(surface, x, y, text, color, clip);
+        return;
+    };
+    let scale = PxScale::from(8.0);
+    let scaled = font.as_scaled(scale);
+    let ascent = scaled.ascent();
+    let mut cursor_x = x as f32;
+    let mut cursor_y = y as f32;
+
+    for character in text.chars() {
+        match character {
+            '\r' => continue,
+            '\n' => {
+                cursor_x = x as f32;
+                cursor_y += 8.0;
                 continue;
             }
-            if ch == '\n' {
+            '\t' => {
+                cursor_x += 24.0;
+                continue;
+            }
+            _ => {}
+        }
+        let glyph_id = font.glyph_id(character);
+        let advance = scaled.h_advance(glyph_id);
+        if glyph_id.0 == 0 {
+            draw_bitmap_glyph(surface, cursor_x.round() as i32, cursor_y.round() as i32, character, color, clip);
+            cursor_x += glyph_advance(character) as f32;
+            continue;
+        }
+        let glyph = glyph_id.with_scale_and_position(
+            scale,
+            point(cursor_x, cursor_y + ascent),
+        );
+        if let Some(outlined) = font.outline_glyph(glyph) {
+            let bounds = outlined.px_bounds();
+            let min_x = bounds.min.x.floor() as i32;
+            let min_y = bounds.min.y.floor() as i32;
+            outlined.draw(|glyph_x, glyph_y, coverage| {
+                blend_text_pixel(
+                    surface,
+                    min_x.saturating_add(glyph_x as i32),
+                    min_y.saturating_add(glyph_y as i32),
+                    color,
+                    coverage,
+                    clip,
+                );
+            });
+        }
+        cursor_x += advance.max(1.0);
+    }
+}
+
+fn draw_bitmap_text(
+    surface: &mut SoftwareSurface,
+    x: i32,
+    y: i32,
+    text: &str,
+    color: Color,
+    clip: Option<crate::layout::Rect>,
+) {
+    let mut cursor_x = x;
+    let mut cursor_y = y;
+    for character in text.chars() {
+        match character {
+            '\r' => continue,
+            '\n' => {
                 cursor_x = x;
                 cursor_y = cursor_y.saturating_add(8);
                 continue;
             }
-            if ch == '\t' {
+            '\t' => {
                 cursor_x = cursor_x.saturating_add(24);
                 continue;
             }
-            if let Some(glyph) = glyph(ch) {
-                for (row, bits) in glyph.iter().enumerate() {
-                    for column in 0..5 {
-                        if bits & (1 << (4 - column)) != 0 {
-                            self.fill_rect_clipped(
-                                cursor_x.saturating_add(column),
-                                cursor_y.saturating_add(row as i32),
-                                1,
-                                1,
-                                color,
-                                clip,
-                            );
-                        }
-                    }
+            _ => {}
+        }
+        draw_bitmap_glyph(surface, cursor_x, cursor_y, character, color, clip);
+        cursor_x = cursor_x.saturating_add(glyph_advance(character));
+    }
+}
+
+fn draw_bitmap_glyph(
+    surface: &mut SoftwareSurface,
+    x: i32,
+    y: i32,
+    character: char,
+    color: Color,
+    clip: Option<crate::layout::Rect>,
+) {
+    if let Some(bitmap) = glyph(character) {
+        for (row, bits) in bitmap.iter().enumerate() {
+            for column in 0..5 {
+                if bits & (1 << (4 - column)) != 0 {
+                    blend_text_pixel(
+                        surface,
+                        x.saturating_add(column),
+                        y.saturating_add(row as i32),
+                        color,
+                        1.0,
+                        clip,
+                    );
                 }
             }
-            cursor_x = cursor_x.saturating_add(glyph_advance(ch));
         }
     }
+}
+
+fn blend_text_pixel(
+    surface: &mut SoftwareSurface,
+    x: i32,
+    y: i32,
+    color: Color,
+    coverage: f32,
+    clip: Option<crate::layout::Rect>,
+) {
+    if x < 0 || y < 0 || x as u32 >= surface.surface.width || y as u32 >= surface.surface.height {
+        return;
+    }
+    if intersect_rect(crate::layout::Rect::new(x, y, 1, 1), clip).is_none() {
+        return;
+    }
+    let Some(index) = (y as usize)
+        .checked_mul(surface.surface.width as usize)
+        .and_then(|row| row.checked_add(x as usize))
+        .and_then(|pixel| pixel.checked_mul(4))
+    else {
+        return;
+    };
+    let Some(pixel) = surface.pixels.get_mut(index..index + 4) else {
+        return;
+    };
+    let source_alpha = coverage.clamp(0.0, 1.0) * (color.3 as f32 / 255.0);
+    if source_alpha <= 0.0 {
+        return;
+    }
+    let destination_alpha = pixel[3] as f32 / 255.0;
+    let output_alpha = source_alpha + destination_alpha * (1.0 - source_alpha);
+    if output_alpha <= 0.0 {
+        return;
+    }
+    for (channel, source) in [(0, color.0), (1, color.1), (2, color.2)] {
+        let destination = pixel[channel] as f32 / 255.0;
+        let blended = (source as f32 / 255.0 * source_alpha
+            + destination * destination_alpha * (1.0 - source_alpha))
+            / output_alpha;
+        pixel[channel] = (blended * 255.0).round().clamp(0.0, 255.0) as u8;
+    }
+    pixel[3] = (output_alpha * 255.0).round().clamp(0.0, 255.0) as u8;
 }
 
 fn parse_functional_color(value: &str) -> Option<Color> {
