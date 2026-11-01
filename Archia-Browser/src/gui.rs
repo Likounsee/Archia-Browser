@@ -4799,7 +4799,7 @@ mod gui_address_tests {
             },
         ];
         let markdown = export_bookmarks_markdown(&bookmarks);
-        assert!(markdown.contains("[Docs \\\\[draft\\\\]](<https://docs.example/path_(one)>)"));
+        assert!(markdown.contains("[Docs \[draft\]](<https://docs.example/path_(one)>)"));
         assert_eq!(parse_imported_bookmarks(&markdown), bookmarks);
         assert!(parse_imported_bookmarks("[unsafe](javascript:alert(1))").is_empty());
     }
