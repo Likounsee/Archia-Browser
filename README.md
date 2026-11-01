@@ -150,6 +150,7 @@ Use Ctrl+Shift+U or the browser menu to copy all currently open tab titles and U
 - `Ctrl+Alt+D` duplique la page actuelle dans un nouvel onglet.
 - `Ctrl+Alt+C` copie le titre et l'adresse de la page au format TSV (`titre\tURL`), prêt à coller dans un tableur ou à réimporter.
 - `Ctrl+Alt+M` copie la page actuelle sous forme de lien Markdown (`[titre](URL)`), pratique pour les notes et les issues.
+- `Ctrl+Alt+Shift+M` copie la liste de tous les onglets ouverts au format Markdown, en conservant leur ordre.
 - Le menu contextuel d'un onglet propose également de fermer les onglets à gauche ou à droite de celui-ci.
 - L'ouverture multiple est plafonnée à 20 liens par opération et respecte la limite globale de 100 onglets.
 - Les liens non HTTP(S) sont ignorés et les doublons sont supprimés par le parseur d'import.
