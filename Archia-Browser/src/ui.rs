@@ -28,6 +28,9 @@ impl RequestPolicyEngine for BrowserPolicy {
 
 type Loader = DocumentLoader<BrowserPolicy, HttpTransport>;
 
+#[derive(Clone, Copy)]
+enum ExportFormat { Tsv, Markdown }
+
 #[derive(Clone)]
 struct SavedPage {
     title: String,
@@ -220,7 +223,16 @@ impl ArchiaApp {
         save_saved_pages(&self.session_path, &entries);
     }
 
-    fn persist_settings(&self) {
+    fn persist_settings(&mut self) {
+        if let Ok(url) = Url::parse(&self.settings.homepage) {
+            if matches!(url.scheme(), "http" | "https") {
+                self.settings.homepage = url.to_string();
+            } else {
+                self.settings.homepage = BrowserSettings::default().homepage;
+            }
+        } else {
+            self.settings.homepage = BrowserSettings::default().homepage;
+        }
         self.settings.save(&self.settings_path);
         self.save_session();
     }
@@ -301,11 +313,11 @@ impl ArchiaApp {
             self.status = "Le dernier onglet ne peut pas être fermé.".to_owned();
             return;
         }
+        let closed_url = self.browser.tabs().tab(id)
+            .and_then(|tab| tab.history().current())
+            .map(|entry| entry.url().to_string());
         if self.browser.close_tab(id) {
-            if let Some(url) = self.browser.tabs().tab(id)
-                .and_then(|tab| tab.history().current())
-                .map(|entry| entry.url().to_string())
-            {
+            if let Some(url) = closed_url {
                 self.closed_tabs.push(url);
                 self.closed_tabs.truncate(20);
             }
@@ -335,6 +347,39 @@ impl ArchiaApp {
     fn open_homepage(&mut self) {
         let homepage = self.settings.homepage.clone();
         self.navigate(&homepage);
+    }
+
+    fn copy_open_tabs(&mut self, ctx: &egui::Context, format: ExportFormat) {
+        let entries = self.tabs.iter().filter_map(|id| {
+            let entry = self.browser.tabs().tab(*id)?.history().current()?;
+            Some((entry.title().unwrap_or_else(|| entry.url().to_string()), entry.url().to_string()))
+        }).collect::<Vec<_>>();
+        let exported = match format {
+            ExportFormat::Tsv => entries.iter()
+                .map(|(title, url)| format!("{}\\t{}", title.replace(['\\t', '\\r', '\\n'], " "), url))
+                .collect::<Vec<_>>().join("\\n"),
+            ExportFormat::Markdown => entries.iter()
+                .map(|(title, url)| format!("- [{}](<{}>)", title.replace('[', "\\\\[").replace(']', "\\\\]"), url))
+                .collect::<Vec<_>>().join("\\n"),
+        };
+        ctx.copy_text(exported);
+        self.status = "Liste des onglets copiée".to_owned();
+    }
+
+    fn copy_history(&mut self, ctx: &egui::Context) {
+        let exported = self.history_items.iter()
+            .map(|item| format!("{}\\t{}", item.title.replace(['\\t', '\\r', '\\n'], " "), item.url))
+            .collect::<Vec<_>>().join("\\n");
+        ctx.copy_text(exported);
+        self.status = "Historique copié".to_owned();
+    }
+
+    fn open_all_bookmarks(&mut self) {
+        let urls = self.bookmarks.iter().map(|item| item.url.clone()).take(20).collect::<Vec<_>>();
+        for (index, url) in urls.into_iter().enumerate() {
+            if index > 0 { self.new_tab(); }
+            self.navigate(&url);
+        }
     }
 
     fn duplicate_active_tab(&mut self) {
@@ -517,17 +562,32 @@ impl ArchiaApp {
 
 impl eframe::App for ArchiaApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let (ctrl_l, ctrl_t, ctrl_w, ctrl_r, ctrl_d, alt_left, alt_right) = ctx.input(|input| {
+        let shortcuts = ctx.input(|input| {
+            let ctrl = input.modifiers.ctrl;
+            let shift = input.modifiers.shift;
+            let alt = input.modifiers.alt;
             (
-                input.modifiers.ctrl && input.key_pressed(egui::Key::L),
-                input.modifiers.ctrl && input.key_pressed(egui::Key::T),
-                input.modifiers.ctrl && input.key_pressed(egui::Key::W),
-                input.modifiers.ctrl && input.key_pressed(egui::Key::R),
-                input.modifiers.ctrl && input.key_pressed(egui::Key::D),
-                input.modifiers.alt && input.key_pressed(egui::Key::ArrowLeft),
-                input.modifiers.alt && input.key_pressed(egui::Key::ArrowRight),
+                ctrl && input.key_pressed(egui::Key::L),
+                ctrl && input.key_pressed(egui::Key::T),
+                ctrl && input.key_pressed(egui::Key::W),
+                ctrl && input.key_pressed(egui::Key::R),
+                ctrl && input.key_pressed(egui::Key::D),
+                alt && input.key_pressed(egui::Key::ArrowLeft),
+                alt && input.key_pressed(egui::Key::ArrowRight),
+                ctrl && shift && input.key_pressed(egui::Key::T),
+                ctrl && shift && input.key_pressed(egui::Key::U),
+                ctrl && shift && input.key_pressed(egui::Key::Y),
+                ctrl && alt && input.key_pressed(egui::Key::D),
+                ctrl && alt && shift && input.key_pressed(egui::Key::W),
+                ctrl && shift && input.key_pressed(egui::Key::O),
+                ctrl && alt && input.key_pressed(egui::Key::C),
+                ctrl && alt && input.key_pressed(egui::Key::M),
+                alt && input.key_pressed(egui::Key::Home),
             )
         });
+        let (ctrl_l, ctrl_t, ctrl_w, ctrl_r, ctrl_d, alt_left, alt_right,
+            reopen_tab, export_tabs, export_history, duplicate_tab, close_others,
+            open_bookmarks, copy_page_tsv, copy_page_markdown, open_home) = shortcuts;
         if ctrl_t {
             self.new_tab();
         }
@@ -550,6 +610,30 @@ impl eframe::App for ArchiaApp {
         }
         if ctrl_l {
             self.focus_address = true;
+        }
+        if reopen_tab { self.reopen_closed_tab(); }
+        if export_tabs { self.copy_open_tabs(ctx, ExportFormat::Tsv); }
+        if export_history { self.copy_history(ctx); }
+        if duplicate_tab { self.duplicate_active_tab(); }
+        if open_home { self.open_homepage(); }
+        if close_others {
+            if let Some(active) = self.browser.active_tab_id() {
+                let to_close = self.tabs.iter().copied().filter(|id| *id != active).collect::<Vec<_>>();
+                for id in to_close { self.close_tab(id); }
+            }
+        }
+        if open_bookmarks { self.open_all_bookmarks(); }
+        if copy_page_tsv || copy_page_markdown {
+            if let Some(url) = self.browser.current_url().map(ToString::to_string) {
+                let title = self.browser.current_page().and_then(|page| page.title()).unwrap_or_else(|| url.clone());
+                let text = if copy_page_tsv {
+                    format!("{}\\t{}", title.replace(['\\t', '\\r', '\\n'], " "), url)
+                } else {
+                    format!("[{}](<{}>)", title.replace('[', "\\\\[").replace(']', "\\\\]"), url)
+                };
+                ctx.copy_text(text);
+                self.status = "Lien de la page copié".to_owned();
+            }
         }
 
         egui::TopBottomPanel::top("archia_tabs")
@@ -682,6 +766,43 @@ impl eframe::App for ArchiaApp {
                                 self.open_link(&href);
                             }
                         }
+                    });
+                    ui.menu_button("Outils", |ui| {
+                        if ui.button("Copier les onglets (TSV) · Ctrl+Shift+U").clicked() {
+                            self.copy_open_tabs(ui.ctx(), ExportFormat::Tsv);
+                        }
+                        if ui.button("Copier les onglets (Markdown)").clicked() {
+                            self.copy_open_tabs(ui.ctx(), ExportFormat::Markdown);
+                        }
+                        if ui.button("Copier l'historique · Ctrl+Shift+Y").clicked() {
+                            self.copy_history(ui.ctx());
+                        }
+                        if ui.button("Rouvrir le dernier onglet fermé · Ctrl+Shift+T").clicked() {
+                            self.reopen_closed_tab();
+                        }
+                        if ui.button("Ouvrir tous les favoris · Ctrl+Shift+O").clicked() {
+                            self.open_all_bookmarks();
+                        }
+                    });
+                    ui.menu_button("Paramètres", |ui| {
+                        ui.label("Moteur de recherche");
+                        let mut changed = false;
+                        changed |= ui.selectable_value(&mut self.settings.search_provider, SearchProvider::Google, "Google").clicked();
+                        changed |= ui.selectable_value(&mut self.settings.search_provider, SearchProvider::Bing, "Bing").clicked();
+                        changed |= ui.selectable_value(&mut self.settings.search_provider, SearchProvider::DuckDuckGo, "DuckDuckGo").clicked();
+                        ui.separator();
+                        ui.label("Profil User-Agent");
+                        changed |= ui.selectable_value(&mut self.settings.user_agent, UserAgentProfile::Archia, "Archia").clicked();
+                        changed |= ui.selectable_value(&mut self.settings.user_agent, UserAgentProfile::ChromiumCompatible, "Chromium compatible").clicked();
+                        changed |= ui.selectable_value(&mut self.settings.user_agent, UserAgentProfile::FirefoxCompatible, "Firefox compatible").clicked();
+                        ui.separator();
+                        changed |= ui.checkbox(&mut self.settings.restore_session, "Restaurer la session au démarrage").changed();
+                        ui.label("Page d'accueil HTTP(S)");
+                        changed |= ui.text_edit_singleline(&mut self.settings.homepage).changed();
+                        if ui.button("Ouvrir la page d'accueil · Alt+Home").clicked() {
+                            self.open_homepage();
+                        }
+                        if changed { self.persist_settings(); }
                     });
                 });
             });
