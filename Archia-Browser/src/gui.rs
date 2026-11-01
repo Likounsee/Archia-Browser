@@ -784,7 +784,6 @@ fn parse_imported_bookmarks(text: &str) -> Vec<Bookmark> {
     imported
 }
 
-
 fn decode_bookmark_html_text(value: &str) -> String {
     value
         .replace("&amp;", "&")
@@ -835,7 +834,9 @@ fn parse_netscape_bookmarks(text: &str) -> Vec<Bookmark> {
             };
             (&value[..end], end + 2)
         } else {
-            let end = attribute.find(char::is_whitespace).unwrap_or(attribute.len());
+            let end = attribute
+                .find(char::is_whitespace)
+                .unwrap_or(attribute.len());
             (&attribute[..end], end)
         };
         let Some(close_relative) = lower[tag_end + 1..].find("</a>") else {
@@ -851,7 +852,11 @@ fn parse_netscape_bookmarks(text: &str) -> Vec<Bookmark> {
         if let Ok(url) = Url::parse(&decode_bookmark_html_text(raw_url)) {
             if matches!(url.scheme(), "http" | "https") {
                 imported.push(Bookmark {
-                    title: if title.is_empty() { url.host().to_owned() } else { title },
+                    title: if title.is_empty() {
+                        url.host().to_owned()
+                    } else {
+                        title
+                    },
                     url: url.to_string(),
                 });
             }
@@ -871,13 +876,17 @@ fn escape_bookmark_html(value: &str) -> String {
 }
 
 fn export_bookmarks_html(bookmarks: &[Bookmark]) -> String {
-    let entries = bookmarks.iter().map(|bookmark| {
-        format!(
-            "<DT><A HREF=\"{}\">{}</A>",
-            escape_bookmark_html(&bookmark.url),
-            escape_bookmark_html(&bookmark.title)
-        )
-    }).collect::<Vec<_>>().join("\n");
+    let entries = bookmarks
+        .iter()
+        .map(|bookmark| {
+            format!(
+                "<DT><A HREF=\"{}\">{}</A>",
+                escape_bookmark_html(&bookmark.url),
+                escape_bookmark_html(&bookmark.title)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
     format!(
         "<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=UTF-8\">\n<TITLE>Archia Browser Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n<DL><p>\n{entries}\n</DL><p>\n"
     )
@@ -917,7 +926,11 @@ fn export_open_tabs_html(entries: &[(String, String)]) -> String {
                 return None;
             }
             Some(Bookmark {
-                title: if title.trim().is_empty() { parsed.host().to_owned() } else { title.clone() },
+                title: if title.trim().is_empty() {
+                    parsed.host().to_owned()
+                } else {
+                    title.clone()
+                },
                 url: parsed.to_string(),
             })
         })
@@ -2400,8 +2413,16 @@ unsafe fn open_links_from_clipboard(state: &mut AppState, hwnd: Hwnd) {
     if links.is_empty() || state.tabs.is_empty() {
         return;
     }
-    let capacity = state.tabs.len().saturating_add(links.len().saturating_sub(1)).min(MAX_GUI_TABS);
-    for (index, url) in links.into_iter().take(capacity.saturating_sub(state.tabs.len()).saturating_add(1)).enumerate() {
+    let capacity = state
+        .tabs
+        .len()
+        .saturating_add(links.len().saturating_sub(1))
+        .min(MAX_GUI_TABS);
+    for (index, url) in links
+        .into_iter()
+        .take(capacity.saturating_sub(state.tabs.len()).saturating_add(1))
+        .enumerate()
+    {
         if index > 0 {
             create_new_tab(state, hwnd);
         }
@@ -2410,10 +2431,17 @@ unsafe fn open_links_from_clipboard(state: &mut AppState, hwnd: Hwnd) {
 }
 
 unsafe fn copy_open_tabs_html(state: &AppState, hwnd: Hwnd) {
-    let entries = state.tabs.iter().filter_map(|(id, _)| {
-        let page = state.browser.tabs().tab(*id)?.page()?;
-        Some((page.title().unwrap_or_else(|| "(sans titre)".to_owned()), page.url()?.to_string()))
-    }).collect::<Vec<_>>();
+    let entries = state
+        .tabs
+        .iter()
+        .filter_map(|(id, _)| {
+            let page = state.browser.tabs().tab(*id)?.page()?;
+            Some((
+                page.title().unwrap_or_else(|| "(sans titre)".to_owned()),
+                page.url()?.to_string(),
+            ))
+        })
+        .collect::<Vec<_>>();
     if !entries.is_empty() {
         let html = export_open_tabs_html(&entries);
         let _ = copy_text_to_clipboard(hwnd, &html);
@@ -2675,12 +2703,30 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             "Supprimer les favoris en double",
         ),
         (ID_MENU_COPY_BOOKMARKS, "Copier tous les favoris (texte)"),
-        (ID_MENU_COPY_BOOKMARKS_HTML, "Copier les favoris au format HTML (Netscape)"),
-        (ID_MENU_PASTE_AND_GO, "Coller et ouvrir l’adresse ou rechercher le texte copié"),
-        (ID_MENU_SEARCH_CLIPBOARD_NEW_TAB, "Rechercher le texte copié dans un nouvel onglet"),
-        (ID_MENU_COPY_HISTORY_HTML, "Copier l’historique au format HTML (Netscape)"),
-        (ID_MENU_COPY_OPEN_TABS_HTML, "Exporter les onglets ouverts en HTML (Netscape)"),
-        (ID_MENU_OPEN_CLIPBOARD_LINKS, "Ouvrir les liens du presse-papiers dans des onglets"),
+        (
+            ID_MENU_COPY_BOOKMARKS_HTML,
+            "Copier les favoris au format HTML (Netscape)",
+        ),
+        (
+            ID_MENU_PASTE_AND_GO,
+            "Coller et ouvrir l’adresse ou rechercher le texte copié",
+        ),
+        (
+            ID_MENU_SEARCH_CLIPBOARD_NEW_TAB,
+            "Rechercher le texte copié dans un nouvel onglet",
+        ),
+        (
+            ID_MENU_COPY_HISTORY_HTML,
+            "Copier l’historique au format HTML (Netscape)",
+        ),
+        (
+            ID_MENU_COPY_OPEN_TABS_HTML,
+            "Exporter les onglets ouverts en HTML (Netscape)",
+        ),
+        (
+            ID_MENU_OPEN_CLIPBOARD_LINKS,
+            "Ouvrir les liens du presse-papiers dans des onglets",
+        ),
         (
             ID_MENU_IMPORT_BOOKMARKS,
             "Importer les favoris depuis le presse-papiers",
@@ -4478,7 +4524,10 @@ mod gui_address_tests {
     #[test]
     fn open_tabs_html_export_is_netscape_compatible_and_escapes_titles() {
         let entries = vec![
-            ("A & B <Docs>".to_owned(), "https://example.org/docs".to_owned()),
+            (
+                "A & B <Docs>".to_owned(),
+                "https://example.org/docs".to_owned(),
+            ),
             ("Unsafe".to_owned(), "javascript:alert(1)".to_owned()),
         ];
         let html = export_open_tabs_html(&entries);
