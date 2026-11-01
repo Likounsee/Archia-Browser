@@ -1127,7 +1127,7 @@ fn downloads_directory() -> PathBuf {
 fn safe_download_filename(value: &str) -> String {
     let leaf = Path::new(value).file_name().unwrap_or_default().to_string_lossy();
     let cleaned = leaf.chars()
-        .filter(|character| !character.is_control() && !matches!(character, '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|') && *character != char::from(92))
+        .filter(|character| !character.is_control() && !matches!(*character, '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|') && *character != char::from(92))
         .take(180)
         .collect::<String>();
     let cleaned = cleaned.trim_matches([' ', '.']);
