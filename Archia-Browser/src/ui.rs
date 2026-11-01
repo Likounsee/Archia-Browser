@@ -185,18 +185,28 @@ impl BrowserSettings {
     }
 }
 
-const GRAPHITE: egui::Color32 = egui::Color32::from_rgb(19, 22, 27);
-const PANEL: egui::Color32 = egui::Color32::from_rgb(25, 29, 35);
-const PANEL_LIGHT: egui::Color32 = egui::Color32::from_rgb(34, 39, 47);
-const LIME: egui::Color32 = egui::Color32::from_rgb(190, 242, 100);
-const TEXT: egui::Color32 = egui::Color32::from_rgb(238, 241, 235);
-const MUTED: egui::Color32 = egui::Color32::from_rgb(147, 155, 163);
+// Palette de repli : identique à themes/archia/theme.toml (graphite neutre,
+// barre quasi noire, accent lime).
+const GRAPHITE: egui::Color32 = egui::Color32::from_rgb(0x1B, 0x1D, 0x22);
+const PANEL: egui::Color32 = egui::Color32::from_rgb(0x0C, 0x0D, 0x0F);
+const PANEL_LIGHT: egui::Color32 = egui::Color32::from_rgb(0x26, 0x29, 0x30);
+const LIME: egui::Color32 = egui::Color32::from_rgb(0xC6, 0xF2, 0x4E);
+const TEXT: egui::Color32 = egui::Color32::from_rgb(0xF1, 0xF2, 0xF4);
+const MUTED: egui::Color32 = egui::Color32::from_rgb(0xA7, 0xAB, 0xB5);
+const BORDER: egui::Color32 = egui::Color32::from_rgb(0x35, 0x38, 0x42);
+// Texte posé sur l'accent (ancien DARK_ON_ACCENT, #11130A).
+const DARK_ON_ACCENT: egui::Color32 = egui::Color32::from_rgb(0x11, 0x13, 0x0A);
+// Rayon des angles : l'ancien chrome utilisait 3 px partout.
+const CHROME_RADIUS: u8 = 3;
 
 #[derive(Clone, Copy)]
 struct UiPalette {
     window: egui::Color32,
     toolbar: egui::Color32,
     address: egui::Color32,
+    tab_active: egui::Color32,
+    tab_inactive: egui::Color32,
+    border: egui::Color32,
     text: egui::Color32,
     muted: egui::Color32,
     accent: egui::Color32,
@@ -207,7 +217,10 @@ impl Default for UiPalette {
         Self {
             window: GRAPHITE,
             toolbar: PANEL,
-            address: PANEL_LIGHT,
+            address: PANEL,
+            tab_active: GRAPHITE,
+            tab_inactive: PANEL_LIGHT,
+            border: BORDER,
             text: TEXT,
             muted: MUTED,
             accent: LIME,
@@ -225,6 +238,11 @@ impl UiPalette {
                 .unwrap_or(defaults.toolbar),
             address: parse_theme_color(&manifest.colors.address_background)
                 .unwrap_or(defaults.address),
+            tab_active: parse_theme_color(&manifest.colors.tab_active_background)
+                .unwrap_or(defaults.tab_active),
+            tab_inactive: parse_theme_color(&manifest.colors.tab_inactive_background)
+                .unwrap_or(defaults.tab_inactive),
+            border: parse_theme_color(&manifest.colors.border).unwrap_or(defaults.border),
             text: parse_theme_color(&manifest.colors.text).unwrap_or(defaults.text),
             muted: parse_theme_color(&manifest.colors.muted_text).unwrap_or(defaults.muted),
             accent: parse_theme_color(&manifest.colors.accent).unwrap_or(defaults.accent),
@@ -284,11 +302,33 @@ fn apply_palette(ctx: &egui::Context, palette: UiPalette) {
     style.visuals.selection.bg_fill = palette.accent.gamma_multiply(0.22);
     style.visuals.selection.stroke = egui::Stroke::new(1.0_f32, palette.accent);
     style.visuals.override_text_color = Some(palette.text);
-    style.visuals.widgets.inactive.bg_fill = palette.address;
+
+    // Boutons « puces » comme dans l'ancien chrome : fond tab_inactive, angles
+    // de 3 px, pas de contour (egui peint les boutons avec weak_bg_fill).
+    let radius = egui::CornerRadius::same(CHROME_RADIUS);
+    let hover_fill = palette.tab_inactive.lerp_to_gamma(palette.accent, 0.18);
+    let active_fill = palette.tab_inactive.lerp_to_gamma(palette.accent, 0.32);
+    style.visuals.window_corner_radius = radius;
+    style.visuals.menu_corner_radius = radius;
+    style.visuals.window_stroke = egui::Stroke::new(1.0_f32, palette.border);
+    style.visuals.widgets.noninteractive.bg_stroke = egui::Stroke::new(1.0_f32, palette.border);
+    style.visuals.widgets.noninteractive.corner_radius = radius;
+    style.visuals.widgets.inactive.bg_fill = palette.tab_inactive;
+    style.visuals.widgets.inactive.weak_bg_fill = palette.tab_inactive;
+    style.visuals.widgets.inactive.bg_stroke = egui::Stroke::NONE;
+    style.visuals.widgets.inactive.corner_radius = radius;
     style.visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0_f32, palette.text);
-    style.visuals.widgets.hovered.bg_fill = palette.accent.gamma_multiply(0.24);
-    style.visuals.widgets.active.bg_fill = palette.accent.gamma_multiply(0.32);
-    style.visuals.widgets.open.bg_fill = palette.address;
+    style.visuals.widgets.hovered.bg_fill = hover_fill;
+    style.visuals.widgets.hovered.weak_bg_fill = hover_fill;
+    style.visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0_f32, palette.border);
+    style.visuals.widgets.hovered.corner_radius = radius;
+    style.visuals.widgets.active.bg_fill = active_fill;
+    style.visuals.widgets.active.weak_bg_fill = active_fill;
+    style.visuals.widgets.active.bg_stroke = egui::Stroke::new(1.0_f32, palette.accent);
+    style.visuals.widgets.active.corner_radius = radius;
+    style.visuals.widgets.open.bg_fill = palette.tab_inactive;
+    style.visuals.widgets.open.weak_bg_fill = palette.tab_inactive;
+    style.visuals.widgets.open.corner_radius = radius;
     ctx.set_style(style);
 }
 
@@ -341,8 +381,9 @@ impl ArchiaApp {
         style.visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(48, 56, 63);
         style.visuals.widgets.active.bg_fill = egui::Color32::from_rgb(57, 75, 44);
         style.visuals.widgets.open.bg_fill = PANEL_LIGHT;
-        style.spacing.item_spacing = egui::vec2(8.0, 7.0);
-        style.spacing.button_padding = egui::vec2(11.0, 7.0);
+        // Barre compacte, comme l'ancien chrome.
+        style.spacing.item_spacing = egui::vec2(6.0, 6.0);
+        style.spacing.button_padding = egui::vec2(10.0, 5.0);
         cc.egui_ctx.set_style(style);
 
         let browser = Browser::new();
@@ -1439,122 +1480,177 @@ impl eframe::App for ArchiaApp {
             }
         }
 
+        let palette = self.palette;
+        let radius = egui::CornerRadius::same(CHROME_RADIUS);
+
+        // Bande d'onglets : fond de barre sombre, onglet actif fondu dans la
+        // barre d'outils (même couleur) avec un filet d'accent de 2 px, onglets
+        // numérotés (01, 02…) et angles vifs.
         egui::TopBottomPanel::top("archia_tabs")
+            .show_separator_line(false)
             .frame(
                 egui::Frame::new()
-                    .fill(self.palette.toolbar)
-                    .inner_margin(egui::Margin::symmetric(12, 8)),
+                    .fill(palette.toolbar)
+                    .inner_margin(egui::Margin {
+                        left: 10,
+                        right: 10,
+                        top: 7,
+                        bottom: 0,
+                    }),
             )
             .show(ctx, |ui| {
                 egui::ScrollArea::horizontal()
                     .id_salt("archia_tab_strip_scroll")
                     .auto_shrink([false, true])
+                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
                     .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            for id in self.tabs.clone() {
+                        ui.horizontal_top(|ui| {
+                            let tab_count = self.tabs.len();
+                            for (index, id) in self.tabs.clone().into_iter().enumerate() {
                                 let active = self.browser.active_tab_id() == Some(id);
                                 let title = self.tab_title(id);
-                                let tab_fill = if active {
-                                    self.palette.address
-                                } else {
-                                    self.palette.toolbar
-                                };
-                                egui::Frame::new()
-                                    .fill(tab_fill)
-                                    .inner_margin(egui::Margin::symmetric(8, 5))
-                                    .show(ui, |ui| {
-                                        ui.horizontal(|ui| {
-                                            let marker = if active { "●" } else { "○" };
-                                            ui.label(egui::RichText::new(marker).size(9.0).color(
-                                                if active {
-                                                    self.palette.accent
+                                ui.vertical(|ui| {
+                                    ui.spacing_mut().item_spacing.y = 0.0;
+                                    // Les onglets inactifs sont plus bas et plus courts
+                                    // que l'actif : 7 px de vide au-dessus.
+                                    if !active {
+                                        ui.add_space(7.0);
+                                    }
+                                    let (fill, top, bottom) = if active {
+                                        (palette.tab_active, 9, 7)
+                                    } else {
+                                        (palette.tab_inactive, 4, 5)
+                                    };
+                                    let tab = egui::Frame::new()
+                                        .fill(fill)
+                                        .inner_margin(egui::Margin {
+                                            left: 10,
+                                            right: 6,
+                                            top,
+                                            bottom,
+                                        })
+                                        .show(ui, |ui| {
+                                            ui.spacing_mut().item_spacing.x = 8.0;
+                                            ui.horizontal(|ui| {
+                                                let tone = if active {
+                                                    palette.accent
                                                 } else {
-                                                    self.palette.muted
-                                                },
-                                            ));
-                                            let response = ui.add_sized(
-                                                [150.0, 25.0],
-                                                egui::Button::new(
-                                                    egui::RichText::new(title)
-                                                        .color(if active {
-                                                            self.palette.text
-                                                        } else {
-                                                            self.palette.muted
-                                                        })
-                                                        .strong(),
-                                                )
-                                                .fill(egui::Color32::TRANSPARENT)
-                                                .stroke(egui::Stroke::NONE),
-                                            );
-                                            response.context_menu(|ui| {
-                                                if ui.button("Fermer cet onglet").clicked() {
+                                                    palette.muted
+                                                };
+                                                ui.label(
+                                                    egui::RichText::new(format!(
+                                                        "{:02}",
+                                                        index + 1
+                                                    ))
+                                                    .size(13.0)
+                                                    .color(tone),
+                                                );
+                                                let response = ui
+                                                    .add_sized(
+                                                        [120.0, 16.0],
+                                                        egui::Label::new(
+                                                            egui::RichText::new(title)
+                                                                .size(13.0)
+                                                                .color(if active {
+                                                                    palette.text
+                                                                } else {
+                                                                    palette.muted
+                                                                }),
+                                                        )
+                                                        .truncate()
+                                                        .sense(egui::Sense::click()),
+                                                    )
+                                                    .on_hover_cursor(
+                                                        egui::CursorIcon::PointingHand,
+                                                    );
+                                                response.context_menu(|ui| {
+                                                    if ui.button("Fermer cet onglet").clicked() {
+                                                        self.close_tab(id);
+                                                    }
+                                                    if ui.button("Dupliquer cet onglet").clicked() {
+                                                        let url = self
+                                                            .browser
+                                                            .tabs()
+                                                            .tab(id)
+                                                            .and_then(|tab| tab.history().current())
+                                                            .map(|entry| entry.url().to_string());
+                                                        if let Some(url) = url {
+                                                            self.new_tab();
+                                                            self.navigate(&url);
+                                                        }
+                                                    }
+                                                    if ui
+                                                        .button("Fermer les onglets à gauche")
+                                                        .clicked()
+                                                    {
+                                                        self.close_tabs_left_of(id);
+                                                    }
+                                                    if ui
+                                                        .button("Fermer les onglets à droite")
+                                                        .clicked()
+                                                    {
+                                                        self.close_tabs_right_of(id);
+                                                    }
+                                                    if ui.button("Fermer les doublons").clicked() {
+                                                        self.close_duplicate_tabs(id);
+                                                    }
+                                                    if ui
+                                                        .button("Fermer les onglets du même site")
+                                                        .clicked()
+                                                    {
+                                                        self.close_same_site_tabs(id);
+                                                    }
+                                                    if ui
+                                                        .button("Copier les URL du même site")
+                                                        .clicked()
+                                                    {
+                                                        self.copy_same_site_urls(ui.ctx(), id);
+                                                    }
+                                                });
+                                                if response.clicked() {
+                                                    self.browser.select_tab(id);
+                                                    self.sync_address();
+                                                    self.page_texture = None;
+                                                    self.page_dirty = true;
+                                                }
+                                                if tab_count > 1
+                                                    && ui
+                                                        .add(
+                                                            egui::Button::new(
+                                                                egui::RichText::new("×")
+                                                                    .size(14.0)
+                                                                    .color(palette.muted),
+                                                            )
+                                                            .frame(false)
+                                                            .min_size(egui::vec2(16.0, 16.0)),
+                                                        )
+                                                        .on_hover_text("Fermer l'onglet")
+                                                        .clicked()
+                                                {
                                                     self.close_tab(id);
                                                 }
-                                                if ui.button("Dupliquer cet onglet").clicked() {
-                                                    let url = self
-                                                        .browser
-                                                        .tabs()
-                                                        .tab(id)
-                                                        .and_then(|tab| tab.history().current())
-                                                        .map(|entry| entry.url().to_string());
-                                                    if let Some(url) = url {
-                                                        self.new_tab();
-                                                        self.navigate(&url);
-                                                    }
-                                                }
-                                                if ui
-                                                    .button("Fermer les onglets à gauche")
-                                                    .clicked()
-                                                {
-                                                    self.close_tabs_left_of(id);
-                                                }
-                                                if ui
-                                                    .button("Fermer les onglets à droite")
-                                                    .clicked()
-                                                {
-                                                    self.close_tabs_right_of(id);
-                                                }
-                                                if ui.button("Fermer les doublons").clicked() {
-                                                    self.close_duplicate_tabs(id);
-                                                }
-                                                if ui
-                                                    .button("Fermer les onglets du même site")
-                                                    .clicked()
-                                                {
-                                                    self.close_same_site_tabs(id);
-                                                }
-                                                if ui
-                                                    .button("Copier les URL du même site")
-                                                    .clicked()
-                                                {
-                                                    self.copy_same_site_urls(ui.ctx(), id);
-                                                }
                                             });
-                                            if response.clicked() {
-                                                self.browser.select_tab(id);
-                                                self.sync_address();
-                                                self.page_texture = None;
-                                                self.page_dirty = true;
-                                            }
-                                            if ui
-                                                .small_button("×")
-                                                .on_hover_text("Fermer l'onglet")
-                                                .clicked()
-                                            {
-                                                self.close_tab(id);
-                                            }
                                         });
-                                    });
+                                    if active {
+                                        let rect = tab.response.rect;
+                                        ui.painter().rect_filled(
+                                            egui::Rect::from_min_size(
+                                                rect.min,
+                                                egui::vec2(rect.width(), 2.0),
+                                            ),
+                                            egui::CornerRadius::ZERO,
+                                            palette.accent,
+                                        );
+                                    }
+                                });
                             }
                             if ui
                                 .add_sized(
-                                    [34.0, 34.0],
+                                    [48.0, 29.0],
                                     egui::Button::new(
-                                        egui::RichText::new("+")
-                                            .size(20.0)
-                                            .color(self.palette.accent),
+                                        egui::RichText::new("+").size(18.0).color(palette.text),
                                     )
-                                    .fill(self.palette.address),
+                                    .fill(palette.tab_inactive),
                                 )
                                 .on_hover_text("Nouvel onglet")
                                 .clicked()
@@ -1565,28 +1661,88 @@ impl eframe::App for ArchiaApp {
                     });
             });
 
+        // Barre d'outils : puces ‹ › ⟳ de 34×32, champ d'adresse avec liseré de
+        // 1 px, ☆ puis « Aller » plein accent. Tous les menus sont regroupés
+        // dans « ⋯ » à droite, comme le menu Archia de l'ancien chrome.
         egui::TopBottomPanel::top("archia_toolbar")
             .frame(
                 egui::Frame::new()
-                    .fill(self.palette.window)
-                    .inner_margin(egui::Margin::symmetric(14, 10)),
+                    .fill(palette.window)
+                    .inner_margin(egui::Margin {
+                        left: 10,
+                        right: 10,
+                        top: 9,
+                        bottom: 6,
+                    }),
             )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    if ui.button("←").on_hover_text("Précédent").clicked() {
+                    let nav_button = |ui: &mut egui::Ui, label: &str, width: f32, enabled: bool| {
+                        ui.add_sized(
+                            [width, 32.0],
+                            egui::Button::new(
+                                egui::RichText::new(label).size(18.0).color(if enabled {
+                                    palette.text
+                                } else {
+                                    palette.muted
+                                }),
+                            )
+                            .fill(if enabled {
+                                palette.tab_inactive
+                            } else {
+                                palette.window
+                            }),
+                        )
+                    };
+                    let can_back = self.browser.history().can_go_back();
+                    if nav_button(ui, "‹", 34.0, can_back)
+                        .on_hover_text("Précédent")
+                        .clicked()
+                    {
                         self.go_back();
                     }
-                    if ui.button("→").on_hover_text("Suivant").clicked() {
+                    let can_forward = self.browser.history().can_go_forward();
+                    if nav_button(ui, "›", 34.0, can_forward)
+                        .on_hover_text("Suivant")
+                        .clicked()
+                    {
                         self.go_forward();
                     }
-                    if ui.button("⟳").on_hover_text("Actualiser").clicked() {
+                    if nav_button(ui, "⟳", 36.0, true)
+                        .on_hover_text("Actualiser")
+                        .clicked()
+                    {
                         self.reload();
                     }
-                    let address = ui.add(
-                        egui::TextEdit::singleline(&mut self.address)
-                            .desired_width(f32::INFINITY)
-                            .hint_text("Rechercher ou saisir une adresse"),
-                    );
+
+                    // ☆ (34) + Aller (112) + ⋯ (≈46) + 3 espacements.
+                    let right_width = 34.0 + 112.0 + 46.0 + 3.0 * ui.spacing().item_spacing.x;
+                    let address_width = (ui.available_width() - right_width).max(160.0);
+                    let address_id = egui::Id::new("archia_address_field");
+                    let focused = ui.memory(|memory| memory.has_focus(address_id));
+                    let address = egui::Frame::new()
+                        .fill(palette.address)
+                        .stroke(egui::Stroke::new(
+                            1.0_f32,
+                            if focused {
+                                palette.accent
+                            } else {
+                                palette.border
+                            },
+                        ))
+                        .corner_radius(radius)
+                        .inner_margin(egui::Margin::symmetric(10, 0))
+                        .show(ui, |ui| {
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.address)
+                                    .id(address_id)
+                                    .frame(false)
+                                    .margin(egui::Margin::symmetric(0, 6))
+                                    .desired_width(address_width - 22.0)
+                                    .hint_text("Rechercher ou saisir une adresse"),
+                            )
+                        })
+                        .inner;
                     if self.focus_address {
                         address.request_focus();
                         self.focus_address = false;
@@ -1596,490 +1752,513 @@ impl eframe::App for ArchiaApp {
                         let target = self.address.clone();
                         self.navigate(&target);
                     }
-                    if ui.button("Aller").clicked() {
-                        let target = self.address.clone();
-                        self.navigate(&target);
-                    }
                     let is_bookmarked = self.browser.current_url().is_some_and(|url| {
                         self.bookmarks
                             .iter()
                             .any(|entry| entry.url == url.to_string())
                     });
                     if ui
-                        .button(if is_bookmarked { "★" } else { "☆" })
+                        .add_sized(
+                            [34.0, 32.0],
+                            egui::Button::new(
+                                egui::RichText::new(if is_bookmarked { "★" } else { "☆" })
+                                    .size(16.0)
+                                    .color(if is_bookmarked {
+                                        palette.accent
+                                    } else {
+                                        palette.text
+                                    }),
+                            )
+                            .fill(palette.tab_inactive),
+                        )
                         .on_hover_text("Ajouter ou retirer des favoris")
                         .clicked()
                     {
                         self.toggle_bookmark();
                     }
-                    ui.menu_button("Favoris", |ui| {
-                        if ui.button("Ajouter / retirer la page actuelle").clicked() {
-                            self.toggle_bookmark();
-                        }
-                        if ui.button("Importer des favoris…").clicked() {
-                            self.bookmark_import_open = true;
-                        }
-                        if ui.button("Exporter les favoris (TSV)").clicked() {
-                            let text = self
-                                .bookmarks
-                                .iter()
-                                .map(|item| format!("{}\t{}", item.title, item.url))
-                                .collect::<Vec<_>>()
-                                .join("\n");
-                            ui.ctx().copy_text(text);
-                            self.status = "Favoris exportés en TSV".to_owned();
-                        }
-                        if ui.button("Exporter les favoris (Markdown)").clicked() {
-                            let text = self
-                                .bookmarks
-                                .iter()
-                                .map(|item| {
-                                    format!(
-                                        "- [{}](<{}>)",
-                                        item.title.replace('[', "\\[").replace(']', "\\]"),
-                                        item.url
-                                    )
-                                })
-                                .collect::<Vec<_>>()
-                                .join("\n");
-                            ui.ctx().copy_text(text);
-                            self.status = "Favoris exportés en Markdown".to_owned();
-                        }
-                        if ui.button("Exporter les favoris (HTML Netscape)").clicked() {
-                            ui.ctx().copy_text(export_bookmarks_html(&self.bookmarks));
-                            self.status = "Favoris exportés en HTML Netscape".to_owned();
-                        }
-                        ui.separator();
-                        ui.menu_button("Trier", |ui| {
-                            if ui.button("Par nom (A → Z)").clicked() {
-                                sort_saved_pages_by_title(&mut self.bookmarks);
-                                save_saved_pages(
-                                    &browser_data_directory().join("bookmarks.tsv"),
-                                    &self.bookmarks,
-                                );
+                    if ui
+                        .add_sized(
+                            [112.0, 32.0],
+                            egui::Button::new(
+                                egui::RichText::new("Aller").color(DARK_ON_ACCENT).strong(),
+                            )
+                            .fill(palette.accent),
+                        )
+                        .clicked()
+                    {
+                        let target = self.address.clone();
+                        self.navigate(&target);
+                    }
+                    ui.menu_button(egui::RichText::new("⋯").size(18.0), |ui| {
+                        ui.menu_button("Favoris", |ui| {
+                            if ui.button("Ajouter / retirer la page actuelle").clicked() {
+                                self.toggle_bookmark();
                             }
-                            if ui.button("Par site puis par nom").clicked() {
-                                sort_saved_pages_by_site(&mut self.bookmarks);
-                                save_saved_pages(
-                                    &browser_data_directory().join("bookmarks.tsv"),
-                                    &self.bookmarks,
-                                );
+                            if ui.button("Importer des favoris…").clicked() {
+                                self.bookmark_import_open = true;
                             }
-                        });
-                        if ui.button("Supprimer les favoris en double").clicked() {
-                            let before = self.bookmarks.len();
-                            deduplicate_saved_pages(&mut self.bookmarks);
-                            let removed = before - self.bookmarks.len();
-                            save_saved_pages(
-                                &browser_data_directory().join("bookmarks.tsv"),
-                                &self.bookmarks,
-                            );
-                            self.status = format!("{removed} favori(s) en double supprimé(s)");
-                        }
-                        ui.separator();
-                        let items = self.bookmarks.clone();
-                        if items.is_empty() {
-                            ui.label("Aucun favori enregistré");
-                        }
-                        for item in items {
-                            let response = ui.button(&item.title).on_hover_text(&item.url);
-                            response.context_menu(|ui| {
-                                if ui.button("Ouvrir dans cet onglet").clicked() {
-                                    self.navigate(&item.url);
-                                }
-                                if ui.button("Ouvrir dans un nouvel onglet").clicked() {
-                                    self.new_tab();
-                                    self.navigate(&item.url);
-                                }
-                                if ui.button("Copier l'adresse").clicked() {
-                                    ui.ctx().copy_text(item.url.clone());
-                                    self.status = "Adresse du favori copiée".to_owned();
-                                }
-                                if ui.button("Supprimer des favoris").clicked() {
-                                    self.bookmarks.retain(|saved| saved.url != item.url);
+                            if ui.button("Exporter les favoris (TSV)").clicked() {
+                                let text = self
+                                    .bookmarks
+                                    .iter()
+                                    .map(|item| format!("{}\t{}", item.title, item.url))
+                                    .collect::<Vec<_>>()
+                                    .join("\n");
+                                ui.ctx().copy_text(text);
+                                self.status = "Favoris exportés en TSV".to_owned();
+                            }
+                            if ui.button("Exporter les favoris (Markdown)").clicked() {
+                                let text = self
+                                    .bookmarks
+                                    .iter()
+                                    .map(|item| {
+                                        format!(
+                                            "- [{}](<{}>)",
+                                            item.title.replace('[', "\\[").replace(']', "\\]"),
+                                            item.url
+                                        )
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .join("\n");
+                                ui.ctx().copy_text(text);
+                                self.status = "Favoris exportés en Markdown".to_owned();
+                            }
+                            if ui.button("Exporter les favoris (HTML Netscape)").clicked() {
+                                ui.ctx().copy_text(export_bookmarks_html(&self.bookmarks));
+                                self.status = "Favoris exportés en HTML Netscape".to_owned();
+                            }
+                            ui.separator();
+                            ui.menu_button("Trier", |ui| {
+                                if ui.button("Par nom (A → Z)").clicked() {
+                                    sort_saved_pages_by_title(&mut self.bookmarks);
                                     save_saved_pages(
                                         &browser_data_directory().join("bookmarks.tsv"),
                                         &self.bookmarks,
                                     );
-                                    self.status = "Favori supprimé".to_owned();
+                                }
+                                if ui.button("Par site puis par nom").clicked() {
+                                    sort_saved_pages_by_site(&mut self.bookmarks);
+                                    save_saved_pages(
+                                        &browser_data_directory().join("bookmarks.tsv"),
+                                        &self.bookmarks,
+                                    );
                                 }
                             });
-                            if response.clicked() {
-                                self.navigate(&item.url);
+                            if ui.button("Supprimer les favoris en double").clicked() {
+                                let before = self.bookmarks.len();
+                                deduplicate_saved_pages(&mut self.bookmarks);
+                                let removed = before - self.bookmarks.len();
+                                save_saved_pages(
+                                    &browser_data_directory().join("bookmarks.tsv"),
+                                    &self.bookmarks,
+                                );
+                                self.status = format!("{removed} favori(s) en double supprimé(s)");
                             }
-                        }
-                    });
-                    ui.menu_button("Historique", |ui| {
-                        ui.horizontal(|ui| {
-                            if ui.button("Exporter TSV").clicked() {
-                                self.copy_history(ui.ctx());
+                            ui.separator();
+                            let items = self.bookmarks.clone();
+                            if items.is_empty() {
+                                ui.label("Aucun favori enregistré");
                             }
-                            if ui.button("Exporter CSV").clicked() {
-                                self.copy_history_csv(ui.ctx());
-                            }
-                            if ui.button("Markdown").clicked() {
-                                self.copy_history_markdown(ui.ctx());
-                            }
-                            if ui.button("HTML").clicked() {
-                                self.copy_history_html(ui.ctx());
-                            }
-                        });
-                        if ui
-                            .button("Ouvrir les 10 pages récentes dans des onglets")
-                            .clicked()
-                        {
-                            self.open_recent_history_in_tabs();
-                        }
-                        if ui.button("Effacer tout l'historique").clicked() {
-                            self.clear_history();
-                        }
-                        ui.separator();
-                        let items = self.history_items.clone();
-                        if items.is_empty() {
-                            ui.label("Aucune navigation enregistrée");
-                        }
-                        for item in items.into_iter().take(30) {
-                            let response = ui.button(&item.title).on_hover_text(&item.url);
-                            response.context_menu(|ui| {
-                                if ui.button("Ouvrir dans un nouvel onglet").clicked() {
-                                    self.new_tab();
+                            for item in items {
+                                let response = ui.button(&item.title).on_hover_text(&item.url);
+                                response.context_menu(|ui| {
+                                    if ui.button("Ouvrir dans cet onglet").clicked() {
+                                        self.navigate(&item.url);
+                                    }
+                                    if ui.button("Ouvrir dans un nouvel onglet").clicked() {
+                                        self.new_tab();
+                                        self.navigate(&item.url);
+                                    }
+                                    if ui.button("Copier l'adresse").clicked() {
+                                        ui.ctx().copy_text(item.url.clone());
+                                        self.status = "Adresse du favori copiée".to_owned();
+                                    }
+                                    if ui.button("Supprimer des favoris").clicked() {
+                                        self.bookmarks.retain(|saved| saved.url != item.url);
+                                        save_saved_pages(
+                                            &browser_data_directory().join("bookmarks.tsv"),
+                                            &self.bookmarks,
+                                        );
+                                        self.status = "Favori supprimé".to_owned();
+                                    }
+                                });
+                                if response.clicked() {
                                     self.navigate(&item.url);
                                 }
-                                if ui.button("Copier l'adresse").clicked() {
-                                    ui.ctx().copy_text(item.url.clone());
-                                    self.status = "Adresse copiée depuis l'historique".to_owned();
+                            }
+                        });
+                        ui.menu_button("Historique", |ui| {
+                            ui.horizontal(|ui| {
+                                if ui.button("Exporter TSV").clicked() {
+                                    self.copy_history(ui.ctx());
+                                }
+                                if ui.button("Exporter CSV").clicked() {
+                                    self.copy_history_csv(ui.ctx());
+                                }
+                                if ui.button("Markdown").clicked() {
+                                    self.copy_history_markdown(ui.ctx());
+                                }
+                                if ui.button("HTML").clicked() {
+                                    self.copy_history_html(ui.ctx());
                                 }
                             });
-                            if response.clicked() {
-                                self.navigate(&item.url);
-                            }
-                        }
-                    });
-                    ui.menu_button("Fermés récemment", |ui| {
-                        if self.closed_tabs.is_empty() {
-                            ui.label("Aucun onglet fermé récemment");
-                        } else {
-                            if ui.button("Effacer la liste").clicked() {
-                                self.clear_closed_tabs();
-                            }
-                            if ui.button("Copier la liste en Markdown").clicked() {
-                                self.copy_closed_tabs_markdown(ui.ctx());
-                            }
-                            ui.separator();
-                            let recent = self.closed_tabs.iter().rev().cloned().collect::<Vec<_>>();
-                            for (index, url) in recent.into_iter().enumerate() {
-                                if ui.button(format!("{} · {}", index + 1, url)).clicked() {
-                                    self.reopen_closed_tab_at(index);
-                                }
-                            }
-                        }
-                    });
-                    ui.menu_button("Liens", |ui| {
-                        let links = self.current_links();
-                        if links.is_empty() {
-                            ui.label("Aucun lien détecté");
-                        }
-                        for (label, href) in links {
-                            if ui.button(label).on_hover_text(&href).clicked() {
-                                self.open_link(&href);
-                            }
-                        }
-                    });
-                    ui.menu_button("Téléchargements", |ui| {
-                        if ui.button("Télécharger la page actuelle").clicked() {
-                            self.start_download();
-                        }
-                        if ui.button("Ouvrir le dossier Téléchargements").clicked() {
-                            let directory = downloads_directory();
-                            if std::fs::create_dir_all(&directory).is_ok() {
-                                open_local_path(&directory);
-                            }
-                        }
-                        ui.separator();
-                        let recent = recent_downloads();
-                        if recent.is_empty() {
-                            ui.label("Aucun téléchargement récent");
-                        }
-                        for path in recent {
-                            let label = path.file_name().unwrap_or_default().to_string_lossy();
                             if ui
-                                .button(label.to_string())
-                                .on_hover_text(path.display().to_string())
+                                .button("Ouvrir les 10 pages récentes dans des onglets")
                                 .clicked()
                             {
-                                open_local_path(&path);
+                                self.open_recent_history_in_tabs();
                             }
-                        }
-                    });
-                    ui.menu_button("Outils", |ui| {
-                        if ui
-                            .button("Coller une adresse/recherche · Ctrl+Shift+V")
-                            .clicked()
-                        {
-                            self.pending_paste = Some(PasteAction::Navigate);
-                            ui.ctx()
-                                .send_viewport_cmd(egui::ViewportCommand::RequestPaste);
-                        }
-                        if ui
-                            .button("Coller dans un nouvel onglet · Ctrl+Shift+F")
-                            .clicked()
-                        {
-                            self.pending_paste = Some(PasteAction::NewTab);
-                            ui.ctx()
-                                .send_viewport_cmd(egui::ViewportCommand::RequestPaste);
-                        }
-                        if ui
-                            .button("Importer depuis le presse-papiers · Ctrl+Shift+M")
-                            .clicked()
-                        {
-                            self.pending_paste = Some(PasteAction::ImportBookmarks);
-                            ui.ctx()
-                                .send_viewport_cmd(egui::ViewportCommand::RequestPaste);
-                        }
-                        if ui
-                            .button("Ouvrir les liens du presse-papiers · Ctrl+Alt+Shift+L")
-                            .clicked()
-                        {
-                            self.pending_paste = Some(PasteAction::OpenLinks);
-                            ui.ctx()
-                                .send_viewport_cmd(egui::ViewportCommand::RequestPaste);
-                        }
-                        if ui.button("Rouvrir tous les onglets fermés").clicked() {
-                            self.reopen_all_closed_tabs();
-                        }
-                        if ui.button("Recharger sans cache").clicked() {
-                            self.hard_reload();
-                        }
-                        if ui.button("Effacer cookies et cache").clicked() {
-                            self.clear_site_data();
-                        }
-                        if ui.button("Télécharger la page actuelle").clicked() {
-                            self.start_download();
-                        }
-                        if ui
-                            .button("Copier les onglets (TSV) · Ctrl+Shift+U")
-                            .clicked()
-                        {
-                            self.copy_open_tabs(ui.ctx(), ExportFormat::Tsv);
-                        }
-                        if ui.button("Copier les onglets (Markdown)").clicked() {
-                            self.copy_open_tabs(ui.ctx(), ExportFormat::Markdown);
-                        }
-                        if ui.button("Copier les onglets (CSV)").clicked() {
-                            self.copy_open_tabs(ui.ctx(), ExportFormat::Csv);
-                        }
-                        if ui.button("Copier les onglets (HTML Netscape)").clicked() {
-                            self.copy_open_tabs(ui.ctx(), ExportFormat::Html);
-                        }
-                        if ui.button("Copier l'historique · Ctrl+Shift+Y").clicked() {
-                            self.copy_history(ui.ctx());
-                        }
-                        if ui
-                            .button("Copier l'historique (Markdown) · Ctrl+Alt+Shift+H")
-                            .clicked()
-                        {
-                            self.copy_history_markdown(ui.ctx());
-                        }
-                        if ui
-                            .button("Rouvrir le dernier onglet fermé · Ctrl+Shift+T")
-                            .clicked()
-                        {
-                            self.reopen_closed_tab();
-                        }
-                        if ui.button("Effacer les onglets fermés récemment").clicked() {
-                            self.clear_closed_tabs();
-                        }
-                        if ui.button("Copier les onglets fermés (Markdown)").clicked() {
-                            self.copy_closed_tabs_markdown(ui.ctx());
-                        }
-                        if ui
-                            .button("Ouvrir tous les favoris · Ctrl+Shift+O")
-                            .clicked()
-                        {
-                            self.open_all_bookmarks();
-                        }
-                    });
-                    ui.menu_button("Paramètres", |ui| {
-                        ui.label("Moteur de recherche");
-                        let mut changed = false;
-                        changed |= ui
-                            .selectable_value(
-                                &mut self.settings.search_provider,
-                                SearchProvider::Google,
-                                "Google",
-                            )
-                            .clicked();
-                        changed |= ui
-                            .selectable_value(
-                                &mut self.settings.search_provider,
-                                SearchProvider::Bing,
-                                "Bing",
-                            )
-                            .clicked();
-                        changed |= ui
-                            .selectable_value(
-                                &mut self.settings.search_provider,
-                                SearchProvider::DuckDuckGo,
-                                "DuckDuckGo",
-                            )
-                            .clicked();
-                        ui.separator();
-                        ui.label("Profil User-Agent");
-                        changed |= ui
-                            .selectable_value(
-                                &mut self.settings.user_agent,
-                                UserAgentProfile::Archia,
-                                "Archia",
-                            )
-                            .clicked();
-                        changed |= ui
-                            .selectable_value(
-                                &mut self.settings.user_agent,
-                                UserAgentProfile::ChromiumCompatible,
-                                "Chromium compatible",
-                            )
-                            .clicked();
-                        changed |= ui
-                            .selectable_value(
-                                &mut self.settings.user_agent,
-                                UserAgentProfile::FirefoxCompatible,
-                                "Firefox compatible",
-                            )
-                            .clicked();
-                        ui.separator();
-                        changed |= ui
-                            .checkbox(
-                                &mut self.settings.restore_session,
-                                "Restaurer la session au démarrage",
-                            )
-                            .changed();
-                        ui.label("Page d'accueil HTTP(S)");
-                        ui.text_edit_singleline(&mut self.homepage_edit);
-                        if ui.button("Enregistrer la page d'accueil").clicked() {
-                            match Url::parse(self.homepage_edit.trim()) {
-                                Ok(url) if matches!(url.scheme(), "http" | "https") => {
-                                    self.settings.homepage = url.to_string();
-                                    self.persist_settings();
-                                    self.status = "Page d'accueil enregistrée".to_owned();
-                                }
-                                _ => {
-                                    self.status =
-                                        "La page d'accueil doit être une URL HTTP(S) valide"
-                                            .to_owned()
-                                }
+                            if ui.button("Effacer tout l'historique").clicked() {
+                                self.clear_history();
                             }
-                        }
-                        if ui.button("Ouvrir la page d'accueil · Alt+Home").clicked() {
-                            self.open_homepage();
-                        }
-                        if ui
-                            .button("Définir la page actuelle comme accueil")
-                            .clicked()
-                        {
-                            self.set_homepage_to_current();
-                        }
-                        if ui.button("Réinitialiser la page d'accueil").clicked() {
-                            self.reset_homepage();
-                        }
-                        if let Some(manager) = self.themes.as_ref() {
                             ui.separator();
-                            ui.label("Thème de l'interface");
-                            let choices = manager
-                                .themes()
-                                .iter()
-                                .map(|theme| {
-                                    (theme.manifest.id.clone(), theme.manifest.name.clone())
-                                })
-                                .collect::<Vec<_>>();
-                            for (id, name) in choices {
-                                let active = self
-                                    .themes
-                                    .as_ref()
-                                    .is_some_and(|themes| themes.active_id() == id);
-                                if ui.selectable_label(active, name).clicked() {
-                                    if let Some(themes) = self.themes.as_mut() {
-                                        if themes.select(&id).is_ok() {
-                                            self.palette = UiPalette::from_manifest(
-                                                &themes.active_theme().manifest,
-                                            );
-                                            apply_palette(ui.ctx(), self.palette);
-                                            self.status = format!("Thème appliqué : {id}");
+                            let items = self.history_items.clone();
+                            if items.is_empty() {
+                                ui.label("Aucune navigation enregistrée");
+                            }
+                            for item in items.into_iter().take(30) {
+                                let response = ui.button(&item.title).on_hover_text(&item.url);
+                                response.context_menu(|ui| {
+                                    if ui.button("Ouvrir dans un nouvel onglet").clicked() {
+                                        self.new_tab();
+                                        self.navigate(&item.url);
+                                    }
+                                    if ui.button("Copier l'adresse").clicked() {
+                                        ui.ctx().copy_text(item.url.clone());
+                                        self.status =
+                                            "Adresse copiée depuis l'historique".to_owned();
+                                    }
+                                });
+                                if response.clicked() {
+                                    self.navigate(&item.url);
+                                }
+                            }
+                        });
+                        ui.menu_button("Fermés récemment", |ui| {
+                            if self.closed_tabs.is_empty() {
+                                ui.label("Aucun onglet fermé récemment");
+                            } else {
+                                if ui.button("Effacer la liste").clicked() {
+                                    self.clear_closed_tabs();
+                                }
+                                if ui.button("Copier la liste en Markdown").clicked() {
+                                    self.copy_closed_tabs_markdown(ui.ctx());
+                                }
+                                ui.separator();
+                                let recent =
+                                    self.closed_tabs.iter().rev().cloned().collect::<Vec<_>>();
+                                for (index, url) in recent.into_iter().enumerate() {
+                                    if ui.button(format!("{} · {}", index + 1, url)).clicked() {
+                                        self.reopen_closed_tab_at(index);
+                                    }
+                                }
+                            }
+                        });
+                        ui.menu_button("Liens", |ui| {
+                            let links = self.current_links();
+                            if links.is_empty() {
+                                ui.label("Aucun lien détecté");
+                            }
+                            for (label, href) in links {
+                                if ui.button(label).on_hover_text(&href).clicked() {
+                                    self.open_link(&href);
+                                }
+                            }
+                        });
+                        ui.menu_button("Téléchargements", |ui| {
+                            if ui.button("Télécharger la page actuelle").clicked() {
+                                self.start_download();
+                            }
+                            if ui.button("Ouvrir le dossier Téléchargements").clicked() {
+                                let directory = downloads_directory();
+                                if std::fs::create_dir_all(&directory).is_ok() {
+                                    open_local_path(&directory);
+                                }
+                            }
+                            ui.separator();
+                            let recent = recent_downloads();
+                            if recent.is_empty() {
+                                ui.label("Aucun téléchargement récent");
+                            }
+                            for path in recent {
+                                let label = path.file_name().unwrap_or_default().to_string_lossy();
+                                if ui
+                                    .button(label.to_string())
+                                    .on_hover_text(path.display().to_string())
+                                    .clicked()
+                                {
+                                    open_local_path(&path);
+                                }
+                            }
+                        });
+                        ui.menu_button("Outils", |ui| {
+                            if ui
+                                .button("Coller une adresse/recherche · Ctrl+Shift+V")
+                                .clicked()
+                            {
+                                self.pending_paste = Some(PasteAction::Navigate);
+                                ui.ctx()
+                                    .send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                            }
+                            if ui
+                                .button("Coller dans un nouvel onglet · Ctrl+Shift+F")
+                                .clicked()
+                            {
+                                self.pending_paste = Some(PasteAction::NewTab);
+                                ui.ctx()
+                                    .send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                            }
+                            if ui
+                                .button("Importer depuis le presse-papiers · Ctrl+Shift+M")
+                                .clicked()
+                            {
+                                self.pending_paste = Some(PasteAction::ImportBookmarks);
+                                ui.ctx()
+                                    .send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                            }
+                            if ui
+                                .button("Ouvrir les liens du presse-papiers · Ctrl+Alt+Shift+L")
+                                .clicked()
+                            {
+                                self.pending_paste = Some(PasteAction::OpenLinks);
+                                ui.ctx()
+                                    .send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                            }
+                            if ui.button("Rouvrir tous les onglets fermés").clicked() {
+                                self.reopen_all_closed_tabs();
+                            }
+                            if ui.button("Recharger sans cache").clicked() {
+                                self.hard_reload();
+                            }
+                            if ui.button("Effacer cookies et cache").clicked() {
+                                self.clear_site_data();
+                            }
+                            if ui.button("Télécharger la page actuelle").clicked() {
+                                self.start_download();
+                            }
+                            if ui
+                                .button("Copier les onglets (TSV) · Ctrl+Shift+U")
+                                .clicked()
+                            {
+                                self.copy_open_tabs(ui.ctx(), ExportFormat::Tsv);
+                            }
+                            if ui.button("Copier les onglets (Markdown)").clicked() {
+                                self.copy_open_tabs(ui.ctx(), ExportFormat::Markdown);
+                            }
+                            if ui.button("Copier les onglets (CSV)").clicked() {
+                                self.copy_open_tabs(ui.ctx(), ExportFormat::Csv);
+                            }
+                            if ui.button("Copier les onglets (HTML Netscape)").clicked() {
+                                self.copy_open_tabs(ui.ctx(), ExportFormat::Html);
+                            }
+                            if ui.button("Copier l'historique · Ctrl+Shift+Y").clicked() {
+                                self.copy_history(ui.ctx());
+                            }
+                            if ui
+                                .button("Copier l'historique (Markdown) · Ctrl+Alt+Shift+H")
+                                .clicked()
+                            {
+                                self.copy_history_markdown(ui.ctx());
+                            }
+                            if ui
+                                .button("Rouvrir le dernier onglet fermé · Ctrl+Shift+T")
+                                .clicked()
+                            {
+                                self.reopen_closed_tab();
+                            }
+                            if ui.button("Effacer les onglets fermés récemment").clicked() {
+                                self.clear_closed_tabs();
+                            }
+                            if ui.button("Copier les onglets fermés (Markdown)").clicked() {
+                                self.copy_closed_tabs_markdown(ui.ctx());
+                            }
+                            if ui
+                                .button("Ouvrir tous les favoris · Ctrl+Shift+O")
+                                .clicked()
+                            {
+                                self.open_all_bookmarks();
+                            }
+                        });
+                        ui.menu_button("Paramètres", |ui| {
+                            ui.label("Moteur de recherche");
+                            let mut changed = false;
+                            changed |= ui
+                                .selectable_value(
+                                    &mut self.settings.search_provider,
+                                    SearchProvider::Google,
+                                    "Google",
+                                )
+                                .clicked();
+                            changed |= ui
+                                .selectable_value(
+                                    &mut self.settings.search_provider,
+                                    SearchProvider::Bing,
+                                    "Bing",
+                                )
+                                .clicked();
+                            changed |= ui
+                                .selectable_value(
+                                    &mut self.settings.search_provider,
+                                    SearchProvider::DuckDuckGo,
+                                    "DuckDuckGo",
+                                )
+                                .clicked();
+                            ui.separator();
+                            ui.label("Profil User-Agent");
+                            changed |= ui
+                                .selectable_value(
+                                    &mut self.settings.user_agent,
+                                    UserAgentProfile::Archia,
+                                    "Archia",
+                                )
+                                .clicked();
+                            changed |= ui
+                                .selectable_value(
+                                    &mut self.settings.user_agent,
+                                    UserAgentProfile::ChromiumCompatible,
+                                    "Chromium compatible",
+                                )
+                                .clicked();
+                            changed |= ui
+                                .selectable_value(
+                                    &mut self.settings.user_agent,
+                                    UserAgentProfile::FirefoxCompatible,
+                                    "Firefox compatible",
+                                )
+                                .clicked();
+                            ui.separator();
+                            changed |= ui
+                                .checkbox(
+                                    &mut self.settings.restore_session,
+                                    "Restaurer la session au démarrage",
+                                )
+                                .changed();
+                            ui.label("Page d'accueil HTTP(S)");
+                            ui.text_edit_singleline(&mut self.homepage_edit);
+                            if ui.button("Enregistrer la page d'accueil").clicked() {
+                                match Url::parse(self.homepage_edit.trim()) {
+                                    Ok(url) if matches!(url.scheme(), "http" | "https") => {
+                                        self.settings.homepage = url.to_string();
+                                        self.persist_settings();
+                                        self.status = "Page d'accueil enregistrée".to_owned();
+                                    }
+                                    _ => {
+                                        self.status =
+                                            "La page d'accueil doit être une URL HTTP(S) valide"
+                                                .to_owned()
+                                    }
+                                }
+                            }
+                            if ui.button("Ouvrir la page d'accueil · Alt+Home").clicked() {
+                                self.open_homepage();
+                            }
+                            if ui
+                                .button("Définir la page actuelle comme accueil")
+                                .clicked()
+                            {
+                                self.set_homepage_to_current();
+                            }
+                            if ui.button("Réinitialiser la page d'accueil").clicked() {
+                                self.reset_homepage();
+                            }
+                            if let Some(manager) = self.themes.as_ref() {
+                                ui.separator();
+                                ui.label("Thème de l'interface");
+                                let choices = manager
+                                    .themes()
+                                    .iter()
+                                    .map(|theme| {
+                                        (theme.manifest.id.clone(), theme.manifest.name.clone())
+                                    })
+                                    .collect::<Vec<_>>();
+                                for (id, name) in choices {
+                                    let active = self
+                                        .themes
+                                        .as_ref()
+                                        .is_some_and(|themes| themes.active_id() == id);
+                                    if ui.selectable_label(active, name).clicked() {
+                                        if let Some(themes) = self.themes.as_mut() {
+                                            if themes.select(&id).is_ok() {
+                                                self.palette = UiPalette::from_manifest(
+                                                    &themes.active_theme().manifest,
+                                                );
+                                                apply_palette(ui.ctx(), self.palette);
+                                                self.status = format!("Thème appliqué : {id}");
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
-                        if changed {
-                            self.persist_settings();
-                        }
+                            if changed {
+                                self.persist_settings();
+                            }
+                        });
                     });
                 });
             });
 
+        // Barre de favoris : puces de 154×22, fond tab_inactive, texte aligné à
+        // gauche (20 caractères max), filet de séparation en dessous.
         egui::TopBottomPanel::top("archia_bookmarks_bar")
             .frame(
                 egui::Frame::new()
-                    .fill(self.palette.window)
-                    .inner_margin(egui::Margin::symmetric(14, 4)),
+                    .fill(palette.window)
+                    .inner_margin(egui::Margin {
+                        left: 12,
+                        right: 12,
+                        top: 3,
+                        bottom: 4,
+                    }),
             )
             .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new("FAVORIS")
-                            .small()
-                            .strong()
-                            .color(self.palette.muted),
-                    );
-                    ui.separator();
-                    egui::ScrollArea::horizontal()
-                        .id_salt("archia_bookmarks_scroll")
-                        .auto_shrink([false, true])
-                        .show(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                let items =
-                                    self.bookmarks.iter().take(40).cloned().collect::<Vec<_>>();
-                                if items.is_empty() {
-                                    ui.label(
-                                        egui::RichText::new("Ajoute tes sites préférés avec ☆")
-                                            .small()
-                                            .color(self.palette.muted),
-                                    );
+                egui::ScrollArea::horizontal()
+                    .id_salt("archia_bookmarks_scroll")
+                    .auto_shrink([false, true])
+                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 8.0;
+                            let items = self.bookmarks.iter().take(40).cloned().collect::<Vec<_>>();
+                            if items.is_empty() {
+                                ui.label(
+                                    egui::RichText::new("Ajoutez vos pages favorites avec ☆")
+                                        .size(13.0)
+                                        .color(palette.muted),
+                                );
+                            }
+                            for item in items {
+                                let label = if item.title.chars().count() > 20 {
+                                    format!("{}…", item.title.chars().take(19).collect::<String>())
+                                } else {
+                                    item.title.clone()
+                                };
+                                let (rect, response) = ui.allocate_exact_size(
+                                    egui::vec2(154.0, 22.0),
+                                    egui::Sense::click(),
+                                );
+                                let fill = if response.hovered() {
+                                    palette.tab_inactive.lerp_to_gamma(palette.accent, 0.18)
+                                } else {
+                                    palette.tab_inactive
+                                };
+                                ui.painter().rect_filled(rect, radius, fill);
+                                ui.painter().with_clip_rect(rect).text(
+                                    egui::pos2(rect.left() + 8.0, rect.center().y),
+                                    egui::Align2::LEFT_CENTER,
+                                    label,
+                                    egui::FontId::proportional(13.0),
+                                    palette.text,
+                                );
+                                if response
+                                    .on_hover_text(&item.url)
+                                    .on_hover_cursor(egui::CursorIcon::PointingHand)
+                                    .clicked()
+                                {
+                                    self.navigate(&item.url);
                                 }
-                                for item in items {
-                                    let label = if item.title.chars().count() > 22 {
-                                        format!(
-                                            "{}…",
-                                            item.title.chars().take(21).collect::<String>()
-                                        )
-                                    } else {
-                                        item.title.clone()
-                                    };
-                                    if ui
-                                        .add(
-                                            egui::Button::new(
-                                                egui::RichText::new(label)
-                                                    .color(self.palette.text)
-                                                    .small(),
-                                            )
-                                            .fill(self.palette.address)
-                                            .stroke(egui::Stroke::new(0.5_f32, self.palette.muted)),
-                                        )
-                                        .on_hover_text(&item.url)
-                                        .clicked()
-                                    {
-                                        self.navigate(&item.url);
-                                    }
-                                }
-                            });
+                            }
                         });
-                    if ui
-                        .small_button("＋")
-                        .on_hover_text("Ajouter la page actuelle aux favoris")
-                        .clicked()
-                    {
-                        self.toggle_bookmark();
-                    }
-                });
+                    });
             });
 
         egui::TopBottomPanel::bottom("archia_status")
