@@ -281,10 +281,10 @@ fn apply_palette(ctx: &egui::Context, palette: UiPalette) {
     style.visuals.extreme_bg_color = palette.window;
     style.visuals.faint_bg_color = palette.toolbar;
     style.visuals.selection.bg_fill = palette.accent.gamma_multiply(0.22);
-    style.visuals.selection.stroke = egui::Stroke::new(1.0, palette.accent);
+    style.visuals.selection.stroke = egui::Stroke::new(1.0_f32, palette.accent);
     style.visuals.override_text_color = Some(palette.text);
     style.visuals.widgets.inactive.bg_fill = palette.address;
-    style.visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, palette.text);
+    style.visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0_f32, palette.text);
     style.visuals.widgets.hovered.bg_fill = palette.accent.gamma_multiply(0.24);
     style.visuals.widgets.active.bg_fill = palette.accent.gamma_multiply(0.32);
     style.visuals.widgets.open.bg_fill = palette.address;
@@ -372,7 +372,7 @@ impl ArchiaApp {
         let pending_restore = restored_tabs.into_iter().map(|saved| saved.url).collect();
         let (download_sender, download_receiver) = mpsc::channel();
 
-        let mut app = Self {
+        let app = Self {
             browser,
             loader,
             tabs: vec![first_tab],
@@ -415,7 +415,7 @@ impl ArchiaApp {
             .filter_map(|id| {
                 let entry = self.browser.tabs().tab(*id)?.history().current()?;
                 Some(SavedPage {
-                    title: entry.title().unwrap_or_else(|| entry.url().to_string()),
+                    title: entry.title().map(str::to_owned).unwrap_or_else(|| entry.url().to_string()),
                     url: entry.url().to_string(),
                 })
             })
@@ -691,7 +691,7 @@ impl ArchiaApp {
             .filter_map(|id| {
                 let entry = self.browser.tabs().tab(*id)?.history().current()?;
                 Some((
-                    entry.title().unwrap_or_else(|| entry.url().to_string()),
+                    entry.title().map(str::to_owned).unwrap_or_else(|| entry.url().to_string()),
                     entry.url().to_string(),
                 ))
             })
@@ -722,7 +722,7 @@ impl ArchiaApp {
                 let bookmarks = entries
                     .iter()
                     .map(|(title, url)| SavedPage {
-                        title: title.clone(),
+                        title: title.to_owned(),
                         url: url.clone(),
                     })
                     .collect::<Vec<_>>();
@@ -1839,8 +1839,11 @@ impl eframe::App for ArchiaApp {
                 }
             });
         if self.bookmark_import_open {
+            let mut import_open = self.bookmark_import_open;
+            let mut should_import = false;
+            let mut should_clear = false;
             egui::Window::new("Importer des favoris")
-                .open(&mut self.bookmark_import_open)
+                .open(&mut import_open)
                 .default_width(560.0)
                 .show(ctx, |ui| {
                     ui.label("Collez des URL, un fichier TSV (titre + URL) ou des liens Markdown.");
@@ -1851,14 +1854,17 @@ impl eframe::App for ArchiaApp {
                             .hint_text("https://example.org/"),
                     );
                     ui.horizontal(|ui| {
-                        if ui.button("Importer").clicked() {
-                            self.import_bookmarks();
-                        }
-                        if ui.button("Effacer").clicked() {
-                            self.bookmark_import_text.clear();
-                        }
+                        should_import = ui.button("Importer").clicked();
+                        should_clear = ui.button("Effacer").clicked();
                     });
                 });
+            self.bookmark_import_open = import_open;
+            if should_clear {
+                self.bookmark_import_text.clear();
+            }
+            if should_import {
+                self.import_bookmarks();
+            }
         }
     }
 }
@@ -2438,7 +2444,7 @@ mod tests {
         assert_eq!(
             super::clipboard_navigation_url("example.org", provider)
                 .unwrap()
-                .as_str(),
+                .to_string(),
             "https://example.org/"
         );
         assert!(
