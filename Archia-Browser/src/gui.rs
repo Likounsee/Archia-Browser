@@ -1451,10 +1451,14 @@ unsafe fn paint_label(
 }
 
 unsafe fn open_all_bookmarks(state: &mut AppState, hwnd: Hwnd) {
+    let capacity = MAX_GUI_TABS
+        .saturating_sub(state.tabs.len())
+        .saturating_add(1)
+        .min(MAX_RESTORED_TABS);
     let urls = state
         .bookmarks
         .iter()
-        .take(MAX_RESTORED_TABS)
+        .take(capacity)
         .map(|bookmark| bookmark.url.clone())
         .collect::<Vec<_>>();
     for (index, url) in urls.iter().enumerate() {
@@ -1466,11 +1470,15 @@ unsafe fn open_all_bookmarks(state: &mut AppState, hwnd: Hwnd) {
 }
 
 unsafe fn open_recent_history_in_tabs(state: &mut AppState, hwnd: Hwnd) {
+    let capacity = MAX_GUI_TABS
+        .saturating_sub(state.tabs.len())
+        .saturating_add(1)
+        .min(MAX_MENU_HISTORY_ITEMS);
     let urls = state
         .persistent_history
         .iter()
         .rev()
-        .take(MAX_MENU_HISTORY_ITEMS)
+        .take(capacity)
         .map(|entry| entry.url.clone())
         .collect::<Vec<_>>();
     for (index, url) in urls.iter().enumerate() {
