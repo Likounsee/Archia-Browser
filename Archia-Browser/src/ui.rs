@@ -34,6 +34,94 @@ struct SavedPage {
     url: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SearchProvider { Google, Bing, DuckDuckGo }
+
+impl SearchProvider {
+    fn id(self) -> &'static str {
+        match self { Self::Google => "google", Self::Bing => "bing", Self::DuckDuckGo => "duckduckgo" }
+    }
+    fn search_url(self, query: &str) -> String {
+        let query = encode_query(query);
+        match self {
+            Self::Google => format!("https://www.google.com/search?q={query}"),
+            Self::Bing => format!("https://www.bing.com/search?q={query}"),
+            Self::DuckDuckGo => format!("https://duckduckgo.com/?q={query}"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UserAgentProfile { Archia, ChromiumCompatible, FirefoxCompatible }
+
+impl UserAgentProfile {
+    fn id(self) -> &'static str {
+        match self { Self::Archia => "archia", Self::ChromiumCompatible => "chromium", Self::FirefoxCompatible => "firefox" }
+    }
+    fn header(self, version: &str) -> String {
+        match self {
+            Self::Archia => format!("Mozilla/5.0 (compatible; ArchiaBrowser/{version})"),
+            Self::ChromiumCompatible => format!("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 ArchiaBrowser/{version}"),
+            Self::FirefoxCompatible => format!("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0 ArchiaBrowser/{version}"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BrowserSettings {
+    search_provider: SearchProvider,
+    homepage: String,
+    restore_session: bool,
+    user_agent: UserAgentProfile,
+}
+
+impl Default for BrowserSettings {
+    fn default() -> Self {
+        Self { search_provider: SearchProvider::Google, homepage: "https://www.google.com/".to_owned(), restore_session: true, user_agent: UserAgentProfile::Archia }
+    }
+}
+
+impl BrowserSettings {
+    fn load(path: &std::path::Path) -> Self {
+        let mut settings = Self::default();
+        let Ok(contents) = std::fs::read_to_string(path) else { return settings };
+        for line in contents.lines() {
+            let Some((key, value)) = line.split_once('=') else { continue };
+            match key.trim() {
+                "search_provider" => settings.search_provider = match value.trim() {
+                    "bing" => SearchProvider::Bing, "duckduckgo" => SearchProvider::DuckDuckGo, _ => SearchProvider::Google,
+                },
+                "homepage" => {
+                    if let Ok(url) = Url::parse(value.trim()) {
+                        if matches!(url.scheme(), "http" | "https") { settings.homepage = url.to_string(); }
+                    }
+                }
+                "restore_session" => settings.restore_session = value.trim() != "false",
+                "user_agent" => settings.user_agent = match value.trim() {
+                    "chromium" => UserAgentProfile::ChromiumCompatible, "firefox" => UserAgentProfile::FirefoxCompatible, _ => UserAgentProfile::Archia,
+                },
+                _ => {}
+            }
+        }
+        settings
+    }
+
+    fn save(&self, path: &std::path::Path) {
+        if let Some(parent) = path.parent() {
+            if std::fs::create_dir_all(parent).is_err() { return; }
+        }
+        let contents = format!(
+            "search_provider={}\nhomepage={}\nrestore_session={}\nuser_agent={}\n",
+            self.search_provider.id(), self.homepage.replace(['\\r', '\\n'], ""), self.restore_session, self.user_agent.id()
+        );
+        let temporary = path.with_extension("tmp");
+        if std::fs::write(&temporary, contents).is_ok() && std::fs::rename(&temporary, path).is_err() {
+            let _ = std::fs::remove_file(path);
+            let _ = std::fs::rename(temporary, path);
+        }
+    }
+}
+
 const GRAPHITE: egui::Color32 = egui::Color32::from_rgb(19, 22, 27);
 const PANEL: egui::Color32 = egui::Color32::from_rgb(25, 29, 35);
 const PANEL_LIGHT: egui::Color32 = egui::Color32::from_rgb(34, 39, 47);
@@ -54,6 +142,10 @@ struct ArchiaApp {
     last_viewport_width: u32,
     bookmarks: Vec<SavedPage>,
     history_items: Vec<SavedPage>,
+    settings: BrowserSettings,
+    settings_path: std::path::PathBuf,
+    session_path: std::path::PathBuf,
+    closed_tabs: Vec<String>,
     focus_address: bool,
 }
 
@@ -85,8 +177,12 @@ impl ArchiaApp {
         let data_dir = browser_data_directory();
         let bookmarks = load_saved_pages(&data_dir.join("bookmarks.tsv"));
         let history_items = load_saved_pages(&data_dir.join("history.tsv"));
+        let settings_path = data_dir.join("settings.ini");
+        let session_path = data_dir.join("session.tsv");
+        let settings = BrowserSettings::load(&settings_path);
+        let restored_tabs = if settings.restore_session { load_saved_pages(&session_path) } else { Vec::new() };
 
-        Self {
+        let mut app = Self {
             browser,
             loader,
             tabs: vec![first_tab],
@@ -99,8 +195,34 @@ impl ArchiaApp {
             last_viewport_width: 0,
             bookmarks,
             history_items,
+            settings,
+            settings_path,
+            session_path,
+            closed_tabs: Vec::new(),
             focus_address: false,
+        };
+        for (index, saved) in restored_tabs.into_iter().enumerate() {
+            if index > 0 { app.new_tab(); }
+            app.navigate(&saved.url);
         }
+        app
+    }
+
+    fn save_session(&self) {
+        if !self.settings.restore_session {
+            let _ = std::fs::remove_file(&self.session_path);
+            return;
+        }
+        let entries = self.tabs.iter().filter_map(|id| {
+            let entry = self.browser.tabs().tab(*id)?.history().current()?;
+            Some(SavedPage { title: entry.title().unwrap_or_else(|| entry.url().to_string()), url: entry.url().to_string() })
+        }).collect::<Vec<_>>();
+        save_saved_pages(&self.session_path, &entries);
+    }
+
+    fn persist_settings(&self) {
+        self.settings.save(&self.settings_path);
+        self.save_session();
     }
 
     fn navigate(&mut self, input: &str) {
@@ -112,7 +234,7 @@ impl ArchiaApp {
         let address = if input.contains("://") {
             input.to_owned()
         } else if input.chars().any(char::is_whitespace) || !looks_like_host(input) {
-            format!("https://www.google.com/search?q={}", encode_query(input))
+            self.settings.search_provider.search_url(input)
         } else {
             format!("https://{input}")
         };
@@ -139,10 +261,7 @@ impl ArchiaApp {
             .insert("accept-language".into(), "fr-FR,fr;q=0.9,en;q=0.8".into());
         request.headers.insert(
             "user-agent".into(),
-            format!(
-                "Mozilla/5.0 (compatible; ArchiaBrowser/{})",
-                self.browser.version()
-            ),
+            self.settings.user_agent.header(self.browser.version()),
         );
         request.policy.resource_kind = ResourceKind::Document;
         request.policy.top_level_navigation = true;
@@ -158,6 +277,7 @@ impl ArchiaApp {
                     .unwrap_or_default();
                 self.status = "Page chargée".to_owned();
                 self.record_history();
+                self.save_session();
                 self.page_dirty = true;
             }
             Err(error) => {
@@ -173,6 +293,7 @@ impl ArchiaApp {
         self.page_texture = None;
         self.page_dirty = true;
         self.status = "Nouvel onglet".to_owned();
+        self.save_session();
     }
 
     fn close_tab(&mut self, id: archia_browser::core::tabs::TabId) {
@@ -181,6 +302,13 @@ impl ArchiaApp {
             return;
         }
         if self.browser.close_tab(id) {
+            if let Some(url) = self.browser.tabs().tab(id)
+                .and_then(|tab| tab.history().current())
+                .map(|entry| entry.url().to_string())
+            {
+                self.closed_tabs.push(url);
+                self.closed_tabs.truncate(20);
+            }
             self.tabs.retain(|tab| *tab != id);
             self.address = self
                 .browser
@@ -190,6 +318,29 @@ impl ArchiaApp {
             self.page_texture = None;
             self.page_dirty = true;
             self.status = "Onglet fermé".to_owned();
+            self.save_session();
+        }
+    }
+
+    fn reopen_closed_tab(&mut self) {
+        if let Some(url) = self.closed_tabs.pop() {
+            self.new_tab();
+            self.navigate(&url);
+            self.status = "Dernier onglet restauré".to_owned();
+        } else {
+            self.status = "Aucun onglet récemment fermé".to_owned();
+        }
+    }
+
+    fn open_homepage(&mut self) {
+        let homepage = self.settings.homepage.clone();
+        self.navigate(&homepage);
+    }
+
+    fn duplicate_active_tab(&mut self) {
+        if let Some(url) = self.browser.current_url().map(ToString::to_string) {
+            self.new_tab();
+            self.navigate(&url);
         }
     }
 
