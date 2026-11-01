@@ -1899,7 +1899,10 @@ unsafe fn activate_link_at(state: &mut AppState, hwnd: Hwnd, client_x: i32, clie
 }
 
 fn gdiplus_argb(color: u32) -> u32 {
-    0xFF00_0000 | ((color & 0x0000_00FF) << 16) | (color & 0x0000_FF00) | ((color >> 16) & 0x0000_00FF)
+    0xFF00_0000
+        | ((color & 0x0000_00FF) << 16)
+        | (color & 0x0000_FF00)
+        | ((color >> 16) & 0x0000_00FF)
 }
 
 unsafe fn create_antialiased_graphics(hdc: Handle) -> Handle {
