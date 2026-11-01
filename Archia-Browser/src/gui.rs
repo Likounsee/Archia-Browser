@@ -725,7 +725,11 @@ fn export_bookmarks_text(bookmarks: &[Bookmark]) -> String {
 }
 
 fn export_open_tabs_text(entries: &[(String, String)]) -> String {
-    entries.iter().map(|(title, url)| format!("{title}\t{url}")).collect::<Vec<_>>().join("\n")
+    entries
+        .iter()
+        .map(|(title, url)| format!("{title}\t{url}"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn browser_data_directory() -> std::path::PathBuf {
@@ -1785,11 +1789,18 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             return true;
         }
         if key == 0x55 && GetKeyState(VK_SHIFT) < 0 {
-            let entries = state.tabs.iter().filter_map(|(id, _)| {
-                let tab = state.browser.tabs().tab(*id)?;
-                let page = tab.page()?;
-                Some((page.title().unwrap_or("(sans titre)").to_owned(), page.url()?.to_string()))
-            }).collect::<Vec<_>>();
+            let entries = state
+                .tabs
+                .iter()
+                .filter_map(|(id, _)| {
+                    let tab = state.browser.tabs().tab(*id)?;
+                    let page = tab.page()?;
+                    Some((
+                        page.title().unwrap_or("(sans titre)").to_owned(),
+                        page.url()?.to_string(),
+                    ))
+                })
+                .collect::<Vec<_>>();
             let text = export_open_tabs_text(&entries);
             if !text.is_empty() { let _ = copy_text_to_clipboard(hwnd, &text); }
             return true;
@@ -2287,7 +2298,10 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         ),
         (ID_MENU_COPY_BOOKMARKS, "Copier tous les favoris"),
         (ID_MENU_COPY_HISTORY, "Copier l'historique"),
-        (ID_MENU_COPY_OPEN_TABS, "Copier les adresses de tous les onglets"),
+        (
+            ID_MENU_COPY_OPEN_TABS,
+            "Copier les adresses de tous les onglets",
+        ),
         (
             ID_MENU_UA_ARCHIA,
             if state.settings.user_agent == UserAgentProfile::Archia {
@@ -3973,8 +3987,14 @@ mod gui_address_tests {
 
     #[test]
     fn open_tabs_export_is_tab_separated_and_preserves_order() {
-        let entries = vec![("Archia".to_owned(), "https://archia.example/".to_owned()), ("Docs".to_owned(), "https://docs.example/".to_owned())];
-        assert_eq!(export_open_tabs_text(&entries), "Archia\thttps://archia.example/\nDocs\thttps://docs.example/");
+        let entries = vec![
+            ("Archia".to_owned(), "https://archia.example/".to_owned()),
+            ("Docs".to_owned(), "https://docs.example/".to_owned()),
+        ];
+        assert_eq!(
+            export_open_tabs_text(&entries),
+            "Archia\thttps://archia.example/\nDocs\thttps://docs.example/"
+        );
         assert!(export_open_tabs_text(&[]).is_empty());
     }
 
