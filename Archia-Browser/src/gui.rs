@@ -92,6 +92,7 @@ const ID_MENU_UA_FIREFOX: u32 = 3034;
 const ID_MENU_COPY_PAGE_TEXT: u32 = 3035;
 const ID_MENU_COPY_PAGE_TITLE: u32 = 3036;
 const ID_MENU_OPEN_EXTERNAL: u32 = 3037;
+const ID_MENU_CLEAR_SITE_DATA: u32 = 3038;
 const ID_RECENT_DOWNLOAD_BASE: u32 = 3700;
 const ID_RECENT_DOWNLOAD_REVEAL_BASE: u32 = 3720;
 const ID_RECENT_DOWNLOAD_COPY_BASE: u32 = 3740;
@@ -2027,7 +2028,8 @@ unsafe fn open_url_externally(hwnd: Hwnd, value: &str) {
         SW_SHOW,
     );
     if (result as isize) <= 32 {
-        let caption = wide("Impossible d’ouvrir cette adresse dans le navigateur externe — Archia Browser");
+        let caption =
+            wide("Impossible d’ouvrir cette adresse dans le navigateur externe — Archia Browser");
         let _ = SetWindowTextW(hwnd, caption.as_ptr());
     }
 }
@@ -2146,7 +2148,10 @@ unsafe fn show_page_context_menu(state: &mut AppState, hwnd: Hwnd) {
         (ID_MENU_COPY_PAGE_URL, "Copier l’adresse de la page"),
         (ID_MENU_COPY_PAGE_TITLE, "Copier le titre de la page"),
         (ID_MENU_COPY_PAGE_TEXT, "Copier le texte visible de la page"),
-        (ID_MENU_OPEN_EXTERNAL, "Ouvrir dans le navigateur par défaut"),
+        (
+            ID_MENU_OPEN_EXTERNAL,
+            "Ouvrir dans le navigateur par défaut",
+        ),
         (
             ID_MENU_BOOKMARK_PAGE,
             if state.bookmarks.iter().any(|bookmark| bookmark.url == url) {
@@ -2242,6 +2247,7 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         (ID_MENU_NEW_TAB, "Nouvel onglet"),
         (ID_MENU_CLOSE_TAB, "Fermer l'onglet"),
         (ID_MENU_CLEAR_HISTORY, "Effacer l'historique"),
+        (ID_MENU_CLEAR_SITE_DATA, "Effacer les cookies et le cache"),
         (ID_MENU_OPEN_ALL_BOOKMARKS, "Ouvrir tous les favoris"),
         (ID_MENU_SEARCH_GOOGLE, "Recherche : Google"),
         (ID_MENU_SEARCH_BING, "Recherche : Bing"),
@@ -2402,6 +2408,9 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         ID_MENU_CLEAR_HISTORY => {
             state.persistent_history.clear();
             save_persistent_history(state);
+        }
+        ID_MENU_CLEAR_SITE_DATA => {
+            let _ = state.loader.clear_cookies_and_cache();
         }
         ID_MENU_SEARCH_GOOGLE | ID_MENU_SEARCH_BING | ID_MENU_SEARCH_DDG => {
             state.settings.search_provider = match selected {
