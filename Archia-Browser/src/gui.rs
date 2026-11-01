@@ -41,6 +41,7 @@ const VK_L: usize = 0x4C;
 const VK_T: usize = 0x54;
 const VK_W: usize = 0x57;
 const VK_R: usize = 0x52;
+const VK_S: usize = 0x53;
 const VK_D: usize = 0x44;
 const VK_E: usize = 0x45;
 const VK_C: usize = 0x43;
@@ -1797,7 +1798,7 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
                     let tab = state.browser.tabs().tab(*id)?;
                     let page = tab.page()?;
                     Some((
-                        page.title().unwrap_or("(sans titre)").to_owned(),
+                        page.title().unwrap_or_else(|| "(sans titre)".to_owned()),
                         page.url()?.to_string(),
                     ))
                 })
@@ -1838,6 +1839,10 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
                 {
                     refresh_page(state);
                 }
+                return true;
+            }
+            VK_S => {
+                download_current_page(state);
                 return true;
             }
             VK_D => {
@@ -2519,7 +2524,7 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
                     let tab = state.browser.tabs().tab(*id)?;
                     let page = tab.page()?;
                     Some((
-                        page.title().unwrap_or("(sans titre)").to_owned(),
+                        page.title().unwrap_or_else(|| "(sans titre)".to_owned()),
                         page.url()?.to_string(),
                     ))
                 })
