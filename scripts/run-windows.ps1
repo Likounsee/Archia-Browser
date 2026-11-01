@@ -13,6 +13,11 @@ if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
 }
 
 Write-Host "Demarrage d'Archia Browser depuis $RepositoryRoot" -ForegroundColor Cyan
+
+$FontInstaller = Join-Path $PSScriptRoot "install-inter-font.ps1"
+if (Test-Path $FontInstaller) {
+    & $FontInstaller
+}
 if ([string]::IsNullOrWhiteSpace($Url)) {
     cargo run --locked -p archia-browser
 }
