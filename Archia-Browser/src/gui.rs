@@ -1970,6 +1970,31 @@ fn tab_indices_to_close(active_index: usize, tab_count: usize, close_left: bool)
     }
 }
 
+fn tab_indices_to_close_except(active_index: usize, tab_count: usize) -> Vec<usize> {
+    if active_index >= tab_count {
+        return Vec::new();
+    }
+    (0..tab_count)
+        .rev()
+        .filter(|index| *index != active_index)
+        .collect()
+}
+
+unsafe fn close_other_tabs(state: &mut AppState) {
+    let Some(active_id) = state.browser.active_tab_id() else {
+        return;
+    };
+    let Some(active_index) = state.tabs.iter().position(|(id, _)| *id == active_id) else {
+        return;
+    };
+    for index in tab_indices_to_close_except(active_index, state.tabs.len()) {
+        close_tab_at(state, index);
+    }
+    if let Some(index) = state.tabs.iter().position(|(id, _)| *id == active_id) {
+        select_tab_index(state, index);
+    }
+}
+
 unsafe fn close_tabs_on_side(state: &mut AppState, close_left: bool) {
     let Some(active_id) = state.browser.active_tab_id() else {
         return;
@@ -2027,6 +2052,10 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
         }
         if alt && key == 0x4D {
             copy_current_page_markdown_link(state, hwnd);
+            return true;
+        }
+        if key == VK_W && GetKeyState(VK_SHIFT) < 0 && alt {
+            close_other_tabs(state);
             return true;
         }
         if key == VK_D && GetKeyState(VK_SHIFT) < 0 {
@@ -4716,6 +4745,13 @@ mod gui_address_tests {
             "Archia\thttps://archia.example/\nDocs\thttps://docs.example/"
         );
         assert!(export_open_tabs_text(&[]).is_empty());
+    }
+
+    #[test]
+    fn close_other_tab_indices_keep_only_the_active_tab() {
+        assert_eq!(tab_indices_to_close_except(2, 5), vec![4, 3, 1, 0]);
+        assert!(tab_indices_to_close_except(0, 0).is_empty());
+        assert!(tab_indices_to_close_except(8, 5).is_empty());
     }
 
     #[test]
