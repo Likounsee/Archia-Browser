@@ -105,7 +105,7 @@ impl Page {
         stylesheet_input.push_str(css);
         stylesheet_input.push('\n');
         collect_inline_styles(&document, &mut stylesheet_input);
-        let stylesheet = StyleSheet::parse(&stylesheet_input);
+        let stylesheet = StyleSheet::parse_for_viewport(\n            &stylesheet_input,\n            viewport.width,\n            viewport.height,\n        );
         let styled = StyleEngine::style(&document, &stylesheet);
         let layout = LayoutEngine::layout_styled(&styled, viewport);
         let display_list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
