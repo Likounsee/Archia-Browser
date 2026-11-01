@@ -632,11 +632,19 @@ impl ArchiaApp {
     }
 
     fn copy_closed_tabs_markdown(&mut self, ctx: &egui::Context) {
-        let exported = self.closed_tabs.iter().rev().filter_map(|raw_url| {
-            let url = Url::parse(raw_url).ok()?;
-            if !matches!(url.scheme(), "http" | "https") { return None; }
-            Some(format!("- {}", markdown_link(url.host(), &url.to_string())))
-        }).collect::<Vec<_>>().join("\n");
+        let exported = self
+            .closed_tabs
+            .iter()
+            .rev()
+            .filter_map(|raw_url| {
+                let url = Url::parse(raw_url).ok()?;
+                if !matches!(url.scheme(), "http" | "https") {
+                    return None;
+                }
+                Some(format!("- {}", markdown_link(url.host(), &url.to_string())))
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
         ctx.copy_text(exported);
         self.status = "Onglets fermés exportés".to_owned();
     }
