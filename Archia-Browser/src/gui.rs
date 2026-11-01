@@ -88,6 +88,8 @@ const ID_MENU_COPY_HISTORY: u32 = 3031;
 const ID_MENU_UA_ARCHIA: u32 = 3032;
 const ID_MENU_UA_CHROMIUM: u32 = 3033;
 const ID_MENU_UA_FIREFOX: u32 = 3034;
+const ID_MENU_COPY_PAGE_TEXT: u32 = 3035;
+const ID_MENU_COPY_PAGE_TITLE: u32 = 3036;
 const ID_RECENT_DOWNLOAD_BASE: u32 = 3700;
 const ID_RECENT_DOWNLOAD_REVEAL_BASE: u32 = 3720;
 const ID_RECENT_DOWNLOAD_COPY_BASE: u32 = 3740;
@@ -1746,6 +1748,10 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             }
             return true;
         }
+        if key == 0x58 && GetKeyState(VK_SHIFT) < 0 {
+            copy_current_page_text(state, hwnd);
+            return true;
+        }
         if key == VK_K && GetKeyState(VK_SHIFT) < 0 {
             if let Some(url) = current_page_url(state) {
                 open_link_in_new_tab(state, hwnd, &url);
@@ -1962,6 +1968,39 @@ unsafe fn current_page_url(state: &AppState) -> Option<String> {
         .map(ToString::to_string)
 }
 
+const MAX_PAGE_CLIPBOARD_BYTES: usize = 2 * 1024 * 1024;
+
+fn truncate_utf8(value: &mut String, max_bytes: usize) {
+    if value.len() <= max_bytes {
+        return;
+    }
+    let boundary = value
+        .char_indices()
+        .take_while(|(index, character)| index + character.len_utf8() <= max_bytes)
+        .last()
+        .map_or(0, |(index, character)| index + character.len_utf8());
+    value.truncate(boundary);
+}
+
+unsafe fn copy_current_page_text(state: &AppState, hwnd: Hwnd) {
+    let Some(page) = state.browser.current_page() else {
+        return;
+    };
+    let mut text = page.document.visible_text_content();
+    truncate_utf8(&mut text, MAX_PAGE_CLIPBOARD_BYTES);
+    if !text.trim().is_empty() {
+        let _ = copy_text_to_clipboard(hwnd, &text);
+    }
+}
+
+unsafe fn copy_current_page_title(state: &AppState, hwnd: Hwnd) {
+    if let Some(title) = state.browser.current_page().and_then(|page| page.title()) {
+        if !title.is_empty() {
+            let _ = copy_text_to_clipboard(hwnd, &title);
+        }
+    }
+}
+
 unsafe fn copy_text_to_clipboard(hwnd: Hwnd, value: &str) -> bool {
     const GMEM_MOVEABLE: u32 = 0x0002;
     const CF_UNICODETEXT: u32 = 13;
@@ -2074,6 +2113,8 @@ unsafe fn show_page_context_menu(state: &mut AppState, hwnd: Hwnd) {
     }
     for (id, label) in [
         (ID_MENU_COPY_PAGE_URL, "Copier l’adresse de la page"),
+        (ID_MENU_COPY_PAGE_TITLE, "Copier le titre de la page"),
+        (ID_MENU_COPY_PAGE_TEXT, "Copier le texte visible de la page"),
         (
             ID_MENU_BOOKMARK_PAGE,
             if state.bookmarks.iter().any(|bookmark| bookmark.url == url) {
@@ -2104,6 +2145,8 @@ unsafe fn show_page_context_menu(state: &mut AppState, hwnd: Hwnd) {
         ID_MENU_COPY_PAGE_URL => {
             let _ = copy_text_to_clipboard(hwnd, &url);
         }
+        ID_MENU_COPY_PAGE_TITLE => copy_current_page_title(state, hwnd),
+        ID_MENU_COPY_PAGE_TEXT => copy_current_page_text(state, hwnd),
         ID_MENU_BOOKMARK_PAGE => toggle_current_bookmark(state),
         ID_MENU_RELOAD => navigate(state, &url),
         ID_MENU_DOWNLOAD_PAGE => download_current_page(state),
@@ -3779,6 +3822,16 @@ mod gui_address_tests {
         .unwrap();
         assert_eq!(BrowserSettings::load(&path), BrowserSettings::default());
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn page_text_truncation_respects_utf8_boundaries() {
+        let mut text = "Aé🙂Z".to_owned();
+        truncate_utf8(&mut text, 4);
+        assert_eq!(text, "Aé");
+        let mut short = "Archia".to_owned();
+        truncate_utf8(&mut short, 20);
+        assert_eq!(short, "Archia");
     }
 
     #[test]
