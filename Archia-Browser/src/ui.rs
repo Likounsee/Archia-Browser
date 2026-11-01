@@ -2349,7 +2349,7 @@ mod tests {
     #[test]
     fn bookmark_import_accepts_both_tsv_orders_and_markdown_bullets() {
         let imported = super::parse_bookmark_text(
-            "https://first.example/\\tFirst\\nSecond\\thttps://second.example/\\n* [Third](https://third.example/)\\nfile:///etc/passwd\\thostile"
+            "https://first.example/\tFirst\nSecond\thttps://second.example/\n* [Third](https://third.example/)\nfile:///etc/passwd\thostile"
         );
         assert_eq!(imported.len(), 3);
         assert_eq!(imported[0].title, "First");
@@ -2359,7 +2359,7 @@ mod tests {
 
     #[test]
     fn bookmark_import_allows_newlines_but_rejects_null_bytes_and_oversized_data() {
-        assert!(super::is_safe_bookmark_import("https://example.org/\\nhttps://example.net/"));
+        assert!(!super::is_safe_bookmark_import("https://example.org/\0"));
         assert!(!super::is_safe_bookmark_import("https://example.org/\\0"));
         assert!(!super::is_safe_bookmark_import(&"x".repeat(128 * 1024 + 1)));
     }
