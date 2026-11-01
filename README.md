@@ -162,3 +162,10 @@ Les favoris peuvent aussi être exportés en Markdown depuis le menu Archia ou a
 
 - `Ctrl+Shift+O` ouvre les favoris enregistrés dans des onglets, dans l’ordre, en respectant la limite de session.
 - `Ctrl+Alt+Shift+H` copie l’historique au format Markdown ; le menu Archia propose aussi cette exportation.
+
+### Restauration des onglets fermés
+
+- `Ctrl+Shift+T` rouvre le dernier onglet fermé.
+- `Ctrl+Alt+Shift+T` rouvre en une fois les onglets récemment fermés, jusqu’à la limite globale de 100 onglets.
+- Le menu Archia propose aussi la restauration groupée.
+- `Ctrl+Alt+Shift+R` copie les adresses des onglets récemment fermés au format Markdown ; les entrées vides et les URL non HTTP(S) sont ignorées.
