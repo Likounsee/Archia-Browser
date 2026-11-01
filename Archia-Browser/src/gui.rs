@@ -150,6 +150,7 @@ const ID_TAB_CONTEXT_RELOAD: u32 = 3606;
 const ID_TAB_CONTEXT_CLOSE_LEFT: u32 = 3607;
 const ID_TAB_CONTEXT_CLOSE_SAME_SITE: u32 = 3608;
 const ID_TAB_CONTEXT_CLOSE_DUPLICATES: u32 = 3609;
+const ID_TAB_CONTEXT_COPY_SITE_URLS: u32 = 3610;
 const GWLP_WNDPROC: i32 = -4;
 const WM_CTLCOLOREDIT: u32 = 0x0133;
 const DT_SINGLELINE: u32 = 0x0020;
@@ -2507,6 +2508,10 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
             ID_TAB_CONTEXT_CLOSE_DUPLICATES,
             "Fermer les onglets avec la même adresse",
         ),
+        (
+            ID_TAB_CONTEXT_COPY_SITE_URLS,
+            "Copier les adresses de tous les onglets de ce site",
+        ),
     ] {
         let label = wide(label);
         let _ = AppendMenuW(menu, MF_STRING, id as usize, label.as_ptr());
@@ -2538,6 +2543,35 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
         ID_TAB_CONTEXT_COPY_URL => {
             if let Some(url) = duplicate_url.as_deref() {
                 let _ = copy_text_to_clipboard(hwnd, url);
+            }
+        }
+        ID_TAB_CONTEXT_COPY_SITE_URLS => {
+            let target_host = state
+                .browser
+                .tabs()
+                .tab(tab_id)
+                .and_then(|tab| tab.page())
+                .and_then(|page| page.url())
+                .map(|url| url.host().to_owned());
+            if let Some(target_host) = target_host {
+                let urls = state
+                    .tabs
+                    .iter()
+                    .filter_map(|(id, _)| {
+                        let url = state
+                            .browser
+                            .tabs()
+                            .tab(*id)
+                            .and_then(|tab| tab.page())
+                            .and_then(|page| page.url())?;
+                        url.host()
+                            .eq_ignore_ascii_case(&target_host)
+                            .then(|| url.to_string())
+                    })
+                    .collect::<Vec<_>>();
+                if !urls.is_empty() {
+                    let _ = copy_text_to_clipboard(hwnd, &urls.join("\\r\\n"));
+                }
             }
         }
         ID_TAB_CONTEXT_CLOSE_DUPLICATES => {
