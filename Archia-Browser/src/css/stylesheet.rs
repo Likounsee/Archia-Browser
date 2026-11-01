@@ -1101,12 +1101,11 @@ mod tests {
     #[test]
     fn media_query_lists_and_orientation_are_supported() {
         let css = "@media (max-width: 400px), screen and (orientation: landscape) { p { color: green; } }";
-        let mut paragraph = Node::element("p");
+        let paragraph = Node::element("p");
         let portrait = StyleSheet::parse_for_viewport(css, 360, 800);
         let landscape = StyleSheet::parse_for_viewport(css, 900, 600);
         assert_eq!(portrait.compute_style(&paragraph).get("color"), Some("green"));
         assert_eq!(landscape.compute_style(&paragraph).get("color"), Some("green"));
-        let _ = &mut paragraph;
     }
 
     #[test]
