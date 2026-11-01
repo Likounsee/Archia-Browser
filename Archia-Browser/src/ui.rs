@@ -6,12 +6,12 @@
 
 use archia_browser::{
     layout::LayoutViewport,
-    theme::{ThemeManager, ThemeManifest},
     net::{
         pipeline::{NetworkPipeline, PolicyDecision, RequestPolicyEngine, ResourceKind},
         DocumentLoader, HttpTransport, Request, Url,
     },
     surface::SoftwareSurface,
+    theme::{ThemeManager, ThemeManifest},
     Browser,
 };
 use eframe::egui;
@@ -194,7 +194,14 @@ struct UiPalette {
 
 impl Default for UiPalette {
     fn default() -> Self {
-        Self { window: GRAPHITE, toolbar: PANEL, address: PANEL_LIGHT, text: TEXT, muted: MUTED, accent: LIME }
+        Self {
+            window: GRAPHITE,
+            toolbar: PANEL,
+            address: PANEL_LIGHT,
+            text: TEXT,
+            muted: MUTED,
+            accent: LIME,
+        }
     }
 }
 
@@ -202,9 +209,12 @@ impl UiPalette {
     fn from_manifest(manifest: &ThemeManifest) -> Self {
         let defaults = Self::default();
         Self {
-            window: parse_theme_color(&manifest.colors.window_background).unwrap_or(defaults.window),
-            toolbar: parse_theme_color(&manifest.colors.toolbar_background).unwrap_or(defaults.toolbar),
-            address: parse_theme_color(&manifest.colors.address_background).unwrap_or(defaults.address),
+            window: parse_theme_color(&manifest.colors.window_background)
+                .unwrap_or(defaults.window),
+            toolbar: parse_theme_color(&manifest.colors.toolbar_background)
+                .unwrap_or(defaults.toolbar),
+            address: parse_theme_color(&manifest.colors.address_background)
+                .unwrap_or(defaults.address),
             text: parse_theme_color(&manifest.colors.text).unwrap_or(defaults.text),
             muted: parse_theme_color(&manifest.colors.muted_text).unwrap_or(defaults.muted),
             accent: parse_theme_color(&manifest.colors.accent).unwrap_or(defaults.accent),
@@ -244,7 +254,9 @@ fn load_inter_font(ctx: &egui::Context) {
 
 fn parse_theme_color(value: &str) -> Option<egui::Color32> {
     let value = value.strip_prefix('#')?;
-    if value.len() != 6 { return None; }
+    if value.len() != 6 {
+        return None;
+    }
     let red = u8::from_str_radix(&value[0..2], 16).ok()?;
     let green = u8::from_str_radix(&value[2..4], 16).ok()?;
     let blue = u8::from_str_radix(&value[4..6], 16).ok()?;
@@ -328,7 +340,8 @@ impl ArchiaApp {
             browser.document_loader(NetworkPipeline::new(BrowserPolicy), HttpTransport::new());
         let data_dir = browser_data_directory();
         let themes = ThemeManager::load(data_dir.join("themes")).ok();
-        let palette = themes.as_ref()
+        let palette = themes
+            .as_ref()
             .map(|manager| UiPalette::from_manifest(&manager.active_theme().manifest))
             .unwrap_or_default();
         apply_palette(&cc.egui_ctx, palette);
@@ -1316,15 +1329,24 @@ impl eframe::App for ArchiaApp {
                         if let Some(manager) = self.themes.as_ref() {
                             ui.separator();
                             ui.label("Thème de l'interface");
-                            let choices = manager.themes().iter()
-                                .map(|theme| (theme.manifest.id.clone(), theme.manifest.name.clone()))
+                            let choices = manager
+                                .themes()
+                                .iter()
+                                .map(|theme| {
+                                    (theme.manifest.id.clone(), theme.manifest.name.clone())
+                                })
                                 .collect::<Vec<_>>();
                             for (id, name) in choices {
-                                let active = self.themes.as_ref().is_some_and(|themes| themes.active_id() == id);
+                                let active = self
+                                    .themes
+                                    .as_ref()
+                                    .is_some_and(|themes| themes.active_id() == id);
                                 if ui.selectable_label(active, name).clicked() {
                                     if let Some(themes) = self.themes.as_mut() {
                                         if themes.select(&id).is_ok() {
-                                            self.palette = UiPalette::from_manifest(&themes.active_theme().manifest);
+                                            self.palette = UiPalette::from_manifest(
+                                                &themes.active_theme().manifest,
+                                            );
                                             apply_palette(ui.ctx(), self.palette);
                                             self.status = format!("Thème appliqué : {id}");
                                         }
@@ -1348,7 +1370,11 @@ impl eframe::App for ArchiaApp {
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("●").color(self.palette.accent));
-                    ui.label(egui::RichText::new(&self.status).color(self.palette.muted).small());
+                    ui.label(
+                        egui::RichText::new(&self.status)
+                            .color(self.palette.muted)
+                            .small(),
+                    );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(
                             egui::RichText::new(format!(
