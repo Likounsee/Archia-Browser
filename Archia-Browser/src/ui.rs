@@ -4,8 +4,6 @@
 //! Platform-specific windowing and GPU backends are provided by eframe/winit;
 //! this module contains no Win32, GDI or Direct2D calls.
 
-use std::time::Duration;
-
 use archia_browser::{
     layout::LayoutViewport,
     net::{
@@ -70,11 +68,11 @@ impl ArchiaApp {
         cc.egui_ctx.set_style(style);
 
         let mut browser = Browser::new();
-        let first_tab = browser.active_tab_id().expect("Browser creates an initial tab");
-        let loader = browser.document_loader(
-            NetworkPipeline::new(BrowserPolicy),
-            HttpTransport::new(),
-        );
+        let first_tab = browser
+            .active_tab_id()
+            .expect("Browser creates an initial tab");
+        let loader =
+            browser.document_loader(NetworkPipeline::new(BrowserPolicy), HttpTransport::new());
 
         Self {
             browser,
@@ -121,10 +119,9 @@ impl ArchiaApp {
             "accept".into(),
             "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8".into(),
         );
-        request.headers.insert(
-            "accept-language".into(),
-            "fr-FR,fr;q=0.9,en;q=0.8".into(),
-        );
+        request
+            .headers
+            .insert("accept-language".into(), "fr-FR,fr;q=0.9,en;q=0.8".into());
         request.headers.insert(
             "user-agent".into(),
             format!(
@@ -255,11 +252,8 @@ impl ArchiaApp {
             if let Some(texture) = self.page_texture.as_mut() {
                 texture.set(image, egui::TextureOptions::LINEAR);
             } else {
-                self.page_texture = Some(ctx.load_texture(
-                    "archia-page",
-                    image,
-                    egui::TextureOptions::LINEAR,
-                ));
+                self.page_texture =
+                    Some(ctx.load_texture("archia-page", image, egui::TextureOptions::LINEAR));
             }
             self.page_texture_size = egui::vec2(width as f32, height as f32);
         }
@@ -280,7 +274,11 @@ impl ArchiaApp {
 impl eframe::App for ArchiaApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::TopBottomPanel::top("archia_tabs")
-            .frame(egui::Frame::new().fill(PANEL).inner_margin(egui::Margin::symmetric(12, 8)))
+            .frame(
+                egui::Frame::new()
+                    .fill(PANEL)
+                    .inner_margin(egui::Margin::symmetric(12, 8)),
+            )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     for id in self.tabs.clone() {
@@ -306,7 +304,11 @@ impl eframe::App for ArchiaApp {
             });
 
         egui::TopBottomPanel::top("archia_toolbar")
-            .frame(egui::Frame::new().fill(GRAPHITE).inner_margin(egui::Margin::symmetric(14, 10)))
+            .frame(
+                egui::Frame::new()
+                    .fill(GRAPHITE)
+                    .inner_margin(egui::Margin::symmetric(14, 10)),
+            )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     if ui.button("←").on_hover_text("Précédent").clicked() {
@@ -323,7 +325,8 @@ impl eframe::App for ArchiaApp {
                             .desired_width(f32::INFINITY)
                             .hint_text("Rechercher ou saisir une adresse"),
                     );
-                    if address.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter)) {
+                    if address.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter))
+                    {
                         let target = self.address.clone();
                         self.navigate(&target);
                     }
@@ -335,14 +338,21 @@ impl eframe::App for ArchiaApp {
             });
 
         egui::TopBottomPanel::bottom("archia_status")
-            .frame(egui::Frame::new().fill(PANEL).inner_margin(egui::Margin::symmetric(14, 6)))
+            .frame(
+                egui::Frame::new()
+                    .fill(PANEL)
+                    .inner_margin(egui::Margin::symmetric(14, 6)),
+            )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("●").color(LIME));
                     ui.label(egui::RichText::new(&self.status).color(MUTED).small());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(
-                            egui::RichText::new(format!("ARCHIA BROWSER · {}", self.browser.version()))
+                            egui::RichText::new(format!(
+                                "ARCHIA BROWSER · {}",
+                                self.browser.version()
+                            ))
                                 .color(MUTED)
                                 .small(),
                         );
@@ -357,7 +367,8 @@ impl eframe::App for ArchiaApp {
                 if width != self.last_viewport_width {
                     self.last_viewport_width = width;
                     if self.browser.current_page().is_some() {
-                        self.browser.relayout_current_page(LayoutViewport::new(width, 760));
+                        self.browser
+                            .relayout_current_page(LayoutViewport::new(width, 760));
                         self.page_dirty = true;
                     }
                 }
@@ -393,7 +404,9 @@ impl eframe::App for ArchiaApp {
                         );
                         ui.add_space(8.0);
                         ui.label(
-                            egui::RichText::new("Un navigateur indépendant, construit autour du moteur Archia.")
+                            egui::RichText::new(
+                                "Un navigateur indépendant, construit autour du moteur Archia.",
+                            )
                                 .size(15.0)
                                 .color(MUTED),
                         );
@@ -405,15 +418,24 @@ impl eframe::App for ArchiaApp {
                                 egui::TextEdit::singleline(&mut self.home_query)
                                     .hint_text("Rechercher sur le web ou saisir une adresse"),
                             );
-                            if response.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter)) {
+                            if response.lost_focus()
+                                && ui.input(|input| input.key_pressed(egui::Key::Enter))
+                            {
                                 let target = self.home_query.clone();
                                 self.address = target.clone();
                                 self.navigate(&target);
                             }
                         });
                         ui.add_space(12.0);
-                        if ui.button(egui::RichText::new("Rechercher  →").color(GRAPHITE).strong())
-                            .fill(LIME)
+                        if ui
+                            .add(
+                                egui::Button::new(
+                                    egui::RichText::new("Rechercher  →")
+                                        .color(GRAPHITE)
+                                        .strong(),
+                                )
+                                .fill(LIME),
+                            )
                             .clicked()
                         {
                             let target = self.home_query.clone();
