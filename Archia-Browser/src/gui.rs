@@ -1996,7 +1996,7 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             open_links_from_clipboard(state, hwnd);
             return true;
         }
-        if key == 0x55 && GetKeyState(VK_SHIFT) < 0 {
+        if key == 0x55 && alt {
             copy_open_tabs_html(state, hwnd);
             return true;
         }
