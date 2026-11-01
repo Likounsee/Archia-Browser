@@ -69,7 +69,7 @@ Theme manifests and selection are available in the engine. The Win32 frontend ap
 - [ ] Better error pages and loading feedback.
 - [x] Basic persistent settings for search provider, homepage and session restoration.
 - [x] Open individual history entries and bookmarks in new tabs, plus batch-open recent history and saved bookmarks with keyboard shortcuts.
-- [ ] User-agent controls.
+- [x] Persistent HTTP User-Agent profiles (Archia, Chromium-compatible and Firefox-compatible; request header only, not a different rendering engine).
 
 
 ### W2 — Theme system
@@ -129,4 +129,4 @@ These are foundations, not a claim of full browser compatibility. A successful H
 License to be defined.
 
 
-Use Ctrl+Shift+U or the browser menu to copy all currently open tab titles and URLs as tab-separated text.
+Use Ctrl+Shift+U or the browser menu to copy all currently open tab titles and URLs as tab-separated text. Ctrl+S downloads the current page; Ctrl+Shift+R performs a hard reload by clearing only the HTTP response cache first.
