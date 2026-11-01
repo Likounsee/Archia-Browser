@@ -79,6 +79,7 @@ const ID_MENU_TOGGLE_SESSION: u32 = 3016;
 const ID_MENU_DOWNLOAD_PAGE: u32 = 3017;
 const ID_MENU_OPEN_DOWNLOADS: u32 = 3018;
 const ID_MENU_RECENT_DOWNLOADS: u32 = 3025;
+const ID_MENU_OPEN_RECENT_HISTORY: u32 = 3026;
 const ID_RECENT_DOWNLOAD_BASE: u32 = 3700;
 const ID_RECENT_DOWNLOAD_REVEAL_BASE: u32 = 3720;
 const ID_RECENT_DOWNLOAD_COPY_BASE: u32 = 3740;
@@ -2075,6 +2076,10 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         (ID_MENU_OPEN_DOWNLOADS, "Ouvrir le dossier Téléchargements"),
         (ID_MENU_RECENT_DOWNLOADS, "Téléchargements récents…"),
         (
+            ID_MENU_OPEN_RECENT_HISTORY,
+            "Ouvrir les pages récentes dans des onglets",
+        ),
+        (
             ID_MENU_TOGGLE_SESSION,
             if state.settings.restore_session {
                 "Désactiver la restauration de session"
@@ -2208,6 +2213,7 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
         ID_MENU_DOWNLOAD_PAGE => download_current_page(state),
         ID_MENU_OPEN_DOWNLOADS => open_downloads_folder(state),
         ID_MENU_RECENT_DOWNLOADS => show_recent_downloads(state, hwnd),
+        ID_MENU_OPEN_RECENT_HISTORY => open_recent_history_in_tabs(state, hwnd),
         ID_MENU_TOGGLE_SESSION => {
             state.settings.restore_session = !state.settings.restore_session;
             if !state.settings.restore_session {
