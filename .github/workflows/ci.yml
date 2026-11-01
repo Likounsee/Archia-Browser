@@ -34,8 +34,11 @@ jobs:
       - name: Audit Rust dependencies against RustSec advisories
         if: runner.os == 'Linux'
         run: |
+          # These are transitive, unmaintained crates in the egui/wgpu font/macro
+          # stack, not known exploitable vulnerabilities. Keep the rest of the
+          # RustSec audit strict and revisit these exceptions on dependency updates.
           cargo install cargo-audit --locked
-          cargo audit --deny warnings
+          cargo audit --ignore RUSTSEC-2024-0436 --ignore RUSTSEC-2026-0192 --deny warnings
       - name: Audit dependency license expressions
         if: runner.os == 'Linux'
         run: |

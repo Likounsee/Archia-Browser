@@ -28,6 +28,13 @@ impl RequestPolicyEngine for BrowserPolicy {
 
 type Loader = DocumentLoader<BrowserPolicy, HttpTransport>;
 
+
+#[derive(Clone)]
+struct SavedPage {
+    title: String,
+    url: String,
+}
+
 const GRAPHITE: egui::Color32 = egui::Color32::from_rgb(19, 22, 27);
 const PANEL: egui::Color32 = egui::Color32::from_rgb(25, 29, 35);
 const PANEL_LIGHT: egui::Color32 = egui::Color32::from_rgb(34, 39, 47);
@@ -46,6 +53,9 @@ struct ArchiaApp {
     page_texture_size: egui::Vec2,
     page_dirty: bool,
     last_viewport_width: u32,
+    bookmarks: Vec<SavedPage>,
+    history_items: Vec<SavedPage>,
+    focus_address: bool,
 }
 
 impl ArchiaApp {
@@ -73,6 +83,9 @@ impl ArchiaApp {
             .expect("Browser creates an initial tab");
         let loader =
             browser.document_loader(NetworkPipeline::new(BrowserPolicy), HttpTransport::new());
+        let data_dir = browser_data_directory();
+        let bookmarks = load_saved_pages(&data_dir.join("bookmarks.tsv"));
+        let history_items = load_saved_pages(&data_dir.join("history.tsv"));
 
         Self {
             browser,
@@ -85,6 +98,9 @@ impl ArchiaApp {
             page_texture_size: egui::Vec2::ZERO,
             page_dirty: true,
             last_viewport_width: 0,
+            bookmarks,
+            history_items,
+            focus_address: false,
         }
     }
 
@@ -142,6 +158,7 @@ impl ArchiaApp {
                     .map(ToString::to_string)
                     .unwrap_or_default();
                 self.status = "Page chargée".to_owned();
+                self.record_history();
                 self.page_dirty = true;
             }
             Err(error) => {
@@ -269,10 +286,123 @@ impl ArchiaApp {
             .map(|title| title.chars().take(24).collect())
             .unwrap_or_else(|| "Nouvel onglet".to_owned())
     }
+
+    fn record_history(&mut self) {
+        let Some(url) = self.browser.current_url().map(ToString::to_string) else {
+            return;
+        };
+        let title = self
+            .browser
+            .current_page()
+            .and_then(|page| page.title())
+            .unwrap_or_else(|| url.clone());
+        self.history_items.retain(|entry| entry.url != url);
+        self.history_items.insert(0, SavedPage { title, url });
+        self.history_items.truncate(500);
+        save_saved_pages(
+            &browser_data_directory().join("history.tsv"),
+            &self.history_items,
+        );
+    }
+
+    fn toggle_bookmark(&mut self) {
+        let Some(url) = self.browser.current_url().map(ToString::to_string) else {
+            self.status = "Aucune page à ajouter aux favoris.".to_owned();
+            return;
+        };
+        if self.bookmarks.iter().any(|entry| entry.url == url) {
+            self.bookmarks.retain(|entry| entry.url != url);
+            self.status = "Favori supprimé".to_owned();
+        } else {
+            let title = self
+                .browser
+                .current_page()
+                .and_then(|page| page.title())
+                .unwrap_or_else(|| url.clone());
+            self.bookmarks.push(SavedPage { title, url });
+            self.status = "Page ajoutée aux favoris".to_owned();
+        }
+        save_saved_pages(
+            &browser_data_directory().join("bookmarks.tsv"),
+            &self.bookmarks,
+        );
+    }
+
+    fn current_links(&self) -> Vec<(String, String)> {
+        self.browser
+            .current_page()
+            .map(|page| {
+                page.document
+                    .find_elements_by_tag("a")
+                    .into_iter()
+                    .filter_map(|node| {
+                        let href = node.link_href()?.trim();
+                        if href.is_empty() {
+                            return None;
+                        }
+                        let label = node.text_content();
+                        let label = if label.trim().is_empty() {
+                            href.to_owned()
+                        } else {
+                            label.split_whitespace().collect::<Vec<_>>().join(" ")
+                        };
+                        Some((label, href.to_owned()))
+                    })
+                    .take(100)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    fn open_link(&mut self, href: &str) {
+        let Some(base) = self.browser.current_url().cloned() else {
+            return;
+        };
+        match base.resolve(href) {
+            Ok(url) => self.navigate(&url.to_string()),
+            Err(error) => self.status = format!("Lien invalide : {error:?}"),
+        }
+    }
+
 }
 
 impl eframe::App for ArchiaApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let (ctrl_l, ctrl_t, ctrl_w, ctrl_r, ctrl_d, alt_left, alt_right) = ctx.input(|input| {
+            (
+                input.modifiers.ctrl && input.key_pressed(egui::Key::L),
+                input.modifiers.ctrl && input.key_pressed(egui::Key::T),
+                input.modifiers.ctrl && input.key_pressed(egui::Key::W),
+                input.modifiers.ctrl && input.key_pressed(egui::Key::R),
+                input.modifiers.ctrl && input.key_pressed(egui::Key::D),
+                input.modifiers.alt && input.key_pressed(egui::Key::ArrowLeft),
+                input.modifiers.alt && input.key_pressed(egui::Key::ArrowRight),
+            )
+        });
+        if ctrl_t {
+            self.new_tab();
+        }
+        if ctrl_w {
+            if let Some(id) = self.browser.active_tab_id() {
+                self.close_tab(id);
+            }
+        }
+        if ctrl_r {
+            self.reload();
+        }
+        if ctrl_d {
+            self.toggle_bookmark();
+        }
+        if alt_left {
+            self.go_back();
+        }
+        if alt_right {
+            self.go_forward();
+        }
+        if ctrl_l {
+            self.focus_address = true;
+        }
+
         egui::TopBottomPanel::top("archia_tabs")
             .frame(
                 egui::Frame::new()
@@ -286,6 +416,23 @@ impl eframe::App for ArchiaApp {
                         let title = self.tab_title(id);
                         ui.horizontal(|ui| {
                             let response = ui.selectable_label(active, title);
+                            response.context_menu(|ui| {
+                                if ui.button("Fermer cet onglet").clicked() {
+                                    self.close_tab(id);
+                                }
+                                if ui.button("Dupliquer cet onglet").clicked() {
+                                    let url = self
+                                        .browser
+                                        .tabs()
+                                        .tab(id)
+                                        .and_then(|tab| tab.history().current())
+                                        .map(|entry| entry.url().to_string());
+                                    if let Some(url) = url {
+                                        self.new_tab();
+                                        self.navigate(&url);
+                                    }
+                                }
+                            });
                             if response.clicked() {
                                 self.browser.select_tab(id);
                                 self.sync_address();
@@ -325,6 +472,10 @@ impl eframe::App for ArchiaApp {
                             .desired_width(f32::INFINITY)
                             .hint_text("Rechercher ou saisir une adresse"),
                     );
+                    if self.focus_address {
+                        address.request_focus();
+                        self.focus_address = false;
+                    }
                     if address.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter))
                     {
                         let target = self.address.clone();
@@ -334,6 +485,50 @@ impl eframe::App for ArchiaApp {
                         let target = self.address.clone();
                         self.navigate(&target);
                     }
+                    let is_bookmarked = self
+                        .browser
+                        .current_url()
+                        .is_some_and(|url| self.bookmarks.iter().any(|entry| entry.url == url.to_string()));
+                    if ui.button(if is_bookmarked { "★" } else { "☆" }).on_hover_text("Ajouter ou retirer des favoris").clicked() {
+                        self.toggle_bookmark();
+                    }
+                    ui.menu_button("Favoris", |ui| {
+                        if ui.button("Ajouter / retirer la page actuelle").clicked() {
+                            self.toggle_bookmark();
+                        }
+                        ui.separator();
+                        let items = self.bookmarks.clone();
+                        if items.is_empty() {
+                            ui.label("Aucun favori enregistré");
+                        }
+                        for item in items {
+                            if ui.button(&item.title).clicked() {
+                                self.navigate(&item.url);
+                            }
+                        }
+                    });
+                    ui.menu_button("Historique", |ui| {
+                        let items = self.history_items.clone();
+                        if items.is_empty() {
+                            ui.label("Aucune navigation enregistrée");
+                        }
+                        for item in items.into_iter().take(30) {
+                            if ui.button(&item.title).on_hover_text(&item.url).clicked() {
+                                self.navigate(&item.url);
+                            }
+                        }
+                    });
+                    ui.menu_button("Liens", |ui| {
+                        let links = self.current_links();
+                        if links.is_empty() {
+                            ui.label("Aucun lien détecté");
+                        }
+                        for (label, href) in links {
+                            if ui.button(label).on_hover_text(&href).clicked() {
+                                self.open_link(&href);
+                            }
+                        }
+                    });
                 });
             });
 
@@ -447,6 +642,88 @@ impl eframe::App for ArchiaApp {
     }
 }
 
+
+
+#[cfg(windows)]
+fn browser_data_directory() -> std::path::PathBuf {
+    std::env::var_os("APPDATA")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("ArchiaBrowser")
+}
+
+#[cfg(not(windows))]
+fn browser_data_directory() -> std::path::PathBuf {
+    std::env::var_os("HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join(".local")
+        .join("share")
+        .join("archia-browser")
+}
+
+fn load_saved_pages(path: &std::path::Path) -> Vec<SavedPage> {
+    let Ok(contents) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    contents
+        .lines()
+        .filter_map(|line| {
+            let (title, url) = line.split_once('\t')?;
+            if url.is_empty() {
+                return None;
+            }
+            Some(SavedPage {
+                title: decode_field(title),
+                url: decode_field(url),
+            })
+        })
+        .take(500)
+        .collect()
+}
+
+fn save_saved_pages(path: &std::path::Path, pages: &[SavedPage]) {
+    if let Some(parent) = path.parent() {
+        if std::fs::create_dir_all(parent).is_err() {
+            return;
+        }
+    }
+    let mut contents = String::new();
+    for page in pages.iter().take(500) {
+        contents.push_str(&encode_query(&page.title));
+        contents.push('\t');
+        contents.push_str(&encode_query(&page.url));
+        contents.push('\n');
+    }
+    let temporary = path.with_extension("tsv.tmp");
+    if std::fs::write(&temporary, contents).is_ok() {
+        if std::fs::rename(&temporary, path).is_err() {
+            let _ = std::fs::remove_file(path);
+            let _ = std::fs::rename(temporary, path);
+        }
+    }
+}
+
+fn decode_field(value: &str) -> String {
+    let source = value.as_bytes();
+    let mut decoded = Vec::with_capacity(source.len());
+    let mut index = 0;
+    while index < source.len() {
+        if source[index] == b'%' && index + 2 < source.len() {
+            if let Ok(hex) = std::str::from_utf8(&source[index + 1..index + 3]) {
+                if let Ok(byte) = u8::from_str_radix(hex, 16) {
+                    decoded.push(byte);
+                    index += 3;
+                    continue;
+                }
+            }
+        }
+        decoded.push(source[index]);
+        index += 1;
+    }
+    String::from_utf8_lossy(&decoded).into_owned()
+}
+
 fn looks_like_host(input: &str) -> bool {
     let authority = input.split(['/', '?', '#']).next().unwrap_or(input);
     authority.starts_with('[') && authority.contains(']')
@@ -504,5 +781,11 @@ mod tests {
     fn search_encoding_is_utf8_percent_encoded() {
         assert_eq!(encode_query("archia browser"), "archia%20browser");
         assert_eq!(encode_query("été"), "%C3%A9t%C3%A9");
+    }
+
+    #[test]
+    fn saved_page_fields_round_trip_utf8_and_delimiters() {
+        let value = "Été\tArchia Browser";
+        assert_eq!(super::decode_field(&encode_query(value)), value);
     }
 }
