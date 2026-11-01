@@ -376,10 +376,9 @@ fn parse_media_length(value: &str) -> Option<u32> {
         (number, 1.0_f64)
     } else if let Some(number) = value.strip_suffix("rem") {
         (number, 16.0)
-    } else if let Some(number) = value.strip_suffix("em") {
-        (number, 16.0)
     } else {
-        return None;
+        let number = value.strip_suffix("em")?;
+        (number, 16.0)
     };
     let pixels = number.trim().parse::<f64>().ok()? * multiplier;
     (pixels.is_finite() && pixels >= 0.0 && pixels <= u32::MAX as f64)
