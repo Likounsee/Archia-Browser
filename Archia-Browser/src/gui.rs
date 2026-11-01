@@ -108,6 +108,7 @@ const ID_MENU_COPY_HISTORY_HTML: u32 = 3045;
 const ID_MENU_COPY_OPEN_TABS_HTML: u32 = 3046;
 const ID_MENU_OPEN_CLIPBOARD_LINKS: u32 = 3047;
 const ID_MENU_COPY_BOOKMARKS_MARKDOWN: u32 = 3048;
+const ID_MENU_COPY_HISTORY_MARKDOWN: u32 = 3049;
 const MAX_IMPORTED_BOOKMARKS: usize = 5_000;
 const MAX_CLIPBOARD_BYTES: usize = 2 * 1024 * 1024;
 const ID_RECENT_DOWNLOAD_BASE: u32 = 3700;
@@ -2215,6 +2216,13 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             }
             return true;
         }
+        if alt && key == VK_H && GetKeyState(VK_SHIFT) < 0 {
+            let markdown = export_bookmarks_markdown(&state.persistent_history);
+            if !markdown.is_empty() {
+                let _ = copy_text_to_clipboard(hwnd, &markdown);
+            }
+            return true;
+        }
         if alt && key == VK_B && GetKeyState(VK_SHIFT) < 0 {
             let markdown = export_bookmarks_markdown(&state.bookmarks);
             if !markdown.is_empty() {
@@ -2227,6 +2235,10 @@ unsafe fn handle_keyboard_shortcut(state: &mut AppState, hwnd: Hwnd, key: Wparam
             if !state.bookmarks.is_empty() {
                 let _ = copy_text_to_clipboard(hwnd, &html);
             }
+            return true;
+        }
+        if key == VK_O && GetKeyState(VK_SHIFT) < 0 {
+            open_all_bookmarks(state, hwnd);
             return true;
         }
         if key == VK_Y && GetKeyState(VK_SHIFT) < 0 {
@@ -2926,6 +2938,10 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             "Copier les favoris au format Markdown",
         ),
         (
+            ID_MENU_COPY_HISTORY_MARKDOWN,
+            "Copier l’historique au format Markdown",
+        ),
+        (
             ID_MENU_PASTE_AND_GO,
             "Coller et ouvrir l’adresse ou rechercher le texte copié",
         ),
@@ -3142,6 +3158,12 @@ unsafe fn show_browser_menu(state: &mut AppState, hwnd: Hwnd) {
             if state.bookmarks.len() != previous_count {
                 save_bookmarks(state);
                 let _ = InvalidateRect(hwnd, ptr::null(), 1);
+            }
+        }
+        ID_MENU_COPY_HISTORY_MARKDOWN => {
+            let markdown = export_bookmarks_markdown(&state.persistent_history);
+            if !markdown.is_empty() {
+                let _ = copy_text_to_clipboard(hwnd, &markdown);
             }
         }
         ID_MENU_COPY_BOOKMARKS_MARKDOWN => {
