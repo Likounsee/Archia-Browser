@@ -5255,6 +5255,28 @@ mod gui_address_tests {
     }
 
     #[test]
+    fn open_tabs_csv_export_escapes_quotes_preserves_order_and_filters_unsafe_urls() {
+        let entries = vec![
+            (
+                "Docs, \"draft\"".to_owned(),
+                "https://docs.example/path".to_owned(),
+            ),
+            ("Unsafe".to_owned(), "javascript:alert(1)".to_owned()),
+            ("Second".to_owned(), "https://example.org/".to_owned()),
+        ];
+        assert_eq!(
+            export_open_tabs_csv(&entries),
+            "title,url\\r\\n\\"Docs, \\"\\"draft\\"\\",\\"https://docs.example/path\\"\\r\\n\\"Second\\",\\"https://example.org/\\""
+        );
+        assert!(export_open_tabs_csv(&[]).is_empty());
+        assert!(export_open_tabs_csv(&[(
+            "Unsafe".to_owned(),
+            "javascript:alert(1)".to_owned()
+        )])
+        .is_empty());
+    }
+
+    #[test]
     fn open_tabs_markdown_export_preserves_order_and_filters_unsafe_urls() {
         let entries = vec![
             (
