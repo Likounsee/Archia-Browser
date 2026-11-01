@@ -139,3 +139,11 @@ Use Ctrl+Shift+U or the browser menu to copy all currently open tab titles and U
 - Le menu Archia propose également ces deux actions.
 - `Ctrl+Shift+G` copie l’historique au format HTML Netscape, importable dans les navigateurs compatibles.
 - Les entrées vides, trop longues, contenant des caractères de contrôle ou utilisant un schéma autre que HTTP(S) sont rejetées.
+
+
+### Gestion des onglets par le presse-papiers
+
+- `Ctrl+Shift+U` copie tous les onglets ouverts au format HTML Netscape, avec leurs titres et adresses. Le fichier HTML obtenu peut être importé comme favoris dans les navigateurs compatibles.
+- `Ctrl+Shift+M` lit les URL ou favoris Netscape/TSV présents dans le presse-papiers et ouvre les liens dans des onglets séparés.
+- L'ouverture multiple est plafonnée à 20 liens par opération et respecte la limite globale de 100 onglets.
+- Les liens non HTTP(S) sont ignorés et les doublons sont supprimés par le parseur d'import.
