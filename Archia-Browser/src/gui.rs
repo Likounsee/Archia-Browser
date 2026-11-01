@@ -152,6 +152,8 @@ const ID_TAB_CONTEXT_CLOSE_SAME_SITE: u32 = 3608;
 const ID_TAB_CONTEXT_CLOSE_DUPLICATES: u32 = 3609;
 const ID_TAB_CONTEXT_COPY_SITE_URLS: u32 = 3610;
 const ID_TAB_CONTEXT_COPY_TITLE_URL: u32 = 3611;
+const ID_TAB_CONTEXT_COPY_MARKDOWN_LINK: u32 = 3612;
+const ID_TAB_CONTEXT_OPEN_EXTERNAL: u32 = 3613;
 const GWLP_WNDPROC: i32 = -4;
 const WM_CTLCOLOREDIT: u32 = 0x0133;
 const DT_SINGLELINE: u32 = 0x0020;
@@ -2538,6 +2540,14 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
             ID_TAB_CONTEXT_COPY_TITLE_URL,
             "Copier le titre et l'adresse de cet onglet",
         ),
+        (
+            ID_TAB_CONTEXT_COPY_MARKDOWN_LINK,
+            "Copier le lien Markdown de cet onglet",
+        ),
+        (
+            ID_TAB_CONTEXT_OPEN_EXTERNAL,
+            "Ouvrir dans le navigateur externe",
+        ),
     ] {
         let label = wide(label);
         let _ = AppendMenuW(menu, MF_STRING, id as usize, label.as_ptr());
@@ -2569,6 +2579,20 @@ unsafe fn show_tab_context_menu(state: &mut AppState, hwnd: Hwnd, index: usize) 
         ID_TAB_CONTEXT_COPY_URL => {
             if let Some(url) = duplicate_url.as_deref() {
                 let _ = copy_text_to_clipboard(hwnd, url);
+            }
+        }
+        ID_TAB_CONTEXT_COPY_MARKDOWN_LINK => {
+            if let Some(page) = state.browser.tabs().tab(tab_id).and_then(|tab| tab.page()) {
+                if let Some(url) = page.url() {
+                    let title = page.title().unwrap_or_default();
+                    let link = markdown_link(&title, &url.to_string());
+                    let _ = copy_text_to_clipboard(hwnd, &link);
+                }
+            }
+        }
+        ID_TAB_CONTEXT_OPEN_EXTERNAL => {
+            if let Some(url) = duplicate_url.as_deref() {
+                open_url_externally(hwnd, url);
             }
         }
         ID_TAB_CONTEXT_COPY_TITLE_URL => {
