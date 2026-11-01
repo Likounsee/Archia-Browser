@@ -158,3 +158,7 @@ Use Ctrl+Shift+U or the browser menu to copy all currently open tab titles and U
 
 
 Les favoris peuvent aussi être exportés en Markdown depuis le menu Archia ou avec `Ctrl+Alt+Shift+B`. L’import des favoris accepte les liens Markdown HTTP(S) (y compris les URL encadrées par `<...>`), en plus des formats texte, TSV et Netscape HTML.
+
+
+- `Ctrl+Shift+O` ouvre les favoris enregistrés dans des onglets, dans l’ordre, en respectant la limite de session.
+- `Ctrl+Alt+Shift+H` copie l’historique au format Markdown ; le menu Archia propose aussi cette exportation.
