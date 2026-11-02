@@ -215,7 +215,11 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // markup from creating arbitrary elements inside a form control.
                 if stack.iter().any(|node| node.tag_name() == Some("select")) {
                     match name.as_str() {
-                        "option" | "optgroup" | "script" | "template" | "select" => {}
+                        "option" | "optgroup" | "script" | "template" => {}
+                        "select" => {
+                            close_element(&mut root, &mut stack, "select");
+                            continue;
+                        }
                         "hr" => {
                             if stack.last().and_then(Node::tag_name) == Some("option") {
                                 close_element(&mut root, &mut stack, "option");
@@ -835,6 +839,26 @@ mod tests {
         assert_eq!(options[0].text_content(), "one");
         assert_eq!(options[1].text_content(), "two");
         assert!(select.find_first_element("div").is_none());
+        assert_eq!(
+            root.find_first_element("p")
+                .expect("following paragraph")
+                .text_content(),
+            "after"
+        );
+    }
+
+    #[test]
+    fn nested_select_start_closes_outer_select_without_nesting() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<select><option>before<select><option>ignored</select><p>after</p>",
+        ));
+        let selects = root
+            .descendants()
+            .filter(|node| node.tag_name() == Some("select"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(selects.len(), 1);
+        assert_eq!(selects[0].text_content(), "before");
         assert_eq!(
             root.find_first_element("p")
                 .expect("following paragraph")
