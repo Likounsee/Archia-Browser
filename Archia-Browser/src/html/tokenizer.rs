@@ -1360,7 +1360,7 @@ mod character_reference_tests {
     fn tokenizes_legacy_raw_text_elements_without_parsing_inner_markup() {
         for tag in ["xmp", "iframe", "noembed", "noframes"] {
             let html = format!("<{tag}><b>not an element</b></{tag}><p>after</p>");
-            let tokens = tokenize(&html);
+            let tokens = HtmlTokenizer::tokenize(&html);
             assert!(tokens.iter().any(|token| matches!(
                 token,
                 HtmlToken::Text(text) if text == "<b>not an element</b>"
