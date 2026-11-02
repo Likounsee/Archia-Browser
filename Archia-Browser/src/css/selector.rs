@@ -555,6 +555,18 @@ fn matches_pseudo_class(
     position: Option<usize>,
 ) -> bool {
     match pseudo {
+        // The normalized HTML document has a single document element named
+        // "html"; :root must not match arbitrary elements in a fragment.
+        "root" => matches!(&node.kind, NodeKind::Element { name, .. } if name.eq_ignore_ascii_case("html")),
+        // :link and :any-link match hyperlink elements with a non-empty href.
+        // Visited state is intentionally not exposed by this engine.
+        "link" | "any-link" => {
+            matches!(&node.kind, NodeKind::Element { name, .. }
+                if (name.eq_ignore_ascii_case("a")
+                    || name.eq_ignore_ascii_case("area")
+                    || name.eq_ignore_ascii_case("link"))
+                    && attributes.get("href").is_some_and(|href| !href.is_empty()))
+        }
         "checked" => attributes.contains_key("checked"),
         "disabled" => attributes.contains_key("disabled"),
         "enabled" => !attributes.contains_key("disabled"),
@@ -1001,6 +1013,31 @@ mod tests {
         assert!(Selector::parse("input:checked:disabled")
             .unwrap()
             .matches(&checked));
+    }
+
+    #[test]
+    fn matches_root_and_hyperlink_pseudo_classes() {
+        let html = Node::element("html");
+        let div = Node::element("div");
+        let mut anchor = Node::element("a");
+        anchor.set_attribute("href", "/docs");
+
+        assert!(Selector::parse(":root").unwrap().matches(&html));
+        assert!(!Selector::parse(":root").unwrap().matches(&div));
+        assert!(Selector::parse("a:link").unwrap().matches(&anchor));
+        assert!(Selector::parse("a:any-link").unwrap().matches(&anchor));
+
+        anchor.set_attribute("href", "");
+        assert!(!Selector::parse("a:link").unwrap().matches(&anchor));
+        assert!(!Selector::parse("a:any-link").unwrap().matches(&anchor));
+
+        let mut area = Node::element("area");
+        area.set_attribute("href", "#section");
+        assert!(Selector::parse("area:any-link").unwrap().matches(&area));
+
+        let mut link = Node::element("link");
+        link.set_attribute("href", "theme.css");
+        assert!(Selector::parse("link:link").unwrap().matches(&link));
     }
 
     #[test]
