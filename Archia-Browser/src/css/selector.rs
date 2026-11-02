@@ -1165,9 +1165,9 @@ mod tests {
         assert!(Selector::parse("p:lang(fr)").unwrap().matches_path(&path));
         assert!(!Selector::parse("p:lang(en)").unwrap().matches_path(&path));
 
-        let mut override = Node::element("section");
-        override.set_attribute("lang", "en-GB");
-        let override_path = [&html, &override, &paragraph];
+        let mut language_override = Node::element("section");
+        language_override.set_attribute("lang", "en-GB");
+        let override_path = [&html, &language_override, &paragraph];
         assert!(Selector::parse("p:lang(en)").unwrap().matches_path(&override_path));
         assert!(!Selector::parse("p:lang(fr)").unwrap().matches_path(&override_path));
     }
