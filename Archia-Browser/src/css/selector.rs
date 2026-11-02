@@ -847,6 +847,15 @@ fn has_descendant_matching(
     if depth >= 256 {
         return false;
     }
+    // :has() accepts relative selectors. A leading child combinator is
+    // anchored to the subject, so express it as an ordinary selector whose
+    // left-hand universal selector is the subject element.
+    let relative_argument = argument.trim_start();
+    let anchored_argument = if relative_argument.starts_with('>') {
+        format!("* {relative_argument}")
+    } else {
+        relative_argument.to_owned()
+    };
     let mut candidate_ancestors = Vec::new();
     if let Some(ancestors) = ancestors {
         if candidate_ancestors
@@ -866,7 +875,7 @@ fn has_descendant_matching(
             return false;
         }
         pseudo_argument_matches(
-            argument,
+            &anchored_argument,
             child,
             Some(&node.children),
             Some(position),
@@ -1825,6 +1834,27 @@ mod tests {
             .unwrap()
             .matches(&root));
         assert!(!Selector::parse("main:has(video)").unwrap().matches(&root));
+    }
+
+    #[test]
+    fn has_supports_relative_child_selectors() {
+        let mut root = Node::element("main");
+        let mut direct = Node::element("section");
+        direct.set_attribute("class", "card");
+        let mut nested = Node::element("div");
+        nested.append(Node::element("img"));
+        root.append(direct);
+        root.append(nested);
+
+        assert!(Selector::parse("main:has(> .card)")
+            .unwrap()
+            .matches(&root));
+        assert!(!Selector::parse("main:has(> img)")
+            .unwrap()
+            .matches(&root));
+        assert!(Selector::parse("main:has(img)")
+            .unwrap()
+            .matches(&root));
     }
 
     #[test]
