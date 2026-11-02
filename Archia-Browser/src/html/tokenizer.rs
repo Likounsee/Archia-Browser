@@ -1161,7 +1161,6 @@ fn decode_character_references_with_context(input: &str, in_attribute: bool) -> 
             "permil" => Some('‰'),
             "lsaquo" => Some('‹'),
             "rsaquo" => Some('›'),
-            "oline" => Some('‾'),
             "lceil" => Some('\u{2308}'),
             "rceil" => Some('\u{2309}'),
             "lfloor" => Some('\u{230A}'),
