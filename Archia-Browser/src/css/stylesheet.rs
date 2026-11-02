@@ -1741,16 +1741,17 @@ mod tests {
     #[test]
     fn media_query_lengths_preserve_fractional_css_pixels() {
         let css = "@media (min-width: 600.5px) { .min { color: green; } } @media (width > 799.5px) { .range { color: blue; } }";
-        let exact = StyleSheet::parse_for_viewport(css, 600, 800);
-        let above = StyleSheet::parse_for_viewport(css, 601, 800);
+        let below_minimum = StyleSheet::parse_for_viewport(css, 600, 800);
+        let above_minimum = StyleSheet::parse_for_viewport(css, 601, 800);
+        let above_range = StyleSheet::parse_for_viewport(css, 800, 800);
         let mut min = Node::element("div");
         min.set_attribute("class", "min");
         let mut range = Node::element("div");
         range.set_attribute("class", "range");
 
-        assert_eq!(exact.compute_style(&min).get("color"), None);
-        assert_eq!(above.compute_style(&min).get("color"), Some("green"));
-        assert_eq!(exact.compute_style(&range).get("color"), Some("blue"));
+        assert_eq!(below_minimum.compute_style(&min).get("color"), None);
+        assert_eq!(above_minimum.compute_style(&min).get("color"), Some("green"));
+        assert_eq!(above_range.compute_style(&range).get("color"), Some("blue"));
     }
 
     #[test]
