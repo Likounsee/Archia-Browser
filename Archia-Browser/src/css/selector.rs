@@ -826,12 +826,37 @@ fn pseudo_argument_matches(
             return false;
         };
         let mut path = Vec::new();
-        if path.try_reserve(ancestors.len().saturating_add(1)).is_err() {
+        let path_len = ancestors.len().saturating_add(1);
+        if path.try_reserve(path_len).is_err() {
             return false;
         }
         path.extend_from_slice(ancestors);
         path.push(node);
-        selector.matches_path(&path)
+
+        let mut sibling_lists: Vec<&[Node]> = Vec::new();
+        let mut sibling_positions = Vec::new();
+        if sibling_lists.try_reserve(path_len).is_err()
+            || sibling_positions.try_reserve(path_len).is_err()
+        {
+            return false;
+        }
+        for index in 0..path_len {
+            if index == 0 {
+                sibling_lists.push(&[]);
+                sibling_positions.push(0);
+                continue;
+            }
+            let siblings = &path[index - 1].children;
+            let Some(position) = siblings
+                .iter()
+                .position(|candidate| std::ptr::eq(candidate, path[index]))
+            else {
+                return false;
+            };
+            sibling_lists.push(siblings);
+            sibling_positions.push(position);
+        }
+        selector.matches_path_with_siblings(&path, &sibling_lists, &sibling_positions)
     })
 }
 
@@ -1200,6 +1225,32 @@ mod tests {
         assert!(Selector::parse("input:checked:disabled")
             .unwrap()
             .matches(&checked));
+    }
+
+    #[test]
+    fn is_and_not_match_sibling_combinators_in_complex_arguments() {
+        let mut root = Node::element("main");
+        root.set_attribute("class", "layout");
+        let mut first = Node::element("section");
+        first.set_attribute("class", "first");
+        let mut second = Node::element("section");
+        second.set_attribute("class", "content");
+        let mut paragraph = Node::element("p");
+        paragraph.set_attribute("class", "target");
+        second.append(paragraph);
+        root.append(first);
+        root.append(second);
+
+        let path = [&root, &root.children[1], &root.children[1].children[0]];
+        assert!(
+            Selector::parse("p:is(main.layout > section.first + section.content > p.target)")
+                .unwrap()
+                .matches_path_with_siblings(
+                    &path,
+                    &[&[], &root.children, &root.children[1].children],
+                    &[0, 1, 0],
+                )
+        );
     }
 
     #[test]
