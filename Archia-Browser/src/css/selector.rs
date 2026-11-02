@@ -1758,9 +1758,7 @@ mod tests {
 
         let mut invalid = Node::element("p");
         invalid.set_attribute("dir", "auto");
-        assert!(!Selector::parse(":dir(rtl)")
-            .unwrap()
-            .matches(&invalid));
+        assert!(!Selector::parse(":dir(rtl)").unwrap().matches(&invalid));
     }
 
     #[test]
