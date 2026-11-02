@@ -1431,7 +1431,6 @@ mod eof_regression_tests {
         );
     }
 
-
     #[test]
     fn decodes_greek_and_extended_typographic_named_references() {
         assert_eq!(
