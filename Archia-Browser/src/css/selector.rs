@@ -185,8 +185,8 @@ impl Selector {
                 }
                 if let Some(argument) = pseudo_argument(pseudo, "not") {
                     result += pseudo_argument_specificity(argument);
-                } else if let Some(argument) = pseudo_argument(pseudo, "is")
-                    .or_else(|| pseudo_argument(pseudo, "has"))
+                } else if let Some(argument) =
+                    pseudo_argument(pseudo, "is").or_else(|| pseudo_argument(pseudo, "has"))
                 {
                     result += pseudo_argument_specificity(argument);
                 } else {
@@ -844,7 +844,10 @@ fn has_descendant_matching(
     }
     let mut candidate_ancestors = Vec::new();
     if let Some(ancestors) = ancestors {
-        if candidate_ancestors.try_reserve(ancestors.len() + 1).is_err() {
+        if candidate_ancestors
+            .try_reserve(ancestors.len() + 1)
+            .is_err()
+        {
             return false;
         }
         candidate_ancestors.extend_from_slice(ancestors);
@@ -1813,7 +1816,9 @@ mod tests {
         root.children.push(section);
 
         assert!(Selector::parse("main:has(img)").unwrap().matches(&root));
-        assert!(Selector::parse("main:has(.card img)").unwrap().matches(&root));
+        assert!(Selector::parse("main:has(.card img)")
+            .unwrap()
+            .matches(&root));
         assert!(!Selector::parse("main:has(video)").unwrap().matches(&root));
     }
 
