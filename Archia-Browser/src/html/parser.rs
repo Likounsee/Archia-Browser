@@ -500,10 +500,10 @@ fn implied_end_tags_for_start(name: &str) -> &'static [&'static str] {
         "li" => &["li"],
         "option" => &["option"],
         "optgroup" => &["option", "optgroup"],
-        "tr" => &["tr"],
+        "tr" => &["tr", "colgroup"],
+        "caption" => &["colgroup"],
         "td" | "th" => &["td", "th"],
         "thead" | "tbody" | "tfoot" => &["thead", "tbody", "tfoot", "colgroup"],
-        "tr" | "caption" => &["colgroup"],
         "rt" | "rp" => &["rt", "rp"],
         _ => &[],
     }
