@@ -213,23 +213,17 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // The "in select" insertion mode only accepts a small set of
                 // descendants. Ignoring unrelated start tags prevents malformed
                 // markup from creating arbitrary elements inside a form control.
-                if let Some(select_position) = stack
+                if stack
                     .iter()
-                    .rposition(|node| node.tag_name() == Some("select"))
+                    .any(|node| node.tag_name() == Some("select"))
                 {
                     match name.as_str() {
                         "option" | "optgroup" | "hr" | "script" | "template" => {}
                         "input" | "keygen" | "textarea" => {
                             close_element(&mut root, &mut stack, "select");
                         }
+                        // A nested select or any unrelated element is ignored.
                         _ => continue,
-                    }
-                    // A nested select start tag is ignored rather than opening
-                    // another select; all other allowed tags remain in select mode.
-                    if name == "select" || (stack.len() > select_position && name != "input" && name != "keygen" && name != "textarea") {
-                        if name == "select" {
-                            continue;
-                        }
                     }
                 }
 
