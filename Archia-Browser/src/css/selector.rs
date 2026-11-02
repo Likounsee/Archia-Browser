@@ -566,7 +566,7 @@ fn is_required_capable_element(
                 .get("type")
                 .map(|value| value.trim().to_ascii_lowercase())
                 .as_deref(),
-            Some("hidden" | "button" | "submit" | "reset" | "image" | "range" | "color")
+            "hidden" | "button" | "submit" | "reset" | "image" | "range" | "color"
         ),
         _ => false,
     }
