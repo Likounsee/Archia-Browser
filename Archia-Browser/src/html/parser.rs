@@ -210,6 +210,29 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                     continue;
                 }
 
+                // The "in select" insertion mode only accepts a small set of
+                // descendants. Ignoring unrelated start tags prevents malformed
+                // markup from creating arbitrary elements inside a form control.
+                if let Some(select_position) = stack
+                    .iter()
+                    .rposition(|node| node.tag_name() == Some("select"))
+                {
+                    match name.as_str() {
+                        "option" | "optgroup" | "hr" | "script" | "template" => {}
+                        "input" | "keygen" | "textarea" => {
+                            close_element(&mut root, &mut stack, "select");
+                        }
+                        _ => continue,
+                    }
+                    // A nested select start tag is ignored rather than opening
+                    // another select; all other allowed tags remain in select mode.
+                    if name == "select" || (stack.len() > select_position && name != "input" && name != "keygen" && name != "textarea") {
+                        if name == "select" {
+                            continue;
+                        }
+                    }
+                }
+
                 // Apply the most common HTML implied-end-tag rules before
                 // inserting a new element. Without these, malformed-but-common
                 // markup such as adjacent anchors or options produces a DOM
@@ -373,6 +396,36 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 }
             }
             HtmlToken::EndTag(name) => {
+                // End tags in select mode are deliberately restricted. In
+                // particular, </div> and similar stray tags must not pop the
+                // select or any of its ancestors.
+                if let Some(select_position) = stack
+                    .iter()
+                    .rposition(|node| node.tag_name() == Some("select"))
+                {
+                    match name.as_str() {
+                        "select" => close_element(&mut root, &mut stack, "select"),
+                        "option" if stack.len() > select_position + 1
+                            && stack.last().and_then(Node::tag_name) == Some("option") =>
+                        {
+                            close_element(&mut root, &mut stack, "option");
+                        }
+                        "optgroup" => {
+                            if stack.last().and_then(Node::tag_name) == Some("option") {
+                                close_element(&mut root, &mut stack, "option");
+                            }
+                            if stack.len() > select_position + 1
+                                && stack.last().and_then(Node::tag_name) == Some("optgroup")
+                            {
+                                close_element(&mut root, &mut stack, "optgroup");
+                            }
+                        }
+                        "script" | "template" => close_element(&mut root, &mut stack, name),
+                        _ => {}
+                    }
+                    continue;
+                }
+
                 // Avoid expensive comparisons against every open element when a
                 // direct-token caller supplies an unbounded closing-tag name.
                 if name.len() <= MAX_DOM_TAG_NAME_BYTES {
@@ -764,6 +817,55 @@ mod tests {
         assert!(head.find_first_element("title").is_some());
         assert!(head.find_first_element("meta").is_some());
         assert!(body.find_first_element("p").is_some());
+    }
+
+    #[test]
+    fn select_mode_ignores_unrelated_elements_and_closes_options() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<select><div>ignored-tag</div><option>one<option>two</select><p>after</p>",
+        ));
+        let select = root.find_first_element("select").expect("select retained");
+        let options = select
+            .children
+            .iter()
+            .filter(|node| node.tag_name() == Some("option"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(options.len(), 2);
+        assert_eq!(options[0].text_content(), "one");
+        assert_eq!(options[1].text_content(), "two");
+        assert!(select.find_first_element("div").is_none());
+        assert_eq!(
+            root.find_first_element("p").expect("following paragraph").text_content(),
+            "after"
+        );
+    }
+
+    #[test]
+    fn select_mode_closes_before_input_controls() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<select><option>choice<input name='outside'><p>after</p>",
+        ));
+        let body = root.find_first_element("body").expect("body normalized");
+        let select_position = body
+            .children
+            .iter()
+            .position(|node| node.tag_name() == Some("select"))
+            .expect("select retained");
+        let input_position = body
+            .children
+            .iter()
+            .position(|node| node.tag_name() == Some("input"))
+            .expect("input reprocessed outside select");
+
+        assert!(input_position > select_position);
+        assert_eq!(
+            body.children[select_position].text_content(),
+            "choice"
+        );
+        assert!(body.children[input_position..]
+            .iter()
+            .any(|node| node.tag_name() == Some("p")));
     }
 
     #[test]
