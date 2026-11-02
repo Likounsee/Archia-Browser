@@ -741,7 +741,7 @@ fn matches_pseudo_class(
             let Some(argument) = pseudo_argument(pseudo, "not") else {
                 return false;
             };
-            !pseudo_argument_matches(argument, node, siblings, position)
+            !pseudo_argument_matches(argument, node, siblings, position, ancestors)
         }
         _ if pseudo.starts_with("is(") || pseudo.starts_with("where(") => {
             let name = if pseudo.starts_with("is(") {
@@ -752,7 +752,7 @@ fn matches_pseudo_class(
             let Some(argument) = pseudo_argument(pseudo, name) else {
                 return false;
             };
-            pseudo_argument_matches(argument, node, siblings, position)
+            pseudo_argument_matches(argument, node, siblings, position, ancestors)
         }
         _ => false,
     }
@@ -775,15 +775,32 @@ fn pseudo_argument_matches(
     node: &Node,
     siblings: Option<&[Node]>,
     position: Option<usize>,
+    ancestors: Option<&[&Node]>,
 ) -> bool {
     split_pseudo_arguments(argument).any(|candidate| {
         let Some(selector) = Selector::parse(candidate) else {
             return false;
         };
-        if selector.parts.len() != 1 {
+        if selector.parts.len() == 1 {
+            return matches_simple_with_siblings(
+                &selector.parts[0].1,
+                node,
+                siblings,
+                position,
+                ancestors,
+            );
+        }
+
+        let Some(ancestors) = ancestors else {
+            return false;
+        };
+        let mut path = Vec::new();
+        if path.try_reserve(ancestors.len().saturating_add(1)).is_err() {
             return false;
         }
-        matches_simple_with_siblings(&selector.parts[0].1, node, siblings, position, None)
+        path.extend_from_slice(ancestors);
+        path.push(node);
+        selector.matches_path(&path)
     })
 }
 
@@ -1153,6 +1170,26 @@ mod tests {
         assert!(Selector::parse("input:checked:disabled")
             .unwrap()
             .matches(&checked));
+    }
+
+    #[test]
+    fn is_and_not_match_complex_ancestor_selectors() {
+        let mut root = Node::element("main");
+        root.set_attribute("class", "layout");
+        let mut section = Node::element("section");
+        section.set_attribute("class", "content");
+        let mut paragraph = Node::element("p");
+        paragraph.set_attribute("class", "target");
+        section.append(paragraph);
+        root.append(section);
+
+        let path = [&root, &root.children[0], &root.children[0].children[0]];
+        assert!(Selector::parse("p:is(main.layout > section.content > p.target)")
+            .unwrap()
+            .matches_path(&path));
+        assert!(!Selector::parse("p:not(main.layout > section.content > p.target)")
+            .unwrap()
+            .matches_path(&path));
     }
 
     #[test]
