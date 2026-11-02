@@ -547,6 +547,7 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
 
     Some(simple)
 }
+
 fn is_disableable_element(node: &Node) -> bool {
     matches!(
         node.tag_name(),
