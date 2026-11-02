@@ -766,8 +766,8 @@ fn matches_pseudo_class(
             let Some(direction) = pseudo_argument(pseudo, "dir") else {
                 return false;
             };
-            let direction = direction.trim();
-            if !matches!(direction, "ltr" | "rtl") {
+            let direction = direction.trim().to_ascii_lowercase();
+            if !matches!(direction.as_str(), "ltr" | "rtl") {
                 return false;
             }
             let own_direction = attributes
