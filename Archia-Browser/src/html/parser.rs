@@ -261,7 +261,11 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // documents such as <table><td>cell</td></table>.
                 // A <col> directly inside a table starts an implicit
                 // <colgroup>, just as a row starts an implicit <tbody>.
-                if name == "col" && stack.last().is_some_and(|node| node.tag_name() == Some("table")) {
+                if name == "col"
+                    && stack
+                        .last()
+                        .is_some_and(|node| node.tag_name() == Some("table"))
+                {
                     if created_nodes >= MAX_DOM_NODES - 1
                         || stack.len() >= MAX_DOM_DEPTH
                         || stack.try_reserve(1).is_err()
