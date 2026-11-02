@@ -3,12 +3,16 @@ version = 2
 confidence-threshold = 0.90
 allow = [
     "Apache-2.0",
+    "BSL-1.0",
     "BSD-3-Clause",
     "CC0-1.0",
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
+    "Zlib",
     # webpki-roots distributes CA root-certificate data under this permissive data license.
     "CDLA-Permissive-2.0",
     "ISC",
     "MIT",
-    # ICU4X data structures use the OSI-approved Unicode License v3.
+    # Font assets use the SIL Open Font License and Ubuntu Font Licence.\n    # Compression libraries use the permissive zlib license.\n    # error-code uses the Boost Software License 1.0.\n    # ICU4X data structures use the OSI-approved Unicode License v3.
     "Unicode-3.0",
 ]
