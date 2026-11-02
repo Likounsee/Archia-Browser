@@ -164,13 +164,7 @@ impl StyleSheet {
         };
 
         for rule in &self.rules {
-            let matching = rule.selectors.iter().filter(|selector| {
-                if selector.parts.len() == 1 {
-                    selector.matches(node)
-                } else {
-                    selector.matches_path(path)
-                }
-            });
+            let matching = rule.selectors.iter().filter(|selector| selector.matches_path(path));
             if let Some(specificity) = matching.map(Selector::specificity).max() {
                 if matches.try_reserve(1).is_err() {
                     return matches;
