@@ -762,6 +762,31 @@ fn matches_pseudo_class(
                     .unwrap_or(false)
             }
         }
+        _ if pseudo.starts_with("dir(") => {
+            let Some(direction) = pseudo_argument(pseudo, "dir") else {
+                return false;
+            };
+            let direction = direction.trim();
+            if !matches!(direction, "ltr" | "rtl") {
+                return false;
+            }
+            let own_direction = attributes
+                .get("dir")
+                .map(|value| value.trim().to_ascii_lowercase());
+            let inherited_direction = ancestors.and_then(|ancestors| {
+                ancestors.iter().rev().find_map(|ancestor| {
+                    let NodeKind::Element { attributes, .. } = &ancestor.kind else {
+                        return None;
+                    };
+                    attributes
+                        .get("dir")
+                        .map(|value| value.trim().to_ascii_lowercase())
+                })
+            });
+            own_direction
+                .or(inherited_direction)
+                .is_some_and(|value| value == direction)
+        }
         // :link and :any-link match hyperlink elements with a non-empty href.
         // Visited state is intentionally not exposed by this engine.
         "link" | "any-link" => {
@@ -1706,6 +1731,36 @@ mod tests {
         let mut option = Node::element("option");
         option.set_attribute("selected", "");
         assert!(Selector::parse(":checked").unwrap().matches(&option));
+    }
+
+    #[test]
+    fn dir_pseudo_class_uses_nearest_inherited_direction() {
+        let mut root = Node::element("html");
+        root.set_attribute("dir", "rtl");
+        let mut section = Node::element("section");
+        let paragraph = Node::element("p");
+        section.append(paragraph);
+        root.append(section);
+
+        let path = [&root, &root.children[0], &root.children[0].children[0]];
+        assert!(Selector::parse(":dir(rtl)").unwrap().matches_path(&path));
+        assert!(!Selector::parse(":dir(ltr)").unwrap().matches_path(&path));
+
+        let mut override = Node::element("p");
+        override.set_attribute("dir", "ltr");
+        let override_path = [&root, &override];
+        assert!(Selector::parse(":dir(ltr)")
+            .unwrap()
+            .matches_path(&override_path));
+        assert!(!Selector::parse(":dir(rtl)")
+            .unwrap()
+            .matches_path(&override_path));
+
+        let mut invalid = Node::element("p");
+        invalid.set_attribute("dir", "auto");
+        assert!(!Selector::parse(":dir(rtl)")
+            .unwrap()
+            .matches(&invalid));
     }
 
     #[test]
