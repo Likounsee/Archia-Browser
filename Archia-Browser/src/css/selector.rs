@@ -1940,29 +1940,15 @@ mod tests {
         parent.append(featured);
 
         let siblings = parent.children.as_slice();
-        let ancestors = [&parent];
         assert!(Selector::parse("section.card:has(~ .featured)")
             .unwrap()
-            .matches_path_with_siblings(
-                &[&parent, &siblings[0]],
-                &[&[], siblings],
-                &[0, 0],
-            ));
+            .matches_path_with_siblings(&[&parent, &siblings[0]], &[&[], siblings], &[0, 0],));
         assert!(!Selector::parse("section.card:has(+ .featured)")
             .unwrap()
-            .matches_path_with_siblings(
-                &[&parent, &siblings[0]],
-                &[&[], siblings],
-                &[0, 0],
-            ));
+            .matches_path_with_siblings(&[&parent, &siblings[0]], &[&[], siblings], &[0, 0],));
         assert!(Selector::parse("section.card:has(+ .featured)")
             .unwrap()
-            .matches_path_with_siblings(
-                &[&parent, &siblings[3]],
-                &[&[], siblings],
-                &[0, 3],
-            ));
-        let _ = ancestors;
+            .matches_path_with_siblings(&[&parent, &siblings[3]], &[&[], siblings], &[0, 3],));
     }
 
     #[test]
