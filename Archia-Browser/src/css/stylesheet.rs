@@ -817,6 +817,14 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
                 return;
             }
         }
+        "border-top" | "border-right" | "border-bottom" | "border-left" => {
+            if let Some((width, style, color)) = expand_border_shorthand(&value) {
+                apply(format!("{name}-width"), width);
+                apply(format!("{name}-style"), style);
+                apply(format!("{name}-color"), color);
+                return;
+            }
+        }
         _ => {}
     }
 
@@ -1220,6 +1228,28 @@ mod tests {
         assert_eq!(style.get("border-width"), Some("2px"));
         assert_eq!(style.get("border-style"), Some("solid"));
         assert_eq!(style.get("border-color"), Some("#102030"));
+    }
+
+    #[test]
+    fn expands_individual_border_side_shorthands() {
+        let sheet = StyleSheet::parse(
+            "div { border-top: 2px solid red; border-right: dashed blue; border-bottom: 4px double; border-left: 1px dotted green; }",
+        );
+        let node = Node::element("div");
+        let style = sheet.compute_style(&node);
+
+        assert_eq!(style.get("border-top-width"), Some("2px"));
+        assert_eq!(style.get("border-top-style"), Some("solid"));
+        assert_eq!(style.get("border-top-color"), Some("red"));
+        assert_eq!(style.get("border-right-width"), Some("medium"));
+        assert_eq!(style.get("border-right-style"), Some("dashed"));
+        assert_eq!(style.get("border-right-color"), Some("blue"));
+        assert_eq!(style.get("border-bottom-width"), Some("4px"));
+        assert_eq!(style.get("border-bottom-style"), Some("double"));
+        assert_eq!(style.get("border-bottom-color"), Some("currentcolor"));
+        assert_eq!(style.get("border-left-width"), Some("1px"));
+        assert_eq!(style.get("border-left-style"), Some("dotted"));
+        assert_eq!(style.get("border-left-color"), Some("green"));
     }
 
     #[test]
