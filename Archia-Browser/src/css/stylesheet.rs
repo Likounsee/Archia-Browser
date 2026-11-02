@@ -561,6 +561,18 @@ fn media_query_matches(query: &str, viewport_width: u32, viewport_height: u32) -
                 "max-height" => expected.is_some_and(|v| viewport_height <= v),
                 "orientation" if value == "portrait" => viewport_height >= viewport_width,
                 "orientation" if value == "landscape" => viewport_width > viewport_height,
+                "aspect-ratio" => parse_media_ratio(value).is_some_and(|(w, h)| {
+                    u64::from(viewport_width) * u64::from(h)
+                        == u64::from(viewport_height) * u64::from(w)
+                }),
+                "min-aspect-ratio" => parse_media_ratio(value).is_some_and(|(w, h)| {
+                    u64::from(viewport_width) * u64::from(h)
+                        >= u64::from(viewport_height) * u64::from(w)
+                }),
+                "max-aspect-ratio" => parse_media_ratio(value).is_some_and(|(w, h)| {
+                    u64::from(viewport_width) * u64::from(h)
+                        <= u64::from(viewport_height) * u64::from(w)
+                }),
                 _ => false,
             };
             matches &= condition;
@@ -575,6 +587,13 @@ fn media_query_matches(query: &str, viewport_width: u32, viewport_height: u32) -
             matches
         }
     })
+}
+
+fn parse_media_ratio(value: &str) -> Option<(u32, u32)> {
+    let (numerator, denominator) = value.split_once('/')?;
+    let numerator = numerator.trim().parse::<u32>().ok()?;
+    let denominator = denominator.trim().parse::<u32>().ok()?;
+    (numerator > 0 && denominator > 0).then_some((numerator, denominator))
 }
 
 fn parse_media_length(value: &str) -> Option<u32> {
@@ -1373,4 +1392,37 @@ mod tests {
         let sheet = StyleSheet::parse(css);
         assert!(sheet.rules.is_empty());
     }
+    #[test]
+    fn media_queries_support_aspect_ratio_features() {
+        let css = "@media (min-aspect-ratio: 16/9) { .wide { color: green; } } @media (max-aspect-ratio: 4/3) { .narrow { color: blue; } } @media (aspect-ratio: 16/9) { .exact { color: purple; } }";
+        let sheet = StyleSheet::parse_for_viewport(css, 1920, 1080);
+        for (class, expected) in [
+            ("wide", Some("green")),
+            ("narrow", None),
+            ("exact", Some("purple")),
+        ] {
+            let mut node = Node::element("div");
+            node.set_attribute("class", class);
+            assert_eq!(sheet.compute_style(&node).get("color"), expected);
+        }
+
+        let portrait = StyleSheet::parse_for_viewport(css, 800, 1200);
+        let mut wide = Node::element("div");
+        wide.set_attribute("class", "wide");
+        let mut narrow = Node::element("div");
+        narrow.set_attribute("class", "narrow");
+        assert_eq!(portrait.compute_style(&wide).get("color"), None);
+        assert_eq!(portrait.compute_style(&narrow).get("color"), Some("blue"));
+    }
+
+    #[test]
+    fn media_queries_reject_invalid_aspect_ratio_values() {
+        let sheet = StyleSheet::parse_for_viewport(
+            "@media (min-aspect-ratio: 16/0) { p { color: red; } } @media (aspect-ratio: nope) { p { color: blue; } }",
+            1200,
+            800,
+        );
+        assert!(sheet.rules.is_empty());
+    }
+
 }
