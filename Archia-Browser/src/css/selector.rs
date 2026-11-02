@@ -603,13 +603,11 @@ fn is_read_write_element(
                     | "number"
             )
         ),
-        _ => attributes
-            .get("contenteditable")
-            .is_some_and(|value| {
-                value.is_empty()
-                    || value.eq_ignore_ascii_case("true")
-                    || value.eq_ignore_ascii_case("plaintext-only")
-            }),
+        _ => attributes.get("contenteditable").is_some_and(|value| {
+            value.is_empty()
+                || value.eq_ignore_ascii_case("true")
+                || value.eq_ignore_ascii_case("plaintext-only")
+        }),
     }
 }
 
