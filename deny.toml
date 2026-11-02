@@ -9,4 +9,6 @@ allow = [
     "CDLA-Permissive-2.0",
     "ISC",
     "MIT",
+    # ICU4X data structures use the OSI-approved Unicode License v3.
+    "Unicode-3.0",
 ]
