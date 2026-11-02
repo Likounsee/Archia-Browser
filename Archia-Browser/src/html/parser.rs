@@ -160,7 +160,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                             && stack[table_position + 1..].iter().all(|node| {
                                 matches!(
                                     node.tag_name(),
-                                    Some("tbody" | "thead" | "tfoot" | "tr" | "table")
+                                    Some("colgroup" | "tbody" | "thead" | "tfoot" | "tr" | "table")
                                 )
                             })
                     });
@@ -1301,6 +1301,24 @@ mod tests {
             super::super::dom::NodeKind::Text(text) if text == "end"
         ));
         assert_eq!(div.text_content(), "startbeforeaftercellend");
+    }
+
+    #[test]
+    fn non_whitespace_inside_colgroup_is_foster_parented() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<div><table><colgroup>invalid<tr><td>cell</td></tr></table></div>",
+        ));
+        let div = root.find_first_element("div").expect("div retained");
+        let table = div.find_first_element("table").expect("table retained");
+
+        assert_eq!(div.children.len(), 2);
+        assert!(matches!(
+            &div.children[0].kind,
+            super::super::dom::NodeKind::Text(text) if text == "invalid"
+        ));
+        assert_eq!(div.children[1].tag_name(), Some("table"));
+        assert_eq!(table.children[0].tag_name(), Some("colgroup"));
+        assert_eq!(table.children[1].tag_name(), Some("tbody"));
     }
 
     #[test]
