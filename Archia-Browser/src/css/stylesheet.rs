@@ -561,33 +561,7 @@ fn media_query_matches(query: &str, viewport_width: u32, viewport_height: u32) -
                 return false;
             };
             let feature = after_open[..close].trim();
-            let Some((name, value)) = feature.split_once(':') else {
-                return false;
-            };
-            let value = value.trim();
-            let expected = parse_media_length(value);
-            let condition = match name.trim() {
-                "min-width" => expected.is_some_and(|v| viewport_width >= v),
-                "max-width" => expected.is_some_and(|v| viewport_width <= v),
-                "min-height" => expected.is_some_and(|v| viewport_height >= v),
-                "max-height" => expected.is_some_and(|v| viewport_height <= v),
-                "orientation" if value == "portrait" => viewport_height >= viewport_width,
-                "orientation" if value == "landscape" => viewport_width > viewport_height,
-                "aspect-ratio" => parse_media_ratio(value).is_some_and(|(w, h)| {
-                    u64::from(viewport_width) * u64::from(h)
-                        == u64::from(viewport_height) * u64::from(w)
-                }),
-                "min-aspect-ratio" => parse_media_ratio(value).is_some_and(|(w, h)| {
-                    u64::from(viewport_width) * u64::from(h)
-                        >= u64::from(viewport_height) * u64::from(w)
-                }),
-                "max-aspect-ratio" => parse_media_ratio(value).is_some_and(|(w, h)| {
-                    u64::from(viewport_width) * u64::from(h)
-                        <= u64::from(viewport_height) * u64::from(w)
-                }),
-                _ => false,
-            };
-            matches &= condition;
+            matches &= media_feature_matches(feature, viewport_width, viewport_height);
             remaining = &after_open[close + 1..];
         }
         if conditions.trim().is_empty() && !media_type.starts_with('(') {
@@ -599,6 +573,86 @@ fn media_query_matches(query: &str, viewport_width: u32, viewport_height: u32) -
             matches
         }
     })
+}
+
+fn media_feature_matches(feature: &str, viewport_width: u32, viewport_height: u32) -> bool {
+    if let Some((name, value)) = feature.split_once(':') {
+        let name = name.trim();
+        let value = value.trim();
+        let expected = parse_media_length(value);
+        return match name {
+            "min-width" => expected.is_some_and(|v| viewport_width >= v),
+            "max-width" => expected.is_some_and(|v| viewport_width <= v),
+            "min-height" => expected.is_some_and(|v| viewport_height >= v),
+            "max-height" => expected.is_some_and(|v| viewport_height <= v),
+            "orientation" if value == "portrait" => viewport_height >= viewport_width,
+            "orientation" if value == "landscape" => viewport_width > viewport_height,
+            "aspect-ratio" => parse_media_ratio(value).is_some_and(|(w, h)| {
+                u64::from(viewport_width) * u64::from(h)
+                    == u64::from(viewport_height) * u64::from(w)
+            }),
+            "min-aspect-ratio" => parse_media_ratio(value).is_some_and(|(w, h)| {
+                u64::from(viewport_width) * u64::from(h)
+                    >= u64::from(viewport_height) * u64::from(w)
+            }),
+            "max-aspect-ratio" => parse_media_ratio(value).is_some_and(|(w, h)| {
+                u64::from(viewport_width) * u64::from(h)
+                    <= u64::from(viewport_height) * u64::from(w)
+            }),
+            _ => false,
+        };
+    }
+
+    let terms = feature.split_whitespace().collect::<Vec<_>>();
+    let dimension = |name: &str| match name {
+        "width" => Some(f64::from(viewport_width)),
+        "height" => Some(f64::from(viewport_height)),
+        _ => None,
+    };
+    let compare = |left: f64, operator: &str, right: f64| match operator {
+        "<" => left < right,
+        "<=" => left <= right,
+        "=" => left == right,
+        ">=" => left >= right,
+        ">" => left > right,
+        _ => false,
+    };
+    let invert = |operator: &str| match operator {
+        "<" => ">",
+        "<=" => ">=",
+        "=" => "=",
+        ">=" => "<=",
+        ">" => "<",
+        _ => "",
+    };
+
+    match terms.as_slice() {
+        [name, operator, value] if dimension(name).is_some() => {
+            let Some(expected) = parse_media_length(value) else {
+                return false;
+            };
+            compare(dimension(name).unwrap(), operator, f64::from(expected))
+        }
+        [value, operator, name] if dimension(name).is_some() => {
+            let Some(expected) = parse_media_length(value) else {
+                return false;
+            };
+            compare(dimension(name).unwrap(), invert(operator), f64::from(expected))
+        }
+        [lower, lower_operator, name, upper_operator, upper]
+            if dimension(name).is_some() =>
+        {
+            let (Some(lower), Some(upper)) =
+                (parse_media_length(lower), parse_media_length(upper))
+            else {
+                return false;
+            };
+            let current = dimension(name).unwrap();
+            compare(f64::from(lower), lower_operator, current)
+                && compare(current, upper_operator, f64::from(upper))
+        }
+        _ => false,
+    }
 }
 
 fn parse_media_ratio(value: &str) -> Option<(u32, u32)> {
@@ -1549,6 +1603,30 @@ mod tests {
         let wide = StyleSheet::parse_for_viewport(css, 900, 700);
         assert_eq!(narrow.compute_style(&card).get("color"), Some("red"));
         assert_eq!(wide.compute_style(&card).get("color"), Some("blue"));
+    }
+
+    #[test]
+    fn media_query_range_syntax_supports_width_and_height() {
+        let css = "@media (width >= 600px) { .wide { color: green; } } @media (400px < width <= 900px) { .middle { color: blue; } } @media (height < 700px) { .short { color: purple; } }";
+        let sheet = StyleSheet::parse_for_viewport(css, 800, 600);
+
+        for (class, expected) in [
+            ("wide", Some("green")),
+            ("middle", Some("blue")),
+            ("short", Some("purple")),
+        ] {
+            let mut node = Node::element("div");
+            node.set_attribute("class", class);
+            assert_eq!(sheet.compute_style(&node).get("color"), expected);
+        }
+
+        let narrow = StyleSheet::parse_for_viewport(css, 350, 900);
+        let mut wide = Node::element("div");
+        wide.set_attribute("class", "wide");
+        let mut middle = Node::element("div");
+        middle.set_attribute("class", "middle");
+        assert_eq!(narrow.compute_style(&wide).get("color"), None);
+        assert_eq!(narrow.compute_style(&middle).get("color"), None);
     }
 
     #[test]
