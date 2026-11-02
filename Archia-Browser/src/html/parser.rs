@@ -1419,12 +1419,12 @@ mod tests {
         assert_eq!(table.children.len(), 1);
         let tbody = &table.children[0];
         assert_eq!(tbody.tag_name(), Some("tbody"));
-        assert_eq!(tbody.children.len(), 2);
+        assert_eq!(tbody.children.len(), 1);
         assert_eq!(tbody.children[0].tag_name(), Some("tr"));
+        assert_eq!(tbody.children[0].children.len(), 2);
         assert_eq!(tbody.children[0].children[0].text_content(), "one");
-        assert_eq!(tbody.children[1].tag_name(), Some("tr"));
-        assert_eq!(tbody.children[1].children[0].tag_name(), Some("th"));
-        assert_eq!(tbody.children[1].children[0].text_content(), "two");
+        assert_eq!(tbody.children[0].children[1].tag_name(), Some("th"));
+        assert_eq!(tbody.children[0].children[1].text_content(), "two");
     }
 
     #[test]
