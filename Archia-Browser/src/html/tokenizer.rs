@@ -754,8 +754,8 @@ fn lookup_named_character_reference(input: &str) -> Option<(&'static str, &'stat
             continue;
         }
         let candidate = &input[..length];
-        if let Ok(index) = NAMED_CHARACTER_REFERENCES
-            .binary_search_by(|(name, _)| name.cmp(&candidate))
+        if let Ok(index) =
+            NAMED_CHARACTER_REFERENCES.binary_search_by(|(name, _)| name.cmp(&candidate))
         {
             return Some(NAMED_CHARACTER_REFERENCES[index]);
         }
@@ -823,9 +823,7 @@ fn decode_character_references_with_context(input: &str, in_attribute: bool) -> 
         let next = remainder[name.len()..].chars().next();
         let blocked_in_attribute = !name.ends_with(';')
             && in_attribute
-            && next.is_some_and(|character| {
-                character.is_ascii_alphanumeric() || character == '='
-            });
+            && next.is_some_and(|character| character.is_ascii_alphanumeric() || character == '=');
         if blocked_in_attribute {
             output.push('&');
             cursor = start + 1;
@@ -857,9 +855,15 @@ mod character_reference_tests {
     fn decodes_full_named_reference_table_and_multi_codepoint_values() {
         assert_eq!(decode_character_references("&NotEqualTilde;"), "≂̸");
         assert_eq!(decode_character_references("&acE;"), "∾̳");
-        assert_eq!(decode_character_references("&CounterClockwiseContourIntegral;"), "∳");
+        assert_eq!(
+            decode_character_references("&CounterClockwiseContourIntegral;"),
+            "∳"
+        );
         assert_eq!(decode_character_references("&Afr;"), "𝔄");
-        assert_eq!(decode_character_references("&NotEqualTilde"), "&NotEqualTilde");
+        assert_eq!(
+            decode_character_references("&NotEqualTilde"),
+            "&NotEqualTilde"
+        );
     }
 
     #[test]
