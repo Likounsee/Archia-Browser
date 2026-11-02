@@ -1271,19 +1271,21 @@ fn split_nth_of_clause(argument: &str) -> (&str, Option<&str>) {
             ']' if brackets > 0 => brackets -= 1,
             '(' if brackets == 0 => parentheses += 1,
             ')' if brackets == 0 && parentheses > 0 => parentheses -= 1,
-            'o' | 'O' if brackets == 0 && parentheses == 0 && index > 0 => {
-                if bytes
-                    .get(index + 1)
-                    .is_some_and(|next| next.eq_ignore_ascii_case(&b'f'))
+            'o' | 'O'
+                if brackets == 0
+                    && parentheses == 0
+                    && index > 0
+                    && bytes
+                        .get(index + 1)
+                        .is_some_and(|next| next.eq_ignore_ascii_case(&b'f'))
                     && bytes[index - 1].is_ascii_whitespace()
-                    && bytes.get(index + 2).is_some_and(u8::is_ascii_whitespace)
-                {
-                    let formula_end = index - 1;
-                    let selector_start = index + 3;
-                    let selector = argument[selector_start..].trim();
-                    if !selector.is_empty() {
-                        return (argument[..formula_end].trim(), Some(selector));
-                    }
+                    && bytes.get(index + 2).is_some_and(u8::is_ascii_whitespace) =>
+            {
+                let formula_end = index - 1;
+                let selector_start = index + 3;
+                let selector = argument[selector_start..].trim();
+                if !selector.is_empty() {
+                    return (argument[..formula_end].trim(), Some(selector));
                 }
             }
             _ => {}
