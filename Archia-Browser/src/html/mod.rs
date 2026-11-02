@@ -1,4 +1,5 @@
 pub mod dom;
+mod entities;
 pub mod parser;
 pub mod tokenizer;
 
