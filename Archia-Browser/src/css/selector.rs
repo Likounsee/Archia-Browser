@@ -851,7 +851,8 @@ fn has_descendant_matching(
     // anchored to the subject, so express it as an ordinary selector whose
     // left-hand universal selector is the subject element.
     let relative_argument = argument.trim_start();
-    let anchored_argument = if relative_argument.starts_with('>') {
+    let direct_child_only = relative_argument.starts_with('>');
+    let anchored_argument = if direct_child_only {
         format!("* {relative_argument}")
     } else {
         relative_argument.to_owned()
@@ -880,7 +881,8 @@ fn has_descendant_matching(
             Some(&node.children),
             Some(position),
             Some(&candidate_ancestors),
-        ) || has_descendant_matching(argument, child, Some(&candidate_ancestors), depth + 1)
+        ) || (!direct_child_only
+            && has_descendant_matching(argument, child, Some(&candidate_ancestors), depth + 1))
     })
 }
 
@@ -1849,6 +1851,15 @@ mod tests {
         assert!(Selector::parse("main:has(> .card)").unwrap().matches(&root));
         assert!(!Selector::parse("main:has(> img)").unwrap().matches(&root));
         assert!(Selector::parse("main:has(img)").unwrap().matches(&root));
+        let mut nested_card = Node::element("main");
+        let mut wrapper = Node::element("div");
+        let mut card = Node::element("section");
+        card.set_attribute("class", "card");
+        wrapper.append(card);
+        nested_card.append(wrapper);
+        assert!(!Selector::parse("main:has(> .card)")
+            .unwrap()
+            .matches(&nested_card));
     }
 
     #[test]
