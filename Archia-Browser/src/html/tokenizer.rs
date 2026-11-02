@@ -1105,6 +1105,63 @@ fn decode_character_references_with_context(input: &str, in_attribute: bool) -> 
             "otimes" => Some('\u{2297}'),
             "perp" => Some('\u{22A5}'),
             "sdot" => Some('\u{22C5}'),
+            // Greek alphabet and variant symbols commonly used in technical content.
+            "Alpha" => Some('Α'),
+            "Beta" => Some('Β'),
+            "Gamma" => Some('Γ'),
+            "Delta" => Some('Δ'),
+            "Epsilon" => Some('Ε'),
+            "Zeta" => Some('Ζ'),
+            "Eta" => Some('Η'),
+            "Theta" => Some('Θ'),
+            "Iota" => Some('Ι'),
+            "Kappa" => Some('Κ'),
+            "Lambda" => Some('Λ'),
+            "Mu" => Some('Μ'),
+            "Nu" => Some('Ν'),
+            "Xi" => Some('Ξ'),
+            "Omicron" => Some('Ο'),
+            "Pi" => Some('Π'),
+            "Rho" => Some('Ρ'),
+            "Sigma" => Some('Σ'),
+            "Tau" => Some('Τ'),
+            "Upsilon" => Some('Υ'),
+            "Phi" => Some('Φ'),
+            "Chi" => Some('Χ'),
+            "Psi" => Some('Ψ'),
+            "Omega" => Some('Ω'),
+            "alpha" => Some('α'),
+            "beta" => Some('β'),
+            "gamma" => Some('γ'),
+            "delta" => Some('δ'),
+            "epsilon" => Some('ε'),
+            "zeta" => Some('ζ'),
+            "eta" => Some('η'),
+            "theta" => Some('θ'),
+            "iota" => Some('ι'),
+            "kappa" => Some('κ'),
+            "lambda" => Some('λ'),
+            "mu" => Some('μ'),
+            "nu" => Some('ν'),
+            "xi" => Some('ξ'),
+            "omicron" => Some('ο'),
+            "pi" => Some('π'),
+            "rho" => Some('ρ'),
+            "sigma" => Some('σ'),
+            "sigmaf" => Some('ς'),
+            "tau" => Some('τ'),
+            "upsilon" => Some('υ'),
+            "phi" => Some('φ'),
+            "chi" => Some('χ'),
+            "psi" => Some('ψ'),
+            "omega" => Some('ω'),
+            "thetasym" => Some('ϑ'),
+            "upsih" => Some('ϒ'),
+            "piv" => Some('ϖ'),
+            "permil" => Some('‰'),
+            "lsaquo" => Some('‹'),
+            "rsaquo" => Some('›'),
+            "oline" => Some('‾'),
             "lceil" => Some('\u{2308}'),
             "rceil" => Some('\u{2309}'),
             "lfloor" => Some('\u{230A}'),
@@ -1371,6 +1428,17 @@ mod eof_regression_tests {
                 "&larr;&rarr; &le; &ge; &ne; &infin; &sum; &radic; &ensp;x&thinsp;y"
             ),
             "←→ ≤ ≥ ≠ ∞ ∑ √ \u{2002}x\u{2009}y"
+        );
+    }
+
+
+    #[test]
+    fn decodes_greek_and_extended_typographic_named_references() {
+        assert_eq!(
+            decode_character_references(
+                "&Alpha;&beta;&Gamma;&delta;&Omega; &sigmaf; &thetasym; &upsih; &piv; &permil; &lsaquo;x&rsaquo;"
+            ),
+            "ΑβΓδΩ ς ϑ ϒ ϖ ‰ ‹x›"
         );
     }
 
