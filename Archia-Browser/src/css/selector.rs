@@ -1229,12 +1229,16 @@ mod tests {
         root.append(section);
 
         let path = [&root, &root.children[0], &root.children[0].children[0]];
-        assert!(Selector::parse("p:is(main.layout > section.content > p.target)")
-            .unwrap()
-            .matches_path(&path));
-        assert!(!Selector::parse("p:not(main.layout > section.content > p.target)")
-            .unwrap()
-            .matches_path(&path));
+        assert!(
+            Selector::parse("p:is(main.layout > section.content > p.target)")
+                .unwrap()
+                .matches_path(&path)
+        );
+        assert!(
+            !Selector::parse("p:not(main.layout > section.content > p.target)")
+                .unwrap()
+                .matches_path(&path)
+        );
     }
 
     #[test]
