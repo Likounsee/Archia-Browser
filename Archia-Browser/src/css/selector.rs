@@ -581,7 +581,9 @@ fn matches_pseudo_class(
     match pseudo {
         // The normalized HTML document has a single document element named
         // "html"; :root must not match arbitrary elements in a fragment.
-        "root" => matches!(&node.kind, NodeKind::Element { name, .. } if name.eq_ignore_ascii_case("html")),
+        "root" => {
+            matches!(&node.kind, NodeKind::Element { name, .. } if name.eq_ignore_ascii_case("html"))
+        }
         // :link and :any-link match hyperlink elements with a non-empty href.
         // Visited state is intentionally not exposed by this engine.
         "link" | "any-link" => {
@@ -591,16 +593,14 @@ fn matches_pseudo_class(
                     || name.eq_ignore_ascii_case("link"))
                     && attributes.get("href").is_some_and(|href| !href.is_empty()))
         }
-        "checked" => attributes.contains_key("checked")
-            || (node.tag_name() == Some("option") && attributes.contains_key("selected")),
-        "disabled" => is_disableable_element(node)
-            && attributes.contains_key("disabled"),
-        "enabled" => is_disableable_element(node)
-            && !attributes.contains_key("disabled"),
-        "required" => is_required_capable_element(node, attributes)
-            && attributes.contains_key("required"),
-        "optional" => is_required_capable_element(node, attributes)
-            && !attributes.contains_key("required"),
+        "checked" => {
+            attributes.contains_key("checked")
+                || (node.tag_name() == Some("option") && attributes.contains_key("selected"))
+        }
+        "disabled" => is_disableable_element(node) && attributes.contains_key("disabled"),
+        "enabled" => is_disableable_element(node) && !attributes.contains_key("disabled"),
+        "required" => is_required_capable_element(node, attributes) && attributes.contains_key("required"),
+        "optional" => is_required_capable_element(node, attributes) && !attributes.contains_key("required"),
         "read-only" => attributes.contains_key("readonly"),
         "read-write" => !attributes.contains_key("readonly"),
         "empty" => node.children.iter().all(|child| match &child.kind {
