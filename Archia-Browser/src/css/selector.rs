@@ -169,7 +169,7 @@ impl Selector {
             had_space = false;
         }
 
-        (!parts.is_empty()).then_some(Self { parts })
+        (!parts.is_empty() && pending.is_none()).then_some(Self { parts })
     }
 
     pub fn specificity(&self) -> Specificity {
@@ -1731,6 +1731,23 @@ mod tests {
         let mut link = Node::element("link");
         link.set_attribute("href", "theme.css");
         assert!(Selector::parse("link:link").unwrap().matches(&link));
+    }
+
+    #[test]
+    fn rejects_selectors_with_trailing_combinators() {
+        for selector in ["div >", "div +", "div ~", "main section >   "] {
+            assert!(
+                Selector::parse(selector).is_none(),
+                "accepted selector with a trailing combinator: {selector}"
+            );
+        }
+
+        for selector in ["div", "div span", "div > span", "div + span", "div ~ span"] {
+            assert!(
+                Selector::parse(selector).is_some(),
+                "rejected valid selector: {selector}"
+            );
+        }
     }
 
     #[test]
