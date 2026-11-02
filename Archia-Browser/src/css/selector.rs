@@ -611,6 +611,37 @@ fn is_read_write_element(
     }
 }
 
+fn matches_language(pseudo: &str, attributes: &std::collections::BTreeMap<String, String>) -> bool {
+    let Some(argument) = pseudo_argument(pseudo, "lang") else {
+        return false;
+    };
+    let language = attributes
+        .get("lang")
+        .or_else(|| attributes.get("xml:lang"));
+    let Some(language) = language else {
+        return false;
+    };
+    let language = language.trim();
+    if language.is_empty() {
+        return false;
+    }
+
+    argument.split(',').any(|candidate| {
+        let candidate = candidate.trim().trim_matches(['\\'', '"']);
+        if candidate == "*" {
+            return true;
+        }
+        !candidate.is_empty()
+            && (language.eq_ignore_ascii_case(candidate)
+                || language
+                    .get(..candidate.len())
+                    .is_some_and(|prefix| prefix.eq_ignore_ascii_case(candidate))
+                    && language
+                        .get(candidate.len()..)
+                        .is_some_and(|suffix| suffix.starts_with('-')))
+    })
+}
+
 fn matches_pseudo_class(
     pseudo: &str,
     node: &Node,
@@ -624,6 +655,7 @@ fn matches_pseudo_class(
         "root" => {
             matches!(&node.kind, NodeKind::Element { name, .. } if name.eq_ignore_ascii_case("html"))
         }
+        _ if pseudo.starts_with("lang(") => matches_language(pseudo, attributes),
         // :link and :any-link match hyperlink elements with a non-empty href.
         // Visited state is intentionally not exposed by this engine.
         "link" | "any-link" => {
@@ -1097,6 +1129,23 @@ mod tests {
         assert!(Selector::parse("input:checked:disabled")
             .unwrap()
             .matches(&checked));
+    }
+
+    #[test]
+    fn language_pseudo_class_matches_language_subtags_and_lists() {
+        let mut french = Node::element("p");
+        french.set_attribute("lang", "fr-CA");
+        assert!(Selector::parse(":lang(fr)").unwrap().matches(&french));
+        assert!(Selector::parse(":lang(fr-CA)").unwrap().matches(&french));
+        assert!(!Selector::parse(":lang(en)").unwrap().matches(&french));
+
+        let mut english = Node::element("p");
+        english.set_attribute("xml:lang", "en-US");
+        assert!(Selector::parse(":lang(fr, en)").unwrap().matches(&english));
+        assert!(Selector::parse(":lang(*)").unwrap().matches(&english));
+
+        let no_language = Node::element("p");
+        assert!(!Selector::parse(":lang(en)").unwrap().matches(&no_language));
     }
 
     #[test]
