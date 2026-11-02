@@ -58,8 +58,15 @@ impl StyleSheet {
                 break;
             }
             let prelude = selector_text.trim();
-            if let Some(condition) = prelude.strip_prefix("@media") {
-                if media_query_matches(condition.trim(), viewport_width, viewport_height) {
+            let conditional_matches = if let Some(condition) = prelude.strip_prefix("@media") {
+                media_query_matches(condition.trim(), viewport_width, viewport_height)
+            } else if let Some(condition) = prelude.strip_prefix("@supports") {
+                supports_condition_matches(condition.trim())
+            } else {
+                false
+            };
+            if prelude.starts_with("@media") || prelude.starts_with("@supports") {
+                if conditional_matches {
                     let nested = Self::parse_internal(
                         &declaration_text,
                         viewport_width,
@@ -298,6 +305,128 @@ impl StyleSheet {
         }
 
         inherited
+    }
+}
+
+/// Evaluate the supported subset of CSS Conditional Rules declaration conditions.
+fn supports_condition_matches(condition: &str) -> bool {
+    let condition = condition.trim();
+    if let Some(negated) = condition.strip_prefix("not ") {
+        return !supports_condition_matches(negated);
+    }
+    if let Some(terms) = split_supports_expression(condition, "or") {
+        return terms.iter().any(|term| supports_condition_matches(term));
+    }
+    if let Some(terms) = split_supports_expression(condition, "and") {
+        return terms.iter().all(|term| supports_condition_matches(term));
+    }
+
+    let Some(inner) = condition
+        .strip_prefix('(')
+        .and_then(|value| value.strip_suffix(')'))
+    else {
+        return false;
+    };
+    let Some((name, value)) = inner.split_once(':') else {
+        return false;
+    };
+    supports_declaration(name.trim(), value.trim())
+}
+
+fn split_supports_expression<'a>(input: &'a str, operator: &str) -> Option<Vec<&'a str>> {
+    let needle = format!(" {operator} ");
+    let mut depth = 0usize;
+    let mut start = 0usize;
+    let mut parts = Vec::new();
+    let mut cursor = 0usize;
+    while cursor < input.len() {
+        let character = input[cursor..].chars().next()?;
+        if character == '(' {
+            depth = depth.saturating_add(1);
+        } else if character == ')' {
+            depth = depth.saturating_sub(1);
+        }
+        if depth == 0 && input[cursor..].starts_with(&needle) {
+            let part = input[start..cursor].trim();
+            if part.is_empty() {
+                return None;
+            }
+            parts.push(part);
+            cursor += needle.len();
+            start = cursor;
+            continue;
+        }
+        cursor += character.len_utf8();
+    }
+    if parts.is_empty() {
+        return None;
+    }
+    let tail = input[start..].trim();
+    if tail.is_empty() {
+        return None;
+    }
+    parts.push(tail);
+    Some(parts)
+}
+
+fn supports_declaration(name: &str, value: &str) -> bool {
+    if value.is_empty() {
+        return false;
+    }
+    let name = name.to_ascii_lowercase();
+    let value = value.to_ascii_lowercase();
+    const IMPLEMENTED_PROPERTIES: &[&str] = &[
+        "display", "position", "box-sizing", "width", "height", "min-width",
+        "max-width", "min-height", "max-height", "margin", "margin-top",
+        "margin-right", "margin-bottom", "margin-left", "padding", "padding-top",
+        "padding-right", "padding-bottom", "padding-left", "border", "border-width",
+        "border-style", "border-color", "border-radius", "background",
+        "background-color", "color", "opacity", "visibility", "overflow",
+        "overflow-x", "overflow-y", "font-size", "font-family", "font-weight",
+        "font-style", "line-height", "text-align", "text-decoration",
+        "white-space", "flex", "flex-grow", "flex-shrink", "flex-basis",
+        "flex-direction", "flex-wrap", "justify-content", "align-items",
+        "align-content", "align-self", "gap", "row-gap", "column-gap",
+        "grid-template-columns", "grid-template-rows", "grid-column",
+        "grid-row", "top", "right", "bottom", "left", "z-index",
+    ];
+    if !IMPLEMENTED_PROPERTIES.contains(&name.as_str()) {
+        return false;
+    }
+    match name.as_str() {
+        "display" => matches!(
+            value.as_str(),
+            "none" | "block" | "inline" | "inline-block" | "flex" | "inline-flex"
+                | "grid" | "inline-grid" | "list-item"
+        ),
+        "position" => matches!(
+            value.as_str(),
+            "static" | "relative" | "absolute" | "fixed" | "sticky"
+        ),
+        "box-sizing" => matches!(value.as_str(), "content-box" | "border-box"),
+        "flex-direction" => matches!(
+            value.as_str(),
+            "row" | "row-reverse" | "column" | "column-reverse"
+        ),
+        "flex-wrap" => matches!(value.as_str(), "nowrap" | "wrap" | "wrap-reverse"),
+        "justify-content" => matches!(
+            value.as_str(),
+            "normal" | "start" | "end" | "center" | "left" | "right"
+                | "flex-start" | "flex-end" | "space-between" | "space-around"
+                | "space-evenly"
+        ),
+        "align-items" | "align-content" | "align-self" => matches!(
+            value.as_str(),
+            "normal" | "stretch" | "center" | "start" | "end" | "self-start"
+                | "self-end" | "flex-start" | "flex-end" | "baseline"
+                | "first baseline" | "last baseline" | "space-between"
+                | "space-around" | "space-evenly"
+        ),
+        "overflow" | "overflow-x" | "overflow-y" => {
+            matches!(value.as_str(), "visible" | "hidden" | "clip" | "scroll" | "auto")
+        }
+        "visibility" => matches!(value.as_str(), "visible" | "hidden" | "collapse"),
+        _ => true,
     }
 }
 
@@ -1133,4 +1262,38 @@ mod tests {
         let sheet = StyleSheet::parse_for_viewport(&nested, 800, 600);
         assert!(sheet.rules.is_empty());
     }
+    #[test]
+    fn supports_rules_apply_only_for_implemented_declarations() {
+        let css = "@supports (display: grid) { .grid { display: grid; } } @supports (display: subgrid) { .grid { color: red; } }";
+        let mut node = Node::element("div");
+        node.set_attribute("class", "grid");
+        let sheet = StyleSheet::parse(css);
+
+        assert_eq!(sheet.compute_style(&node).get("display"), Some("grid"));
+        assert_eq!(sheet.compute_style(&node).get("color"), None);
+    }
+
+    #[test]
+    fn supports_rules_evaluate_nested_and_or_and_not_conditions() {
+        let css = "@supports (display: flex) and (gap: 8px) { .a { color: green; } } @supports (display: flex) and (display: subgrid) { .b { color: red; } } @supports not (display: subgrid) { .c { color: blue; } } @supports (display: grid) or (display: subgrid) { .d { color: purple; } }";
+        let sheet = StyleSheet::parse(css);
+        for (class, expected) in [
+            ("a", Some("green")),
+            ("b", None),
+            ("c", Some("blue")),
+            ("d", Some("purple")),
+        ] {
+            let mut node = Node::element("div");
+            node.set_attribute("class", class);
+            assert_eq!(sheet.compute_style(&node).get("color"), expected);
+        }
+    }
+
+    #[test]
+    fn supports_rules_reject_unknown_properties_and_malformed_conditions() {
+        let css = "@supports (unknown-feature: yes) { p { color: red; } } @supports display: grid { p { color: blue; } }";
+        let sheet = StyleSheet::parse(css);
+        assert!(sheet.rules.is_empty());
+    }
+
 }
