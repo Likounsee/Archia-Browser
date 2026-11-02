@@ -326,9 +326,7 @@ impl Selector {
         // sibling (for a selector chain such as `div > span + p`) or only the
         // ancestor path (as in a complex :is() argument). Reuse the existing
         // path slot when it is the candidate; otherwise append at this depth.
-        let candidate_index = if node_index > 0
-            && std::ptr::eq(path[node_index - 1], sibling)
-        {
+        let candidate_index = if node_index > 0 && std::ptr::eq(path[node_index - 1], sibling) {
             node_index - 1
         } else {
             node_index
