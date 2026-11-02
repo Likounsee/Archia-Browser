@@ -127,6 +127,31 @@ mod tests {
     }
 
     #[test]
+    fn language_pseudo_class_inherits_through_the_styled_dom_tree() {
+        let mut html = Node::element("html");
+        html.set_attribute("lang", "fr-CA");
+        let mut body = Node::element("body");
+        let paragraph = Node::element("p");
+        let mut section = Node::element("section");
+        section.set_attribute("lang", "en-GB");
+        let nested_paragraph = Node::element("p");
+        section.append(nested_paragraph);
+        body.append(paragraph);
+        body.append(section);
+        html.append(body);
+
+        let sheet = StyleSheet::parse("p:lang(fr) { color: red; } p:lang(en) { color: blue; }");
+        let styled = StyleEngine::style(&html, &sheet);
+        let styled_body = &styled.children[0];
+
+        assert_eq!(styled_body.children[0].style.get("color"), Some("red"));
+        assert_eq!(
+            styled_body.children[1].children[0].style.get("color"),
+            Some("blue")
+        );
+    }
+
+    #[test]
     fn computes_styles_per_dom_node() {
         let mut body = Node::element("body");
         let mut first = Node::element("div");
