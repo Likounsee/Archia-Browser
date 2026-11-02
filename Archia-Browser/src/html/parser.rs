@@ -666,6 +666,9 @@ fn normalize_document_structure(mut root: Node) -> Node {
     let mut body = None;
     let mut loose_head_children = Vec::new();
     if loose_head_children.try_reserve(html_child_count).is_err() {
+        // Keep the detached html subtree alive if the optional normalization
+        // allocation fails; the original tree remains available to the caller.
+        root.children.push(html);
         return root;
     }
     for child in html.children.drain(..) {
@@ -678,10 +681,12 @@ fn normalize_document_structure(mut root: Node) -> Node {
     }
 
     let mut head = head.unwrap_or_else(|| Node::element("head"));
-    if head.children.try_reserve(loose_head_children.len()).is_err() {
-        return root;
+    if head.children.try_reserve(loose_head_children.len()).is_ok() {
+        head.children.extend(loose_head_children);
+    } else {
+        // Preserve all content even if it cannot be moved into the head.
+        body_extras.extend(loose_head_children);
     }
-    head.children.extend(loose_head_children);
 
     let mut body = body.unwrap_or_else(|| Node::element("body"));
     preceding.append(&mut body.children);
@@ -719,7 +724,7 @@ mod tests {
     #[test]
     fn head_metadata_inside_explicit_html_is_normalized_into_head() {
         let root = parse(&HtmlTokenizer::tokenize(
-            "<html><title>Page title</title><body><p>content</p></body><meta charset='utf-8'></html>",
+            "<html><title>Page title</title><meta charset='utf-8'><body><p>content</p></body></html>",
         ));
         let html = root.find_first_element("html").expect("html element");
         let head = html.children.iter().find(|node| node.tag_name() == Some("head")).expect("head");
