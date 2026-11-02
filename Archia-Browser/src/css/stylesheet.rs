@@ -607,7 +607,18 @@ fn media_feature_matches(feature: &str, viewport_width: u32, viewport_height: u3
     let dimension = |name: &str| match name {
         "width" => Some(f64::from(viewport_width)),
         "height" => Some(f64::from(viewport_height)),
+        "aspect-ratio" if viewport_height > 0 => {
+            Some(f64::from(viewport_width) / f64::from(viewport_height))
+        }
         _ => None,
+    };
+    let parse_value = |name: &str, value: &str| {
+        if name == "aspect-ratio" {
+            parse_media_ratio(value)
+                .map(|(width, height)| f64::from(width) / f64::from(height))
+        } else {
+            parse_media_length(value).map(f64::from)
+        }
     };
     let compare = |left: f64, operator: &str, right: f64| match operator {
         "<" => left < right,
@@ -628,29 +639,25 @@ fn media_feature_matches(feature: &str, viewport_width: u32, viewport_height: u3
 
     match terms.as_slice() {
         [name, operator, value] if dimension(name).is_some() => {
-            let Some(expected) = parse_media_length(value) else {
+            let Some(expected) = parse_value(name, value) else {
                 return false;
             };
-            compare(dimension(name).unwrap(), operator, f64::from(expected))
+            compare(dimension(name).unwrap(), operator, expected)
         }
         [value, operator, name] if dimension(name).is_some() => {
-            let Some(expected) = parse_media_length(value) else {
+            let Some(expected) = parse_value(name, value) else {
                 return false;
             };
-            compare(
-                dimension(name).unwrap(),
-                invert(operator),
-                f64::from(expected),
-            )
+            compare(dimension(name).unwrap(), invert(operator), expected)
         }
         [lower, lower_operator, name, upper_operator, upper] if dimension(name).is_some() => {
-            let (Some(lower), Some(upper)) = (parse_media_length(lower), parse_media_length(upper))
+            let (Some(lower), Some(upper)) =
+                (parse_value(name, lower), parse_value(name, upper))
             else {
                 return false;
             };
             let current = dimension(name).unwrap();
-            compare(f64::from(lower), lower_operator, current)
-                && compare(current, upper_operator, f64::from(upper))
+            compare(lower, lower_operator, current) && compare(current, upper_operator, upper)
         }
         _ => false,
     }
@@ -1732,6 +1739,26 @@ mod tests {
         narrow.set_attribute("class", "narrow");
         assert_eq!(portrait.compute_style(&wide).get("color"), None);
         assert_eq!(portrait.compute_style(&narrow).get("color"), Some("blue"));
+    }
+
+    #[test]
+    fn media_query_range_syntax_supports_aspect_ratio() {
+        let css = "@media (aspect-ratio >= 16/9) { .wide { color: green; } } @media (4/3 < aspect-ratio < 2/1) { .middle { color: blue; } } @media (aspect-ratio < 1/1) { .portrait { color: purple; } }";
+        let landscape = StyleSheet::parse_for_viewport(css, 1600, 900);
+        let portrait = StyleSheet::parse_for_viewport(css, 800, 1200);
+
+        for (sheet, class, expected) in [
+            (&landscape, "wide", Some("green")),
+            (&landscape, "middle", Some("blue")),
+            (&landscape, "portrait", None),
+            (&portrait, "wide", None),
+            (&portrait, "middle", None),
+            (&portrait, "portrait", Some("purple")),
+        ] {
+            let mut node = Node::element("div");
+            node.set_attribute("class", class);
+            assert_eq!(sheet.compute_style(&node).get("color"), expected);
+        }
     }
 
     #[test]
