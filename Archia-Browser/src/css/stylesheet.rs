@@ -139,9 +139,9 @@ impl StyleSheet {
         sibling_lists: &[&[Node]],
         sibling_positions: &[usize],
     ) -> Vec<(&'a StyleRule, Specificity)> {
-        let Some(node) = path.last() else {
+        if path.is_empty() {
             return Vec::new();
-        };
+        }
         let mut matches = Vec::new();
         for rule in &self.rules {
             let matching = rule.selectors.iter().filter(|selector| {
@@ -159,9 +159,9 @@ impl StyleSheet {
 
     pub fn matching_rules_path<'a>(&'a self, path: &[&Node]) -> Vec<(&'a StyleRule, Specificity)> {
         let mut matches = Vec::new();
-        let Some(node) = path.last() else {
+        if path.is_empty() {
             return matches;
-        };
+        }
 
         for rule in &self.rules {
             let matching = rule
