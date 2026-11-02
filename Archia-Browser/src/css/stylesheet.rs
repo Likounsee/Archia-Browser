@@ -968,6 +968,26 @@ fn initial_value(name: &str) -> &'static str {
         "font-stretch" => "normal",
         "font-kerning" => "auto",
         "font-feature-settings" | "font-variation-settings" => "normal",
+        "writing-mode" => "horizontal-tb",
+        "text-orientation" => "mixed",
+        "text-combine-upright" => "none",
+        "text-emphasis" => "none",
+        "text-emphasis-color" => "currentcolor",
+        "text-emphasis-style" => "none",
+        "text-emphasis-position" => "over right",
+        "text-align-last" => "auto",
+        "text-justify" => "auto",
+        "color-scheme" => "normal",
+        "caret-color" => "auto",
+        "scrollbar-color" => "auto",
+        "fill" => "black",
+        "fill-rule" => "nonzero",
+        "fill-opacity" | "stroke-opacity" => "1",
+        "stroke" => "none",
+        "stroke-width" => "1",
+        "stroke-linecap" => "butt",
+        "stroke-linejoin" => "miter",
+        "stroke-dasharray" | "stroke-dashoffset" => "none",
         "list-style" => "disc outside none",
         "visibility" => "visible",
         "flex-grow" => "0",
@@ -1108,6 +1128,28 @@ fn is_inherited_property(name: &str) -> bool {
             | "font-feature-settings"
             | "font-variation-settings"
             | "text-shadow"
+            | "writing-mode"
+            | "text-orientation"
+            | "text-combine-upright"
+            | "text-emphasis"
+            | "text-emphasis-color"
+            | "text-emphasis-style"
+            | "text-emphasis-position"
+            | "text-align-last"
+            | "text-justify"
+            | "color-scheme"
+            | "caret-color"
+            | "scrollbar-color"
+            | "fill"
+            | "fill-rule"
+            | "fill-opacity"
+            | "stroke"
+            | "stroke-width"
+            | "stroke-linecap"
+            | "stroke-linejoin"
+            | "stroke-dasharray"
+            | "stroke-dashoffset"
+            | "stroke-opacity"
     )
 }
 
