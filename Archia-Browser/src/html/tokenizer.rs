@@ -859,7 +859,7 @@ mod character_reference_tests {
         assert_eq!(decode_character_references("&acE;"), "∾̳");
         assert_eq!(decode_character_references("&CounterClockwiseContourIntegral;"), "∳");
         assert_eq!(decode_character_references("&Afr;"), "𝔄");
-        assert_eq!(decode_character_references("&NotEqualTilde"), "≂̸");
+        assert_eq!(decode_character_references("&NotEqualTilde"), "&NotEqualTilde");
     }
 
     #[test]
