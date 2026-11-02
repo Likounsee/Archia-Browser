@@ -803,8 +803,12 @@ fn matches_pseudo_class(
         "first-of-type" => is_type_position(node, siblings, position, 0),
         "last-of-type" => is_last_type_position(node, siblings, position),
         "only-of-type" => type_count(node, siblings.unwrap_or(&[])) == 1,
-        _ if pseudo.starts_with("nth-child(") => nth_matches(pseudo, siblings, position, false),
-        _ if pseudo.starts_with("nth-last-child(") => nth_matches(pseudo, siblings, position, true),
+        _ if pseudo.starts_with("nth-child(") => {
+            nth_matches(pseudo, node, siblings, position, ancestors, false)
+        },
+        _ if pseudo.starts_with("nth-last-child(") => {
+            nth_matches(pseudo, node, siblings, position, ancestors, true)
+        },
         _ if pseudo.starts_with("nth-of-type(") => {
             nth_type_matches(pseudo, node, siblings, position, false)
         }
@@ -1180,29 +1184,99 @@ fn is_element_position(
 
 fn nth_matches(
     pseudo: &str,
+    _node: &Node,
     siblings: Option<&[Node]>,
     position: Option<usize>,
+    ancestors: Option<&[&Node]>,
     from_end: bool,
 ) -> bool {
     let Some((list, pos)) = siblings.zip(position) else {
         return false;
     };
-    if list.get(pos).is_none_or(|node| !node.is_element()) {
+    if list.get(pos).is_none_or(|candidate| !candidate.is_element()) {
         return false;
     }
-    let count = element_count(list) as i32;
-    let index = if from_end {
-        count - element_position(list, pos) as i32
-    } else {
-        element_position(list, pos) as i32 + 1
-    };
     let Some(argument) = pseudo
         .split_once('(')
         .and_then(|(_, rest)| rest.strip_suffix(')'))
     else {
         return false;
     };
-    parse_nth_formula(argument.trim(), index)
+    let (formula, selector_filter) = split_nth_of_clause(argument);
+    let matches_filter = |candidate: &Node, candidate_position: usize| {
+        selector_filter.is_none_or(|filter| {
+            pseudo_argument_matches(
+                filter,
+                candidate,
+                Some(list),
+                Some(candidate_position),
+                ancestors,
+            )
+        })
+    };
+    let filtered_positions: Vec<usize> = list
+        .iter()
+        .enumerate()
+        .filter(|(candidate_position, candidate)| {
+            candidate.is_element() && matches_filter(candidate, *candidate_position)
+        })
+        .map(|(candidate_position, _)| candidate_position)
+        .collect();
+    let Some(filtered_index) = filtered_positions.iter().position(|candidate| *candidate == pos)
+    else {
+        return false;
+    };
+    let index = if from_end {
+        filtered_positions.len().saturating_sub(filtered_index) as i32
+    } else {
+        filtered_index as i32 + 1
+    };
+    parse_nth_formula(formula.trim(), index)
+}
+
+fn split_nth_of_clause(argument: &str) -> (&str, Option<&str>) {
+    let bytes = argument.as_bytes();
+    let mut index = 0;
+    let mut brackets = 0usize;
+    let mut parentheses = 0usize;
+    let mut quote = None;
+    while index < bytes.len() {
+        let character = bytes[index] as char;
+        if let Some(active_quote) = quote {
+            if character == '\\\\' {
+                index = (index + 2).min(bytes.len());
+                continue;
+            }
+            if character == active_quote {
+                quote = None;
+            }
+            index += 1;
+            continue;
+        }
+        match character {
+            '\'' | '"' if brackets > 0 => quote = Some(character),
+            '[' => brackets += 1,
+            ']' if brackets > 0 => brackets -= 1,
+            '(' if brackets == 0 => parentheses += 1,
+            ')' if brackets == 0 && parentheses > 0 => parentheses -= 1,
+            'o' | 'O' if brackets == 0 && parentheses == 0 && index > 0 => {
+                if bytes.get(index + 1).is_some_and(|next| next.eq_ignore_ascii_case(&b'f'))
+                    && bytes[index - 1].is_ascii_whitespace()
+                    && bytes.get(index + 2).is_some_and(u8::is_ascii_whitespace)
+                {
+                    let formula_end = index - 1;
+                    let selector_start = index + 3;
+                    let selector = argument[selector_start..].trim();
+                    if !selector.is_empty() {
+                        return (argument[..formula_end].trim(), Some(selector));
+                    }
+                }
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+    (argument.trim(), None)
 }
 
 fn parse_nth_formula(formula: &str, index: i32) -> bool {
