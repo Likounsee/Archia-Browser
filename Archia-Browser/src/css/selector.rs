@@ -572,6 +572,47 @@ fn is_required_capable_element(
     }
 }
 
+fn is_read_write_element(
+    node: &Node,
+    attributes: &std::collections::BTreeMap<String, String>,
+) -> bool {
+    if attributes.contains_key("disabled") || attributes.contains_key("readonly") {
+        return false;
+    }
+
+    match node.tag_name() {
+        Some("textarea") => true,
+        Some("input") => matches!(
+            attributes
+                .get("type")
+                .map(|value| value.trim().to_ascii_lowercase())
+                .as_deref()
+                .unwrap_or("text"),
+            Some(
+                "text"
+                    | "search"
+                    | "url"
+                    | "tel"
+                    | "email"
+                    | "password"
+                    | "date"
+                    | "month"
+                    | "week"
+                    | "time"
+                    | "datetime-local"
+                    | "number"
+            )
+        ),
+        _ => attributes
+            .get("contenteditable")
+            .is_some_and(|value| {
+                value.is_empty()
+                    || value.eq_ignore_ascii_case("true")
+                    || value.eq_ignore_ascii_case("plaintext-only")
+            }),
+    }
+}
+
 fn matches_pseudo_class(
     pseudo: &str,
     node: &Node,
@@ -606,8 +647,13 @@ fn matches_pseudo_class(
         "optional" => {
             is_required_capable_element(node, attributes) && !attributes.contains_key("required")
         }
-        "read-only" => attributes.contains_key("readonly"),
-        "read-write" => !attributes.contains_key("readonly"),
+        "read-only" => !is_read_write_element(node, attributes),
+        "read-write" => is_read_write_element(node, attributes),
+        "placeholder-shown" => {
+            matches!(node.tag_name(), Some("input" | "textarea"))
+                && attributes.contains_key("placeholder")
+                && attributes.get("value").is_none_or(String::is_empty)
+        }
         "empty" => node.children.iter().all(|child| match &child.kind {
             NodeKind::Text(text) => text.is_empty(),
             NodeKind::Comment(_) => true,
@@ -1047,6 +1093,40 @@ mod tests {
         assert!(Selector::parse("input:checked:disabled")
             .unwrap()
             .matches(&checked));
+    }
+
+    #[test]
+    fn read_write_and_placeholder_pseudo_classes_follow_editability() {
+        let div = Node::element("div");
+        assert!(Selector::parse(":read-only").unwrap().matches(&div));
+        assert!(!Selector::parse(":read-write").unwrap().matches(&div));
+
+        let input = Node::element("input");
+        assert!(Selector::parse(":read-write").unwrap().matches(&input));
+        assert!(!Selector::parse(":read-only").unwrap().matches(&input));
+
+        let mut readonly = Node::element("input");
+        readonly.set_attribute("readonly", "");
+        assert!(Selector::parse(":read-only").unwrap().matches(&readonly));
+        assert!(!Selector::parse(":read-write").unwrap().matches(&readonly));
+
+        let mut checkbox = Node::element("input");
+        checkbox.set_attribute("type", "checkbox");
+        assert!(Selector::parse(":read-only").unwrap().matches(&checkbox));
+
+        let mut editable = Node::element("div");
+        editable.set_attribute("contenteditable", "true");
+        assert!(Selector::parse(":read-write").unwrap().matches(&editable));
+
+        let mut placeholder = Node::element("textarea");
+        placeholder.set_attribute("placeholder", "Write here");
+        assert!(Selector::parse(":placeholder-shown")
+            .unwrap()
+            .matches(&placeholder));
+        placeholder.set_attribute("value", "hello");
+        assert!(!Selector::parse(":placeholder-shown")
+            .unwrap()
+            .matches(&placeholder));
     }
 
     #[test]
