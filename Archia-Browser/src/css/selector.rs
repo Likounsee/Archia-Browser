@@ -189,6 +189,13 @@ impl Selector {
                     pseudo_argument(pseudo, "is").or_else(|| pseudo_argument(pseudo, "has"))
                 {
                     result += pseudo_argument_specificity(argument);
+                } else if let Some(argument) = pseudo_argument(pseudo, "nth-child")
+                    .or_else(|| pseudo_argument(pseudo, "nth-last-child"))
+                {
+                    result.classes += 1;
+                    if let (_, Some(filter)) = split_nth_of_clause(argument) {
+                        result += pseudo_argument_specificity(filter);
+                    }
                 } else {
                     result.classes += 1;
                 }
@@ -1822,6 +1829,22 @@ mod tests {
         assert!(!Selector::parse("p:nth-child(even)")
             .unwrap()
             .matches_path_with_siblings(&[&body, &siblings[0]], &lists, &[0, 0]));
+    }
+
+    #[test]
+    fn nth_child_of_filter_contributes_selector_specificity() {
+        assert_eq!(
+            Selector::parse("li:nth-child(2n of .item, #featured)")
+                .unwrap()
+                .specificity(),
+            Specificity::new(1, 1, 1)
+        );
+        assert_eq!(
+            Selector::parse("li:nth-last-child(odd of :where(#featured))")
+                .unwrap()
+                .specificity(),
+            Specificity::new(0, 1, 1)
+        );
     }
 
     #[test]
