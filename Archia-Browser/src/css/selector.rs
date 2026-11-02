@@ -324,23 +324,28 @@ impl Selector {
         let mut candidate_path = Vec::new();
         let mut candidate_sibling_lists = Vec::new();
         let mut candidate_positions = Vec::new();
-        if candidate_path.try_reserve(node_index + 1).is_err()
-            || candidate_sibling_lists.try_reserve(node_index + 1).is_err()
-            || candidate_positions.try_reserve(node_index + 1).is_err()
+        let candidate_len = node_index;
+        if candidate_len == 0
+            || candidate_path.try_reserve(candidate_len).is_err()
+            || candidate_sibling_lists.try_reserve(candidate_len).is_err()
+            || candidate_positions.try_reserve(candidate_len).is_err()
         {
             return false;
         }
 
-        candidate_path.extend_from_slice(&path[..node_index]);
+        // Replace the current node in the path with the candidate sibling.
+        // Keeping the current node as well would create a duplicate path level
+        // and make ancestor/child combinators fail after a sibling match.
+        candidate_path.extend_from_slice(&path[..node_index - 1]);
         candidate_path.push(sibling);
-        candidate_sibling_lists.extend_from_slice(&sibling_lists[..node_index]);
+        candidate_sibling_lists.extend_from_slice(&sibling_lists[..node_index - 1]);
         candidate_sibling_lists.push(sibling_lists[node_index]);
-        candidate_positions.extend_from_slice(&sibling_positions[..node_index]);
+        candidate_positions.extend_from_slice(&sibling_positions[..node_index - 1]);
         candidate_positions.push(sibling_position);
 
         self.matches_at_with_siblings(
             selector_index,
-            node_index,
+            node_index - 1,
             &candidate_path,
             &candidate_sibling_lists,
             &candidate_positions,
