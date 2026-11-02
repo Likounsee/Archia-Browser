@@ -1443,10 +1443,18 @@ mod eof_regression_tests {
     }
 
     #[test]
+    fn legacy_not_reference_can_end_before_a_hyphen() {
+        assert_eq!(
+            decode_character_references("&not-a-real-entity;"),
+            "¬-a-real-entity;"
+        );
+    }
+
+    #[test]
     fn unknown_named_entities_are_preserved_verbatim() {
         assert_eq!(
-            decode_character_references("&not-a-real-entity; &customThing;"),
-            "&not-a-real-entity; &customThing;"
+            decode_character_references("&custom-a-real-entity; &customThing;"),
+            "&custom-a-real-entity; &customThing;"
         );
     }
 }
