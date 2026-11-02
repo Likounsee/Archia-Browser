@@ -314,17 +314,29 @@ fn supports_condition_matches(condition: &str) -> bool {
         return terms.iter().all(|term| supports_condition_matches(term));
     }
 
-    let Some(inner) = condition
-        .strip_prefix('(')
-        .and_then(|value| value.strip_suffix(')'))
-    else {
-        return false;
+    let parenthesized = condition.starts_with('(') && condition.ends_with(')');
+    let inner = if parenthesized {
+        let Some(inner) = condition
+            .strip_prefix('(')
+            .and_then(|value| value.strip_suffix(')'))
+        else {
+            return false;
+        };
+        inner.trim()
+    } else {
+        condition
     };
+
+    // selector() is a complete feature query; declaration queries still
+    // require the surrounding parentheses from the CSS @supports grammar.
     if let Some(selector) = inner
         .strip_prefix("selector(")
         .and_then(|value| value.strip_suffix(')'))
     {
         return !selector.trim().is_empty() && Selector::parse(selector.trim()).is_some();
+    }
+    if !parenthesized {
+        return false;
     }
 
     let Some((name, value)) = inner.split_once(':') else {
