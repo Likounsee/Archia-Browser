@@ -772,7 +772,7 @@ fn pseudo_argument_matches(
         if selector.parts.len() != 1 {
             return false;
         }
-        matches_simple_with_siblings(&selector.parts[0].1, node, siblings, position)
+        matches_simple_with_siblings(&selector.parts[0].1, node, siblings, position, None)
     })
 }
 
@@ -1144,6 +1144,24 @@ mod tests {
         assert!(Selector::parse("input:checked:disabled")
             .unwrap()
             .matches(&checked));
+    }
+
+    #[test]
+    fn language_pseudo_class_inherits_from_nearest_ancestor() {
+        let mut html = Node::element("html");
+        html.set_attribute("lang", "fr-CA");
+        let body = Node::element("body");
+        let paragraph = Node::element("p");
+        let path = [&html, &body, &paragraph];
+
+        assert!(Selector::parse("p:lang(fr)").unwrap().matches_path(&path));
+        assert!(!Selector::parse("p:lang(en)").unwrap().matches_path(&path));
+
+        let mut override = Node::element("section");
+        override.set_attribute("lang", "en-GB");
+        let override_path = [&html, &override, &paragraph];
+        assert!(Selector::parse("p:lang(en)").unwrap().matches_path(&override_path));
+        assert!(!Selector::parse("p:lang(fr)").unwrap().matches_path(&override_path));
     }
 
     #[test]
