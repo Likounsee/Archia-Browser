@@ -614,8 +614,7 @@ fn media_feature_matches(feature: &str, viewport_width: u32, viewport_height: u3
     };
     let parse_value = |name: &str, value: &str| {
         if name == "aspect-ratio" {
-            parse_media_ratio(value)
-                .map(|(width, height)| f64::from(width) / f64::from(height))
+            parse_media_ratio(value).map(|(width, height)| f64::from(width) / f64::from(height))
         } else {
             parse_media_length(value).map(f64::from)
         }
@@ -651,8 +650,7 @@ fn media_feature_matches(feature: &str, viewport_width: u32, viewport_height: u3
             compare(dimension(name).unwrap(), invert(operator), expected)
         }
         [lower, lower_operator, name, upper_operator, upper] if dimension(name).is_some() => {
-            let (Some(lower), Some(upper)) =
-                (parse_value(name, lower), parse_value(name, upper))
+            let (Some(lower), Some(upper)) = (parse_value(name, lower), parse_value(name, upper))
             else {
                 return false;
             };
