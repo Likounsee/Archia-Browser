@@ -311,7 +311,13 @@ impl Selector {
         let Some((combinator, simple)) = self.parts.get(selector_index) else {
             return false;
         };
-        if !matches_simple_with_siblings(simple, path[node_index], None, None, Some(&path[..node_index])) {
+        if !matches_simple_with_siblings(
+            simple,
+            path[node_index],
+            None,
+            None,
+            Some(&path[..node_index]),
+        ) {
             return false;
         }
         if selector_index == 0 {
@@ -1011,7 +1017,9 @@ fn matches_simple_with_siblings(
     if simple
         .pseudo_classes
         .iter()
-        .any(|pseudo| !matches_pseudo_class(pseudo, node, attributes, siblings, position, ancestors))
+        .any(|pseudo| {
+            !matches_pseudo_class(pseudo, node, attributes, siblings, position, ancestors)
+        })
     {
         return false;
     }
