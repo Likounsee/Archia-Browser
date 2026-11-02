@@ -1825,6 +1825,38 @@ mod tests {
     }
 
     #[test]
+    fn matches_nth_child_with_selector_list_filter() {
+        let mut body = Node::element("body");
+        let mut first = Node::element("li");
+        first.set_attribute("class", "item");
+        let mut excluded = Node::element("li");
+        excluded.set_attribute("class", "skip");
+        let mut third = Node::element("li");
+        third.set_attribute("class", "item featured");
+        let mut fourth = Node::element("li");
+        fourth.set_attribute("class", "item");
+        body.append(first);
+        body.append(excluded);
+        body.append(third);
+        body.append(fourth);
+
+        let siblings = body.children.as_slice();
+        let lists: [&[Node]; 2] = [&[], siblings];
+        assert!(Selector::parse("li:nth-child(2 of .item)")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[2]], &lists, &[0, 2]));
+        assert!(Selector::parse("li:nth-last-child(1 of .item)")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[3]], &lists, &[0, 3]));
+        assert!(!Selector::parse("li:nth-child(2 of .item)")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[3]], &lists, &[0, 3]));
+        assert!(Selector::parse("li:nth-child(2 of li:not(.skip))")
+            .unwrap()
+            .matches_path_with_siblings(&[&body, &siblings[2]], &lists, &[0, 2]));
+    }
+
+    #[test]
     fn matches_structural_pseudo_classes() {
         let mut body = Node::element("body");
         let first = Node::element("p");
