@@ -1250,7 +1250,7 @@ fn split_nth_of_clause(argument: &str) -> (&str, Option<&str>) {
     while index < bytes.len() {
         let character = bytes[index] as char;
         if let Some(active_quote) = quote {
-            if character == '\\\\' {
+            if character == '\\' {
                 index = (index + 2).min(bytes.len());
                 continue;
             }
