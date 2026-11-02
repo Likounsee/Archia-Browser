@@ -393,7 +393,7 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
                     while i < chars.len() && depth > 0 {
                         let character = chars[i];
                         if let Some(active_quote) = quote {
-                            if character == '\\\\' {
+                            if character == '\\' {
                                 i = (i + 2).min(chars.len());
                                 continue;
                             }
@@ -404,11 +404,11 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
                             continue;
                         }
                         match character {
-                            '\\\\' => {
+                            '\\' => {
                                 i = (i + 2).min(chars.len());
                                 continue;
                             }
-                            '\\'' | '"' if bracket_depth > 0 => quote = Some(character),
+                            '\'' | '"' if bracket_depth > 0 => quote = Some(character),
                             '[' => bracket_depth = bracket_depth.saturating_add(1),
                             ']' if bracket_depth > 0 => bracket_depth -= 1,
                             '(' if bracket_depth == 0 => depth = depth.saturating_add(1),
