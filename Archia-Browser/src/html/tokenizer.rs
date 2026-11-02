@@ -39,8 +39,11 @@ pub struct HtmlTokenizer;
 
 impl HtmlTokenizer {
     pub fn tokenize(input: &str) -> Vec<HtmlToken> {
-        // Truncate oversized documents only at a UTF-8 character boundary.
-        let input = if input.len() > MAX_HTML_INPUT_BYTES {
+        // Apply HTML input preprocessing before tokenization: normalize CRLF
+        // and lone CR to LF, and replace literal NULL characters with U+FFFD.
+        // Bound the source before normalization so hostile input cannot force
+        // an unbounded temporary allocation.
+        let bounded_input = if input.len() > MAX_HTML_INPUT_BYTES {
             let mut end = MAX_HTML_INPUT_BYTES;
             while !input.is_char_boundary(end) {
                 end -= 1;
@@ -49,6 +52,24 @@ impl HtmlTokenizer {
         } else {
             input
         };
+        let mut normalized_input = String::new();
+        let mut characters = bounded_input.chars().peekable();
+        while let Some(character) = characters.next() {
+            let normalized = match character {
+                '\\r' => {
+                    if characters.peek() == Some(&'\\n') {
+                        characters.next();
+                    }
+                    '\\n'
+                }
+                '\\0' => '\\u{FFFD}',
+                other => other,
+            };
+            if !try_push_char(&mut normalized_input, normalized) {
+                break;
+            }
+        }
+        let input = normalized_input.as_str();
         let mut tokens = Vec::new();
         let mut cursor = 0;
         let bytes = input.as_bytes();
@@ -1200,6 +1221,16 @@ fn decode_character_references_with_context(input: &str, in_attribute: bool) -> 
 #[cfg(test)]
 mod character_reference_tests {
     use super::*;
+
+    #[test]
+    fn preprocesses_html_newlines_and_null_characters() {
+        assert_eq!(
+            HtmlTokenizer::tokenize("first\\r\\nsecond\\rthird\\0fourth"),
+            vec![HtmlToken::Text(
+                "first\\nsecond\\nthird\\u{FFFD}fourth".to_owned()
+            )]
+        );
+    }
 
     #[test]
     fn decodes_basic_character_references() {
