@@ -56,13 +56,13 @@ impl HtmlTokenizer {
         let mut characters = bounded_input.chars().peekable();
         while let Some(character) = characters.next() {
             let normalized = match character {
-                '\\r' => {
-                    if characters.peek() == Some(&'\\n') {
+                '\${ch}' => {
+                    if characters.peek() == Some(&'\${ch}') {
                         characters.next();
                     }
-                    '\\n'
+                    '\${ch}'
                 }
-                '\\0' => '\\u{FFFD}',
+                '\${ch}' => '\u{FFFD}',
                 other => other,
             };
             if !try_push_char(&mut normalized_input, normalized) {
@@ -1225,9 +1225,9 @@ mod character_reference_tests {
     #[test]
     fn preprocesses_html_newlines_and_null_characters() {
         assert_eq!(
-            HtmlTokenizer::tokenize("first\\r\\nsecond\\rthird\\0fourth"),
+            HtmlTokenizer::tokenize("first\${ch}\${ch}second\${ch}third\${ch}fourth"),
             vec![HtmlToken::Text(
-                "first\\nsecond\\nthird\\u{FFFD}fourth".to_owned()
+                "first\${ch}second\${ch}third\u{FFFD}fourth".to_owned()
             )]
         );
     }
