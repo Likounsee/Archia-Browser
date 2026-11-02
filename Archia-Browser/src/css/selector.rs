@@ -279,12 +279,14 @@ impl Selector {
             Combinator::AdjacentSibling => {
                 previous_element(sibling_lists[node_index], sibling_positions[node_index])
                     .is_some_and(|(sibling, position)| {
-                        matches_simple_with_siblings(
-                            &self.parts[selector_index - 1].1,
+                        self.matches_sibling_at_with_context(
+                            selector_index - 1,
+                            node_index,
                             sibling,
-                            Some(sibling_lists[node_index]),
-                            Some(position),
-                            Some(&path[..node_index]),
+                            position,
+                            path,
+                            sibling_lists,
+                            sibling_positions,
                         )
                     })
             }
@@ -294,17 +296,55 @@ impl Selector {
                     .get(..position)
                     .is_some_and(|siblings| {
                         siblings.iter().enumerate().rev().any(|(index, sibling)| {
-                            matches_simple_with_siblings(
-                                &self.parts[selector_index - 1].1,
+                            self.matches_sibling_at_with_context(
+                                selector_index - 1,
+                                node_index,
                                 sibling,
-                                Some(sibling_lists[node_index]),
-                                Some(index),
-                                Some(&path[..node_index]),
+                                index,
+                                path,
+                                sibling_lists,
+                                sibling_positions,
                             )
                         })
                     })
             }
         }
+    }
+
+    fn matches_sibling_at_with_context(
+        &self,
+        selector_index: usize,
+        node_index: usize,
+        sibling: &Node,
+        sibling_position: usize,
+        path: &[&Node],
+        sibling_lists: &[&[Node]],
+        sibling_positions: &[usize],
+    ) -> bool {
+        let mut candidate_path = Vec::new();
+        let mut candidate_sibling_lists = Vec::new();
+        let mut candidate_positions = Vec::new();
+        if candidate_path.try_reserve(node_index + 1).is_err()
+            || candidate_sibling_lists.try_reserve(node_index + 1).is_err()
+            || candidate_positions.try_reserve(node_index + 1).is_err()
+        {
+            return false;
+        }
+
+        candidate_path.extend_from_slice(&path[..node_index]);
+        candidate_path.push(sibling);
+        candidate_sibling_lists.extend_from_slice(&sibling_lists[..node_index]);
+        candidate_sibling_lists.push(sibling_lists[node_index]);
+        candidate_positions.extend_from_slice(&sibling_positions[..node_index]);
+        candidate_positions.push(sibling_position);
+
+        self.matches_at_with_siblings(
+            selector_index,
+            node_index,
+            &candidate_path,
+            &candidate_sibling_lists,
+            &candidate_positions,
+        )
     }
 
     fn matches_at(&self, selector_index: usize, node_index: usize, path: &[&Node]) -> bool {
