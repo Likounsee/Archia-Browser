@@ -581,10 +581,10 @@ fn media_feature_matches(feature: &str, viewport_width: u32, viewport_height: u3
         let value = value.trim();
         let expected = parse_media_length(value);
         return match name {
-            "min-width" => expected.is_some_and(|v| viewport_width >= v),
-            "max-width" => expected.is_some_and(|v| viewport_width <= v),
-            "min-height" => expected.is_some_and(|v| viewport_height >= v),
-            "max-height" => expected.is_some_and(|v| viewport_height <= v),
+            "min-width" => expected.is_some_and(|v| f64::from(viewport_width) >= v),
+            "max-width" => expected.is_some_and(|v| f64::from(viewport_width) <= v),
+            "min-height" => expected.is_some_and(|v| f64::from(viewport_height) >= v),
+            "max-height" => expected.is_some_and(|v| f64::from(viewport_height) <= v),
             "orientation" if value == "portrait" => viewport_height >= viewport_width,
             "orientation" if value == "landscape" => viewport_width > viewport_height,
             "aspect-ratio" => parse_media_ratio(value).is_some_and(|(w, h)| {
@@ -616,7 +616,7 @@ fn media_feature_matches(feature: &str, viewport_width: u32, viewport_height: u3
         if name == "aspect-ratio" {
             parse_media_ratio(value).map(|(width, height)| f64::from(width) / f64::from(height))
         } else {
-            parse_media_length(value).map(f64::from)
+            parse_media_length(value)
         }
     };
     let compare = |left: f64, operator: &str, right: f64| match operator {
@@ -668,7 +668,7 @@ fn parse_media_ratio(value: &str) -> Option<(u32, u32)> {
     (numerator > 0 && denominator > 0).then_some((numerator, denominator))
 }
 
-fn parse_media_length(value: &str) -> Option<u32> {
+fn parse_media_length(value: &str) -> Option<f64> {
     let value = value.trim();
     let (number, multiplier) = if let Some(number) = value.strip_suffix("px") {
         (number, 1.0_f64)
@@ -679,8 +679,7 @@ fn parse_media_length(value: &str) -> Option<u32> {
         (number, 16.0)
     };
     let pixels = number.trim().parse::<f64>().ok()? * multiplier;
-    (pixels.is_finite() && pixels >= 0.0 && pixels <= u32::MAX as f64)
-        .then_some(pixels.round() as u32)
+    (pixels.is_finite() && pixels >= 0.0).then_some(pixels)
 }
 
 /// Scan only top-level qualified rules. Unlike splitting on braces, this respects
@@ -1737,6 +1736,21 @@ mod tests {
         narrow.set_attribute("class", "narrow");
         assert_eq!(portrait.compute_style(&wide).get("color"), None);
         assert_eq!(portrait.compute_style(&narrow).get("color"), Some("blue"));
+    }
+
+    #[test]
+    fn media_query_lengths_preserve_fractional_css_pixels() {
+        let css = "@media (min-width: 600.5px) { .min { color: green; } } @media (width > 799.5px) { .range { color: blue; } }";
+        let exact = StyleSheet::parse_for_viewport(css, 600, 800);
+        let above = StyleSheet::parse_for_viewport(css, 601, 800);
+        let mut min = Node::element("div");
+        min.set_attribute("class", "min");
+        let mut range = Node::element("div");
+        range.set_attribute("class", "range");
+
+        assert_eq!(exact.compute_style(&min).get("color"), None);
+        assert_eq!(above.compute_style(&min).get("color"), Some("green"));
+        assert_eq!(exact.compute_style(&range).get("color"), Some("blue"));
     }
 
     #[test]
