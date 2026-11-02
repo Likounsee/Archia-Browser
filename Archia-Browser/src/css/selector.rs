@@ -1846,15 +1846,9 @@ mod tests {
         root.append(direct);
         root.append(nested);
 
-        assert!(Selector::parse("main:has(> .card)")
-            .unwrap()
-            .matches(&root));
-        assert!(!Selector::parse("main:has(> img)")
-            .unwrap()
-            .matches(&root));
-        assert!(Selector::parse("main:has(img)")
-            .unwrap()
-            .matches(&root));
+        assert!(Selector::parse("main:has(> .card)").unwrap().matches(&root));
+        assert!(!Selector::parse("main:has(> img)").unwrap().matches(&root));
+        assert!(Selector::parse("main:has(img)").unwrap().matches(&root));
     }
 
     #[test]
