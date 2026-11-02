@@ -588,20 +588,18 @@ fn is_read_write_element(
                 .map(|value| value.trim().to_ascii_lowercase())
                 .as_deref()
                 .unwrap_or("text"),
-            Some(
-                "text"
-                    | "search"
-                    | "url"
-                    | "tel"
-                    | "email"
-                    | "password"
-                    | "date"
-                    | "month"
-                    | "week"
-                    | "time"
-                    | "datetime-local"
-                    | "number"
-            )
+            "text"
+                | "search"
+                | "url"
+                | "tel"
+                | "email"
+                | "password"
+                | "date"
+                | "month"
+                | "week"
+                | "time"
+                | "datetime-local"
+                | "number"
         ),
         _ => attributes.get("contenteditable").is_some_and(|value| {
             value.is_empty()
