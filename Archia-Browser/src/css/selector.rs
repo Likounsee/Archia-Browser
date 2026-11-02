@@ -248,6 +248,7 @@ impl Selector {
             path[node_index],
             Some(sibling_lists[node_index]),
             Some(sibling_positions[node_index]),
+            Some(&path[..node_index]),
         ) {
             return false;
         }
@@ -283,6 +284,7 @@ impl Selector {
                             sibling,
                             Some(sibling_lists[node_index]),
                             Some(position),
+                            Some(&path[..node_index]),
                         )
                     })
             }
@@ -297,6 +299,7 @@ impl Selector {
                                 sibling,
                                 Some(sibling_lists[node_index]),
                                 Some(index),
+                                Some(&path[..node_index]),
                             )
                         })
                     })
@@ -646,6 +649,7 @@ fn matches_pseudo_class(
     attributes: &std::collections::BTreeMap<String, String>,
     siblings: Option<&[Node]>,
     position: Option<usize>,
+    ancestors: Option<&[&Node]>,
 ) -> bool {
     match pseudo {
         // The normalized HTML document has a single document element named
@@ -653,7 +657,19 @@ fn matches_pseudo_class(
         "root" => {
             matches!(&node.kind, NodeKind::Element { name, .. } if name.eq_ignore_ascii_case("html"))
         }
-        _ if pseudo.starts_with("lang(") => matches_language(pseudo, attributes),
+        _ if pseudo.starts_with("lang(") => {
+            matches_language(pseudo, attributes)
+                || attributes.get("lang").is_none()
+                    && attributes.get("xml:lang").is_none()
+                    && ancestors.is_some_and(|ancestors| {
+                        ancestors.iter().rev().any(|ancestor| {
+                            let NodeKind::Element { attributes, .. } = &ancestor.kind else {
+                                return false;
+                            };
+                            matches_language(pseudo, attributes)
+                        })
+                    })
+        },
         // :link and :any-link match hyperlink elements with a non-empty href.
         // Visited state is intentionally not exposed by this engine.
         "link" | "any-link" => {
@@ -955,7 +971,7 @@ fn attribute_value_matches(
 }
 
 fn matches_simple(simple: &SimpleSelector, node: &Node) -> bool {
-    matches_simple_with_siblings(simple, node, None, None)
+    matches_simple_with_siblings(simple, node, None, None, None)
 }
 
 fn matches_simple_with_siblings(
@@ -963,6 +979,7 @@ fn matches_simple_with_siblings(
     node: &Node,
     siblings: Option<&[Node]>,
     position: Option<usize>,
+    ancestors: Option<&[&Node]>,
 ) -> bool {
     let NodeKind::Element { name, attributes } = &node.kind else {
         return false;
@@ -994,7 +1011,7 @@ fn matches_simple_with_siblings(
     if simple
         .pseudo_classes
         .iter()
-        .any(|pseudo| !matches_pseudo_class(pseudo, node, attributes, siblings, position))
+        .any(|pseudo| !matches_pseudo_class(pseudo, node, attributes, siblings, position, ancestors))
     {
         return false;
     }
