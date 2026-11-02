@@ -637,13 +637,14 @@ fn media_feature_matches(feature: &str, viewport_width: u32, viewport_height: u3
             let Some(expected) = parse_media_length(value) else {
                 return false;
             };
-            compare(dimension(name).unwrap(), invert(operator), f64::from(expected))
+            compare(
+                dimension(name).unwrap(),
+                invert(operator),
+                f64::from(expected),
+            )
         }
-        [lower, lower_operator, name, upper_operator, upper]
-            if dimension(name).is_some() =>
-        {
-            let (Some(lower), Some(upper)) =
-                (parse_media_length(lower), parse_media_length(upper))
+        [lower, lower_operator, name, upper_operator, upper] if dimension(name).is_some() => {
+            let (Some(lower), Some(upper)) = (parse_media_length(lower), parse_media_length(upper))
             else {
                 return false;
             };
