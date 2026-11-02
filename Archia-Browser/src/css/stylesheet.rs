@@ -928,6 +928,26 @@ fn initial_value(name: &str) -> &'static str {
         | "border-right-width"
         | "border-bottom-width"
         | "border-left-width" => "0",
+        "border-style"
+        | "border-top-style"
+        | "border-right-style"
+        | "border-bottom-style"
+        | "border-left-style" => "none",
+        "border-color"
+        | "border-top-color"
+        | "border-right-color"
+        | "border-bottom-color"
+        | "border-left-color" => "currentcolor",
+        "background-image" => "none",
+        "background-repeat" => "repeat",
+        "background-position" => "0% 0%",
+        "background-size" => "auto",
+        "box-sizing" => "content-box",
+        "position" => "static",
+        "overflow" | "overflow-x" | "overflow-y" => "visible",
+        "opacity" => "1",
+        "z-index" => "auto",
+        "vertical-align" => "baseline",
         "font-size" => "16px",
         "font-style" => "normal",
         "font-weight" => "normal",
@@ -1201,6 +1221,24 @@ mod tests {
         assert_eq!(style.get("color"), Some("green"));
         assert_eq!(style.get("margin-top"), Some("0"));
         assert_eq!(style.get("padding-top"), Some("0"));
+    }
+
+    #[test]
+    fn css_wide_initial_values_cover_common_paint_and_layout_properties() {
+        for (property, expected) in [
+            ("border-top-style", "none"),
+            ("border-right-color", "currentcolor"),
+            ("background-image", "none"),
+            ("background-repeat", "repeat"),
+            ("box-sizing", "content-box"),
+            ("position", "static"),
+            ("overflow-x", "visible"),
+            ("opacity", "1"),
+            ("z-index", "auto"),
+            ("vertical-align", "baseline"),
+        ] {
+            assert_eq!(initial_value(property), expected, "{property}");
+        }
     }
 
     #[test]
