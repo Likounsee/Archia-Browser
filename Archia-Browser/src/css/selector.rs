@@ -807,7 +807,6 @@ fn pseudo_argument_matches(
 fn pseudo_argument_specificity(argument: &str) -> Specificity {
     split_pseudo_arguments(argument)
         .filter_map(Selector::parse)
-        .filter(|selector| selector.parts.len() == 1)
         .map(|selector| selector.specificity())
         .max()
         .unwrap_or_default()
@@ -1170,6 +1169,12 @@ mod tests {
         assert!(Selector::parse("input:checked:disabled")
             .unwrap()
             .matches(&checked));
+    }
+
+    #[test]
+    fn is_and_not_use_max_specificity_of_complex_arguments() {
+        let selector = Selector::parse("p:is(main > section.featured > p, #chosen)").unwrap();
+        assert_eq!(selector.specificity(), Specificity::new(1, 0, 1));
     }
 
     #[test]
