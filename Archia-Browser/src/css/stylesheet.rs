@@ -320,6 +320,13 @@ fn supports_condition_matches(condition: &str) -> bool {
     else {
         return false;
     };
+    if let Some(selector) = inner
+        .strip_prefix("selector(")
+        .and_then(|value| value.strip_suffix(')'))
+    {
+        return !selector.trim().is_empty() && Selector::parse(selector.trim()).is_some();
+    }
+
     let Some((name, value)) = inner.split_once(':') else {
         return false;
     };
@@ -1564,6 +1571,22 @@ mod tests {
         let sheet = StyleSheet::parse_for_viewport(&nested, 800, 600);
         assert!(sheet.rules.is_empty());
     }
+    #[test]
+    fn supports_selector_conditions_use_the_selector_parser() {
+        let css = "@supports selector(.card > .title) { .supported { color: green; } } @supports selector(:has(> img)) { .has { color: blue; } } @supports selector(.card >) { .invalid { color: red; } }";
+        let sheet = StyleSheet::parse(css);
+
+        for (class, expected) in [
+            ("supported", Some("green")),
+            ("has", Some("blue")),
+            ("invalid", None),
+        ] {
+            let mut node = Node::element("div");
+            node.set_attribute("class", class);
+            assert_eq!(sheet.compute_style(&node).get("color"), expected);
+        }
+    }
+
     #[test]
     fn supports_rules_apply_only_for_implemented_declarations() {
         let css = "@supports (display: grid) { .grid { display: grid; } } @supports (display: subgrid) { .grid { color: red; } }";
