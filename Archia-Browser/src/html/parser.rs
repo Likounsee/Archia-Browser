@@ -573,8 +573,17 @@ fn close_element(root: &mut Node, stack: &mut Vec<Node>, name: &str) {
 fn is_head_element(name: &str) -> bool {
     matches!(
         name,
-        "base" | "basefont" | "bgsound" | "link" | "meta" | "title" | "noscript"
-            | "noframes" | "style" | "script" | "template"
+        "base"
+            | "basefont"
+            | "bgsound"
+            | "link"
+            | "meta"
+            | "title"
+            | "noscript"
+            | "noframes"
+            | "style"
+            | "script"
+            | "template"
     )
 }
 
@@ -717,8 +726,16 @@ mod tests {
             "<title>Page title</title><meta charset='utf-8'><link rel='stylesheet' href='site.css'><main>content</main>",
         ));
         let html = root.find_first_element("html").expect("html element");
-        let head = html.children.iter().find(|node| node.tag_name() == Some("head")).expect("head");
-        let body = html.children.iter().find(|node| node.tag_name() == Some("body")).expect("body");
+        let head = html
+            .children
+            .iter()
+            .find(|node| node.tag_name() == Some("head"))
+            .expect("head");
+        let body = html
+            .children
+            .iter()
+            .find(|node| node.tag_name() == Some("body"))
+            .expect("body");
 
         assert!(head.find_first_element("title").is_some());
         assert!(head.find_first_element("meta").is_some());
@@ -733,8 +750,16 @@ mod tests {
             "<html><title>Page title</title><meta charset='utf-8'><body><p>content</p></body></html>",
         ));
         let html = root.find_first_element("html").expect("html element");
-        let head = html.children.iter().find(|node| node.tag_name() == Some("head")).expect("head");
-        let body = html.children.iter().find(|node| node.tag_name() == Some("body")).expect("body");
+        let head = html
+            .children
+            .iter()
+            .find(|node| node.tag_name() == Some("head"))
+            .expect("head");
+        let body = html
+            .children
+            .iter()
+            .find(|node| node.tag_name() == Some("body"))
+            .expect("body");
 
         assert!(head.find_first_element("title").is_some());
         assert!(head.find_first_element("meta").is_some());
