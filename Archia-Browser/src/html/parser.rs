@@ -213,10 +213,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // The "in select" insertion mode only accepts a small set of
                 // descendants. Ignoring unrelated start tags prevents malformed
                 // markup from creating arbitrary elements inside a form control.
-                if stack
-                    .iter()
-                    .any(|node| node.tag_name() == Some("select"))
-                {
+                if stack.iter().any(|node| node.tag_name() == Some("select")) {
                     match name.as_str() {
                         "option" | "optgroup" | "script" | "template" => {}
                         "hr" => {
@@ -407,8 +404,9 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 {
                     match name.as_str() {
                         "select" => close_element(&mut root, &mut stack, "select"),
-                        "option" if stack.len() > select_position + 1
-                            && stack.last().and_then(Node::tag_name) == Some("option") =>
+                        "option"
+                            if stack.len() > select_position + 1
+                                && stack.last().and_then(Node::tag_name) == Some("option") =>
                         {
                             close_element(&mut root, &mut stack, "option");
                         }
@@ -838,7 +836,9 @@ mod tests {
         assert_eq!(options[1].text_content(), "two");
         assert!(select.find_first_element("div").is_none());
         assert_eq!(
-            root.find_first_element("p").expect("following paragraph").text_content(),
+            root.find_first_element("p")
+                .expect("following paragraph")
+                .text_content(),
             "after"
         );
     }
@@ -856,7 +856,11 @@ mod tests {
         assert_eq!(optgroup.children[0].tag_name(), Some("option"));
         assert_eq!(optgroup.children[0].text_content(), "choice");
         assert_eq!(
-            select.children.iter().filter(|node| node.tag_name() == Some("hr")).count(),
+            select
+                .children
+                .iter()
+                .filter(|node| node.tag_name() == Some("hr"))
+                .count(),
             1
         );
         assert!(select
@@ -884,10 +888,7 @@ mod tests {
             .expect("input reprocessed outside select");
 
         assert!(input_position > select_position);
-        assert_eq!(
-            body.children[select_position].text_content(),
-            "choice"
-        );
+        assert_eq!(body.children[select_position].text_content(), "choice");
         assert!(body.children[input_position..]
             .iter()
             .any(|node| node.tag_name() == Some("p")));
