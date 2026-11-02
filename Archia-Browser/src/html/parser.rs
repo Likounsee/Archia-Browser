@@ -255,6 +255,30 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // A row directly inside a table starts an implicit tbody in
                 // the HTML tree builder. Keep this scoped to the table being
                 // the current insertion parent; foster parenting is separate.
+                // A cell encountered directly in a table or section gets the
+                // missing table scaffolding inserted before it. This mirrors the
+                // in-table insertion modes for common malformed-but-valid-in-practice
+                // documents such as <table><td>cell</td></table>.
+                if matches!(name.as_str(), "td" | "th") {
+                    let implied: &[&str] = match stack.last().and_then(Node::tag_name) {
+                        Some("table") => &["tbody", "tr"],
+                        Some("tbody" | "thead" | "tfoot") => &["tr"],
+                        _ => &[],
+                    };
+                    if !implied.is_empty() {
+                        if created_nodes.saturating_add(implied.len()) >= MAX_DOM_NODES
+                            || stack.len().saturating_add(implied.len()) > MAX_DOM_DEPTH
+                            || stack.try_reserve(implied.len()).is_err()
+                        {
+                            continue;
+                        }
+                        for tag in implied {
+                            stack.push(Node::element(tag));
+                            created_nodes += 1;
+                        }
+                    }
+                }
+
                 if name == "tr"
                     && stack
                         .last()
@@ -1386,4 +1410,37 @@ mod tests {
         assert_eq!(html.children[0].tag_name(), Some("head"));
         assert_eq!(html.children[1].tag_name(), Some("body"));
     }
+    #[test]
+    fn table_cells_receive_missing_implicit_row_and_section_elements() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<table><td>one</td><th>two</th></table>",
+        ));
+        let table = root.find_first_element("table").expect("table retained");
+        assert_eq!(table.children.len(), 1);
+        let tbody = &table.children[0];
+        assert_eq!(tbody.tag_name(), Some("tbody"));
+        assert_eq!(tbody.children.len(), 2);
+        assert_eq!(tbody.children[0].tag_name(), Some("tr"));
+        assert_eq!(tbody.children[0].children[0].text_content(), "one");
+        assert_eq!(tbody.children[1].tag_name(), Some("tr"));
+        assert_eq!(tbody.children[1].children[0].tag_name(), Some("th"));
+        assert_eq!(tbody.children[1].children[0].text_content(), "two");
+    }
+
+    #[test]
+    fn table_cells_inside_sections_receive_implicit_rows() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<table><thead><th>heading</th></thead><tbody><td>body</td></tbody></table>",
+        ));
+        let table = root.find_first_element("table").expect("table retained");
+        let head = &table.children[0];
+        let body = &table.children[1];
+        assert_eq!(head.tag_name(), Some("thead"));
+        assert_eq!(head.children[0].tag_name(), Some("tr"));
+        assert_eq!(head.children[0].children[0].text_content(), "heading");
+        assert_eq!(body.tag_name(), Some("tbody"));
+        assert_eq!(body.children[0].tag_name(), Some("tr"));
+        assert_eq!(body.children[0].children[0].text_content(), "body");
+    }
+
 }
