@@ -323,10 +323,17 @@ impl Selector {
         sibling_lists: &[&[Node]],
         sibling_positions: &[usize],
     ) -> bool {
+        // Sibling candidates occupy the same depth as the current node's
+        // parent-to-child edge. The path includes the parent at node_index - 1,
+        // so replace the current node at that depth rather than appending a
+        // second child below it.
+        let Some(candidate_index) = node_index.checked_sub(1) else {
+            return false;
+        };
+        let candidate_len = candidate_index + 1;
         let mut candidate_path = Vec::new();
         let mut candidate_sibling_lists = Vec::new();
         let mut candidate_positions = Vec::new();
-        let candidate_len = node_index.saturating_add(1);
         if candidate_len > path.len()
             || candidate_path.try_reserve(candidate_len).is_err()
             || candidate_sibling_lists.try_reserve(candidate_len).is_err()
@@ -335,20 +342,16 @@ impl Selector {
             return false;
         }
 
-        // Replace the current path node at this depth with its sibling while
-        // retaining every ancestor above it. The previous implementation
-        // dropped the parent context, so selectors such as
-        // main > section + section > p could not match.
-        candidate_path.extend_from_slice(&path[..node_index]);
+        candidate_path.extend_from_slice(&path[..candidate_index]);
         candidate_path.push(sibling);
-        candidate_sibling_lists.extend_from_slice(&sibling_lists[..node_index]);
-        candidate_sibling_lists.push(sibling_lists[node_index]);
-        candidate_positions.extend_from_slice(&sibling_positions[..node_index]);
+        candidate_sibling_lists.extend_from_slice(&sibling_lists[..candidate_index]);
+        candidate_sibling_lists.push(sibling_lists[candidate_index]);
+        candidate_positions.extend_from_slice(&sibling_positions[..candidate_index]);
         candidate_positions.push(sibling_position);
 
         self.matches_at_with_siblings(
             selector_index,
-            node_index,
+            candidate_index,
             &candidate_path,
             &candidate_sibling_lists,
             &candidate_positions,
