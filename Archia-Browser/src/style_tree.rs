@@ -172,6 +172,35 @@ mod tests {
     }
 
     #[test]
+    fn relative_sibling_has_selectors_style_the_subject_element() {
+        let mut body = Node::element("body");
+        let mut first = Node::element("section");
+        first.set_attribute("class", "card");
+        let comment = Node::comment("ignored by adjacent sibling matching");
+        let mut spacer = Node::element("span");
+        spacer.set_attribute("class", "spacer");
+        let mut second = Node::element("section");
+        second.set_attribute("class", "card");
+        let mut featured = Node::element("section");
+        featured.set_attribute("class", "featured");
+        body.append(first);
+        body.append(comment);
+        body.append(spacer);
+        body.append(second);
+        body.append(featured);
+
+        let sheet = StyleSheet::parse(
+            ".card:has(~ .featured) { color: red; } .card:has(+ .featured) { padding: 4px; }",
+        );
+        let styled = StyleEngine::style(&body, &sheet);
+
+        assert_eq!(styled.children[0].style.get("color"), Some("red"));
+        assert_eq!(styled.children[0].style.get("padding"), None);
+        assert_eq!(styled.children[3].style.get("color"), Some("red"));
+        assert_eq!(styled.children[3].style.get("padding"), Some("4px"));
+    }
+
+    #[test]
     fn sibling_selectors_style_the_correct_dom_nodes() {
         let mut body = Node::element("body");
         let first = Node::element("span");
