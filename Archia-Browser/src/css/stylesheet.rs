@@ -1750,7 +1750,10 @@ mod tests {
         range.set_attribute("class", "range");
 
         assert_eq!(below_minimum.compute_style(&min).get("color"), None);
-        assert_eq!(above_minimum.compute_style(&min).get("color"), Some("green"));
+        assert_eq!(
+            above_minimum.compute_style(&min).get("color"),
+            Some("green")
+        );
         assert_eq!(above_range.compute_style(&range).get("color"), Some("blue"));
     }
 
