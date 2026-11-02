@@ -1442,5 +1442,4 @@ mod tests {
         assert_eq!(body.children[0].tag_name(), Some("tr"));
         assert_eq!(body.children[0].children[0].text_content(), "body");
     }
-
 }
