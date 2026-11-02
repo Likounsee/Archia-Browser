@@ -821,7 +821,7 @@ fn matches_pseudo_class(
             let Some(argument) = pseudo_argument(pseudo, "has") else {
                 return false;
             };
-            has_descendant_matching(argument, node, ancestors, 0)
+            has_descendant_matching(argument, node, siblings, position, ancestors, 0)
         }
         _ if pseudo.starts_with("is(") || pseudo.starts_with("where(") => {
             let name = if pseudo.starts_with("is(") {
@@ -841,12 +841,64 @@ fn matches_pseudo_class(
 fn has_descendant_matching(
     argument: &str,
     node: &Node,
+    siblings: Option<&[Node]>,
+    position: Option<usize>,
     ancestors: Option<&[&Node]>,
     depth: usize,
 ) -> bool {
     if depth >= 256 {
         return false;
     }
+    // Relative sibling selectors are anchored to the subject element. The
+    // sibling list supplied by the style engine preserves text/comment nodes,
+    // while selector matching itself skips non-element siblings.
+    let relative_argument = argument.trim_start();
+    if relative_argument.starts_with('+') || relative_argument.starts_with('~') {
+        let Some((sibling_list, subject_position)) = siblings.zip(position) else {
+            return false;
+        };
+        let mut candidate_ancestors = Vec::new();
+        if candidate_ancestors
+            .try_reserve(ancestors.map_or(1, |path| path.len().saturating_add(1)))
+            .is_err()
+        {
+            return false;
+        }
+        if let Some(ancestors) = ancestors {
+            candidate_ancestors.extend_from_slice(ancestors);
+        }
+        candidate_ancestors.push(node);
+        let anchored_argument = format!("* {relative_argument}");
+        let adjacent = relative_argument.starts_with('+');
+        let mut found_next_element = false;
+        for (candidate_position, candidate) in sibling_list
+            .iter()
+            .enumerate()
+            .skip(subject_position.saturating_add(1))
+        {
+            if !candidate.is_element() {
+                continue;
+            }
+            if adjacent && found_next_element {
+                break;
+            }
+            found_next_element = true;
+            if pseudo_argument_matches(
+                &anchored_argument,
+                candidate,
+                Some(sibling_list),
+                Some(candidate_position),
+                Some(&candidate_ancestors),
+            ) {
+                return true;
+            }
+            if adjacent {
+                break;
+            }
+        }
+        return false;
+    }
+
     // :has() accepts relative selectors. A leading child combinator is
     // anchored to the subject, so express it as an ordinary selector whose
     // left-hand universal selector is the subject element.
@@ -882,7 +934,14 @@ fn has_descendant_matching(
             Some(position),
             Some(&candidate_ancestors),
         ) || (!direct_child_only
-            && has_descendant_matching(argument, child, Some(&candidate_ancestors), depth + 1))
+            && has_descendant_matching(
+                argument,
+                child,
+                Some(&node.children),
+                Some(position),
+                Some(&candidate_ancestors),
+                depth + 1,
+            ))
     })
 }
 
@@ -1860,6 +1919,50 @@ mod tests {
         assert!(!Selector::parse("main:has(> .card)")
             .unwrap()
             .matches(&nested_card));
+    }
+
+    #[test]
+    fn has_supports_relative_adjacent_and_general_sibling_selectors() {
+        let mut parent = Node::element("main");
+        let mut first = Node::element("section");
+        first.set_attribute("class", "card");
+        let comment = Node::comment("between");
+        let mut spacer = Node::element("span");
+        spacer.set_attribute("class", "spacer");
+        let mut second = Node::element("section");
+        second.set_attribute("class", "card");
+        let mut featured = Node::element("section");
+        featured.set_attribute("class", "featured");
+        parent.append(first);
+        parent.append(comment);
+        parent.append(spacer);
+        parent.append(second);
+        parent.append(featured);
+
+        let siblings = parent.children.as_slice();
+        let ancestors = [&parent];
+        assert!(Selector::parse("section.card:has(~ .featured)")
+            .unwrap()
+            .matches_path_with_siblings(
+                &[&parent, &siblings[0]],
+                &[&[], siblings],
+                &[0, 0],
+            ));
+        assert!(!Selector::parse("section.card:has(+ .featured)")
+            .unwrap()
+            .matches_path_with_siblings(
+                &[&parent, &siblings[0]],
+                &[&[], siblings],
+                &[0, 0],
+            ));
+        assert!(Selector::parse("section.card:has(+ .featured)")
+            .unwrap()
+            .matches_path_with_siblings(
+                &[&parent, &siblings[3]],
+                &[&[], siblings],
+                &[0, 3],
+            ));
+        let _ = ancestors;
     }
 
     #[test]
