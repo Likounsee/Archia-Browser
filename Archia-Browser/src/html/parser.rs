@@ -218,7 +218,15 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                     .any(|node| node.tag_name() == Some("select"))
                 {
                     match name.as_str() {
-                        "option" | "optgroup" | "hr" | "script" | "template" => {}
+                        "option" | "optgroup" | "script" | "template" => {}
+                        "hr" => {
+                            if stack.last().and_then(Node::tag_name) == Some("option") {
+                                close_element(&mut root, &mut stack, "option");
+                            }
+                            if stack.last().and_then(Node::tag_name) == Some("optgroup") {
+                                close_element(&mut root, &mut stack, "optgroup");
+                            }
+                        }
                         "input" | "keygen" | "textarea" => {
                             close_element(&mut root, &mut stack, "select");
                         }
@@ -833,6 +841,29 @@ mod tests {
             root.find_first_element("p").expect("following paragraph").text_content(),
             "after"
         );
+    }
+
+    #[test]
+    fn select_mode_closes_option_and_optgroup_before_horizontal_rule() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<select><optgroup><option>choice<hr><option>next</select>",
+        ));
+        let select = root.find_first_element("select").expect("select retained");
+        let optgroup = select
+            .find_first_element("optgroup")
+            .expect("optgroup retained");
+
+        assert_eq!(optgroup.children[0].tag_name(), Some("option"));
+        assert_eq!(optgroup.children[0].text_content(), "choice");
+        assert_eq!(
+            select.children.iter().filter(|node| node.tag_name() == Some("hr")).count(),
+            1
+        );
+        assert!(select
+            .children
+            .iter()
+            .any(|node| node.tag_name() == Some("option")
+                && node.text_content() == "next"));
     }
 
     #[test]
