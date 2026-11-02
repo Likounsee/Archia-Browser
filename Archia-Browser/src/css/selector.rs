@@ -219,7 +219,6 @@ impl Selector {
     ) -> bool {
         if self.parts.is_empty()
             || path.is_empty()
-            || path.len() < self.parts.len()
             || sibling_lists.len() != path.len()
             || sibling_positions.len() != path.len()
         {
@@ -323,12 +322,16 @@ impl Selector {
         sibling_lists: &[&[Node]],
         sibling_positions: &[usize],
     ) -> bool {
-        // Sibling candidates occupy the same depth as the current node's
-        // parent-to-child edge. The path includes the parent at node_index - 1,
-        // so replace the current node at that depth rather than appending a
-        // second child below it.
-        let Some(candidate_index) = node_index.checked_sub(1) else {
-            return false;
+        // A caller may provide a path that already includes the previous
+        // sibling (for a selector chain such as `div > span + p`) or only the
+        // ancestor path (as in a complex :is() argument). Reuse the existing
+        // path slot when it is the candidate; otherwise append at this depth.
+        let candidate_index = if node_index > 0
+            && std::ptr::eq(path[node_index - 1], sibling)
+        {
+            node_index - 1
+        } else {
+            node_index
         };
         let candidate_len = candidate_index + 1;
         let mut candidate_path = Vec::new();
