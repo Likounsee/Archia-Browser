@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use super::entities::{MAX_NAMED_REFERENCE_LENGTH, NAMED_CHARACTER_REFERENCES};
+
 fn is_html_whitespace(character: char) -> bool {
     matches!(character, '\t' | '\n' | '\u{000C}' | '\r' | ' ')
 }
@@ -745,6 +747,22 @@ fn decode_numeric_character_reference(codepoint: u32) -> char {
     char::from_u32(codepoint).unwrap_or('\u{FFFD}')
 }
 
+fn lookup_named_character_reference(input: &str) -> Option<(&'static str, &'static str)> {
+    let max_length = input.len().min(MAX_NAMED_REFERENCE_LENGTH);
+    for length in (1..=max_length).rev() {
+        if !input.is_char_boundary(length) {
+            continue;
+        }
+        let candidate = &input[..length];
+        if let Ok(index) = NAMED_CHARACTER_REFERENCES
+            .binary_search_by(|(name, _)| name.cmp(&candidate))
+        {
+            return Some(NAMED_CHARACTER_REFERENCES[index]);
+        }
+    }
+    None
+}
+
 fn decode_character_references(input: &str) -> String {
     decode_character_references_with_context(input, false)
 }
@@ -794,427 +812,28 @@ fn decode_character_references_with_context(input: &str, in_attribute: bool) -> 
             }
         }
 
-        // HTML permits a small legacy set of named references without a
-        // semicolon. In attributes, do not consume one when followed by an
-        // ASCII alphanumeric or '='; otherwise values such as '&copycat' change.
+        // Match the longest WHATWG named reference. Entries without a
+        // semicolon are limited to the legacy set by the generated table.
         let remainder = &input[start + 1..];
-        // The HTML tokenizer has a defined legacy set of named references
-        // that may omit their semicolon. Keep it separate from the full
-        // semicolon-terminated entity table so attribute ambiguity is handled
-        // exactly at this point in tokenization.
-        let legacy = [
-            ("AElig", 'Æ'),
-            ("AMP", '&'),
-            ("Aacute", 'Á'),
-            ("Acirc", 'Â'),
-            ("Agrave", 'À'),
-            ("Aring", 'Å'),
-            ("Atilde", 'Ã'),
-            ("Auml", 'Ä'),
-            ("COPY", '©'),
-            ("Ccedil", 'Ç'),
-            ("ETH", 'Ð'),
-            ("Eacute", 'É'),
-            ("Ecirc", 'Ê'),
-            ("Egrave", 'È'),
-            ("Euml", 'Ë'),
-            ("GT", '>'),
-            ("Iacute", 'Í'),
-            ("Icirc", 'Î'),
-            ("Igrave", 'Ì'),
-            ("Iuml", 'Ï'),
-            ("LT", '<'),
-            ("Ntilde", 'Ñ'),
-            ("Oacute", 'Ó'),
-            ("Ocirc", 'Ô'),
-            ("Ograve", 'Ò'),
-            ("Oslash", 'Ø'),
-            ("Otilde", 'Õ'),
-            ("Ouml", 'Ö'),
-            ("QUOT", '"'),
-            ("REG", '®'),
-            ("THORN", 'Þ'),
-            ("Uacute", 'Ú'),
-            ("Ucirc", 'Û'),
-            ("Ugrave", 'Ù'),
-            ("Uuml", 'Ü'),
-            ("Yacute", 'Ý'),
-            ("aacute", 'á'),
-            ("acirc", 'â'),
-            ("acute", '´'),
-            ("aelig", 'æ'),
-            ("agrave", 'à'),
-            ("amp", '&'),
-            ("aring", 'å'),
-            ("atilde", 'ã'),
-            ("auml", 'ä'),
-            ("brvbar", '¦'),
-            ("ccedil", 'ç'),
-            ("cedil", '¸'),
-            ("cent", '¢'),
-            ("copy", '©'),
-            ("curren", '¤'),
-            ("deg", '°'),
-            ("divide", '÷'),
-            ("eacute", 'é'),
-            ("ecirc", 'ê'),
-            ("egrave", 'è'),
-            ("eth", 'ð'),
-            ("euml", 'ë'),
-            ("frac12", '½'),
-            ("frac14", '¼'),
-            ("frac34", '¾'),
-            ("gt", '>'),
-            ("iacute", 'í'),
-            ("icirc", 'î'),
-            ("iexcl", '¡'),
-            ("igrave", 'ì'),
-            ("iquest", '¿'),
-            ("iuml", 'ï'),
-            ("laquo", '«'),
-            ("lt", '<'),
-            ("macr", '¯'),
-            ("micro", 'µ'),
-            ("middot", '·'),
-            ("nbsp", '\u{00A0}'),
-            ("not", '¬'),
-            ("ntilde", 'ñ'),
-            ("oacute", 'ó'),
-            ("ocirc", 'ô'),
-            ("ograve", 'ò'),
-            ("ordf", 'ª'),
-            ("ordm", 'º'),
-            ("oslash", 'ø'),
-            ("otilde", 'õ'),
-            ("ouml", 'ö'),
-            ("para", '¶'),
-            ("plusmn", '±'),
-            ("pound", '£'),
-            ("quot", '"'),
-            ("raquo", '»'),
-            ("reg", '®'),
-            ("sect", '§'),
-            ("shy", '\u{00AD}'),
-            ("sup1", '¹'),
-            ("sup2", '²'),
-            ("sup3", '³'),
-            ("szlig", 'ß'),
-            ("thorn", 'þ'),
-            ("times", '×'),
-            ("uacute", 'ú'),
-            ("ucirc", 'û'),
-            ("ugrave", 'ù'),
-            ("uml", '¨'),
-            ("uuml", 'ü'),
-            ("yacute", 'ý'),
-            ("yen", '¥'),
-            ("yuml", 'ÿ'),
-        ];
-        let legacy_match = legacy
-            .iter()
-            .filter(|(name, _)| remainder.starts_with(name))
-            .max_by_key(|(name, _)| name.len());
-        if let Some((name, character)) = legacy_match {
-            let end = start + 1 + name.len();
-            let next = input[end..].chars().next();
-            let blocked_in_attribute =
-                in_attribute && next.is_some_and(|ch| ch.is_ascii_alphanumeric() || ch == '=');
-            if !blocked_in_attribute && next != Some(';') {
-                output.push(*character);
-                cursor = end;
-                continue;
-            }
-        }
-
-        let Some(end_relative) = input[start + 1..].find(';') else {
-            // A bare ampersand is literal, but later references in the same
-            // text or attribute value must still be decoded.
+        let Some((name, value)) = lookup_named_character_reference(remainder) else {
             output.push('&');
             cursor = start + 1;
             continue;
         };
-        // An ampersand before the semicolon starts a separate candidate
-        // reference; do not swallow a valid reference that follows an unknown one.
-        if let Some(next_ampersand) = input[start + 1..start + 1 + end_relative].find('&') {
-            let next_start = start + 1 + next_ampersand;
-            // Preserve the entire unknown candidate, including its name.
-            output.push_str(&input[start..next_start]);
-            cursor = next_start;
+        let next = remainder[name.len()..].chars().next();
+        let blocked_in_attribute = !name.ends_with(';')
+            && in_attribute
+            && next.is_some_and(|character| {
+                character.is_ascii_alphanumeric() || character == '='
+            });
+        if blocked_in_attribute {
+            output.push('&');
+            cursor = start + 1;
             continue;
         }
-        let end = start + 1 + end_relative;
-        let reference = &input[start + 1..end];
-
-        let decoded = match reference {
-            "amp" => Some('&'),
-            "lt" => Some('<'),
-            "gt" => Some('>'),
-            "quot" => Some('"'),
-            "apos" => Some('\''),
-            // Common named references used by ordinary prose and typography.
-            // This is intentionally a bounded subset, not the full WHATWG table.
-            "nbsp" => Some('\u{00A0}'),
-            "copy" => Some('\u{00A9}'),
-            "reg" => Some('\u{00AE}'),
-            "trade" => Some('\u{2122}'),
-            "hellip" => Some('\u{2026}'),
-            "mdash" => Some('\u{2014}'),
-            "ndash" => Some('\u{2013}'),
-            "lsquo" => Some('\u{2018}'),
-            "rsquo" => Some('\u{2019}'),
-            "ldquo" => Some('\u{201C}'),
-            "rdquo" => Some('\u{201D}'),
-            "bull" => Some('\u{2022}'),
-            "euro" => Some('\u{20AC}'),
-            "times" => Some('\u{00D7}'),
-            "divide" => Some('\u{00F7}'),
-            "plusmn" => Some('\u{00B1}'),
-            "cent" => Some('\u{00A2}'),
-            "pound" => Some('\u{00A3}'),
-            "yen" => Some('\u{00A5}'),
-            "iexcl" => Some('\u{00A1}'),
-            "brvbar" => Some('\u{00A6}'),
-            "sect" => Some('\u{00A7}'),
-            "uml" => Some('\u{00A8}'),
-            "ordf" => Some('\u{00AA}'),
-            "laquo" => Some('\u{00AB}'),
-            "not" => Some('\u{00AC}'),
-            "shy" => Some('\u{00AD}'),
-            "macr" => Some('\u{00AF}'),
-            "deg" => Some('\u{00B0}'),
-            "sup2" => Some('\u{00B2}'),
-            "sup3" => Some('\u{00B3}'),
-            "acute" => Some('\u{00B4}'),
-            "micro" => Some('\u{00B5}'),
-            "middot" => Some('\u{00B7}'),
-            "cedil" => Some('\u{00B8}'),
-            "sup1" => Some('\u{00B9}'),
-            "ordm" => Some('\u{00BA}'),
-            "raquo" => Some('\u{00BB}'),
-            "frac14" => Some('\u{00BC}'),
-            "frac12" => Some('\u{00BD}'),
-            "frac34" => Some('\u{00BE}'),
-            "iquest" => Some('\u{00BF}'),
-            "Agrave" => Some('\u{00C0}'),
-            "Aacute" => Some('\u{00C1}'),
-            "Acirc" => Some('\u{00C2}'),
-            "Atilde" => Some('\u{00C3}'),
-            "Auml" => Some('\u{00C4}'),
-            "Aring" => Some('\u{00C5}'),
-            "AElig" => Some('\u{00C6}'),
-            "Ccedil" => Some('\u{00C7}'),
-            "Egrave" => Some('\u{00C8}'),
-            "Eacute" => Some('\u{00C9}'),
-            "Ecirc" => Some('\u{00CA}'),
-            "Euml" => Some('\u{00CB}'),
-            "Igrave" => Some('\u{00CC}'),
-            "Iacute" => Some('\u{00CD}'),
-            "Icirc" => Some('\u{00CE}'),
-            "Iuml" => Some('\u{00CF}'),
-            "ETH" => Some('\u{00D0}'),
-            "Ntilde" => Some('\u{00D1}'),
-            "Ograve" => Some('\u{00D2}'),
-            "Oacute" => Some('\u{00D3}'),
-            "Ocirc" => Some('\u{00D4}'),
-            "Otilde" => Some('\u{00D5}'),
-            "Ouml" => Some('\u{00D6}'),
-            "Oslash" => Some('\u{00D8}'),
-            "Ugrave" => Some('\u{00D9}'),
-            "Uacute" => Some('\u{00DA}'),
-            "Ucirc" => Some('\u{00DB}'),
-            "Uuml" => Some('\u{00DC}'),
-            "Yacute" => Some('\u{00DD}'),
-            "THORN" => Some('\u{00DE}'),
-            "szlig" => Some('\u{00DF}'),
-            "agrave" => Some('\u{00E0}'),
-            "aacute" => Some('\u{00E1}'),
-            "acirc" => Some('\u{00E2}'),
-            "atilde" => Some('\u{00E3}'),
-            "auml" => Some('\u{00E4}'),
-            "aring" => Some('\u{00E5}'),
-            "aelig" => Some('\u{00E6}'),
-            "ccedil" => Some('\u{00E7}'),
-            "egrave" => Some('\u{00E8}'),
-            "eacute" => Some('\u{00E9}'),
-            "ecirc" => Some('\u{00EA}'),
-            "euml" => Some('\u{00EB}'),
-            "igrave" => Some('\u{00EC}'),
-            "iacute" => Some('\u{00ED}'),
-            "icirc" => Some('\u{00EE}'),
-            "iuml" => Some('\u{00EF}'),
-            "eth" => Some('\u{00F0}'),
-            "ntilde" => Some('\u{00F1}'),
-            "ograve" => Some('\u{00F2}'),
-            "oacute" => Some('\u{00F3}'),
-            "ocirc" => Some('\u{00F4}'),
-            "otilde" => Some('\u{00F5}'),
-            "ouml" => Some('\u{00F6}'),
-            "oslash" => Some('\u{00F8}'),
-            "ugrave" => Some('\u{00F9}'),
-            "uacute" => Some('\u{00FA}'),
-            "ucirc" => Some('\u{00FB}'),
-            "uuml" => Some('\u{00FC}'),
-            "yacute" => Some('\u{00FD}'),
-            "thorn" => Some('\u{00FE}'),
-            "yuml" => Some('\u{00FF}'),
-            "OElig" => Some('\u{0152}'),
-            "oelig" => Some('\u{0153}'),
-            "Scaron" => Some('\u{0160}'),
-            "scaron" => Some('\u{0161}'),
-            "Yuml" => Some('\u{0178}'),
-            "fnof" => Some('\u{0192}'),
-            "circ" => Some('\u{02C6}'),
-            "tilde" => Some('\u{02DC}'),
-            "ensp" => Some('\u{2002}'),
-            "emsp" => Some('\u{2003}'),
-            "thinsp" => Some('\u{2009}'),
-            "zwnj" => Some('\u{200C}'),
-            "zwj" => Some('\u{200D}'),
-            "lrm" => Some('\u{200E}'),
-            "rlm" => Some('\u{200F}'),
-            "prime" => Some('\u{2032}'),
-            "Prime" => Some('\u{2033}'),
-            "oline" => Some('\u{203E}'),
-            "frasl" => Some('\u{2044}'),
-            "weierp" => Some('\u{2118}'),
-            "image" => Some('\u{2111}'),
-            "real" => Some('\u{211C}'),
-            "alefsym" => Some('\u{2135}'),
-            "larr" => Some('\u{2190}'),
-            "uarr" => Some('\u{2191}'),
-            "rarr" => Some('\u{2192}'),
-            "darr" => Some('\u{2193}'),
-            "harr" => Some('\u{2194}'),
-            "crarr" => Some('\u{21B5}'),
-            "lArr" => Some('\u{21D0}'),
-            "uArr" => Some('\u{21D1}'),
-            "rArr" => Some('\u{21D2}'),
-            "dArr" => Some('\u{21D3}'),
-            "hArr" => Some('\u{21D4}'),
-            "forall" => Some('\u{2200}'),
-            "part" => Some('\u{2202}'),
-            "exist" => Some('\u{2203}'),
-            "empty" => Some('\u{2205}'),
-            "nabla" => Some('\u{2207}'),
-            "isin" => Some('\u{2208}'),
-            "notin" => Some('\u{2209}'),
-            "ni" => Some('\u{220B}'),
-            "prod" => Some('\u{220F}'),
-            "sum" => Some('\u{2211}'),
-            "minus" => Some('\u{2212}'),
-            "lowast" => Some('\u{2217}'),
-            "radic" => Some('\u{221A}'),
-            "prop" => Some('\u{221D}'),
-            "infin" => Some('\u{221E}'),
-            "ang" => Some('\u{2220}'),
-            "and" => Some('\u{2227}'),
-            "or" => Some('\u{2228}'),
-            "cap" => Some('\u{2229}'),
-            "cup" => Some('\u{222A}'),
-            "int" => Some('\u{222B}'),
-            "there4" => Some('\u{2234}'),
-            "sim" => Some('\u{223C}'),
-            "cong" => Some('\u{2245}'),
-            "asymp" => Some('\u{2248}'),
-            "ne" => Some('\u{2260}'),
-            "equiv" => Some('\u{2261}'),
-            "le" => Some('\u{2264}'),
-            "ge" => Some('\u{2265}'),
-            "sub" => Some('\u{2282}'),
-            "sup" => Some('\u{2283}'),
-            "nsub" => Some('\u{2284}'),
-            "sube" => Some('\u{2286}'),
-            "supe" => Some('\u{2287}'),
-            "oplus" => Some('\u{2295}'),
-            "otimes" => Some('\u{2297}'),
-            "perp" => Some('\u{22A5}'),
-            "sdot" => Some('\u{22C5}'),
-            // Greek alphabet and variant symbols commonly used in technical content.
-            "Alpha" => Some('Α'),
-            "Beta" => Some('Β'),
-            "Gamma" => Some('Γ'),
-            "Delta" => Some('Δ'),
-            "Epsilon" => Some('Ε'),
-            "Zeta" => Some('Ζ'),
-            "Eta" => Some('Η'),
-            "Theta" => Some('Θ'),
-            "Iota" => Some('Ι'),
-            "Kappa" => Some('Κ'),
-            "Lambda" => Some('Λ'),
-            "Mu" => Some('Μ'),
-            "Nu" => Some('Ν'),
-            "Xi" => Some('Ξ'),
-            "Omicron" => Some('Ο'),
-            "Pi" => Some('Π'),
-            "Rho" => Some('Ρ'),
-            "Sigma" => Some('Σ'),
-            "Tau" => Some('Τ'),
-            "Upsilon" => Some('Υ'),
-            "Phi" => Some('Φ'),
-            "Chi" => Some('Χ'),
-            "Psi" => Some('Ψ'),
-            "Omega" => Some('Ω'),
-            "alpha" => Some('α'),
-            "beta" => Some('β'),
-            "gamma" => Some('γ'),
-            "delta" => Some('δ'),
-            "epsilon" => Some('ε'),
-            "zeta" => Some('ζ'),
-            "eta" => Some('η'),
-            "theta" => Some('θ'),
-            "iota" => Some('ι'),
-            "kappa" => Some('κ'),
-            "lambda" => Some('λ'),
-            "mu" => Some('μ'),
-            "nu" => Some('ν'),
-            "xi" => Some('ξ'),
-            "omicron" => Some('ο'),
-            "pi" => Some('π'),
-            "rho" => Some('ρ'),
-            "sigma" => Some('σ'),
-            "sigmaf" => Some('ς'),
-            "tau" => Some('τ'),
-            "upsilon" => Some('υ'),
-            "phi" => Some('φ'),
-            "chi" => Some('χ'),
-            "psi" => Some('ψ'),
-            "omega" => Some('ω'),
-            "thetasym" => Some('ϑ'),
-            "upsih" => Some('ϒ'),
-            "piv" => Some('ϖ'),
-            "permil" => Some('‰'),
-            "lsaquo" => Some('‹'),
-            "rsaquo" => Some('›'),
-            "lceil" => Some('\u{2308}'),
-            "rceil" => Some('\u{2309}'),
-            "lfloor" => Some('\u{230A}'),
-            "rfloor" => Some('\u{230B}'),
-            "lang" => Some('\u{2329}'),
-            "rang" => Some('\u{232A}'),
-            "loz" => Some('\u{25CA}'),
-            "spades" => Some('\u{2660}'),
-            "clubs" => Some('\u{2663}'),
-            "hearts" => Some('\u{2665}'),
-            "diams" => Some('\u{2666}'),
-            _ if reference.starts_with("#x") || reference.starts_with("#X") => {
-                u32::from_str_radix(&reference[2..], 16)
-                    .ok()
-                    .map(decode_numeric_character_reference)
-            }
-            _ if reference.starts_with('#') => reference[1..]
-                .parse::<u32>()
-                .ok()
-                .map(decode_numeric_character_reference),
-            _ => None,
-        };
-
-        if let Some(character) = decoded {
-            output.push(character);
-            cursor = end + 1;
-        } else {
-            output.push_str(&input[start..=end]);
-            cursor = end + 1;
-        }
+        output.push_str(value);
+        cursor = start + 1 + name.len();
+        continue;
     }
 
     output.push_str(&input[cursor..]);
@@ -1234,6 +853,27 @@ mod character_reference_tests {
             )]
         );
     }
+    #[test]
+    fn decodes_full_named_reference_table_and_multi_codepoint_values() {
+        assert_eq!(decode_character_references("&NotEqualTilde;"), "≂̸");
+        assert_eq!(decode_character_references("&acE;"), "∾̳");
+        assert_eq!(decode_character_references("&CounterClockwiseContourIntegral;"), "∳");
+        assert_eq!(decode_character_references("&Afr;"), "𝔄");
+        assert_eq!(decode_character_references("&NotEqualTilde"), "≂̸");
+    }
+
+    #[test]
+    fn named_reference_attribute_ambiguity_uses_legacy_rules() {
+        assert_eq!(
+            super::decode_character_references_with_context("&copycat &copy=1 &copy;cat", true),
+            "&copycat &copy=1 ©cat"
+        );
+        assert_eq!(
+            super::decode_character_references_with_context("&copycat &copy=1 &copy;cat", false),
+            "©cat ©=1 ©cat"
+        );
+    }
+
     #[test]
     fn decodes_basic_character_references() {
         assert_eq!(
