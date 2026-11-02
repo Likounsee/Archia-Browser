@@ -1083,6 +1083,21 @@ fn is_inherited_property(name: &str) -> bool {
             | "visibility"
             | "white-space"
             | "cursor"
+            | "direction"
+            | "list-style"
+            | "list-style-image"
+            | "list-style-position"
+            | "list-style-type"
+            | "quotes"
+            | "tab-size"
+            | "word-break"
+            | "overflow-wrap"
+            | "hyphens"
+            | "font-stretch"
+            | "font-kerning"
+            | "font-feature-settings"
+            | "font-variation-settings"
+            | "text-shadow"
     )
 }
 
@@ -1411,13 +1426,18 @@ mod tests {
 
     #[test]
     fn inherited_properties_reach_descendants() {
-        let sheet = StyleSheet::parse("body { color: green; margin: 10px; }");
+        let sheet = StyleSheet::parse(
+            "body { color: green; direction: rtl; list-style-type: square; word-break: break-word; margin: 10px; }",
+        );
         let body = Node::element("body");
         let child = Node::element("span");
         let path = [&body, &child];
 
         let style = sheet.compute_style_path(&path);
         assert_eq!(style.get("color"), Some("green"));
+        assert_eq!(style.get("direction"), Some("rtl"));
+        assert_eq!(style.get("list-style-type"), Some("square"));
+        assert_eq!(style.get("word-break"), Some("break-word"));
         assert_eq!(style.get("margin"), None);
     }
 
