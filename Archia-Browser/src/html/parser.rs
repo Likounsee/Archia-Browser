@@ -570,6 +570,14 @@ fn close_element(root: &mut Node, stack: &mut Vec<Node>, name: &str) {
     }
 }
 
+fn is_head_element(name: &str) -> bool {
+    matches!(
+        name,
+        "base" | "basefont" | "bgsound" | "link" | "meta" | "title" | "noscript"
+            | "noframes" | "style" | "script" | "template"
+    )
+}
+
 fn normalize_document_structure(mut root: Node) -> Node {
     let root_child_count = root.children.len();
     let Some(html_position) = root
@@ -581,8 +589,9 @@ fn normalize_document_structure(mut root: Node) -> Node {
         let mut head = Node::element("head");
         let mut body = Node::element("body");
 
-        // Reserve every destination before moving any input children. Draining
-        // keeps the root vector's allocation for the final push.
+        // Head-only metadata elements written without an explicit <head> still
+        // belong in the document head (for example, a leading <title> or <meta>).
+        // Reserve every destination before moving any input children.
         if root.children.try_reserve(1).is_err()
             || html.children.try_reserve(2).is_err()
             || head.children.try_reserve(root_child_count).is_err()
@@ -593,6 +602,10 @@ fn normalize_document_structure(mut root: Node) -> Node {
 
         for child in root.children.drain(..) {
             if child.tag_name() == Some("head") {
+                for head_child in child.children {
+                    head.children.push(head_child);
+                }
+            } else if child.tag_name().is_some_and(is_head_element) {
                 head.children.push(child);
             } else {
                 body.children.push(child);
@@ -651,13 +664,24 @@ fn normalize_document_structure(mut root: Node) -> Node {
 
     let mut head = None;
     let mut body = None;
+    let mut loose_head_children = Vec::new();
+    if loose_head_children.try_reserve(html_child_count).is_err() {
+        return root;
+    }
     for child in html.children.drain(..) {
         match child.tag_name() {
             Some("head") if head.is_none() => head = Some(child),
             Some("body") if body.is_none() => body = Some(child),
+            _ if child.tag_name().is_some_and(is_head_element) => loose_head_children.push(child),
             _ => body_extras.push(child),
         }
     }
+
+    let mut head = head.unwrap_or_else(|| Node::element("head"));
+    if head.children.try_reserve(loose_head_children.len()).is_err() {
+        return root;
+    }
+    head.children.extend(loose_head_children);
 
     let mut body = body.unwrap_or_else(|| Node::element("body"));
     preceding.append(&mut body.children);
@@ -665,8 +689,7 @@ fn normalize_document_structure(mut root: Node) -> Node {
     preceding.extend(following);
     body.children = preceding;
 
-    html.children
-        .push(head.unwrap_or_else(|| Node::element("head")));
+    html.children.push(head);
     html.children.push(body);
     root.children.push(html);
     root
@@ -676,6 +699,36 @@ fn normalize_document_structure(mut root: Node) -> Node {
 mod tests {
     use super::*;
     use crate::html::tokenizer::HtmlTokenizer;
+
+    #[test]
+    fn head_metadata_without_explicit_head_is_normalized_into_head() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<title>Page title</title><meta charset='utf-8'><link rel='stylesheet' href='site.css'><main>content</main>",
+        ));
+        let html = root.find_first_element("html").expect("html element");
+        let head = html.children.iter().find(|node| node.tag_name() == Some("head")).expect("head");
+        let body = html.children.iter().find(|node| node.tag_name() == Some("body")).expect("body");
+
+        assert!(head.find_first_element("title").is_some());
+        assert!(head.find_first_element("meta").is_some());
+        assert!(head.find_first_element("link").is_some());
+        assert!(body.find_first_element("main").is_some());
+        assert!(body.find_first_element("title").is_none());
+    }
+
+    #[test]
+    fn head_metadata_inside_explicit_html_is_normalized_into_head() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<html><title>Page title</title><body><p>content</p></body><meta charset='utf-8'></html>",
+        ));
+        let html = root.find_first_element("html").expect("html element");
+        let head = html.children.iter().find(|node| node.tag_name() == Some("head")).expect("head");
+        let body = html.children.iter().find(|node| node.tag_name() == Some("body")).expect("body");
+
+        assert!(head.find_first_element("title").is_some());
+        assert!(head.find_first_element("meta").is_some());
+        assert!(body.find_first_element("p").is_some());
+    }
 
     #[test]
     fn duplicate_html_attributes_keep_the_first_value() {
