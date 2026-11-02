@@ -675,7 +675,7 @@ fn matches_pseudo_class(
                             matches_language(pseudo, attributes)
                         })
                     })
-        },
+        }
         // :link and :any-link match hyperlink elements with a non-empty href.
         // Visited state is intentionally not exposed by this engine.
         "link" | "any-link" => {
