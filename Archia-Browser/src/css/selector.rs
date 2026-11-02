@@ -1746,9 +1746,9 @@ mod tests {
         assert!(Selector::parse(":dir(rtl)").unwrap().matches_path(&path));
         assert!(!Selector::parse(":dir(ltr)").unwrap().matches_path(&path));
 
-        let mut override = Node::element("p");
-        override.set_attribute("dir", "ltr");
-        let override_path = [&root, &override];
+        let mut overridden = Node::element("p");
+        overridden.set_attribute("dir", "ltr");
+        let override_path = [&root, &overridden];
         assert!(Selector::parse(":dir(ltr)")
             .unwrap()
             .matches_path(&override_path));
