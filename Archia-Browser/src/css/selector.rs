@@ -312,6 +312,7 @@ impl Selector {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn matches_sibling_at_with_context(
         &self,
         selector_index: usize,
