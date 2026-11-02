@@ -778,7 +778,7 @@ fn split_pseudo_arguments(argument: &str) -> std::vec::IntoIter<&str> {
             continue;
         }
         match character {
-            '\\'' | '"' if brackets > 0 => quote = Some(character),
+            '\'' | '"' if brackets > 0 => quote = Some(character),
             '[' => brackets = brackets.saturating_add(1),
             ']' if brackets > 0 => brackets -= 1,
             '(' if brackets == 0 => parentheses = parentheses.saturating_add(1),
