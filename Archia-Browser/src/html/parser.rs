@@ -1405,18 +1405,28 @@ mod tests {
     }
 
     #[test]
-    fn nested_select_end_tags_do_not_close_outer_options() {
+    fn nested_select_start_closes_outer_select_before_following_content() {
         let root = parse(&HtmlTokenizer::tokenize(
             "<select><option>outer<select></option>tail</select><option>second</option></select>",
         ));
-        let select = root
-            .find_first_element("select")
-            .expect("outer select retained");
+        let selects = root
+            .descendants()
+            .filter(|node| node.tag_name() == Some("select"))
+            .collect::<Vec<_>>();
+        assert_eq!(selects.len(), 1);
+
+        let select = &selects[0];
+        assert_eq!(select.children.len(), 1);
         assert_eq!(select.children[0].tag_name(), Some("option"));
-        assert_eq!(select.children[0].text_content(), "outertail");
-        assert!(select.children[0].find_first_element("select").is_some());
-        assert_eq!(select.children[1].tag_name(), Some("option"));
-        assert_eq!(select.children[1].text_content(), "second");
+        assert_eq!(select.children[0].text_content(), "outer");
+        assert_eq!(root.text_content(), "outertailsecond");
+
+        let options = root
+            .descendants()
+            .filter(|node| node.tag_name() == Some("option"))
+            .collect::<Vec<_>>();
+        assert_eq!(options.len(), 2);
+        assert_eq!(options[1].text_content(), "second");
     }
 
     #[test]
