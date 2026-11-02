@@ -215,7 +215,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // markup from creating arbitrary elements inside a form control.
                 if stack.iter().any(|node| node.tag_name() == Some("select")) {
                     match name.as_str() {
-                        "option" | "optgroup" | "script" | "template" => {}
+                        "option" | "optgroup" | "script" | "template" | "select" => {}
                         "hr" => {
                             if stack.last().and_then(Node::tag_name) == Some("option") {
                                 close_element(&mut root, &mut stack, "option");
