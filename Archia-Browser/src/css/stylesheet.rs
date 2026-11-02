@@ -1424,5 +1424,4 @@ mod tests {
         );
         assert!(sheet.rules.is_empty());
     }
-
 }
