@@ -664,17 +664,22 @@ fn matches_pseudo_class(
             matches!(&node.kind, NodeKind::Element { name, .. } if name.eq_ignore_ascii_case("html"))
         }
         _ if pseudo.starts_with("lang(") => {
-            matches_language(pseudo, attributes)
-                || attributes.get("lang").is_none()
-                    && attributes.get("xml:lang").is_none()
-                    && ancestors.is_some_and(|ancestors| {
-                        ancestors.iter().rev().any(|ancestor| {
+            if attributes.contains_key("lang") || attributes.contains_key("xml:lang") {
+                // An explicitly empty language also stops inheritance.
+                matches_language(pseudo, attributes)
+            } else {
+                ancestors
+                    .and_then(|ancestors| {
+                        ancestors.iter().rev().find_map(|ancestor| {
                             let NodeKind::Element { attributes, .. } = &ancestor.kind else {
-                                return false;
+                                return None;
                             };
-                            matches_language(pseudo, attributes)
+                            (attributes.contains_key("lang") || attributes.contains_key("xml:lang"))
+                                .then_some(matches_language(pseudo, attributes))
                         })
                     })
+                    .unwrap_or(false)
+            }
         }
         // :link and :any-link match hyperlink elements with a non-empty href.
         // Visited state is intentionally not exposed by this engine.
