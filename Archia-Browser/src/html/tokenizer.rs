@@ -774,14 +774,38 @@ fn decode_character_references_with_context(input: &str, in_attribute: bool) -> 
         // semicolon. In attributes, do not consume one when followed by an
         // ASCII alphanumeric or '='; otherwise values such as '&copycat' change.
         let remainder = &input[start + 1..];
+        // The HTML tokenizer has a defined legacy set of named references
+        // that may omit their semicolon. Keep it separate from the full
+        // semicolon-terminated entity table so attribute ambiguity is handled
+        // exactly at this point in tokenization.
         let legacy = [
-            ("nbsp", '\u{00A0}'),
-            ("copy", '\u{00A9}'),
-            ("reg", '\u{00AE}'),
-            ("amp", '&'),
-            ("lt", '<'),
-            ("gt", '>'),
-            ("quot", '"'),
+            ("AElig", 'Æ'), ("AMP", '&'), ("Aacute", 'Á'), ("Acirc", 'Â'),
+            ("Agrave", 'À'), ("Aring", 'Å'), ("Atilde", 'Ã'), ("Auml", 'Ä'),
+            ("COPY", '©'), ("Ccedil", 'Ç'), ("ETH", 'Ð'), ("Eacute", 'É'),
+            ("Ecirc", 'Ê'), ("Egrave", 'È'), ("Euml", 'Ë'), ("GT", '>'),
+            ("Iacute", 'Í'), ("Icirc", 'Î'), ("Igrave", 'Ì'), ("Iuml", 'Ï'),
+            ("LT", '<'), ("Ntilde", 'Ñ'), ("Oacute", 'Ó'), ("Ocirc", 'Ô'),
+            ("Ograve", 'Ò'), ("Oslash", 'Ø'), ("Otilde", 'Õ'), ("Ouml", 'Ö'),
+            ("QUOT", '"'), ("REG", '®'), ("THORN", 'Þ'), ("Uacute", 'Ú'),
+            ("Ucirc", 'Û'), ("Ugrave", 'Ù'), ("Uuml", 'Ü'), ("Yacute", 'Ý'),
+            ("aacute", 'á'), ("acirc", 'â'), ("acute", '´'), ("aelig", 'æ'),
+            ("agrave", 'à'), ("amp", '&'), ("aring", 'å'), ("atilde", 'ã'),
+            ("auml", 'ä'), ("brvbar", '¦'), ("ccedil", 'ç'), ("cedil", '¸'),
+            ("cent", '¢'), ("copy", '©'), ("curren", '¤'), ("deg", '°'),
+            ("divide", '÷'), ("eacute", 'é'), ("ecirc", 'ê'), ("egrave", 'è'),
+            ("eth", 'ð'), ("euml", 'ë'), ("frac12", '½'), ("frac14", '¼'),
+            ("frac34", '¾'), ("gt", '>'), ("iacute", 'í'), ("icirc", 'î'),
+            ("iexcl", '¡'), ("igrave", 'ì'), ("iquest", '¿'), ("iuml", 'ï'),
+            ("laquo", '«'), ("lt", '<'), ("macr", '¯'), ("micro", 'µ'),
+            ("middot", '·'), ("nbsp", '\u{00A0}'), ("not", '¬'), ("ntilde", 'ñ'),
+            ("oacute", 'ó'), ("ocirc", 'ô'), ("ograve", 'ò'), ("ordf", 'ª'),
+            ("ordm", 'º'), ("oslash", 'ø'), ("otilde", 'õ'), ("ouml", 'ö'),
+            ("para", '¶'), ("plusmn", '±'), ("pound", '£'), ("quot", '"'),
+            ("raquo", '»'), ("reg", '®'), ("sect", '§'), ("shy", '\u{00AD}'),
+            ("sup1", '¹'), ("sup2", '²'), ("sup3", '³'), ("szlig", 'ß'),
+            ("thorn", 'þ'), ("times", '×'), ("uacute", 'ú'), ("ucirc", 'û'),
+            ("ugrave", 'ù'), ("uml", '¨'), ("uuml", 'ü'), ("yacute", 'ý'),
+            ("yen", '¥'), ("yuml", 'ÿ'),
         ];
         let legacy_match = legacy
             .iter()
@@ -1137,6 +1161,29 @@ mod character_reference_tests {
             Some("&copycat &copy=foo © test")
         );
         assert_eq!(attributes.get("href").map(String::as_str), Some("x&y"));
+    }
+
+
+    #[test]
+    fn decodes_the_full_legacy_semicolonless_named_reference_set() {
+        assert_eq!(
+            decode_character_references("&AElig &Aacute &curren &para &Oslash &THORN &yuml"),
+            "Æ Á ¤ ¶ Ø Þ ÿ"
+        );
+    }
+
+    #[test]
+    fn legacy_semicolonless_references_obey_attribute_ambiguity_for_extended_names() {
+        let tokens = HtmlTokenizer::tokenize(
+            r#"<a title="&AEligx &AElig=foo &AElig test">ok</a>"#,
+        );
+        let HtmlToken::StartTag { attributes, .. } = &tokens[0] else {
+            panic!("expected anchor start tag");
+        };
+        assert_eq!(
+            attributes.get("title").map(String::as_str),
+            Some("&AEligx &AElig=foo Æ test")
+        );
     }
 
     #[test]
