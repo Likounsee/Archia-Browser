@@ -1857,7 +1857,9 @@ mod tests {
         card.set_attribute("class", "card");
         wrapper.append(card);
         nested_card.append(wrapper);
-        assert!(!Selector::parse("main:has(> .card)").unwrap().matches(&nested_card));
+        assert!(!Selector::parse("main:has(> .card)")
+            .unwrap()
+            .matches(&nested_card));
     }
 
     #[test]
