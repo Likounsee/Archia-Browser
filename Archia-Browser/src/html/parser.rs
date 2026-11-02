@@ -866,8 +866,7 @@ mod tests {
         assert!(select
             .children
             .iter()
-            .any(|node| node.tag_name() == Some("option")
-                && node.text_content() == "next"));
+            .any(|node| node.tag_name() == Some("option") && node.text_content() == "next"));
     }
 
     #[test]
