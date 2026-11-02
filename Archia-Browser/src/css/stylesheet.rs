@@ -376,19 +376,68 @@ fn supports_declaration(name: &str, value: &str) -> bool {
     let name = name.to_ascii_lowercase();
     let value = value.to_ascii_lowercase();
     const IMPLEMENTED_PROPERTIES: &[&str] = &[
-        "display", "position", "box-sizing", "width", "height", "min-width",
-        "max-width", "min-height", "max-height", "margin", "margin-top",
-        "margin-right", "margin-bottom", "margin-left", "padding", "padding-top",
-        "padding-right", "padding-bottom", "padding-left", "border", "border-width",
-        "border-style", "border-color", "border-radius", "background",
-        "background-color", "color", "opacity", "visibility", "overflow",
-        "overflow-x", "overflow-y", "font-size", "font-family", "font-weight",
-        "font-style", "line-height", "text-align", "text-decoration",
-        "white-space", "flex", "flex-grow", "flex-shrink", "flex-basis",
-        "flex-direction", "flex-wrap", "justify-content", "align-items",
-        "align-content", "align-self", "gap", "row-gap", "column-gap",
-        "grid-template-columns", "grid-template-rows", "grid-column",
-        "grid-row", "top", "right", "bottom", "left", "z-index",
+        "display",
+        "position",
+        "box-sizing",
+        "width",
+        "height",
+        "min-width",
+        "max-width",
+        "min-height",
+        "max-height",
+        "margin",
+        "margin-top",
+        "margin-right",
+        "margin-bottom",
+        "margin-left",
+        "padding",
+        "padding-top",
+        "padding-right",
+        "padding-bottom",
+        "padding-left",
+        "border",
+        "border-width",
+        "border-style",
+        "border-color",
+        "border-radius",
+        "background",
+        "background-color",
+        "color",
+        "opacity",
+        "visibility",
+        "overflow",
+        "overflow-x",
+        "overflow-y",
+        "font-size",
+        "font-family",
+        "font-weight",
+        "font-style",
+        "line-height",
+        "text-align",
+        "text-decoration",
+        "white-space",
+        "flex",
+        "flex-grow",
+        "flex-shrink",
+        "flex-basis",
+        "flex-direction",
+        "flex-wrap",
+        "justify-content",
+        "align-items",
+        "align-content",
+        "align-self",
+        "gap",
+        "row-gap",
+        "column-gap",
+        "grid-template-columns",
+        "grid-template-rows",
+        "grid-column",
+        "grid-row",
+        "top",
+        "right",
+        "bottom",
+        "left",
+        "z-index",
     ];
     if !IMPLEMENTED_PROPERTIES.contains(&name.as_str()) {
         return false;
@@ -396,8 +445,15 @@ fn supports_declaration(name: &str, value: &str) -> bool {
     match name.as_str() {
         "display" => matches!(
             value.as_str(),
-            "none" | "block" | "inline" | "inline-block" | "flex" | "inline-flex"
-                | "grid" | "inline-grid" | "list-item"
+            "none"
+                | "block"
+                | "inline"
+                | "inline-block"
+                | "flex"
+                | "inline-flex"
+                | "grid"
+                | "inline-grid"
+                | "list-item"
         ),
         "position" => matches!(
             value.as_str(),
@@ -411,19 +467,41 @@ fn supports_declaration(name: &str, value: &str) -> bool {
         "flex-wrap" => matches!(value.as_str(), "nowrap" | "wrap" | "wrap-reverse"),
         "justify-content" => matches!(
             value.as_str(),
-            "normal" | "start" | "end" | "center" | "left" | "right"
-                | "flex-start" | "flex-end" | "space-between" | "space-around"
+            "normal"
+                | "start"
+                | "end"
+                | "center"
+                | "left"
+                | "right"
+                | "flex-start"
+                | "flex-end"
+                | "space-between"
+                | "space-around"
                 | "space-evenly"
         ),
         "align-items" | "align-content" | "align-self" => matches!(
             value.as_str(),
-            "normal" | "stretch" | "center" | "start" | "end" | "self-start"
-                | "self-end" | "flex-start" | "flex-end" | "baseline"
-                | "first baseline" | "last baseline" | "space-between"
-                | "space-around" | "space-evenly"
+            "normal"
+                | "stretch"
+                | "center"
+                | "start"
+                | "end"
+                | "self-start"
+                | "self-end"
+                | "flex-start"
+                | "flex-end"
+                | "baseline"
+                | "first baseline"
+                | "last baseline"
+                | "space-between"
+                | "space-around"
+                | "space-evenly"
         ),
         "overflow" | "overflow-x" | "overflow-y" => {
-            matches!(value.as_str(), "visible" | "hidden" | "clip" | "scroll" | "auto")
+            matches!(
+                value.as_str(),
+                "visible" | "hidden" | "clip" | "scroll" | "auto"
+            )
         }
         "visibility" => matches!(value.as_str(), "visible" | "hidden" | "collapse"),
         _ => true,
@@ -1295,5 +1373,4 @@ mod tests {
         let sheet = StyleSheet::parse(css);
         assert!(sheet.rules.is_empty());
     }
-
 }
