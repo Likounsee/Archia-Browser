@@ -812,10 +812,10 @@ fn matches_pseudo_class(
         "only-of-type" => type_count(node, siblings.unwrap_or(&[])) == 1,
         _ if pseudo.starts_with("nth-child(") => {
             nth_matches(pseudo, node, siblings, position, ancestors, false)
-        },
+        }
         _ if pseudo.starts_with("nth-last-child(") => {
             nth_matches(pseudo, node, siblings, position, ancestors, true)
-        },
+        }
         _ if pseudo.starts_with("nth-of-type(") => {
             nth_type_matches(pseudo, node, siblings, position, false)
         }
@@ -1200,7 +1200,10 @@ fn nth_matches(
     let Some((list, pos)) = siblings.zip(position) else {
         return false;
     };
-    if list.get(pos).is_none_or(|candidate| !candidate.is_element()) {
+    if list
+        .get(pos)
+        .is_none_or(|candidate| !candidate.is_element())
+    {
         return false;
     }
     let Some(argument) = pseudo
@@ -1229,7 +1232,9 @@ fn nth_matches(
         })
         .map(|(candidate_position, _)| candidate_position)
         .collect();
-    let Some(filtered_index) = filtered_positions.iter().position(|candidate| *candidate == pos)
+    let Some(filtered_index) = filtered_positions
+        .iter()
+        .position(|candidate| *candidate == pos)
     else {
         return false;
     };
@@ -1267,7 +1272,9 @@ fn split_nth_of_clause(argument: &str) -> (&str, Option<&str>) {
             '(' if brackets == 0 => parentheses += 1,
             ')' if brackets == 0 && parentheses > 0 => parentheses -= 1,
             'o' | 'O' if brackets == 0 && parentheses == 0 && index > 0 => {
-                if bytes.get(index + 1).is_some_and(|next| next.eq_ignore_ascii_case(&b'f'))
+                if bytes
+                    .get(index + 1)
+                    .is_some_and(|next| next.eq_ignore_ascii_case(&b'f'))
                     && bytes[index - 1].is_ascii_whitespace()
                     && bytes.get(index + 2).is_some_and(u8::is_ascii_whitespace)
                 {
