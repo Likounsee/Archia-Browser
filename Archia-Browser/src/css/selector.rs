@@ -547,6 +547,17 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
 
     Some(simple)
 }
+fn is_disableable_element(node: &Node) -> bool {
+    matches!(
+        node.tag_name(),
+        Some("button" | "input" | "select" | "textarea" | "option" | "optgroup" | "fieldset")
+    )
+}
+
+fn is_required_capable_element(node: &Node) -> bool {
+    matches!(node.tag_name(), Some("input" | "select" | "textarea"))
+}
+
 fn matches_pseudo_class(
     pseudo: &str,
     node: &Node,
@@ -567,11 +578,16 @@ fn matches_pseudo_class(
                     || name.eq_ignore_ascii_case("link"))
                     && attributes.get("href").is_some_and(|href| !href.is_empty()))
         }
-        "checked" => attributes.contains_key("checked"),
-        "disabled" => attributes.contains_key("disabled"),
-        "enabled" => !attributes.contains_key("disabled"),
-        "required" => attributes.contains_key("required"),
-        "optional" => !attributes.contains_key("required"),
+        "checked" => attributes.contains_key("checked")
+            || (node.tag_name() == Some("option") && attributes.contains_key("selected")),
+        "disabled" => is_disableable_element(node)
+            && attributes.contains_key("disabled"),
+        "enabled" => is_disableable_element(node)
+            && !attributes.contains_key("disabled"),
+        "required" => is_required_capable_element(node)
+            && attributes.contains_key("required"),
+        "optional" => is_required_capable_element(node)
+            && !attributes.contains_key("required"),
         "read-only" => attributes.contains_key("readonly"),
         "read-write" => !attributes.contains_key("readonly"),
         "empty" => node.children.iter().all(|child| match &child.kind {
@@ -1013,6 +1029,31 @@ mod tests {
         assert!(Selector::parse("input:checked:disabled")
             .unwrap()
             .matches(&checked));
+    }
+
+    #[test]
+    fn form_state_pseudo_classes_only_match_applicable_elements() {
+        let div = Node::element("div");
+        assert!(!Selector::parse(":enabled").unwrap().matches(&div));
+        assert!(!Selector::parse(":optional").unwrap().matches(&div));
+
+        let input = Node::element("input");
+        assert!(Selector::parse(":enabled").unwrap().matches(&input));
+        assert!(Selector::parse(":optional").unwrap().matches(&input));
+        assert!(!Selector::parse(":required").unwrap().matches(&input));
+
+        let mut required = Node::element("textarea");
+        required.set_attribute("required", "");
+        assert!(Selector::parse(":required").unwrap().matches(&required));
+        assert!(!Selector::parse(":optional").unwrap().matches(&required));
+
+        let mut disabled_div = Node::element("div");
+        disabled_div.set_attribute("disabled", "");
+        assert!(!Selector::parse(":disabled").unwrap().matches(&disabled_div));
+
+        let mut option = Node::element("option");
+        option.set_attribute("selected", "");
+        assert!(Selector::parse(":checked").unwrap().matches(&option));
     }
 
     #[test]
