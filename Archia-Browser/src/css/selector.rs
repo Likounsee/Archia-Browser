@@ -650,9 +650,15 @@ fn matches_pseudo_class(
         "read-only" => !is_read_write_element(node, attributes),
         "read-write" => is_read_write_element(node, attributes),
         "placeholder-shown" => {
-            matches!(node.tag_name(), Some("input" | "textarea"))
-                && attributes.contains_key("placeholder")
-                && attributes.get("value").is_none_or(String::is_empty)
+            attributes.contains_key("placeholder")
+                && match node.tag_name() {
+                    Some("input") => attributes.get("value").is_none_or(String::is_empty),
+                    Some("textarea") => node.children.iter().all(|child| {
+                        matches!(&child.kind, NodeKind::Text(text) if text.is_empty())
+                            || matches!(&child.kind, NodeKind::Comment(_))
+                    }),
+                    _ => false,
+                }
         }
         "empty" => node.children.iter().all(|child| match &child.kind {
             NodeKind::Text(text) => text.is_empty(),
@@ -1123,7 +1129,7 @@ mod tests {
         assert!(Selector::parse(":placeholder-shown")
             .unwrap()
             .matches(&placeholder));
-        placeholder.set_attribute("value", "hello");
+        placeholder.children.push(Node::text("typed text"));
         assert!(!Selector::parse(":placeholder-shown")
             .unwrap()
             .matches(&placeholder));
