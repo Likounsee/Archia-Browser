@@ -1350,6 +1350,22 @@ mod tests {
             ("font-kerning", "auto"),
             ("font-feature-settings", "normal"),
             ("font-variation-settings", "normal"),
+            ("writing-mode", "horizontal-tb"),
+            ("text-orientation", "mixed"),
+            ("text-emphasis", "none"),
+            ("text-emphasis-position", "over right"),
+            ("text-align-last", "auto"),
+            ("color-scheme", "normal"),
+            ("caret-color", "auto"),
+            ("scrollbar-color", "auto"),
+            ("fill", "black"),
+            ("fill-rule", "nonzero"),
+            ("fill-opacity", "1"),
+            ("stroke", "none"),
+            ("stroke-width", "1"),
+            ("stroke-linecap", "butt"),
+            ("stroke-linejoin", "miter"),
+            ("stroke-opacity", "1"),
             ("list-style", "disc outside none"),
             ("list-style-type", "disc"),
             ("object-fit", "fill"),
@@ -1491,7 +1507,7 @@ mod tests {
     #[test]
     fn inherited_properties_reach_descendants() {
         let sheet = StyleSheet::parse(
-            "body { color: green; direction: rtl; list-style-type: square; word-break: break-word; margin: 10px; }",
+            "body { color: green; direction: rtl; list-style-type: square; word-break: break-word; writing-mode: vertical-rl; text-orientation: upright; text-emphasis: filled; caret-color: red; fill: blue; stroke-width: 3; margin: 10px; }",
         );
         let body = Node::element("body");
         let child = Node::element("span");
@@ -1502,6 +1518,12 @@ mod tests {
         assert_eq!(style.get("direction"), Some("rtl"));
         assert_eq!(style.get("list-style-type"), Some("square"));
         assert_eq!(style.get("word-break"), Some("break-word"));
+        assert_eq!(style.get("writing-mode"), Some("vertical-rl"));
+        assert_eq!(style.get("text-orientation"), Some("upright"));
+        assert_eq!(style.get("text-emphasis"), Some("filled"));
+        assert_eq!(style.get("caret-color"), Some("red"));
+        assert_eq!(style.get("fill"), Some("blue"));
+        assert_eq!(style.get("stroke-width"), Some("3"));
         assert_eq!(style.get("margin"), None);
     }
 
