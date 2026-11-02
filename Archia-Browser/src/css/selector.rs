@@ -627,7 +627,7 @@ fn matches_language(pseudo: &str, attributes: &std::collections::BTreeMap<String
     }
 
     argument.split(',').any(|candidate| {
-        let candidate = candidate.trim().trim_matches(['\\'', '"']);
+        let candidate = candidate.trim().trim_matches(['\'', '"']);
         if candidate == "*" {
             return true;
         }
