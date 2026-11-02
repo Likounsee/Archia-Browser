@@ -1012,12 +1012,28 @@ fn pseudo_argument_matches(
         let Some(ancestors) = ancestors else {
             return false;
         };
+
+        // A relative sibling selector passed by :has() is anchored to the
+        // subject, but its right-hand candidate is a sibling, not a child of
+        // that subject. Build the real candidate ancestry (excluding the
+        // subject) and retain the candidate's actual parent sibling list.
+        let relative_sibling = candidate.starts_with("* +") || candidate.starts_with("* ~");
+        let path_ancestors = if relative_sibling {
+            let Some((_, subject)) = ancestors.split_last() else {
+                return false;
+            };
+            let _ = subject;
+            &ancestors[..ancestors.len() - 1]
+        } else {
+            ancestors
+        };
+
         let mut path = Vec::new();
-        let path_len = ancestors.len().saturating_add(1);
+        let path_len = path_ancestors.len().saturating_add(1);
         if path.try_reserve(path_len).is_err() {
             return false;
         }
-        path.extend_from_slice(ancestors);
+        path.extend_from_slice(path_ancestors);
         path.push(node);
 
         let mut sibling_lists: Vec<&[Node]> = Vec::new();
@@ -1028,20 +1044,30 @@ fn pseudo_argument_matches(
             return false;
         }
         for index in 0..path_len {
+            if index + 1 == path_len && relative_sibling {
+                let (Some(siblings), Some(position)) = (siblings, position) else {
+                    return false;
+                };
+                sibling_lists.push(siblings);
+                sibling_positions.push(position);
+                continue;
+            }
             if index == 0 {
                 sibling_lists.push(&[]);
                 sibling_positions.push(0);
                 continue;
             }
-            let siblings = &path[index - 1].children;
-            let Some(position) = siblings
+            let parent = path[index - 1];
+            let child = path[index];
+            let child_siblings = &parent.children;
+            let Some(child_position) = child_siblings
                 .iter()
-                .position(|candidate| std::ptr::eq(candidate, path[index]))
+                .position(|candidate| std::ptr::eq(candidate, child))
             else {
                 return false;
             };
-            sibling_lists.push(siblings);
-            sibling_positions.push(position);
+            sibling_lists.push(child_siblings);
+            sibling_positions.push(child_position);
         }
         selector.matches_path_with_siblings(&path, &sibling_lists, &sibling_positions)
     })
