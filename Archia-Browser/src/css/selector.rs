@@ -1014,13 +1014,9 @@ fn matches_simple_with_siblings(
         return false;
     }
 
-    if simple
-        .pseudo_classes
-        .iter()
-        .any(|pseudo| {
-            !matches_pseudo_class(pseudo, node, attributes, siblings, position, ancestors)
-        })
-    {
+    if simple.pseudo_classes.iter().any(|pseudo| {
+        !matches_pseudo_class(pseudo, node, attributes, siblings, position, ancestors)
+    }) {
         return false;
     }
 
@@ -1168,8 +1164,12 @@ mod tests {
         let mut language_override = Node::element("section");
         language_override.set_attribute("lang", "en-GB");
         let override_path = [&html, &language_override, &paragraph];
-        assert!(Selector::parse("p:lang(en)").unwrap().matches_path(&override_path));
-        assert!(!Selector::parse("p:lang(fr)").unwrap().matches_path(&override_path));
+        assert!(Selector::parse("p:lang(en)")
+            .unwrap()
+            .matches_path(&override_path));
+        assert!(!Selector::parse("p:lang(fr)")
+            .unwrap()
+            .matches_path(&override_path));
     }
 
     #[test]
