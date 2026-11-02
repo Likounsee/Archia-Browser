@@ -386,12 +386,33 @@ fn parse_simple(chars: &[char]) -> Option<SimpleSelector> {
                     .to_ascii_lowercase();
                 if i < chars.len() && chars[i] == '(' {
                     let argument_start = i + 1;
-                    let mut depth = 1;
+                    let mut depth = 1usize;
+                    let mut bracket_depth = 0usize;
+                    let mut quote = None;
                     i += 1;
                     while i < chars.len() && depth > 0 {
-                        match chars[i] {
-                            '(' => depth += 1,
-                            ')' => depth -= 1,
+                        let character = chars[i];
+                        if let Some(active_quote) = quote {
+                            if character == '\\\\' {
+                                i = (i + 2).min(chars.len());
+                                continue;
+                            }
+                            if character == active_quote {
+                                quote = None;
+                            }
+                            i += 1;
+                            continue;
+                        }
+                        match character {
+                            '\\\\' => {
+                                i = (i + 2).min(chars.len());
+                                continue;
+                            }
+                            '\\'' | '"' if bracket_depth > 0 => quote = Some(character),
+                            '[' => bracket_depth = bracket_depth.saturating_add(1),
+                            ']' if bracket_depth > 0 => bracket_depth -= 1,
+                            '(' if bracket_depth == 0 => depth = depth.saturating_add(1),
+                            ')' if bracket_depth == 0 => depth -= 1,
                             _ => {}
                         }
                         i += 1;
@@ -1251,6 +1272,15 @@ mod tests {
                     &[0, 1, 0],
                 )
         );
+    }
+
+    #[test]
+    fn functional_pseudo_parser_ignores_parentheses_inside_quoted_attributes() {
+        let mut node = Node::element("p");
+        node.set_attribute("data-value", ")");
+        let selector = Selector::parse("p:is([data-value=\")\"], .other)")
+            .expect("quoted closing parenthesis must not end :is()");
+        assert!(selector.matches(&node));
     }
 
     #[test]
