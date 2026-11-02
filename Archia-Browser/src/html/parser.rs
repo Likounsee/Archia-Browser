@@ -259,6 +259,19 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                 // missing table scaffolding inserted before it. This mirrors the
                 // in-table insertion modes for common malformed-but-valid-in-practice
                 // documents such as <table><td>cell</td></table>.
+                // A <col> directly inside a table starts an implicit
+                // <colgroup>, just as a row starts an implicit <tbody>.
+                if name == "col" && stack.last().is_some_and(|node| node.tag_name() == Some("table")) {
+                    if created_nodes >= MAX_DOM_NODES - 1
+                        || stack.len() >= MAX_DOM_DEPTH
+                        || stack.try_reserve(1).is_err()
+                    {
+                        continue;
+                    }
+                    stack.push(Node::element("colgroup"));
+                    created_nodes += 1;
+                }
+
                 if matches!(name.as_str(), "td" | "th") {
                     let implied: &[&str] = match stack.last().and_then(Node::tag_name) {
                         Some("table") => &["tbody", "tr"],
@@ -485,7 +498,8 @@ fn implied_end_tags_for_start(name: &str) -> &'static [&'static str] {
         "optgroup" => &["option", "optgroup"],
         "tr" => &["tr"],
         "td" | "th" => &["td", "th"],
-        "thead" | "tbody" | "tfoot" => &["thead", "tbody", "tfoot"],
+        "thead" | "tbody" | "tfoot" => &["thead", "tbody", "tfoot", "colgroup"],
+        "tr" | "caption" => &["colgroup"],
         "rt" | "rp" => &["rt", "rp"],
         _ => &[],
     }
@@ -1410,6 +1424,20 @@ mod tests {
         assert_eq!(html.children[0].tag_name(), Some("head"));
         assert_eq!(html.children[1].tag_name(), Some("body"));
     }
+    #[test]
+    fn table_columns_receive_an_implicit_colgroup() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<table><col><col span='2'><tr><td>cell</td></tr></table>",
+        ));
+        let table = root.find_first_element("table").expect("table retained");
+        assert_eq!(table.children.len(), 2);
+        let colgroup = &table.children[0];
+        assert_eq!(colgroup.tag_name(), Some("colgroup"));
+        assert_eq!(colgroup.children.len(), 2);
+        assert_eq!(colgroup.children[1].attribute("span"), Some("2"));
+        assert_eq!(table.children[1].tag_name(), Some("tbody"));
+    }
+
     #[test]
     fn table_cells_receive_missing_implicit_row_and_section_elements() {
         let root = parse(&HtmlTokenizer::tokenize(
