@@ -7,7 +7,12 @@ pub struct Property {
 }
 
 fn normalize_property_name(name: &str) -> String {
-    name.trim().to_ascii_lowercase()
+    let name = name.trim();
+    if name.starts_with("--") {
+        name.to_owned()
+    } else {
+        name.to_ascii_lowercase()
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -84,5 +89,17 @@ mod tests {
         style.set_if_unimportant("color", "blue");
         assert_eq!(style.get("color"), Some("red"));
         assert!(style.is_important(" COLOR "));
+    }
+
+    #[test]
+    fn custom_property_names_remain_case_sensitive() {
+        let mut style = ComputedStyle::default();
+        style.set("--ThemeColor", "red");
+        style.set("--themecolor", "blue");
+
+        assert_eq!(style.get("--ThemeColor"), Some("red"));
+        assert_eq!(style.get("--themecolor"), Some("blue"));
+        assert_eq!(style.get("--THEMECOLOR"), None);
+        assert_eq!(style.len(), 2);
     }
 }

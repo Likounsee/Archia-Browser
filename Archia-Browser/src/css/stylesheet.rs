@@ -854,7 +854,11 @@ fn split_selector_list(input: &str, max_selectors: usize) -> Vec<String> {
 
 fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
     let (value, important) = normalize_declaration_value(&declaration.value);
-    let name = declaration.name.to_ascii_lowercase();
+    let name = if declaration.name.starts_with("--") {
+        declaration.name.clone()
+    } else {
+        declaration.name.to_ascii_lowercase()
+    };
 
     let mut apply = |property: String, property_value: String| {
         if important {
@@ -1507,6 +1511,21 @@ mod tests {
         assert_eq!(style.get("--accent"), Some("#123456"));
         assert_eq!(style.get("color"), Some("#123456"));
         assert_eq!(style.get("background-color"), Some("#123456"));
+    }
+
+    #[test]
+    fn custom_property_names_are_case_sensitive_during_var_resolution() {
+        let sheet = StyleSheet::parse(
+            ".box { --Theme: red; --theme: blue; color: var(--Theme); background-color: var(--theme); }",
+        );
+        let mut node = Node::element("div");
+        node.set_attribute("class", "box");
+
+        let style = sheet.compute_style(&node);
+        assert_eq!(style.get("--Theme"), Some("red"));
+        assert_eq!(style.get("--theme"), Some("blue"));
+        assert_eq!(style.get("color"), Some("red"));
+        assert_eq!(style.get("background-color"), Some("blue"));
     }
 
     #[test]
