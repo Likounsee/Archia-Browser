@@ -666,9 +666,15 @@ fn normalize_document_structure(mut root: Node) -> Node {
     let mut body = None;
     let mut loose_head_children = Vec::new();
     if loose_head_children.try_reserve(html_child_count).is_err() {
-        // Keep the detached html subtree alive if the optional normalization
-        // allocation fails; the original tree remains available to the caller.
+        // Restore the original root order without allocating: its vector kept
+        // the capacity released when the html element was detached.
+        for child in preceding {
+            root.children.push(child);
+        }
         root.children.push(html);
+        for child in following {
+            root.children.push(child);
+        }
         return root;
     }
     for child in html.children.drain(..) {
