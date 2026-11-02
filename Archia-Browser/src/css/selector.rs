@@ -185,7 +185,9 @@ impl Selector {
                 }
                 if let Some(argument) = pseudo_argument(pseudo, "not") {
                     result += pseudo_argument_specificity(argument);
-                } else if let Some(argument) = pseudo_argument(pseudo, "is") {
+                } else if let Some(argument) = pseudo_argument(pseudo, "is")
+                    .or_else(|| pseudo_argument(pseudo, "has"))
+                {
                     result += pseudo_argument_specificity(argument);
                 } else {
                     result.classes += 1;
@@ -809,6 +811,12 @@ fn matches_pseudo_class(
             };
             !pseudo_argument_matches(argument, node, siblings, position, ancestors)
         }
+        _ if pseudo.starts_with("has(") => {
+            let Some(argument) = pseudo_argument(pseudo, "has") else {
+                return false;
+            };
+            has_descendant_matching(argument, node, ancestors, 0)
+        }
         _ if pseudo.starts_with("is(") || pseudo.starts_with("where(") => {
             let name = if pseudo.starts_with("is(") {
                 "is"
@@ -822,6 +830,40 @@ fn matches_pseudo_class(
         }
         _ => false,
     }
+}
+
+fn has_descendant_matching(
+    argument: &str,
+    node: &Node,
+    ancestors: Option<&[&Node]>,
+    depth: usize,
+) -> bool {
+    if depth >= 256 {
+        return false;
+    }
+    let mut candidate_ancestors = Vec::new();
+    if let Some(ancestors) = ancestors {
+        if candidate_ancestors.try_reserve(ancestors.len() + 1).is_err() {
+            return false;
+        }
+        candidate_ancestors.extend_from_slice(ancestors);
+    } else if candidate_ancestors.try_reserve(1).is_err() {
+        return false;
+    }
+    candidate_ancestors.push(node);
+
+    node.children.iter().enumerate().any(|(position, child)| {
+        if !child.is_element() {
+            return false;
+        }
+        pseudo_argument_matches(
+            argument,
+            child,
+            Some(&node.children),
+            Some(position),
+            Some(&candidate_ancestors),
+        ) || has_descendant_matching(argument, child, Some(&candidate_ancestors), depth + 1)
+    })
 }
 
 fn pseudo_argument<'a>(pseudo: &'a str, name: &str) -> Option<&'a str> {
@@ -1757,6 +1799,27 @@ mod tests {
                 "accepted invalid universal selector: {input}"
             );
         }
+    }
+
+    #[test]
+    fn has_matches_descendants_and_complex_descendant_selectors() {
+        let mut root = Node::element("main");
+        let mut section = Node::element("section");
+        section.set_attribute("class", "card");
+        let mut image = Node::element("img");
+        image.set_attribute("alt", "preview");
+        section.children.push(image);
+        root.children.push(section);
+
+        assert!(Selector::parse("main:has(img)").unwrap().matches(&root));
+        assert!(Selector::parse("main:has(.card img)").unwrap().matches(&root));
+        assert!(!Selector::parse("main:has(video)").unwrap().matches(&root));
+    }
+
+    #[test]
+    fn has_specificity_uses_the_most_specific_argument() {
+        let selector = Selector::parse("main:has(.card, #featured)").unwrap();
+        assert_eq!(selector.specificity(), Specificity::new(1, 0, 1));
     }
 
     #[test]
