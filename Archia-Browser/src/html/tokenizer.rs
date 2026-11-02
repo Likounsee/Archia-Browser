@@ -163,7 +163,10 @@ impl HtmlTokenizer {
                     return tokens;
                 }
             } else if let Some((name, attributes, self_closing)) = parse_start_tag(inside) {
-                let is_raw_text = matches!(name.as_str(), "script" | "style");
+                let is_raw_text = matches!(
+                    name.as_str(),
+                    "script" | "style" | "xmp" | "iframe" | "noembed" | "noframes"
+                );
                 let is_rcdata = matches!(name.as_str(), "title" | "textarea");
                 let is_plaintext = name == "plaintext";
                 if !try_push_token(
@@ -1351,6 +1354,26 @@ mod character_reference_tests {
     #[test]
     fn leaves_unknown_references_untouched() {
         assert_eq!(decode_character_references("&unknown;"), "&unknown;");
+    }
+
+    #[test]
+    fn tokenizes_legacy_raw_text_elements_without_parsing_inner_markup() {
+        for tag in ["xmp", "iframe", "noembed", "noframes"] {
+            let html = format!("<{tag}><b>not an element</b></{tag}><p>after</p>");
+            let tokens = tokenize(&html);
+            assert!(tokens.iter().any(|token| matches!(
+                token,
+                HtmlToken::Text(text) if text == "<b>not an element</b>"
+            )));
+            assert!(!tokens.iter().any(|token| matches!(
+                token,
+                HtmlToken::StartTag { name, .. } if name == "b"
+            )));
+            assert!(tokens.iter().any(|token| matches!(
+                token,
+                HtmlToken::StartTag { name, .. } if name == "p"
+            )));
+        }
     }
 
     #[test]
