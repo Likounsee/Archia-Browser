@@ -554,8 +554,21 @@ fn is_disableable_element(node: &Node) -> bool {
     )
 }
 
-fn is_required_capable_element(node: &Node) -> bool {
-    matches!(node.tag_name(), Some("input" | "select" | "textarea"))
+fn is_required_capable_element(
+    node: &Node,
+    attributes: &std::collections::BTreeMap<String, String>,
+) -> bool {
+    match node.tag_name() {
+        Some("select" | "textarea") => true,
+        Some("input") => !matches!(
+            attributes
+                .get("type")
+                .map(|value| value.trim().to_ascii_lowercase())
+                .as_deref(),
+            Some("hidden" | "button" | "submit" | "reset" | "image" | "range" | "color")
+        ),
+        _ => false,
+    }
 }
 
 fn matches_pseudo_class(
@@ -584,9 +597,9 @@ fn matches_pseudo_class(
             && attributes.contains_key("disabled"),
         "enabled" => is_disableable_element(node)
             && !attributes.contains_key("disabled"),
-        "required" => is_required_capable_element(node)
+        "required" => is_required_capable_element(node, attributes)
             && attributes.contains_key("required"),
-        "optional" => is_required_capable_element(node)
+        "optional" => is_required_capable_element(node, attributes)
             && !attributes.contains_key("required"),
         "read-only" => attributes.contains_key("readonly"),
         "read-write" => !attributes.contains_key("readonly"),
@@ -1041,6 +1054,16 @@ mod tests {
         assert!(Selector::parse(":enabled").unwrap().matches(&input));
         assert!(Selector::parse(":optional").unwrap().matches(&input));
         assert!(!Selector::parse(":required").unwrap().matches(&input));
+
+        let mut hidden_input = Node::element("input");
+        hidden_input.set_attribute("type", "hidden");
+        hidden_input.set_attribute("required", "");
+        assert!(!Selector::parse(":required")
+            .unwrap()
+            .matches(&hidden_input));
+        assert!(!Selector::parse(":optional")
+            .unwrap()
+            .matches(&hidden_input));
 
         let mut required = Node::element("textarea");
         required.set_attribute("required", "");
