@@ -763,11 +763,42 @@ fn pseudo_argument<'a>(pseudo: &'a str, name: &str) -> Option<&'a str> {
     pseudo.strip_prefix(&prefix)?.strip_suffix(')')
 }
 
-fn split_pseudo_arguments(argument: &str) -> impl Iterator<Item = &str> {
-    argument
-        .split(',')
-        .map(str::trim)
-        .filter(|part| !part.is_empty())
+fn split_pseudo_arguments(argument: &str) -> std::vec::IntoIter<&str> {
+    let mut parts = Vec::new();
+    let mut start = 0;
+    let mut parentheses = 0usize;
+    let mut brackets = 0usize;
+    let mut quote = None;
+
+    for (index, character) in argument.char_indices() {
+        if let Some(active_quote) = quote {
+            if character == active_quote {
+                quote = None;
+            }
+            continue;
+        }
+        match character {
+            '\\'' | '"' if brackets > 0 => quote = Some(character),
+            '[' => brackets = brackets.saturating_add(1),
+            ']' if brackets > 0 => brackets -= 1,
+            '(' if brackets == 0 => parentheses = parentheses.saturating_add(1),
+            ')' if brackets == 0 && parentheses > 0 => parentheses -= 1,
+            ',' if brackets == 0 && parentheses == 0 => {
+                let candidate = argument[start..index].trim();
+                if !candidate.is_empty() && parts.try_reserve(1).is_ok() {
+                    parts.push(candidate);
+                }
+                start = index + character.len_utf8();
+            }
+            _ => {}
+        }
+    }
+
+    let candidate = argument[start..].trim();
+    if !candidate.is_empty() && parts.try_reserve(1).is_ok() {
+        parts.push(candidate);
+    }
+    parts.into_iter()
 }
 
 fn pseudo_argument_matches(
@@ -1169,6 +1200,15 @@ mod tests {
         assert!(Selector::parse("input:checked:disabled")
             .unwrap()
             .matches(&checked));
+    }
+
+    #[test]
+    fn is_and_not_split_only_top_level_argument_commas() {
+        let mut node = Node::element("p");
+        node.set_attribute("class", "chosen");
+        assert!(Selector::parse("p:is(:not(.missing, .other), .chosen)")
+            .unwrap()
+            .matches(&node));
     }
 
     #[test]
