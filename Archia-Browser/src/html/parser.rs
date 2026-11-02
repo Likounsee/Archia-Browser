@@ -273,7 +273,7 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                             continue;
                         }
                         for tag in implied {
-                            stack.push(Node::element(tag));
+                            stack.push(Node::element(*tag));
                             created_nodes += 1;
                         }
                     }
