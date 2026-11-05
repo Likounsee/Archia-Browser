@@ -795,10 +795,18 @@ fn is_form_control_valid(
     if attributes.contains_key("required") {
         let value = attributes.get("value").map(String::as_str).unwrap_or("");
         let missing = match tag {
-            "select" => node.children.iter().find(|child| child.tag_name() == Some("option"))
-                .is_some_and(|option| option.has_attribute("selected")
-                    && option.attribute("value").unwrap_or("").is_empty()
-                    && option.text_content().trim().is_empty()),
+            "select" => {
+                let options = node.children.iter()
+                    .filter(|child| child.tag_name() == Some("option"))
+                    .collect::<Vec<_>>();
+                let has_selected = options.iter().any(|option| option.has_attribute("selected"));
+                options.first().is_some_and(|option| {
+                    let empty_value = option.attribute("value")
+                        .map(str::is_empty)
+                        .unwrap_or_else(|| option.text_content().trim().is_empty());
+                    empty_value && (option.has_attribute("selected") || !has_selected)
+                })
+            },
             "textarea" => node.text_content().is_empty(),
             _ => value.is_empty(),
         };
