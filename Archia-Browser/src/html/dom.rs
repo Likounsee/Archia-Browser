@@ -85,6 +85,25 @@ impl Node {
         Ok(())
     }
 
+    /// Insert a new child immediately before the child at `index`.
+    /// Returns the child unchanged when the reference index does not exist.
+    pub fn insert_before(&mut self, index: usize, child: Node) -> Result<(), Node> {
+        if index >= self.children.len() || self.children.try_reserve(1).is_err() {
+            return Err(child);
+        }
+        self.children.insert(index, child);
+        Ok(())
+    }
+
+    /// Insert a new child immediately after the child at `index`.
+    pub fn insert_after(&mut self, index: usize, child: Node) -> Result<(), Node> {
+        if index >= self.children.len() || self.children.try_reserve(1).is_err() {
+            return Err(child);
+        }
+        self.children.insert(index + 1, child);
+        Ok(())
+    }
+
     pub fn remove_child(&mut self, index: usize) -> Option<Node> {
         (index < self.children.len()).then(|| self.children.remove(index))
     }
@@ -371,6 +390,49 @@ impl Node {
     /// the DOM Node.contains() contract.
     pub fn contains(&self, other: &Node) -> bool {
         std::ptr::eq(self, other) || self.descendants().any(|node| std::ptr::eq(node, other))
+    }
+
+    /// DOM-style getElementById alias. Searches descendants, not the receiver.
+    pub fn get_element_by_id(&self, id: &str) -> Option<&Node> {
+        self.find_by_id(id)
+    }
+
+    /// DOM-style getElementsByTagName. The wildcard matches every descendant
+    /// element; the receiver itself is excluded.
+    pub fn get_elements_by_tag_name(&self, tag_name: &str) -> Vec<&Node> {
+        if tag_name == "*" {
+            return self.descendants().filter(|node| node.is_element()).collect();
+        }
+        self.find_elements_by_tag(tag_name)
+    }
+
+    /// DOM-style getElementsByClassName. Every whitespace-separated class
+    /// token in the query must be present on a matching descendant element.
+    pub fn get_elements_by_class_name(&self, class_names: &str) -> Vec<&Node> {
+        let required: Vec<&str> = class_names
+            .split(is_html_whitespace)
+            .filter(|token| !token.is_empty())
+            .collect();
+        if required.is_empty() {
+            return Vec::new();
+        }
+        self.descendants()
+            .filter(|node| {
+                node.is_element() && required.iter().all(|class| node.has_class(class))
+            })
+            .collect()
+    }
+
+    /// Test whether this element matches a compound CSS selector or selector
+    /// list. Combinators are rejected because this node alone has no ancestor
+    /// or sibling context; use querySelector on a tree for those selectors.
+    pub fn matches_selector(&self, selector: &str) -> bool {
+        if !self.is_element() {
+            return false;
+        }
+        parse_dom_selector_list(selector).is_some_and(|selectors| {
+            selectors.iter().any(|selector| selector.matches(self))
+        })
     }
 
     /// Find the first descendant element with the requested tag name.
@@ -924,6 +986,41 @@ mod tests {
         let mut image = Node::element("img");
         assert!(!image.append_html("<span>invalid</span>"));
         assert!(image.children.is_empty());
+    }
+
+    #[test]
+    fn dom_collection_and_matches_apis_cover_wildcards_and_multiple_classes() {
+        let mut root = Node::element("main");
+        let mut first = Node::element("div");
+        first.set_attribute("id", "first");
+        first.set_attribute("class", "card featured");
+        let mut second = Node::element("span");
+        second.set_attribute("class", "card");
+        root.append(first);
+        root.append(second);
+
+        assert_eq!(root.get_element_by_id("first").unwrap().tag_name(), Some("div"));
+        assert_eq!(root.get_elements_by_tag_name("*").len(), 2);
+        assert_eq!(root.get_elements_by_tag_name("DIV").len(), 1);
+        assert_eq!(root.get_elements_by_class_name("card featured").len(), 1);
+        assert_eq!(root.get_elements_by_class_name("featured card").len(), 1);
+        assert!(root.get_elements_by_class_name("missing").is_empty());
+        assert!(root.child(0).unwrap().matches_selector("div.card, span.active") );
+        assert!(!root.child(0).unwrap().matches_selector("main > div"));
+    }
+
+    #[test]
+    fn insert_before_and_after_preserve_order_and_reject_invalid_indices() {
+        let mut root = Node::element("div");
+        root.append(Node::element("a"));
+        root.append(Node::element("c"));
+        assert!(root.insert_before(1, Node::element("b")).is_ok());
+        assert!(root.insert_after(1, Node::element("between")).is_ok());
+        assert!(root.insert_before(99, Node::element("invalid")).is_err());
+        assert_eq!(
+            root.children.iter().filter_map(Node::tag_name).collect::<Vec<_>>(),
+            ["a", "b", "between", "c"]
+        );
     }
 
     #[test]
