@@ -450,13 +450,7 @@ where
         let document = parse(&HtmlTokenizer::tokenize(html));
         let mut links = Vec::new();
         collect_stylesheet_links(&document, &mut links);
-        let base_url = document
-            .find_first_element("base")
-            .and_then(|base| base.attribute("href"))
-            .map(str::trim)
-            .filter(|href| !href.is_empty())
-            .and_then(|href| document_url.resolve(href).ok())
-            .unwrap_or_else(|| document_url.clone());
+        let base_url = document_base_url(&document, document_url);
 
         let mut stylesheet = String::new();
         // Bound both network work and the expanded CSS retained for one
@@ -954,6 +948,19 @@ fn remove_header_case_insensitive(
     headers.retain(|key, _| !key.eq_ignore_ascii_case(name));
 }
 
+fn document_base_url(document: &Node, document_url: &super::Url) -> super::Url {
+    // A <base> element without href only changes the target browsing context;
+    // it must not prevent a later <base href> from defining the document base.
+    document
+        .descendants()
+        .find(|node| node.tag_name() == Some("base") && node.attribute("href").is_some())
+        .and_then(|base| base.attribute("href"))
+        .map(str::trim)
+        .filter(|href| !href.is_empty())
+        .and_then(|href| document_url.resolve(href).ok())
+        .unwrap_or_else(|| document_url.clone())
+}
+
 fn collect_stylesheet_links(node: &Node, links: &mut Vec<String>) {
     // Stop collecting once the document's stylesheet request budget is full.
     // Otherwise a small HTML document containing thousands of <link> elements
@@ -1265,6 +1272,23 @@ mod tests {
 
         assert_eq!(statement, r"@import foo\;bar.css;");
         assert_eq!(&css[next..], " body { color: red; }");
+    }
+
+    #[test]
+    fn stylesheet_urls_use_the_first_base_element_that_has_href() {
+        use super::document_base_url;
+        use crate::html::{parse, HtmlTokenizer};
+        use crate::net::Url;
+
+        let document = parse(&HtmlTokenizer::tokenize(
+            r#"<head><base target="_blank"><base href="/assets/"></head>"#,
+        ));
+        let document_url = Url::parse("https://example.org/docs/index.html").unwrap();
+
+        assert_eq!(
+            document_base_url(&document, &document_url).to_string(),
+            "https://example.org/assets/"
+        );
     }
 
     #[test]
