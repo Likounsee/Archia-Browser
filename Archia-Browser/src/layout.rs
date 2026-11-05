@@ -1241,18 +1241,14 @@ fn layout_grid_children(
         }
         let span = parse_grid_column_span(child.style.get("grid-column"), column, columns)
             .min(columns.saturating_sub(column));
-        let row_span = parse_grid_row_span(
-            child.style.get("grid-row"),
-            row,
-            row_heights.len().max(1),
-        )
-        .min(row_heights.len().saturating_sub(row).max(1));
+        let row_span =
+            parse_grid_row_span(child.style.get("grid-row"), row, row_heights.len().max(1))
+                .min(row_heights.len().saturating_sub(row).max(1));
         while cells.len() <= row + row_span - 1 {
             cells.push(vec![None; columns]);
         }
-        let free = (row..row + row_span).all(|grid_row| {
-            (column..column + span).all(|cell| cells[grid_row][cell].is_none())
-        });
+        let free = (row..row + row_span)
+            .all(|grid_row| (column..column + span).all(|cell| cells[grid_row][cell].is_none()));
         if free {
             for grid_row in row..row + row_span {
                 for cell in column..column + span {
@@ -5713,10 +5709,22 @@ mod tests {
             crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 80));
 
-        assert_eq!((layout.children[0].rect.x, layout.children[0].rect.y), (0, 0));
-        assert_eq!((layout.children[1].rect.x, layout.children[1].rect.y), (0, 30));
-        assert_eq!((layout.children[2].rect.x, layout.children[2].rect.y), (100, 0));
-        assert_eq!((layout.children[3].rect.x, layout.children[3].rect.y), (100, 30));
+        assert_eq!(
+            (layout.children[0].rect.x, layout.children[0].rect.y),
+            (0, 0)
+        );
+        assert_eq!(
+            (layout.children[1].rect.x, layout.children[1].rect.y),
+            (0, 30)
+        );
+        assert_eq!(
+            (layout.children[2].rect.x, layout.children[2].rect.y),
+            (100, 0)
+        );
+        assert_eq!(
+            (layout.children[3].rect.x, layout.children[3].rect.y),
+            (100, 30)
+        );
     }
 
     #[test]
@@ -5736,8 +5744,14 @@ mod tests {
             crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 80));
 
-        assert_eq!((layout.children[1].rect.x, layout.children[1].rect.y), (0, 0));
-        assert_eq!((layout.children[2].rect.x, layout.children[2].rect.y), (0, 30));
+        assert_eq!(
+            (layout.children[1].rect.x, layout.children[1].rect.y),
+            (0, 0)
+        );
+        assert_eq!(
+            (layout.children[2].rect.x, layout.children[2].rect.y),
+            (0, 30)
+        );
     }
 
     #[test]
@@ -5760,9 +5774,18 @@ mod tests {
             crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 80));
 
-        assert_eq!((layout.children[1].rect.x, layout.children[1].rect.y), (0, 0));
-        assert_eq!((layout.children[2].rect.x, layout.children[2].rect.y), (100, 0));
-        assert_eq!((layout.children[0].rect.x, layout.children[0].rect.y), (0, 20));
+        assert_eq!(
+            (layout.children[1].rect.x, layout.children[1].rect.y),
+            (0, 0)
+        );
+        assert_eq!(
+            (layout.children[2].rect.x, layout.children[2].rect.y),
+            (100, 0)
+        );
+        assert_eq!(
+            (layout.children[0].rect.x, layout.children[0].rect.y),
+            (0, 20)
+        );
     }
 
     #[test]
@@ -5780,11 +5803,26 @@ mod tests {
             crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(300, 80));
 
-        assert_eq!((layout.children[0].rect.x, layout.children[0].rect.y), (0, 0));
-        assert_eq!((layout.children[1].rect.x, layout.children[1].rect.y), (0, 25));
-        assert_eq!((layout.children[2].rect.x, layout.children[2].rect.y), (100, 0));
-        assert_eq!((layout.children[3].rect.x, layout.children[3].rect.y), (100, 25));
-        assert_eq!((layout.children[4].rect.x, layout.children[4].rect.y), (180, 0));
+        assert_eq!(
+            (layout.children[0].rect.x, layout.children[0].rect.y),
+            (0, 0)
+        );
+        assert_eq!(
+            (layout.children[1].rect.x, layout.children[1].rect.y),
+            (0, 25)
+        );
+        assert_eq!(
+            (layout.children[2].rect.x, layout.children[2].rect.y),
+            (100, 0)
+        );
+        assert_eq!(
+            (layout.children[3].rect.x, layout.children[3].rect.y),
+            (100, 25)
+        );
+        assert_eq!(
+            (layout.children[4].rect.x, layout.children[4].rect.y),
+            (180, 0)
+        );
     }
 
     #[test]
