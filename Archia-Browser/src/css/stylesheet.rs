@@ -501,6 +501,7 @@ fn supports_declaration(name: &str, value: &str) -> bool {
         "justify-self",
         "place-items",
         "place-content",
+        "place-self",
         "align-self",
         "gap",
         "row-gap",
@@ -613,7 +614,7 @@ fn supports_declaration(name: &str, value: &str) -> bool {
             value.as_str(),
             "normal" | "stretch" | "start" | "end" | "self-start" | "self-end" | "center" | "left" | "right"
         ),
-        "place-items" | "place-content" => {
+        "place-items" | "place-content" | "place-self" => {
             let values = value.split_whitespace().collect::<Vec<_>>();
             (1..=2).contains(&values.len())
                 && values.iter().all(|value| {
@@ -651,13 +652,13 @@ fn supports_declaration(name: &str, value: &str) -> bool {
         "row-gap" | "column-gap" => is_valid_gap_component(&value),
         "list-style" => expand_list_style(&value).is_some(),
         "background" => expand_background(&value).is_some(),
-        "place-items" | "place-content" => {
+        "place-items" | "place-content" | "place-self" => {
             let values = value.split_whitespace().collect::<Vec<_>>();
             if (1..=2).contains(&values.len()) {
-                let (first, second) = if name == "place-items" {
-                    ("align-items", "justify-items")
-                } else {
-                    ("align-content", "justify-content")
+                let (first, second) = match name.as_str() {
+                    "place-items" => ("align-items", "justify-items"),
+                    "place-self" => ("align-self", "justify-self"),
+                    _ => ("align-content", "justify-content"),
                 };
                 apply(name.clone(), value.clone());
                 apply(first.to_owned(), values[0].to_owned());
@@ -2636,6 +2637,15 @@ mod tests {
         ] {
             assert_eq!(initial_value(property), expected, "{property}");
         }
+    }
+
+    #[test]
+    fn expands_place_self_shorthand() {
+        let sheet = StyleSheet::parse("div { place-self: end center; }");
+        let style = sheet.compute_style(&Node::element("div"));
+
+        assert_eq!(style.get("align-self"), Some("end"));
+        assert_eq!(style.get("justify-self"), Some("center"));
     }
 
     #[test]
