@@ -1085,11 +1085,34 @@ fn layout_grid_children(
             let area_width = widths[grid_position - row_start];
             let child_box = box_model_from_style(&child.style, content_width);
             let content_cell_width = area_width.saturating_sub(child_box.horizontal_outer());
+            let justify_self = child
+                .style
+                .get("justify-self")
+                .or_else(|| node.style.get("justify-items"))
+                .map(|value| value.trim().to_ascii_lowercase())
+                .unwrap_or_else(|| "stretch".to_owned());
             let mut grid_child = child.clone();
+            let mut justify_offset = 0_u32;
             if is_auto_dimension(grid_child.style.get("width")) {
-                grid_child
-                    .style
-                    .set("width", format!("{content_cell_width}px"));
+                if matches!(justify_self.as_str(), "start" | "self-start" | "end" | "self-end" | "center") {
+                    let intrinsic_outer = intrinsic_inline_width(child, content_cell_width);
+                    let intrinsic_content = intrinsic_outer
+                        .saturating_sub(child_box.horizontal_outer())
+                        .min(content_cell_width);
+                    grid_child
+                        .style
+                        .set("width", format!("{intrinsic_content}px"));
+                    let remaining = content_cell_width.saturating_sub(intrinsic_content);
+                    justify_offset = match justify_self.as_str() {
+                        "end" | "self-end" => remaining,
+                        "center" => remaining / 2,
+                        _ => 0,
+                    };
+                } else {
+                    grid_child
+                        .style
+                        .set("width", format!("{content_cell_width}px"));
+                }
             }
             if let Some(row_height) = explicit_row_height {
                 let content_cell_height = row_height.saturating_sub(child_box.vertical_outer());
@@ -1103,7 +1126,8 @@ fn layout_grid_children(
                 &grid_child,
                 content_origin_x
                     .saturating_add(column_left as i32)
-                    .saturating_add(child_box.margin_left as i32),
+                    .saturating_add(child_box.margin_left as i32)
+                    .saturating_add(justify_offset as i32),
                 content_origin_y
                     .saturating_add(row_top)
                     .saturating_add(child_box.margin_top as i32),
@@ -4923,6 +4947,28 @@ mod tests {
         assert_eq!(layout.children[2].rect.height, 70);
         assert_eq!(layout.children[3].rect.height, 70);
         assert_eq!(layout.rect.height, 120);
+    }
+
+    #[test]
+    fn grid_layout_supports_justify_items_and_justify_self() {
+        let mut root = Node::element("section");
+        root.set_attribute(
+            "style",
+            "display: grid; width: 200px; grid-template-columns: 100px 100px; justify-items: center;",
+        );
+        root.append(Node::text("ab"));
+        let mut second = Node::text("ab");
+        second.set_attribute("style", "justify-self: end;");
+        root.append(second);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.width, 12);
+        assert_eq!(layout.children[0].rect.x, 44);
+        assert_eq!(layout.children[1].rect.width, 12);
+        assert_eq!(layout.children[1].rect.x, 188);
     }
 
     #[test]
