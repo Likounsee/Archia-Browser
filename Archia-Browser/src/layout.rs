@@ -3002,10 +3002,7 @@ fn intrinsic_inline_height(node: &crate::style_tree::StyledNode) -> u32 {
 /// The auto keyword is ignored because intrinsic image metadata is not loaded yet.
 fn parse_aspect_ratio(value: Option<&str>) -> Option<f64> {
     let value = value?.trim();
-    let value = value
-        .strip_prefix("auto")
-        .map(str::trim)
-        .unwrap_or(value);
+    let value = value.strip_prefix("auto").map(str::trim).unwrap_or(value);
     if value.is_empty() {
         return None;
     }
