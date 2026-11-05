@@ -257,7 +257,8 @@ impl Node {
 
     /// Whether this element currently has one or more attributes.
     pub fn has_attributes(&self) -> bool {
-        self.attributes().is_some_and(|attributes| !attributes.is_empty())
+        self.attributes()
+            .is_some_and(|attributes| !attributes.is_empty())
     }
 
     /// Return attribute names in the DOM's deterministic map order.
