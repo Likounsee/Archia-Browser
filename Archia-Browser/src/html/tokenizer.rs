@@ -427,18 +427,31 @@ mod tests {
     #[test]
     fn slash_is_preserved_inside_attribute_names() {
         let tokens = HtmlTokenizer::tokenize("<div data/name=value></div>");
-        let HtmlToken::StartTag { attributes, self_closing, .. } = &tokens[0] else {
+        let HtmlToken::StartTag {
+            attributes,
+            self_closing,
+            ..
+        } = &tokens[0]
+        else {
             panic!("expected start tag");
         };
 
-        assert_eq!(attributes.get("data/name").map(String::as_str), Some("value"));
+        assert_eq!(
+            attributes.get("data/name").map(String::as_str),
+            Some("value")
+        );
         assert!(!self_closing);
     }
 
     #[test]
     fn slash_after_attributes_still_marks_void_syntax() {
         let tokens = HtmlTokenizer::tokenize("<div id=value />");
-        let HtmlToken::StartTag { attributes, self_closing, .. } = &tokens[0] else {
+        let HtmlToken::StartTag {
+            attributes,
+            self_closing,
+            ..
+        } = &tokens[0]
+        else {
             panic!("expected start tag");
         };
 
