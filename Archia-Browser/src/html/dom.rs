@@ -636,6 +636,62 @@ impl Node {
         output
     }
 
+    /// Replace this element/document's children by parsing an HTML fragment.
+    ///
+    /// The current parser uses its document-mode recovery rules for fragments;
+    /// context-sensitive fragment parsing (table/select/template) is still a
+    /// separate HTML5 tree-builder task. Returns false for text/comment nodes
+    /// and HTML void elements, which cannot contain children.
+    pub fn set_inner_html(&mut self, html: &str) -> bool {
+        if !(self.is_document() || self.is_element()) {
+            return false;
+        }
+        if self.tag_name().is_some_and(is_void_html_element) {
+            return false;
+        }
+
+        let tokens = super::HtmlTokenizer::tokenize(html);
+        let fragment = super::parse(&tokens);
+        self.replace_children(fragment.children);
+        true
+    }
+
+    /// Append parsed HTML nodes to this element/document.
+    /// Returns false when the receiver cannot contain child nodes.
+    pub fn append_html(&mut self, html: &str) -> bool {
+        if !(self.is_document() || self.is_element()) {
+            return false;
+        }
+        if self.tag_name().is_some_and(is_void_html_element) {
+            return false;
+        }
+
+        let tokens = super::HtmlTokenizer::tokenize(html);
+        let fragment = super::parse(&tokens);
+        if self.children.try_reserve(fragment.children.len()).is_err() {
+            return false;
+        }
+        self.children.extend(fragment.children);
+        true
+    }
+
+    /// Set the node's text content without interpreting the value as markup.
+    /// For elements/documents this replaces children; for text/comment nodes
+    /// this replaces the node data.
+    pub fn set_text_content(&mut self, value: impl Into<String>) {
+        let value = value.into();
+        match &mut self.kind {
+            NodeKind::Document => self.children.clear(),
+            NodeKind::Element { .. } => {
+                self.children.clear();
+                if !value.is_empty() {
+                    self.children.push(Node::text(value));
+                }
+            }
+            NodeKind::Text(data) | NodeKind::Comment(data) => *data = value,
+        }
+    }
+
     /// Collect text intended for a basic visual page view.
     ///
     /// Unlike DOM textContent, this omits metadata and non-rendered source
@@ -838,6 +894,43 @@ impl<'a> Iterator for Descendants<'a> {
 }
 
 #[cfg(test)]
+    #[test]
+    fn inner_html_setter_replaces_children_and_parses_markup() {
+        let mut root = Node::element("div");
+        root.append(Node::element("old"));
+        assert!(root.set_inner_html("<p class='x'>hello &amp; <b>world</b></p><!--done-->"));
+        assert_eq!(root.children.len(), 2);
+        assert_eq!(root.query_selector("p.x").unwrap().text_content(), "hello & world");
+        assert_eq!(root.inner_html(), "<p class=\"x\">hello &amp; <b>world</b></p><!--done-->");
+    }
+
+    #[test]
+    fn append_html_preserves_existing_children_and_rejects_void_elements() {
+        let mut root = Node::element("div");
+        root.append(Node::text("before"));
+        assert!(root.append_html("<span>after</span>"));
+        assert_eq!(root.text_content(), "beforeafter");
+
+        let mut image = Node::element("img");
+        assert!(!image.append_html("<span>invalid</span>"));
+        assert!(image.children.is_empty());
+    }
+
+    #[test]
+    fn set_text_content_never_parses_markup() {
+        let mut element = Node::element("div");
+        element.append(Node::element("b"));
+        element.set_text_content("<b>literal</b>");
+        assert_eq!(element.children.len(), 1);
+        assert!(element.children[0].is_text());
+        assert_eq!(element.inner_html(), "&lt;b&gt;literal&lt;/b&gt;");
+
+        let mut text = Node::text("old");
+        text.set_text_content("new");
+        assert_eq!(text.text_content(), "new");
+    }
+
+
 mod tests {
     use super::*;
 
