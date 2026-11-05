@@ -563,28 +563,18 @@ impl Node {
         };
 
         let mut matches = Vec::new();
-        let mut stack: Vec<(
-            &Node,
-            Vec<&Node>,
-            Vec<&[Node]>,
-            Vec<usize>,
-        )> = Vec::new();
+        let mut stack: Vec<(&Node, Vec<&Node>, Vec<&[Node]>, Vec<usize>)> = Vec::new();
 
         let root_path = vec![self];
         let root_siblings: Vec<&[Node]> = vec![&[]];
         let root_positions = vec![0];
 
         for (index, child) in self.children.iter().enumerate().rev() {
-            stack.push((
-                child,
-                root_path.clone(),
-                root_siblings.clone(),
-                {
-                    let mut positions = root_positions.clone();
-                    positions.push(index);
-                    positions
-                },
-            ));
+            stack.push((child, root_path.clone(), root_siblings.clone(), {
+                let mut positions = root_positions.clone();
+                positions.push(index);
+                positions
+            }));
         }
 
         while let Some((node, mut path, mut sibling_lists, mut positions)) = stack.pop() {
@@ -607,12 +597,7 @@ impl Node {
             for (index, child) in children.iter().enumerate().rev() {
                 let mut child_positions = positions.clone();
                 child_positions.push(index);
-                stack.push((
-                    child,
-                    path.clone(),
-                    sibling_lists.clone(),
-                    child_positions,
-                ));
+                stack.push((child, path.clone(), sibling_lists.clone(), child_positions));
             }
         }
 
@@ -723,8 +708,6 @@ impl Node {
     }
 }
 
-
- 
 
 /// Parse a CSS selector list while keeping commas inside strings, attributes,
 /// escaped sequences and functional pseudo-classes intact.
@@ -893,8 +876,10 @@ impl<'a> Iterator for Descendants<'a> {
     }
 }
 
-#[cfg(test)]
-    #[test]
+mod tests {
+    use super::*;
+
+#[test]
     fn inner_html_setter_replaces_children_and_parses_markup() {
         let mut root = Node::element("div");
         root.append(Node::element("old"));
@@ -931,8 +916,6 @@ impl<'a> Iterator for Descendants<'a> {
     }
 
 
-mod tests {
-    use super::*;
 
     #[test]
     fn contains_uses_node_identity_and_includes_the_receiver() {
@@ -1489,9 +1472,13 @@ mod tests {
         root.append(third);
 
         assert_eq!(root.query_selector_all(".first, .third").len(), 2);
-        assert_eq!(root.query_selector_all("[data-label='a,b'], .third").len(), 2);
         assert_eq!(
-            root.query_selector(".missing, .second").and_then(Node::tag_name),
+            root.query_selector_all("[data-label='a,b'], .third").len(),
+            2
+        );
+        assert_eq!(
+            root.query_selector(".missing, .second")
+                .and_then(Node::tag_name),
             Some("p")
         );
         assert!(root.query_selector_all(".first, > .broken").is_empty());
