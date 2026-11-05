@@ -944,26 +944,45 @@ fn numeric_range_state(
     node: &Node,
     attributes: &std::collections::BTreeMap<String, String>,
 ) -> Option<bool> {
-    if node.tag_name() != Some("input") { return None; }
+    if node.tag_name() != Some("input") {
+        return None;
+    }
     let input_type = attributes.get("type")?.to_ascii_lowercase();
-    if !matches!(input_type.as_str(), "number" | "range") { return None; }
+    if !matches!(input_type.as_str(), "number" | "range") {
+        return None;
+    }
     // :in-range/:out-of-range apply only when a range constraint exists;
     // a plain number input is neither in-range nor out-of-range.
     if !attributes.contains_key("min") && !attributes.contains_key("max") {
         return None;
     }
     let value = attributes.get("value")?.parse::<f64>().ok()?;
-    if !value.is_finite() { return None; }
-    if let Some(minimum) = attributes.get("min").and_then(|v| v.parse::<f64>().ok()) {
-        if value < minimum { return Some(false); }
+    if !value.is_finite() {
+        return None;
     }
-    if let Some(maximum) = attributes.get("max").and_then(|v| v.parse::<f64>().ok()) {
-        if value > maximum { return Some(false); }
+    if let Some(minimum) = attributes
+        .get("min")
+        .and_then(|value| value.parse::<f64>().ok())
+    {
+        if value < minimum {
+            return Some(false);
+        }
+    }
+    if let Some(maximum) = attributes
+        .get("max")
+        .and_then(|value| value.parse::<f64>().ok())
+    {
+        if value > maximum {
+            return Some(false);
+        }
     }
     Some(true)
 }
 
-fn matches_language(pseudo: &str, attributes: &std::collections::BTreeMap<String, String>) -> bool {
+fn matches_language(
+    pseudo: &str,
+    attributes: &std::collections::BTreeMap<String, String>,
+) -> bool {
     let Some(argument) = pseudo_argument(pseudo, "lang") else {
         return false;
     };
