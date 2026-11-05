@@ -2389,9 +2389,18 @@ mod whitespace_layout_tests {
     fn min_max_and_clamp_lengths_resolve_against_containing_width() {
         assert_eq!(parse_length(Some("min(50%, 120px)"), 300), Some(120));
         assert_eq!(parse_length(Some("max(50%, 120px)"), 300), Some(150));
-        assert_eq!(parse_length(Some("clamp(100px, 50%, 180px)"), 400), Some(180));
-        assert_eq!(parse_length(Some("clamp(100px, 20%, 180px)"), 400), Some(100));
-        assert_eq!(parse_length(Some("min(2in, max(50%, 80px))"), 300), Some(150));
+        assert_eq!(
+            parse_length(Some("clamp(100px, 50%, 180px)"), 400),
+            Some(180)
+        );
+        assert_eq!(
+            parse_length(Some("clamp(100px, 20%, 180px)"), 400),
+            Some(100)
+        );
+        assert_eq!(
+            parse_length(Some("min(2in, max(50%, 80px))"), 300),
+            Some(150)
+        );
     }
 
     #[test]
@@ -2557,7 +2566,9 @@ fn parse_length_inner(value: &str, containing_width: u32, depth: usize) -> Optio
             _ => None,
         };
     }
-    if value.get(..5).is_some_and(|prefix| prefix.eq_ignore_ascii_case("calc("))
+    if value
+        .get(..5)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("calc("))
         && value.ends_with(')')
     {
         return parse_calc_length(&value[5..value.len() - 1], containing_width);
