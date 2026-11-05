@@ -450,6 +450,53 @@ fn supports_declaration(name: &str, value: &str) -> bool {
         "bottom",
         "left",
         "z-index",
+        "vertical-align",
+        "text-transform",
+        "letter-spacing",
+        "word-spacing",
+        "text-indent",
+        "direction",
+        "unicode-bidi",
+        "word-break",
+        "overflow-wrap",
+        "hyphens",
+        "tab-size",
+        "quotes",
+        "text-shadow",
+        "font-stretch",
+        "font-kerning",
+        "font-variant",
+        "text-align-last",
+        "text-justify",
+        "color-scheme",
+        "caret-color",
+        "scrollbar-color",
+        "float",
+        "clear",
+        "cursor",
+        "list-style",
+        "list-style-type",
+        "list-style-position",
+        "list-style-image",
+        "object-fit",
+        "object-position",
+        "writing-mode",
+        "text-orientation",
+        "text-combine-upright",
+        "text-emphasis",
+        "text-emphasis-color",
+        "text-emphasis-style",
+        "text-emphasis-position",
+        "fill",
+        "fill-rule",
+        "fill-opacity",
+        "stroke",
+        "stroke-width",
+        "stroke-linecap",
+        "stroke-linejoin",
+        "stroke-dasharray",
+        "stroke-dashoffset",
+        "stroke-opacity",
     ];
     if !IMPLEMENTED_PROPERTIES.contains(&name.as_str()) {
         return false;
@@ -1783,6 +1830,23 @@ mod tests {
             let mut node = Node::element("div");
             node.set_attribute("class", class);
             assert_eq!(sheet.compute_style(&node).get("color"), expected);
+        }
+    }
+
+    #[test]
+    fn supports_rules_recognize_additional_stored_text_and_layout_properties() {
+        let css = "@supports (text-transform: uppercase) { .transform { text-transform: uppercase; } } @supports (letter-spacing: 0.1em) { .spacing { letter-spacing: 0.1em; } } @supports (float: left) { .float { float: left; } } @supports (cursor: pointer) { .cursor { cursor: pointer; } } @supports (object-fit: cover) { .object { object-fit: cover; } }";
+        let sheet = StyleSheet::parse(css);
+        for (class, property, expected) in [
+            ("transform", "text-transform", "uppercase"),
+            ("spacing", "letter-spacing", "0.1em"),
+            ("float", "float", "left"),
+            ("cursor", "cursor", "pointer"),
+            ("object", "object-fit", "cover"),
+        ] {
+            let mut node = Node::element("div");
+            node.set_attribute("class", class);
+            assert_eq!(sheet.compute_style(&node).get(property), Some(expected));
         }
     }
 
