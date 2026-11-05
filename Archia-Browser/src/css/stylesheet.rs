@@ -590,16 +590,27 @@ fn supports_declaration(name: &str, value: &str) -> bool {
                 && values.iter().all(|value| {
                     matches!(
                         *value,
-                        "row" | "row-reverse" | "column" | "column-reverse"
-                            | "nowrap" | "wrap" | "wrap-reverse"
+                        "row"
+                            | "row-reverse"
+                            | "column"
+                            | "column-reverse"
+                            | "nowrap"
+                            | "wrap"
+                            | "wrap-reverse"
                     )
                 })
-                && values.iter().filter(|value| {
-                    matches!(**value, "row" | "row-reverse" | "column" | "column-reverse")
-                }).count() <= 1
-                && values.iter().filter(|value| {
-                    matches!(**value, "nowrap" | "wrap" | "wrap-reverse")
-                }).count() <= 1
+                && values
+                    .iter()
+                    .filter(|value| {
+                        matches!(**value, "row" | "row-reverse" | "column" | "column-reverse")
+                    })
+                    .count()
+                    <= 1
+                && values
+                    .iter()
+                    .filter(|value| matches!(**value, "nowrap" | "wrap" | "wrap-reverse"))
+                    .count()
+                    <= 1
         }
         "visibility" => matches!(value.as_str(), "visible" | "hidden" | "collapse"),
         _ => true,
@@ -1036,8 +1047,10 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
                 let mut valid = true;
                 for token in values {
                     let token = token.to_ascii_lowercase();
-                    if matches!(token.as_str(), "row" | "row-reverse" | "column" | "column-reverse")
-                    {
+                    if matches!(
+                        token.as_str(),
+                        "row" | "row-reverse" | "column" | "column-reverse"
+                    ) {
                         if direction.replace(token).is_some() {
                             valid = false;
                         }
@@ -1595,9 +1608,7 @@ mod tests {
 
     #[test]
     fn gap_shorthand_respects_important_longhands() {
-        let sheet = StyleSheet::parse(
-            "div { row-gap: 3px !important; gap: 8px 16px; }",
-        );
+        let sheet = StyleSheet::parse("div { row-gap: 3px !important; gap: 8px 16px; }");
         let computed = sheet.compute_style(&Node::element("div"));
         assert_eq!(computed.get("row-gap"), Some("3px"));
         assert_eq!(computed.get("column-gap"), Some("16px"));
