@@ -4956,9 +4956,12 @@ mod tests {
             "style",
             "display: grid; width: 200px; grid-template-columns: 100px 100px; justify-items: center;",
         );
-        root.append(Node::text("ab"));
-        let mut second = Node::text("ab");
+        let mut first = Node::element("span");
+        first.append(Node::text("ab"));
+        root.append(first);
+        let mut second = Node::element("span");
         second.set_attribute("style", "justify-self: end;");
+        second.append(Node::text("ab"));
         root.append(second);
 
         let styled =
