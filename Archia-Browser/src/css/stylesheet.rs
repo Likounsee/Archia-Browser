@@ -458,6 +458,11 @@ fn supports_declaration(name: &str, value: &str) -> bool {
         "border-inline-end-style",
         "border-inline-end-color",
         "border-radius",
+        "outline",
+        "outline-width",
+        "outline-style",
+        "outline-color",
+        "outline-offset",
         "border-top-left-radius",
         "border-top-right-radius",
         "border-bottom-right-radius",
@@ -1117,6 +1122,15 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
                 ] {
                     apply(property.to_owned(), property_value);
                 }
+                return;
+            }
+        }
+        "outline" => {
+            if let Some((width, style, color)) = expand_border_shorthand(&value) {
+                apply(name.clone(), value.clone());
+                apply("outline-width".to_owned(), width);
+                apply("outline-style".to_owned(), style);
+                apply("outline-color".to_owned(), color);
                 return;
             }
         }
@@ -1830,6 +1844,35 @@ mod tests {
         assert_eq!(computed.get("border-block-start-width"), Some("9px"));
         assert_eq!(computed.get("border-block-start-style"), Some("solid"));
         assert_eq!(computed.get("border-block-end-width"), Some("2px"));
+    }
+
+    #[test]
+    fn outline_shorthand_expands_width_style_and_color() {
+        let sheet = StyleSheet::parse(
+            "div { outline: 2px solid red; } span { outline: dashed blue; } p { outline: 3px; }",
+        );
+        let cases = [
+            ("div", "2px", "solid", "red"),
+            ("span", "medium", "dashed", "blue"),
+            ("p", "3px", "none", "currentcolor"),
+        ];
+        for (tag, width, style, color) in cases {
+            let computed = sheet.compute_style(&Node::element(tag));
+            assert_eq!(computed.get("outline-width"), Some(width));
+            assert_eq!(computed.get("outline-style"), Some(style));
+            assert_eq!(computed.get("outline-color"), Some(color));
+        }
+    }
+
+    #[test]
+    fn outline_shorthand_preserves_important_longhands() {
+        let sheet = StyleSheet::parse(
+            "div { outline-width: 7px !important; outline: 2px solid red; }",
+        );
+        let computed = sheet.compute_style(&Node::element("div"));
+        assert_eq!(computed.get("outline-width"), Some("7px"));
+        assert_eq!(computed.get("outline-style"), Some("solid"));
+        assert_eq!(computed.get("outline-color"), Some("red"));
     }
 
     #[test]
