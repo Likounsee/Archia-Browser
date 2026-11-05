@@ -846,10 +846,12 @@ fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayL
         (
             "top",
             true,
+            true,
             Rect::new(outer_x, outer_y, outer_width, border.border_top),
         ),
         (
             "right",
+            false,
             false,
             Rect::new(
                 outer_x.saturating_add(outer_width.saturating_sub(border.border_right) as i32),
@@ -861,6 +863,7 @@ fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayL
         (
             "bottom",
             true,
+            false,
             Rect::new(
                 outer_x,
                 outer_y.saturating_add(outer_height.saturating_sub(border.border_bottom) as i32),
@@ -871,11 +874,12 @@ fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayL
         (
             "left",
             false,
+            true,
             Rect::new(outer_x, outer_y, border.border_left, outer_height),
         ),
     ];
 
-    for (side, horizontal, rect) in sides {
+    for (side, horizontal, top_left, rect) in sides {
         if rect.width == 0 || rect.height == 0 {
             continue;
         }
@@ -902,6 +906,7 @@ fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayL
         paint_border_edge(
             rect,
             horizontal,
+            top_left,
             &border_style,
             apply_opacity(color, opacity),
             list,
@@ -912,6 +917,7 @@ fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayL
 fn paint_border_edge(
     rect: Rect,
     horizontal: bool,
+    top_left: bool,
     border_style: &str,
     color: u32,
     list: &mut DisplayList,
@@ -958,6 +964,41 @@ fn paint_border_edge(
                 emitted += 1;
             }
         }
+        "groove" | "ridge" | "inset" | "outset" => {
+            let dark = shade_border_color(color, 0.6);
+            let light = shade_border_color(color, 1.4);
+            let top_left_dark = match border_style.as_str() {
+                "groove" | "inset" => true,
+                _ => false,
+            };
+            let first_color = if top_left == top_left_dark { dark } else { light };
+            let second_color = if top_left == top_left_dark { light } else { dark };
+            if matches!(border_style.as_str(), "inset" | "outset") {
+                list.push(PaintCommand::FillRect {
+                    rect,
+                    color: first_color,
+                });
+            } else {
+                let first = thickness / 2;
+                let second = thickness.saturating_sub(first);
+                if first > 0 {
+                    let first_rect = if horizontal {
+                        Rect::new(rect.x, rect.y, rect.width, first)
+                    } else {
+                        Rect::new(rect.x, rect.y, first, rect.height)
+                    };
+                    list.push(PaintCommand::FillRect { rect: first_rect, color: first_color });
+                }
+                if second > 0 {
+                    let second_rect = if horizontal {
+                        Rect::new(rect.x, rect.y.saturating_add(first.min(i32::MAX as u32) as i32), rect.width, second)
+                    } else {
+                        Rect::new(rect.x.saturating_add(first.min(i32::MAX as u32) as i32), rect.y, second, rect.height)
+                    };
+                    list.push(PaintCommand::FillRect { rect: second_rect, color: second_color });
+                }
+            }
+        }
         "double" if thickness >= 3 => {
             let stripe = (thickness / 3).max(1);
             let middle_gap = thickness.saturating_sub(stripe.saturating_mul(2));
@@ -987,6 +1028,17 @@ fn paint_border_edge(
         }
         _ => list.push(PaintCommand::FillRect { rect, color }),
     }
+}
+
+fn shade_border_color(color: u32, factor: f32) -> u32 {
+    let red = ((color >> 24) & 0xff) as f32;
+    let green = ((color >> 16) & 0xff) as f32;
+    let blue = ((color >> 8) & 0xff) as f32;
+    let alpha = color & 0xff;
+    let red = (red * factor).round().clamp(0.0, 255.0) as u32;
+    let green = (green * factor).round().clamp(0.0, 255.0) as u32;
+    let blue = (blue * factor).round().clamp(0.0, 255.0) as u32;
+    (red << 24) | (green << 16) | (blue << 8) | alpha
 }
 
 fn parse_color(value: &str) -> Option<u32> {
@@ -1110,6 +1162,35 @@ mod tests {
             command,
             PaintCommand::FillRect { color: 0xff000080, rect, .. } if rect.width == 2
         )));
+    }
+
+    #[test]
+    fn three_dimensional_border_styles_render_shaded_edges() {
+        for (style, expected_commands) in [
+            ("groove", 2),
+            ("ridge", 2),
+            ("inset", 1),
+            ("outset", 1),
+        ] {
+            let mut list = DisplayList::new();
+            paint_border_edge(
+                Rect::new(2, 3, 20, 6),
+                true,
+                true,
+                style,
+                0x808080ff,
+                &mut list,
+            );
+            assert_eq!(list.commands().len(), expected_commands, "{style}");
+            let colors = list.commands().iter().filter_map(|command| match command {
+                PaintCommand::FillRect { color, .. } => Some(*color),
+                _ => None,
+            }).collect::<Vec<_>>();
+            assert!(colors.iter().all(|color| *color != 0x808080ff), "{style}");
+            if expected_commands == 2 {
+                assert_ne!(colors[0], colors[1], "{style}");
+            }
+        }
     }
 
     #[test]
