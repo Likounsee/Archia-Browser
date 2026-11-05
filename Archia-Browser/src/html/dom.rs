@@ -1067,6 +1067,7 @@ impl<'a> Iterator for Descendants<'a> {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::{Node, NodeKind};
     #[test]
