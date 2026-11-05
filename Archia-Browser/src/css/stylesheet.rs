@@ -1592,7 +1592,7 @@ fn expand_list_style(value: &str) -> Option<(String, String, String)> {
             if position.replace(lower).is_some() {
                 return None;
             }
-        } else if lower == "none" || lower.starts_with("url(") {
+        } else if lower.starts_with("url(") {
             if image.replace(token.to_owned()).is_some() {
                 return None;
             }
