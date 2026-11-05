@@ -2367,6 +2367,25 @@ mod whitespace_layout_tests {
     }
 
     #[test]
+    fn absolute_css_length_units_convert_to_css_pixels() {
+        assert_eq!(parse_length(Some("1in"), 100), Some(96));
+        assert_eq!(parse_length(Some("2.54cm"), 100), Some(96));
+        assert_eq!(parse_length(Some("25.4mm"), 100), Some(96));
+        assert_eq!(parse_length(Some("101.6Q"), 100), Some(96));
+        assert_eq!(parse_length(Some("72pt"), 100), Some(96));
+        assert_eq!(parse_length(Some("6pc"), 100), Some(96));
+        assert_eq!(parse_length(Some("0"), 100), Some(0));
+        assert_eq!(parse_length(Some("-1pt"), 100), None);
+    }
+
+    #[test]
+    fn calc_accepts_mixed_absolute_css_units_and_percentages() {
+        assert_eq!(parse_length(Some("calc(1in - 72pt)"), 100), Some(0));
+        assert_eq!(parse_length(Some("calc(1in + 12.5%)"), 160), Some(116));
+        assert_eq!(parse_length(Some("calc(2.54cm + 6pc)"), 100), Some(192));
+    }
+
+    #[test]
     fn line_height_accepts_fractional_percentages_and_pixels() {
         assert_eq!(parse_line_height(Some("125.5%"), 16), Some(20));
         assert_eq!(parse_line_height(Some("12.5px"), 16), Some(13));
@@ -2495,7 +2514,9 @@ fn parse_border_width(value: Option<&str>) -> Option<u32> {
 
 fn parse_length(value: Option<&str>, containing_width: u32) -> Option<u32> {
     let value = value?.trim();
-    if value.len() >= 6 && value[..5].eq_ignore_ascii_case("calc(") && value.ends_with(')') {
+    if value.get(..5).is_some_and(|prefix| prefix.eq_ignore_ascii_case("calc("))
+        && value.ends_with(')')
+    {
         return parse_calc_length(&value[5..value.len() - 1], containing_width);
     }
     if let Some(percent) = value.strip_suffix('%') {
@@ -2509,7 +2530,48 @@ fn parse_length(value: Option<&str>, containing_width: u32) -> Option<u32> {
         }
         return Some(result.floor() as u32);
     }
-    parse_px(Some(value))
+    let pixels = parse_absolute_length(value)?;
+    if pixels < 0.0 || pixels > f64::from(u32::MAX) {
+        return None;
+    }
+    Some(pixels.floor() as u32)
+}
+
+// CSS absolute units use the standard 96 CSS pixels per inch.
+// Relative units need font or viewport context and are handled elsewhere.
+fn parse_absolute_length(value: &str) -> Option<f64> {
+    let value = value.trim();
+    if matches!(value, "0" | "+0" | "-0" | "0.0") {
+        return Some(0.0);
+    }
+
+    let units = [
+        ("px", 1.0),
+        ("in", 96.0),
+        ("cm", 96.0 / 2.54),
+        ("mm", 96.0 / 25.4),
+        ("q", 96.0 / 101.6),
+        ("pt", 96.0 / 72.0),
+        ("pc", 16.0),
+    ];
+    for (unit, factor) in units {
+        if value.len() <= unit.len() {
+            continue;
+        }
+        let split = value.len() - unit.len();
+        let Some(suffix) = value.get(split..) else {
+            continue;
+        };
+        if !suffix.eq_ignore_ascii_case(unit) {
+            continue;
+        }
+        let number = value.get(..split)?.trim().parse::<f64>().ok()?;
+        if !number.is_finite() {
+            return None;
+        }
+        return Some(number * factor);
+    }
+    None
 }
 
 fn parse_calc_length(expression: &str, containing_width: u32) -> Option<u32> {
@@ -2552,18 +2614,7 @@ fn parse_calc_length(expression: &str, containing_width: u32) -> Option<u32> {
             }
             f64::from(containing_width) * percent / 100.0
         } else {
-            let px = term.get(..term.len().checked_sub(2)?)?;
-            if !term
-                .get(term.len().checked_sub(2)?..)?
-                .eq_ignore_ascii_case("px")
-            {
-                return None;
-            }
-            let px = px.parse::<f64>().ok()?;
-            if !px.is_finite() {
-                return None;
-            }
-            px
+            parse_absolute_length(term)?
         };
 
         total = if add { total + value } else { total - value };
