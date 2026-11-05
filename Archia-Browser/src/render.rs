@@ -884,8 +884,9 @@ fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayL
             .get(&side_style)
             .or_else(|| style.get("border-style"))
             .map(str::trim)
-            .unwrap_or("none");
-        if matches!(border_style, "none" | "hidden") {
+            .unwrap_or("none")
+            .to_ascii_lowercase();
+        if matches!(border_style.as_str(), "none" | "hidden") {
             continue;
         }
 
@@ -901,7 +902,7 @@ fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayL
         paint_border_edge(
             rect,
             horizontal,
-            border_style,
+            &border_style,
             apply_opacity(color, opacity),
             list,
         );
@@ -1132,6 +1133,19 @@ mod tests {
                 "border style: {style}"
             );
         }
+    }
+
+    #[test]
+    fn border_style_keywords_are_ascii_case_insensitive() {
+        let mut list = DisplayList::new();
+        paint_border_edge(
+            Rect::new(0, 0, 30, 2),
+            true,
+            "DASHED",
+            0xff0000ff,
+            &mut list,
+        );
+        assert_eq!(list.commands().len(), 3);
     }
 
     #[test]
