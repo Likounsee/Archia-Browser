@@ -947,7 +947,8 @@ fn paint_border_edge(rect: Rect, border_style: &str, color: u32, list: &mut Disp
             if horizontal {
                 for y in [
                     rect.y,
-                    rect.y.saturating_add((stripe + middle_gap).min(i32::MAX as u32) as i32),
+                    rect.y
+                        .saturating_add((stripe + middle_gap).min(i32::MAX as u32) as i32),
                 ] {
                     list.push(PaintCommand::FillRect {
                         rect: Rect::new(rect.x, y, rect.width, stripe),
@@ -957,7 +958,8 @@ fn paint_border_edge(rect: Rect, border_style: &str, color: u32, list: &mut Disp
             } else {
                 for x in [
                     rect.x,
-                    rect.x.saturating_add((stripe + middle_gap).min(i32::MAX as u32) as i32),
+                    rect.x
+                        .saturating_add((stripe + middle_gap).min(i32::MAX as u32) as i32),
                 ] {
                     list.push(PaintCommand::FillRect {
                         rect: Rect::new(x, rect.y, stripe, rect.height),
@@ -1102,12 +1104,7 @@ mod tests {
             ("double", 2, 6),
         ] {
             let mut list = DisplayList::new();
-            paint_border_edge(
-                Rect::new(0, 0, 30, thickness),
-                style,
-                0xff0000ff,
-                &mut list,
-            );
+            paint_border_edge(Rect::new(0, 0, 30, thickness), style, 0xff0000ff, &mut list);
             assert_eq!(
                 list.commands().len(),
                 expected_commands,
@@ -1119,12 +1116,7 @@ mod tests {
     #[test]
     fn vertical_dashed_borders_follow_the_edge_orientation() {
         let mut list = DisplayList::new();
-        paint_border_edge(
-            Rect::new(4, 10, 2, 30),
-            "dashed",
-            0x0000ffff,
-            &mut list,
-        );
+        paint_border_edge(Rect::new(4, 10, 2, 30), "dashed", 0x0000ffff, &mut list);
 
         let segments = list
             .commands()
@@ -1164,9 +1156,9 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        assert!(commands.iter().any(|(rect, color)| {
-            rect.height == 2 && rect.width < 30 && *color == 0xff0000ff
-        }));
+        assert!(commands
+            .iter()
+            .any(|(rect, color)| { rect.height == 2 && rect.width < 30 && *color == 0xff0000ff }));
         assert!(commands
             .iter()
             .any(|(rect, color)| rect.width == 2 && *color == 0x0000ffff));
