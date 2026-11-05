@@ -1068,7 +1068,7 @@ impl<'a> Iterator for Descendants<'a> {
 }
 
 mod tests {
-    use super::NodeKind;
+    use super::{Node, NodeKind};
     #[test]
     fn inner_html_setter_replaces_children_and_parses_markup() {
         let mut root = Node::element("div");
