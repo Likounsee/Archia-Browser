@@ -716,6 +716,25 @@ fn supports_declaration(name: &str, value: &str) -> bool {
                     .count()
                     <= 1
         }
+        "border-style"
+        | "border-top-style"
+        | "border-right-style"
+        | "border-bottom-style"
+        | "border-left-style"
+        | "border-block-start-style"
+        | "border-block-end-style"
+        | "border-inline-start-style"
+        | "border-inline-end-style" => {
+            let values = value.split_whitespace().collect::<Vec<_>>();
+            (1..=4).contains(&values.len())
+                && values.iter().all(|value| is_border_style_keyword(value))
+        }
+        "border" | "border-top" | "border-right" | "border-bottom" | "border-left"
+        | "border-block" | "border-block-start" | "border-block-end" | "border-inline"
+        | "border-inline-start" | "border-inline-end" | "outline" => {
+            expand_border_shorthand(&value)
+                .is_some_and(|(_, style, _)| is_border_style_keyword(&style))
+        }
         "visibility" => matches!(value.as_str(), "visible" | "hidden" | "collapse"),
         "aspect-ratio" => value == "auto" || parse_supported_aspect_ratio(&value),
         _ => true,
@@ -1614,6 +1633,14 @@ fn initial_value(name: &str) -> &'static str {
         "object-position" => "50% 50%",
         _ => "initial",
     }
+}
+
+fn is_border_style_keyword(value: &str) -> bool {
+    matches!(
+        value.to_ascii_lowercase().as_str(),
+        "none" | "hidden" | "dotted" | "dashed" | "solid" | "double" | "groove" | "ridge"
+            | "inset" | "outset"
+    )
 }
 
 fn expand_border_shorthand(value: &str) -> Option<(String, String, String)> {
@@ -3043,6 +3070,22 @@ mod tests {
             let mut node = Node::element("div");
             node.set_attribute("class", class);
             assert_eq!(sheet.compute_style(&node).get(property), Some(expected));
+        }
+    }
+
+    #[test]
+    fn supports_rules_reject_invalid_border_style_keywords() {
+        let css = "@supports (border-style: dashed) { .valid { border-style: dashed; } } @supports (border-style: imaginary) { .invalid { border-style: solid; } } @supports (border-left-style: DOUBLE) { .case { border-left-style: DOUBLE; } } @supports (border: 2px imaginary red) { .shorthand { border: 2px solid red; } }";
+        let sheet = StyleSheet::parse(css);
+        for (class, property, expected) in [
+            ("valid", "border-style", Some("dashed")),
+            ("invalid", "border-style", None),
+            ("case", "border-left-style", Some("DOUBLE")),
+            ("shorthand", "border-style", None),
+        ] {
+            let mut node = Node::element("div");
+            node.set_attribute("class", class);
+            assert_eq!(sheet.compute_style(&node).get(property), expected);
         }
     }
 
