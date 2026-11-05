@@ -1107,19 +1107,17 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
             }
         }
         "border-radius" => {
-            if !value.contains('/') {
-                if let Some(values) = expand_box_shorthand(&name, &value) {
-                    apply(name.clone(), value.clone());
-                    for (property, property_value) in [
-                        ("border-top-left-radius", values[0].clone()),
-                        ("border-top-right-radius", values[1].clone()),
-                        ("border-bottom-right-radius", values[2].clone()),
-                        ("border-bottom-left-radius", values[3].clone()),
-                    ] {
-                        apply(property.to_owned(), property_value);
-                    }
-                    return;
+            if let Some(values) = expand_border_radius(&value) {
+                apply(name.clone(), value.clone());
+                for (property, property_value) in [
+                    ("border-top-left-radius", values[0].clone()),
+                    ("border-top-right-radius", values[1].clone()),
+                    ("border-bottom-right-radius", values[2].clone()),
+                    ("border-bottom-left-radius", values[3].clone()),
+                ] {
+                    apply(property.to_owned(), property_value);
                 }
+                return;
             }
         }
         "border" => {
@@ -1553,6 +1551,25 @@ fn expand_pair_shorthand(value: &str) -> Option<[String; 2]> {
     Some([first.to_owned(), second.to_owned()])
 }
 
+fn expand_border_radius(value: &str) -> Option<[String; 4]> {
+    let mut halves = value.split('/');
+    let horizontal = expand_box_shorthand("border-radius", halves.next()?.trim())?;
+    let vertical = match halves.next() {
+        Some(value) => expand_box_shorthand("border-radius", value.trim())?,
+        None => horizontal.clone(),
+    };
+    if halves.next().is_some() {
+        return None;
+    }
+    Some(std::array::from_fn(|index| {
+        if horizontal[index] == vertical[index] {
+            horizontal[index].clone()
+        } else {
+            format!("{} {}", horizontal[index], vertical[index])
+        }
+    }))
+}
+
 fn expand_box_shorthand(_name: &str, value: &str) -> Option<[String; 4]> {
     let values = value
         .split_whitespace()
@@ -1838,6 +1855,22 @@ mod tests {
                 assert_eq!(computed.get(property), Some(value), "{tag} {property}");
             }
         }
+    }
+
+    #[test]
+    fn border_radius_shorthand_supports_elliptical_slash_values() {
+        let sheet = StyleSheet::parse(
+            "div { border-radius: 10px / 20px; } span { border-radius: 1px 2px / 3px 4px; }",
+        );
+        let div = sheet.compute_style(&Node::element("div"));
+        assert_eq!(div.get("border-top-left-radius"), Some("10px 20px"));
+        assert_eq!(div.get("border-bottom-right-radius"), Some("10px 20px"));
+
+        let span = sheet.compute_style(&Node::element("span"));
+        assert_eq!(span.get("border-top-left-radius"), Some("1px 3px"));
+        assert_eq!(span.get("border-top-right-radius"), Some("2px 4px"));
+        assert_eq!(span.get("border-bottom-right-radius"), Some("1px 3px"));
+        assert_eq!(span.get("border-bottom-left-radius"), Some("2px 4px"));
     }
 
     #[test]
