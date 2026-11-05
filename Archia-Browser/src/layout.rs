@@ -2386,6 +2386,12 @@ mod whitespace_layout_tests {
     }
 
     #[test]
+    fn calc_remains_available_alongside_min_max_and_clamp() {
+        assert_eq!(parse_length(Some("calc(10px + 5px)"), 100), Some(15));
+        assert_eq!(parse_length(Some("calc(50% - 10px)"), 100), Some(40));
+    }
+
+    #[test]
     fn min_max_and_clamp_lengths_resolve_against_containing_width() {
         assert_eq!(parse_length(Some("min(50%, 120px)"), 300), Some(120));
         assert_eq!(parse_length(Some("max(50%, 120px)"), 300), Some(150));
@@ -2554,17 +2560,21 @@ fn parse_length_inner(value: &str, containing_width: u32, depth: usize) -> Optio
     }
     let value = value.trim();
     if let Some((name, arguments)) = parse_css_math_function(value) {
-        let arguments = split_css_math_arguments(arguments)?;
-        let values = arguments
-            .iter()
-            .map(|argument| parse_length_inner(argument, containing_width, depth + 1))
-            .collect::<Option<Vec<_>>>()?;
-        return match name.to_ascii_lowercase().as_str() {
-            "min" if !values.is_empty() => values.into_iter().min(),
-            "max" if !values.is_empty() => values.into_iter().max(),
-            "clamp" if values.len() == 3 => Some(values[0].max(values[1].min(values[2]))),
-            _ => None,
-        };
+        if matches!(name.to_ascii_lowercase().as_str(), "min" | "max" | "clamp") {
+            let arguments = split_css_math_arguments(arguments)?;
+            let values = arguments
+                .iter()
+                .map(|argument| parse_length_inner(argument, containing_width, depth + 1))
+                .collect::<Option<Vec<_>>>()?;
+            return match name.to_ascii_lowercase().as_str() {
+                "min" if !values.is_empty() => values.into_iter().min(),
+                "max" if !values.is_empty() => values.into_iter().max(),
+                "clamp" if values.len() == 3 => {
+                    Some(values[0].max(values[1].min(values[2])))
+                }
+                _ => None,
+            };
+        }
     }
     if value
         .get(..5)
