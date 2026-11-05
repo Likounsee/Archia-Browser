@@ -595,12 +595,25 @@ impl Node {
 }
 
 
+ 
 /// HTML void elements cannot have serialized end tags or children.
 fn is_void_html_element(name: &str) -> bool {
     matches!(
         name,
-        "area" | "base" | "br" | "col" | "embed" | "hr" | "img" | "input"
-            | "link" | "meta" | "param" | "source" | "track" | "wbr"
+        "area"
+            | "base"
+            | "br"
+            | "col"
+            | "embed"
+            | "hr"
+            | "img"
+            | "input"
+            | "link"
+            | "meta"
+            | "param"
+            | "source"
+            | "track"
+            | "wbr"
     )
 }
 
@@ -634,7 +647,12 @@ fn serialize_html(root: &Node, output: &mut String) {
             }
             Entry::Node(node, raw_text) => match &node.kind {
                 NodeKind::Document => {
-                    stack.extend(node.children.iter().rev().map(|child| Entry::Node(child, false)));
+                    stack.extend(
+                        node.children
+                            .iter()
+                            .rev()
+                            .map(|child| Entry::Node(child, false)),
+                    );
                 }
                 NodeKind::Text(value) => {
                     if raw_text {
