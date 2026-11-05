@@ -463,6 +463,39 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                         }) {
                             close_element(&mut root, &mut stack, name);
                         }
+                    } else if is_formatting_element(name) {
+                        // Recover the common mis-nested formatting case handled by
+                        // the HTML adoption-agency algorithm. When a formatting
+                        // element is closed while only formatting descendants are
+                        // open, close the original subtree and reopen shallow
+                        // copies of those descendants at the current insertion
+                        // point (for example: <b><i>one</b>two</i>).
+                        let matching_position =
+                            stack.iter().rposition(|node| node.tag_name() == Some(name.as_str()));
+                        let mut reopen = Vec::new();
+                        let can_reopen = matching_position.is_some_and(|position| {
+                            stack[position + 1..]
+                                .iter()
+                                .all(|node| node.tag_name().is_some_and(is_formatting_element))
+                        });
+                        if can_reopen {
+                            let position = matching_position.unwrap_or(stack.len());
+                            if reopen.try_reserve(stack.len() - position - 1).is_ok()
+                                && stack.try_reserve(stack.len() - position - 1).is_ok()
+                            {
+                                reopen.extend(
+                                    stack[position + 1..]
+                                        .iter()
+                                        .map(Node::shallow_clone),
+                                );
+                                close_element(&mut root, &mut stack, name);
+                                stack.extend(reopen);
+                            } else {
+                                close_element(&mut root, &mut stack, name);
+                            }
+                        } else {
+                            close_element(&mut root, &mut stack, name);
+                        }
                     } else {
                         close_element(&mut root, &mut stack, name);
                     }
@@ -568,6 +601,14 @@ fn implied_end_tags_for_start(name: &str) -> &'static [&'static str] {
 
 fn is_block_closing_p(name: &str) -> bool {
     BLOCK_CLOSES_P.contains(&name)
+}
+
+fn is_formatting_element(name: &str) -> bool {
+    matches!(
+        name,
+        "a" | "b" | "big" | "code" | "em" | "font" | "i" | "s" | "small"
+            | "strike" | "strong" | "tt" | "u"
+    )
 }
 
 fn close_element(root: &mut Node, stack: &mut Vec<Node>, name: &str) {
@@ -776,6 +817,39 @@ fn normalize_document_structure(mut root: Node) -> Node {
 mod tests {
     use super::*;
     use crate::html::tokenizer::HtmlTokenizer;
+
+    #[test]
+    fn misnested_formatting_elements_reopen_formatting_descendants() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<p><b><i>one</b>two</i>three</p>",
+        ));
+        let paragraph = root.find_first_element("p").expect("paragraph");
+        let italic_nodes = paragraph
+            .descendants()
+            .filter(|node| node.tag_name() == Some("i"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(italic_nodes.len(), 2);
+        assert_eq!(italic_nodes[0].text_content(), "one");
+        assert_eq!(italic_nodes[1].text_content(), "two");
+        assert_eq!(paragraph.text_content(), "onetwothree");
+    }
+
+    #[test]
+    fn misnested_formatting_reopening_preserves_attributes() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<p><b><i class='accent'>one</b>two</i></p>",
+        ));
+        let italic_nodes = root
+            .find_first_element("p")
+            .expect("paragraph")
+            .descendants()
+            .filter(|node| node.tag_name() == Some("i"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(italic_nodes.len(), 2);
+        assert_eq!(italic_nodes[1].attribute("class"), Some("accent"));
+    }
 
     #[test]
     fn head_metadata_without_explicit_head_is_normalized_into_head() {
