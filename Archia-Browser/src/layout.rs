@@ -977,6 +977,16 @@ fn layout_grid_children(
             resolve_grid_track_sizes(&row_tracks, containing_height, row_gap)
         })
         .unwrap_or_default();
+    let implicit_row_height = node
+        .style
+        .get("grid-auto-rows")
+        .and_then(|value| parse_grid_track(value, containing_height))
+        .and_then(|track| match track {
+            GridTrack::Auto => None,
+            track => resolve_grid_track_sizes(&[track], containing_height, 0)
+                .first()
+                .copied(),
+        });
     let columns = widths.len().max(1);
     let mut laid_out = Vec::with_capacity(node.children.len());
     laid_out.resize_with(node.children.len(), || None);
@@ -1027,7 +1037,10 @@ fn layout_grid_children(
     for row_start in (0..grid_items.len()).step_by(columns) {
         let row_end = (row_start + columns).min(grid_items.len());
         let row_index = row_start / columns;
-        let explicit_row_height = row_heights.get(row_index).copied();
+        let explicit_row_height = row_heights
+            .get(row_index)
+            .copied()
+            .or(implicit_row_height);
         let mut row_height = explicit_row_height.unwrap_or(0);
         let mut column_left = 0_u32;
 
@@ -4874,6 +4887,29 @@ mod tests {
         assert_eq!(layout.children[2].rect.height, 70);
         assert_eq!(layout.children[3].rect.height, 70);
         assert_eq!(layout.rect.height, 120);
+    }
+
+    #[test]
+    fn grid_layout_applies_grid_auto_rows_to_implicit_rows() {
+        let mut root = Node::element("section");
+        root.set_attribute(
+            "style",
+            "display: grid; width: 200px; grid-template-columns: 1fr 1fr; grid-template-rows: 20px; grid-auto-rows: 35px; row-gap: 5px;",
+        );
+        for _ in 0..4 {
+            root.append(Node::element("div"));
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 120));
+
+        assert_eq!(layout.children[0].rect.height, 20);
+        assert_eq!(layout.children[1].rect.height, 20);
+        assert_eq!(layout.children[2].rect.y, 25);
+        assert_eq!(layout.children[2].rect.height, 35);
+        assert_eq!(layout.children[3].rect.height, 35);
+        assert_eq!(layout.rect.height, 65);
     }
 
     #[test]
