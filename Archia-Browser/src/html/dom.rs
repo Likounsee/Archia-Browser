@@ -184,6 +184,16 @@ impl Node {
         }
     }
 
+    /// DOM-style alias for retrieving an element attribute.
+    pub fn get_attribute(&self, name: &str) -> Option<&str> {
+        self.attribute(name)
+    }
+
+    /// Number of attributes on this element; non-elements report zero.
+    pub fn attribute_count(&self) -> usize {
+        self.attributes().map_or(0, BTreeMap::len)
+    }
+
     pub fn set_attribute(&mut self, name: impl Into<String>, value: impl Into<String>) {
         if let NodeKind::Element { attributes, .. } = &mut self.kind {
             attributes.insert(name.into().to_ascii_lowercase(), value.into());
@@ -355,6 +365,12 @@ impl Node {
         Descendants {
             stack: self.children.iter().rev().collect(),
         }
+    }
+
+    /// Test node identity, including the receiver itself, as required by
+    /// the DOM Node.contains() contract.
+    pub fn contains(&self, other: &Node) -> bool {
+        std::ptr::eq(self, other) || self.descendants().any(|node| std::ptr::eq(node, other))
     }
 
     /// Find the first descendant element with the requested tag name.
@@ -579,6 +595,37 @@ impl<'a> Iterator for Descendants<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn contains_uses_node_identity_and_includes_the_receiver() {
+        let mut root = Node::element("main");
+        let mut section = Node::element("section");
+        section.append(Node::text("inside"));
+        root.append(section);
+        let child = root.child(0).expect("section");
+        let text = child.child(0).expect("text");
+        let unrelated = Node::element("section");
+
+        assert!(root.contains(&root));
+        assert!(root.contains(child));
+        assert!(root.contains(text));
+        assert!(!child.contains(&root));
+        assert!(!root.contains(&unrelated));
+    }
+
+    #[test]
+    fn attribute_alias_and_count_follow_element_attributes() {
+        let mut element = Node::element("div");
+        assert_eq!(element.attribute_count(), 0);
+        assert_eq!(element.get_attribute("id"), None);
+        element.set_attribute("ID", "root");
+        element.set_attribute("class", "main");
+        assert_eq!(element.get_attribute("id"), Some("root"));
+        assert_eq!(element.attribute_count(), 2);
+        element.remove_attribute("class");
+        assert_eq!(element.attribute_count(), 1);
+        assert_eq!(Node::text("text").attribute_count(), 0);
+    }
 
     #[test]
     fn node_metadata_matches_dom_node_types_and_names() {
