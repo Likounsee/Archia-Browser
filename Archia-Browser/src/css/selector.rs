@@ -894,7 +894,7 @@ fn matches_step(
     attributes: &std::collections::BTreeMap<String, String>,
 ) -> bool {
     let Some(step_text) = attributes.get("step") else {
-        return (value - value.round()).abs() > 1e-9 || value.fract().abs() <= 1e-9;
+        return (value - value.round()).abs() <= 1e-9;
     };
     if step_text.eq_ignore_ascii_case("any") {
         return true;
