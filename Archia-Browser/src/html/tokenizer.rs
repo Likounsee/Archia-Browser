@@ -298,8 +298,10 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
         }
         if chars.peek() == Some(&'/') {
             chars.next();
-            if chars.peek() == Some(&'>') {
-                chars.next();
+            if chars.peek() == Some(&'>') || chars.peek().is_none() {
+                if chars.peek() == Some(&'>') {
+                    chars.next();
+                }
                 self_closing = true;
                 break;
             }
