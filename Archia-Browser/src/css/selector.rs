@@ -774,6 +774,67 @@ fn is_read_write_element(
     }
 }
 
+fn is_form_control(node: &Node) -> bool {
+    matches!(node.tag_name(), Some("input" | "textarea" | "select"))
+}
+
+fn is_form_control_valid(
+    node: &Node,
+    attributes: &std::collections::BTreeMap<String, String>,
+) -> bool {
+    let tag = node.tag_name().unwrap_or_default();
+    let input_type = attributes
+        .get("type")
+        .map(|value| value.to_ascii_lowercase())
+        .unwrap_or_else(|| "text".to_owned());
+    if tag == "input"
+        && matches!(input_type.as_str(), "hidden" | "button" | "submit" | "reset" | "image")
+    {
+        return true;
+    }
+    if attributes.contains_key("required") {
+        let value = attributes.get("value").map(String::as_str).unwrap_or("");
+        let missing = match tag {
+            "select" => node.children.iter().find(|child| child.tag_name() == Some("option"))
+                .is_some_and(|option| option.has_attribute("selected")
+                    && option.attribute("value").unwrap_or("").is_empty()
+                    && option.text_content().trim().is_empty()),
+            "textarea" => node.text_content().is_empty(),
+            _ => value.is_empty(),
+        };
+        if missing { return false; }
+    }
+    let value = attributes.get("value").map(String::as_str).unwrap_or("");
+    match input_type.as_str() {
+        "email" if !value.is_empty() => {
+            let Some((local, domain)) = value.split_once('@') else { return false; };
+            !local.is_empty() && domain.contains('.') && !domain.starts_with('.')
+                && !domain.ends_with('.') && !value.chars().any(char::is_whitespace)
+        }
+        "url" if !value.is_empty() => value.starts_with("http://") || value.starts_with("https://"),
+        "number" | "range" if !value.is_empty() => value.parse::<f64>().is_ok_and(f64::is_finite),
+        _ => true,
+    }
+}
+
+fn numeric_range_state(
+    node: &Node,
+    attributes: &std::collections::BTreeMap<String, String>,
+) -> Option<bool> {
+    if node.tag_name() != Some("input") { return None; }
+    let input_type = attributes.get("type")?.to_ascii_lowercase();
+    if !matches!(input_type.as_str(), "number" | "range") { return None; }
+    let value = attributes.get("value")?.parse::<f64>().ok()?;
+    if !value.is_finite() { return None; }
+    if let Some(minimum) = attributes.get("min").and_then(|v| v.parse::<f64>().ok()) {
+        if value < minimum { return Some(false); }
+    }
+    if let Some(maximum) = attributes.get("max").and_then(|v| v.parse::<f64>().ok()) {
+        if value > maximum { return Some(false); }
+    }
+    Some(true)
+}
+
 fn matches_language(pseudo: &str, attributes: &std::collections::BTreeMap<String, String>) -> bool {
     let Some(argument) = pseudo_argument(pseudo, "lang") else {
         return false;
@@ -892,6 +953,10 @@ fn matches_pseudo_class(
         "optional" => {
             is_required_capable_element(node, attributes) && !attributes.contains_key("required")
         }
+        "valid" => is_form_control(node) && is_form_control_valid(node, attributes),
+        "invalid" => is_form_control(node) && !is_form_control_valid(node, attributes),
+        "in-range" => numeric_range_state(node, attributes) == Some(true),
+        "out-of-range" => numeric_range_state(node, attributes) == Some(false),
         "read-only" => !is_read_write_element(node, attributes, ancestors),
         "read-write" => is_read_write_element(node, attributes, ancestors),
         "placeholder-shown" => {
@@ -1637,6 +1702,32 @@ mod tests {
         assert!(Selector::parse("input:checked:disabled")
             .unwrap()
             .matches(&checked));
+    }
+
+    #[test]
+    fn form_validity_and_numeric_range_pseudo_classes_are_evaluated() {
+        let mut required = Node::element("input");
+        required.set_attribute("required", "");
+        required.set_attribute("value", "");
+        assert!(Selector::parse("input:invalid").unwrap().matches(&required));
+        required.set_attribute("value", "filled");
+        assert!(Selector::parse("input:valid").unwrap().matches(&required));
+
+        let mut email = Node::element("input");
+        email.set_attribute("type", "email");
+        email.set_attribute("value", "not-an-email");
+        assert!(Selector::parse("input:invalid").unwrap().matches(&email));
+        email.set_attribute("value", "user@example.com");
+        assert!(Selector::parse("input:valid").unwrap().matches(&email));
+
+        let mut number = Node::element("input");
+        number.set_attribute("type", "number");
+        number.set_attribute("min", "1");
+        number.set_attribute("max", "10");
+        number.set_attribute("value", "12");
+        assert!(Selector::parse("input:out-of-range").unwrap().matches(&number));
+        number.set_attribute("value", "5");
+        assert!(Selector::parse("input:in-range").unwrap().matches(&number));
     }
 
     #[test]
