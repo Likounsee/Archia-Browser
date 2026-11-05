@@ -1781,7 +1781,11 @@ mod tests {
 
         let html = root.outer_html();
         assert!(html.starts_with("<div><span><span>"));
-        assert!(html.ends_with("end</span></span></div>"));
+        assert!(
+            html.ends_with("end</span></span></div>"),
+            "serialized suffix: {:?}",
+            &html[html.len().saturating_sub(96)..]
+        );
         assert_eq!(html.matches("<span>").count(), 2_000);
     }
 
