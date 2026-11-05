@@ -1432,7 +1432,7 @@ fn layout_grid_children(
                 .unwrap_or_else(|| "stretch".to_owned());
             let mut grid_child = child.clone();
             let mut justify_offset = 0_u32;
-            if is_auto_dimension(grid_child.style.get("width")) {
+            if is_auto_or_unspecified_dimension(grid_child.style.get("width")) {
                 if matches!(
                     justify_self.as_str(),
                     "start" | "self-start" | "end" | "self-end" | "center"
@@ -1475,7 +1475,7 @@ fn layout_grid_children(
                     .saturating_add(row_gap.saturating_mul(item_row_span.saturating_sub(1) as u32))
                     .max(row_height);
                 let content_cell_height = area_height.saturating_sub(child_box.vertical_outer());
-                if is_auto_dimension(grid_child.style.get("height")) {
+                if is_auto_or_unspecified_dimension(grid_child.style.get("height")) {
                     if matches!(
                         align_self.as_str(),
                         "start" | "self-start" | "end" | "self-end" | "center"
@@ -3059,6 +3059,10 @@ fn box_model_from_style(style: &ComputedStyle, containing_width: u32) -> BoxMode
 }
 
 fn is_auto_dimension(value: Option<&str>) -> bool {
+    value.is_some_and(|value| value.trim().eq_ignore_ascii_case("auto"))
+}
+
+fn is_auto_or_unspecified_dimension(value: Option<&str>) -> bool {
     value.map_or(true, |value| value.trim().eq_ignore_ascii_case("auto"))
 }
 
