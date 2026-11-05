@@ -1005,7 +1005,7 @@ fn find_var_function(value: &str) -> Option<(usize, usize, usize, Option<usize>)
             index += 1;
             continue;
         }
-        if byte == b'\\'' || byte == b'"' {
+        if byte == b'\'' || byte == b'"' {
             quote = Some(byte);
             index += 1;
             continue;
@@ -1045,7 +1045,7 @@ fn find_var_function(value: &str) -> Option<(usize, usize, usize, Option<usize>)
             }
             continue;
         }
-        if byte == b'\\'' || byte == b'"' {
+        if byte == b'\'' || byte == b'"' {
             quote = Some(byte);
             continue;
         }
