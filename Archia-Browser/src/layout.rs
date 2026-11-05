@@ -953,7 +953,7 @@ fn layout_grid_children(
     content_origin_x: i32,
     content_origin_y: i32,
     content_width: u32,
-    _containing_height: u32,
+    containing_height: u32,
     viewport_width: u32,
     viewport_height: u32,
     abs_origin_x: i32,
@@ -969,6 +969,8 @@ fn layout_grid_children(
         .unwrap_or(0);
     let tracks = parse_grid_tracks(node.style.get("grid-template-columns"), content_width);
     let widths = resolve_grid_track_sizes(&tracks, content_width, column_gap);
+    let row_tracks = parse_grid_tracks(node.style.get("grid-template-rows"), containing_height);
+    let row_heights = resolve_grid_track_sizes(&row_tracks, containing_height, row_gap);
     let columns = widths.len().max(1);
     let mut laid_out = Vec::with_capacity(node.children.len());
     laid_out.resize_with(node.children.len(), || None);
@@ -976,7 +978,9 @@ fn layout_grid_children(
 
     for row_start in (0..node.children.len()).step_by(columns) {
         let row_end = (row_start + columns).min(node.children.len());
-        let mut row_height = 0_u32;
+        let row_index = row_start / columns;
+        let explicit_row_height = row_heights.get(row_index).copied();
+        let mut row_height = explicit_row_height.unwrap_or(0);
         let mut column_left = 0_u32;
 
         for child_index in row_start..row_end {
@@ -1035,6 +1039,14 @@ fn layout_grid_children(
                 grid_child
                     .style
                     .set("width", format!("{content_cell_width}px"));
+            }
+            if let Some(row_height) = explicit_row_height {
+                let content_cell_height = row_height.saturating_sub(child_box.vertical_outer());
+                if is_auto_dimension(grid_child.style.get("height")) {
+                    grid_child
+                        .style
+                        .set("height", format!("{content_cell_height}px"));
+                }
             }
             let child_layout = layout_styled_node(
                 &grid_child,
@@ -4788,6 +4800,30 @@ mod tests {
         assert_eq!(layout.children[0].rect.width, 93);
         assert_eq!(layout.children[2].rect.width, 94);
         assert_eq!(layout.rect.height, 50);
+    }
+
+    #[test]
+    fn grid_layout_applies_explicit_row_tracks_and_stretches_auto_items() {
+        let mut root = Node::element("section");
+        root.set_attribute(
+            "style",
+            "display: grid; width: 200px; height: 120px; grid-template-columns: 1fr 1fr; grid-template-rows: 40px 1fr; gap: 10px;",
+        );
+        for _ in 0..4 {
+            root.append(Node::element("div"));
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 120));
+
+        assert_eq!(layout.children.len(), 4);
+        assert_eq!(layout.children[0].rect.height, 40);
+        assert_eq!(layout.children[1].rect.height, 40);
+        assert_eq!(layout.children[2].rect.y, 50);
+        assert_eq!(layout.children[2].rect.height, 70);
+        assert_eq!(layout.children[3].rect.height, 70);
+        assert_eq!(layout.rect.height, 120);
     }
 
     #[test]
