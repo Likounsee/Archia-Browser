@@ -853,7 +853,10 @@ fn parse_grid_row_span(value: Option<&str>, start: usize, rows: usize) -> usize 
         .split_once('/')
         .map_or(value.trim(), |(_, end)| end.trim());
     let mut parts = end.split_whitespace();
-    if parts.next().is_some_and(|part| part.eq_ignore_ascii_case("span")) {
+    if parts
+        .next()
+        .is_some_and(|part| part.eq_ignore_ascii_case("span"))
+    {
         return parts
             .next()
             .and_then(|span| span.parse::<usize>().ok())
@@ -1066,7 +1069,9 @@ fn layout_grid_children(
     // Grow the implicit column axis for column auto-flow. Explicit tracks keep
     // their resolved sizes; new tracks use grid-auto-columns (or intrinsic auto).
     let flow_column = node.style.get("grid-auto-flow").is_some_and(|value| {
-        value.split_whitespace().any(|part| part.eq_ignore_ascii_case("column"))
+        value
+            .split_whitespace()
+            .any(|part| part.eq_ignore_ascii_case("column"))
     });
     if flow_column && !row_heights.is_empty() {
         let in_flow_count = node
@@ -1267,13 +1272,17 @@ fn layout_grid_children(
     let flow_tokens: Vec<String> = node
         .style
         .get("grid-auto-flow")
-        .map(|value| value.split_whitespace().map(str::to_ascii_lowercase).collect())
+        .map(|value| {
+            value
+                .split_whitespace()
+                .map(str::to_ascii_lowercase)
+                .collect()
+        })
         .unwrap_or_default();
     let dense = flow_tokens.iter().any(|part| part == "dense");
     // Column flow is supported when explicit row tracks define the scan height.
     // Without explicit rows, retain row flow until implicit-column sizing exists.
-    let column_flow = flow_tokens.iter().any(|part| part == "column")
-        && !row_heights.is_empty();
+    let column_flow = flow_tokens.iter().any(|part| part == "column") && !row_heights.is_empty();
     let scan_rows = row_heights.len().max(1);
     let mut cursor = 0_usize;
     for &child_index in &grid_items {
@@ -1451,17 +1460,15 @@ fn layout_grid_children(
                 .unwrap_or_else(|| "stretch".to_owned());
             let mut align_offset = 0_u32;
             if let Some(row_height) = explicit_row_height {
-                let item_row_span = row_spans[child_index]
-                    .min(row_heights.len().saturating_sub(row_index).max(1));
+                let item_row_span =
+                    row_spans[child_index].min(row_heights.len().saturating_sub(row_index).max(1));
                 let area_height = row_heights
                     .iter()
                     .skip(row_index)
                     .take(item_row_span)
                     .copied()
                     .fold(0_u32, u32::saturating_add)
-                    .saturating_add(
-                        row_gap.saturating_mul(item_row_span.saturating_sub(1) as u32),
-                    )
+                    .saturating_add(row_gap.saturating_mul(item_row_span.saturating_sub(1) as u32))
                     .max(row_height);
                 let content_cell_height = area_height.saturating_sub(child_box.vertical_outer());
                 if is_auto_dimension(grid_child.style.get("height")) {
@@ -5235,10 +5242,7 @@ mod tests {
 
     #[test]
     fn grid_auto_repeat_fills_available_width_with_minmax_tracks() {
-        let tracks = parse_grid_tracks(
-            Some("repeat(auto-fit, minmax(100px, 1fr))"),
-            350,
-        );
+        let tracks = parse_grid_tracks(Some("repeat(auto-fit, minmax(100px, 1fr))"), 350);
         assert_eq!(tracks.len(), 3);
         let widths = resolve_grid_track_sizes(&tracks, 350, 0);
         assert_eq!(widths.iter().sum::<u32>(), 350);
@@ -5247,10 +5251,7 @@ mod tests {
 
     #[test]
     fn grid_auto_fill_respects_track_limit() {
-        let tracks = parse_grid_tracks(
-            Some("repeat(auto-fill, minmax(1px, 1fr))"),
-            10_000,
-        );
+        let tracks = parse_grid_tracks(Some("repeat(auto-fill, minmax(1px, 1fr))"), 10_000);
         assert_eq!(tracks.len(), 16);
     }
 
@@ -5695,7 +5696,8 @@ mod tests {
         assert_eq!(layout.children[1].rect.width, 213);
         assert_eq!(layout.children[2].rect.x, 333);
         assert_eq!(layout.children[2].rect.width, 67);
-    }    
+    }
+
     #[test]
     fn grid_auto_flow_column_fills_explicit_rows_before_advancing_columns() {
         let mut root = Node::element("section");
@@ -5822,5 +5824,4 @@ mod tests {
         assert!(layout.children[1].rect.x >= 100);
         assert!(layout.children[1].rect.width > 0);
     }
-
 }
