@@ -21,6 +21,7 @@ const BLOCK_CLOSES_P: &[&str] = &[
     "blockquote",
     "dd",
     "details",
+    "dialog",
     "div",
     "dl",
     "dt",
