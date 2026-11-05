@@ -1053,8 +1053,8 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
                 return;
             }
         }
-        "margin-block" | "margin-inline" | "padding-block" | "padding-inline"
-        | "inset-block" | "inset-inline" => {
+        "margin-block" | "margin-inline" | "padding-block" | "padding-inline" | "inset-block"
+        | "inset-inline" => {
             if let Some([start, end]) = expand_pair_shorthand(&value) {
                 let (first, second) = match name.as_str() {
                     "margin-block" => ("margin-block-start", "margin-block-end"),
@@ -1089,6 +1089,14 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
                 apply("border-width".to_owned(), width.to_owned());
                 apply("border-style".to_owned(), style.to_owned());
                 apply("border-color".to_owned(), color.to_owned());
+                return;
+            }
+        }
+        "border-top" | "border-right" | "border-bottom" | "border-left" => {
+            if let Some((width, style, color)) = expand_border_shorthand(&value) {
+                apply(format!("{name}-width"), width);
+                apply(format!("{name}-style"), style);
+                apply(format!("{name}-color"), color);
                 return;
             }
         }
@@ -1695,6 +1703,40 @@ mod tests {
     }
 
     #[test]
+    fn border_side_shorthands_expand_components_independently() {
+        let sheet = StyleSheet::parse(
+            "div { border-top: 2px solid red; border-right: dashed blue; border-bottom: 4px double; border-left: green; }",
+        );
+        let computed = sheet.compute_style(&Node::element("div"));
+        for (property, expected) in [
+            ("border-top-width", "2px"),
+            ("border-top-style", "solid"),
+            ("border-top-color", "red"),
+            ("border-right-width", "medium"),
+            ("border-right-style", "dashed"),
+            ("border-right-color", "blue"),
+            ("border-bottom-width", "4px"),
+            ("border-bottom-style", "double"),
+            ("border-bottom-color", "currentcolor"),
+            ("border-left-width", "medium"),
+            ("border-left-style", "none"),
+            ("border-left-color", "green"),
+        ] {
+            assert_eq!(computed.get(property), Some(expected), "{property}");
+        }
+    }
+
+    #[test]
+    fn border_side_shorthands_respect_important_longhands() {
+        let sheet =
+            StyleSheet::parse("div { border-top-width: 9px !important; border-top: 2px solid red; }");
+        let computed = sheet.compute_style(&Node::element("div"));
+        assert_eq!(computed.get("border-top-width"), Some("9px"));
+        assert_eq!(computed.get("border-top-style"), Some("solid"));
+        assert_eq!(computed.get("border-top-color"), Some("red"));
+    }
+
+    #[test]
     fn border_component_shorthands_expand_one_to_four_sides() {
         let node = Node::element("div");
         let sheet = StyleSheet::parse(
@@ -1721,9 +1763,8 @@ mod tests {
 
     #[test]
     fn border_component_shorthands_respect_important_longhands() {
-        let sheet = StyleSheet::parse(
-            "div { border-top-width: 9px !important; border-width: 1px 2px; }",
-        );
+        let sheet =
+            StyleSheet::parse("div { border-top-width: 9px !important; border-width: 1px 2px; }");
         let computed = sheet.compute_style(&Node::element("div"));
         assert_eq!(computed.get("border-top-width"), Some("9px"));
         assert_eq!(computed.get("border-right-width"), Some("2px"));
@@ -1757,9 +1798,8 @@ mod tests {
 
     #[test]
     fn logical_axis_shorthands_preserve_important_longhands() {
-        let sheet = StyleSheet::parse(
-            "div { margin-block-start: 9px !important; margin-block: 1px 2px; }",
-        );
+        let sheet =
+            StyleSheet::parse("div { margin-block-start: 9px !important; margin-block: 1px 2px; }");
         let computed = sheet.compute_style(&Node::element("div"));
         assert_eq!(computed.get("margin-block-start"), Some("9px"));
         assert_eq!(computed.get("margin-block-end"), Some("2px"));
