@@ -1134,6 +1134,9 @@ fn layout_grid_children(
         }
     }
 
+    // CSS Grid auto-placement follows order-modified document order.
+    grid_items.sort_by_key(|index| parse_flex_order(node.children[*index].style.get("order")));
+
     // Resolve explicit grid lines before auto-placement so explicitly positioned
     // items reserve their cells regardless of their source order.
     let mut cells: Vec<Vec<Option<usize>>> = Vec::new();
@@ -5657,6 +5660,31 @@ mod tests {
 
         assert_eq!((layout.children[1].rect.x, layout.children[1].rect.y), (0, 0));
         assert_eq!((layout.children[2].rect.x, layout.children[2].rect.y), (0, 30));
+    }
+
+    #[test]
+    fn grid_auto_placement_respects_order_property() {
+        let mut root = Node::element("section");
+        root.set_attribute(
+            "style",
+            "display: grid; width: 200px; grid-template-columns: 100px 100px;",
+        );
+        let mut first = Node::element("div");
+        first.set_attribute("style", "order: 2;");
+        let mut second = Node::element("div");
+        second.set_attribute("style", "order: -1;");
+        let third = Node::element("div");
+        root.append(first);
+        root.append(second);
+        root.append(third);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 80));
+
+        assert_eq!((layout.children[1].rect.x, layout.children[1].rect.y), (0, 0));
+        assert_eq!((layout.children[2].rect.x, layout.children[2].rect.y), (100, 0));
+        assert_eq!((layout.children[0].rect.x, layout.children[0].rect.y), (0, 20));
     }
 
 }
