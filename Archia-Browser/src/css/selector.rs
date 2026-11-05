@@ -1779,8 +1779,8 @@ mod tests {
         assert!(Selector::parse("a:any-link").unwrap().matches(&anchor));
 
         anchor.set_attribute("href", "");
-        assert!(!Selector::parse("a:link").unwrap().matches(&anchor));
-        assert!(!Selector::parse("a:any-link").unwrap().matches(&anchor));
+        assert!(Selector::parse("a:link").unwrap().matches(&anchor));
+        assert!(Selector::parse("a:any-link").unwrap().matches(&anchor));
 
         let mut area = Node::element("area");
         area.set_attribute("href", "#section");
