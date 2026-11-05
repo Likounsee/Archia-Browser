@@ -162,7 +162,10 @@ impl Node {
 
     /// Number of element children, excluding text and comment nodes.
     pub fn child_element_count(&self) -> usize {
-        self.children.iter().filter(|child| child.is_element()).count()
+        self.children
+            .iter()
+            .filter(|child| child.is_element())
+            .count()
     }
 
     /// First element child, skipping text and comment nodes.
@@ -177,7 +180,10 @@ impl Node {
 
     /// Element children in document order.
     pub fn element_children(&self) -> Vec<&Node> {
-        self.children.iter().filter(|child| child.is_element()).collect()
+        self.children
+            .iter()
+            .filter(|child| child.is_element())
+            .collect()
     }
 
     pub fn children(&self) -> &[Node] {
@@ -1090,13 +1096,13 @@ mod tests {
         assert!(root.set_inner_html("<p class='x'>hello &amp; <b>world</b></p><!--done-->"));
         assert_eq!(root.children.len(), 2);
         assert_eq!(
-        root.query_selector("p.x").unwrap().text_content(),
-        "hello & world"
-    );
+            root.query_selector("p.x").unwrap().text_content(),
+            "hello & world"
+        );
         assert_eq!(
-    root.inner_html(),
-    "<p class=\"x\">hello &amp; <b>world</b></p><!--done-->"
-);
+            root.inner_html(),
+            "<p class=\"x\">hello &amp; <b>world</b></p><!--done-->"
+        );
     }
 
     #[test]
@@ -1897,8 +1903,14 @@ mod tests {
 
         assert_eq!(root.child_count(), 6);
         assert_eq!(root.child_element_count(), 2);
-        assert_eq!(root.first_element_child().and_then(Node::tag_name), Some("span"));
-        assert_eq!(root.last_element_child().and_then(Node::tag_name), Some("strong"));
+        assert_eq!(
+            root.first_element_child().and_then(Node::tag_name),
+            Some("span")
+        );
+        assert_eq!(
+            root.last_element_child().and_then(Node::tag_name),
+            Some("strong")
+        );
         assert_eq!(root.element_children().len(), 2);
         assert_eq!(root.element_children()[0].tag_name(), Some("span"));
         assert_eq!(root.element_children()[1].tag_name(), Some("strong"));
