@@ -879,46 +879,47 @@ impl<'a> Iterator for Descendants<'a> {
 mod tests {
     use super::*;
 
+#[test]
+    fn inner_html_setter_replaces_children_and_parses_markup() {
+        let mut root = Node::element("div");
+        root.append(Node::element("old"));
+        assert!(root.set_inner_html("<p class='x'>hello &amp; <b>world</b></p><!--done-->"));
+        assert_eq!(root.children.len(), 2);
+        assert_eq!(
+        root.query_selector("p.x").unwrap().text_content(),
+        "hello & world"
+    );
+        assert_eq!(
+    root.inner_html(),
+    "<p class=\"x\">hello &amp; <b>world</b></p><!--done-->"
+);
+    }
+
     #[test]
-        fn inner_html_setter_replaces_children_and_parses_markup() {
-            let mut root = Node::element("div");
-            root.append(Node::element("old"));
-            assert!(root.set_inner_html("<p class='x'>hello &amp; <b>world</b></p><!--done-->"));
-            assert_eq!(root.children.len(), 2);
-            assert_eq!(
-            root.query_selector("p.x").unwrap().text_content(),
-            "hello & world"
-        );
-            assert_eq!(root.inner_html(), "<p class=\"x\">hello &amp; <b>world</b></p><!--done-->");
-        }
+    fn append_html_preserves_existing_children_and_rejects_void_elements() {
+        let mut root = Node::element("div");
+        root.append(Node::text("before"));
+        assert!(root.append_html("<span>after</span>"));
+        assert_eq!(root.text_content(), "beforeafter");
 
-        #[test]
-        fn append_html_preserves_existing_children_and_rejects_void_elements() {
-            let mut root = Node::element("div");
-            root.append(Node::text("before"));
-            assert!(root.append_html("<span>after</span>"));
-            assert_eq!(root.text_content(), "beforeafter");
+        let mut image = Node::element("img");
+        assert!(!image.append_html("<span>invalid</span>"));
+        assert!(image.children.is_empty());
+    }
 
-            let mut image = Node::element("img");
-            assert!(!image.append_html("<span>invalid</span>"));
-            assert!(image.children.is_empty());
-        }
+    #[test]
+    fn set_text_content_never_parses_markup() {
+        let mut element = Node::element("div");
+        element.append(Node::element("b"));
+        element.set_text_content("<b>literal</b>");
+        assert_eq!(element.children.len(), 1);
+        assert!(element.children[0].is_text());
+        assert_eq!(element.inner_html(), "&lt;b&gt;literal&lt;/b&gt;");
 
-        #[test]
-        fn set_text_content_never_parses_markup() {
-            let mut element = Node::element("div");
-            element.append(Node::element("b"));
-            element.set_text_content("<b>literal</b>");
-            assert_eq!(element.children.len(), 1);
-            assert!(element.children[0].is_text());
-            assert_eq!(element.inner_html(), "&lt;b&gt;literal&lt;/b&gt;");
-
-            let mut text = Node::text("old");
-            text.set_text_content("new");
-            assert_eq!(text.text_content(), "new");
-        }
-
-
+        let mut text = Node::text("old");
+        text.set_text_content("new");
+        assert_eq!(text.text_content(), "new");
+    }
 
     #[test]
     fn contains_uses_node_identity_and_includes_the_receiver() {
