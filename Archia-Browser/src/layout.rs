@@ -2176,10 +2176,10 @@ fn display_for_styled_node(node: &crate::style_tree::StyledNode) -> Display {
             "head" | "title" | "meta" | "link" | "base" | "script" | "style" | "template" => {
                 Display::None
             }
-            "a" | "abbr" | "acronym" | "b" | "bdi" | "bdo" | "br" | "cite" | "code" | "data"
-            | "del" | "dfn" | "em" | "i" | "ins" | "kbd" | "label" | "mark" | "q" | "ruby"
-            | "s" | "samp" | "small" | "span" | "strong" | "sub" | "sup" | "time" | "u" | "var"
-            | "wbr" => Display::Inline,
+            "a" | "abbr" | "acronym" | "b" | "bdi" | "bdo" | "br" | "cite" | "code"
+            | "data" | "del" | "dfn" | "em" | "i" | "ins" | "kbd" | "label" | "mark"
+            | "q" | "ruby" | "s" | "samp" | "small" | "span" | "strong" | "sub" | "sup"
+            | "time" | "u" | "var" | "wbr" => Display::Inline,
             "audio" | "button" | "canvas" | "embed" | "iframe" | "img" | "input" | "meter"
             | "object" | "output" | "picture" | "progress" | "select" | "textarea" | "video" => {
                 Display::InlineBlock
