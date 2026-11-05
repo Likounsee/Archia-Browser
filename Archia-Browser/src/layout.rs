@@ -994,6 +994,33 @@ fn layout_grid_children(
         })
         .unwrap_or_default();
     let columns = widths.len().max(1);
+    let occupied_width = widths
+        .iter()
+        .copied()
+        .fold(0_u32, u32::saturating_add)
+        .saturating_add(column_gap.saturating_mul(columns.saturating_sub(1) as u32));
+    let free_grid_width = content_width.saturating_sub(occupied_width);
+    let justify_content = node
+        .style
+        .get("justify-content")
+        .map(|value| value.trim().to_ascii_lowercase())
+        .unwrap_or_else(|| "start".to_owned());
+    let (grid_start_offset, distributed_column_gap) = match justify_content.as_str() {
+        "center" => (free_grid_width / 2, 0),
+        "end" | "flex-end" => (free_grid_width, 0),
+        "space-between" if columns > 1 => {
+            (0, free_grid_width / (columns.saturating_sub(1) as u32))
+        }
+        "space-around" if columns > 0 => {
+            let extra = free_grid_width / columns as u32;
+            (extra / 2, extra)
+        }
+        "space-evenly" if columns > 0 => {
+            let extra = free_grid_width / (columns as u32 + 1);
+            (extra, extra)
+        }
+        _ => (0, 0),
+    };
     let mut laid_out = Vec::with_capacity(node.children.len());
     laid_out.resize_with(node.children.len(), || None);
 
@@ -1050,7 +1077,7 @@ fn layout_grid_children(
                 .flatten()
         });
         let mut row_height = explicit_row_height.unwrap_or(0);
-        let mut column_left = 0_u32;
+        let mut column_left = grid_start_offset;
 
         for grid_position in row_start..row_end {
             let child_index = grid_items[grid_position];
@@ -1097,7 +1124,8 @@ fn layout_grid_children(
             laid_out[child_index] = Some(child_layout);
             column_left = column_left
                 .saturating_add(area_width)
-                .saturating_add(column_gap);
+                .saturating_add(column_gap)
+                .saturating_add(distributed_column_gap);
         }
 
         row_top = row_top
@@ -4895,6 +4923,40 @@ mod tests {
         assert_eq!(layout.children[2].rect.height, 70);
         assert_eq!(layout.children[3].rect.height, 70);
         assert_eq!(layout.rect.height, 120);
+    }
+
+    #[test]
+    fn grid_layout_distributes_fixed_tracks_with_justify_content() {
+        let cases = [
+            ("center", 75_u32, 0_u32),
+            ("end", 150, 0),
+            ("space-between", 0, 100),
+            ("space-around", 25, 50),
+            ("space-evenly", 33, 33),
+        ];
+
+        for (justify, expected_first_x, expected_second_x) in cases {
+            let mut root = Node::element("section");
+            root.set_attribute(
+                "style",
+                format!(
+                    "display: grid; width: 300px; grid-template-columns: 50px 50px; column-gap: 0; justify-content: {justify};"
+                ),
+            );
+            root.append(Node::element("div"));
+            root.append(Node::element("div"));
+
+            let styled =
+                crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+            let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(300, 100));
+
+            assert_eq!(layout.children[0].rect.x, expected_first_x as i32, "{justify}");
+            assert_eq!(
+                layout.children[1].rect.x,
+                expected_first_x.saturating_add(50).saturating_add(expected_second_x) as i32,
+                "{justify}"
+            );
+        }
     }
 
     #[test]
