@@ -717,16 +717,26 @@ fn parse_media_ratio(value: &str) -> Option<(u32, u32)> {
 
 fn parse_media_length(value: &str) -> Option<f64> {
     let value = value.trim();
-    let (number, multiplier) = if let Some(number) = value.strip_suffix("px") {
-        (number, 1.0_f64)
-    } else if let Some(number) = value.strip_suffix("rem") {
-        (number, 16.0)
-    } else {
-        let number = value.strip_suffix("em")?;
-        (number, 16.0)
-    };
-    let pixels = number.trim().parse::<f64>().ok()? * multiplier;
-    (pixels.is_finite() && pixels >= 0.0).then_some(pixels)
+    let units = [
+        ("rem", 16.0_f64),
+        ("em", 16.0),
+        ("px", 1.0),
+        ("in", 96.0),
+        ("cm", 96.0 / 2.54),
+        ("mm", 96.0 / 25.4),
+        ("q", 96.0 / 101.6),
+        ("pt", 96.0 / 72.0),
+        ("pc", 16.0),
+    ];
+    for (unit, multiplier) in units {
+        let Some(number) = value.strip_suffix(unit) else {
+            continue;
+        };
+        let number = number.trim().parse::<f64>().ok()?;
+        let pixels = number * multiplier;
+        return (pixels.is_finite() && pixels >= 0.0).then_some(pixels);
+    }
+    None
 }
 
 /// Scan only top-level qualified rules. Unlike splitting on braces, this respects
@@ -1904,6 +1914,15 @@ mod tests {
         narrow.set_attribute("class", "narrow");
         assert_eq!(portrait.compute_style(&wide).get("color"), None);
         assert_eq!(portrait.compute_style(&narrow).get("color"), Some("blue"));
+    }
+
+    #[test]
+    fn media_query_lengths_support_absolute_css_units() {
+        assert!(media_query_matches("(min-width: 1in)", 96, 100));
+        assert!(media_query_matches("(min-width: 2.54cm)", 96, 100));
+        assert!(media_query_matches("(min-width: 72pt)", 96, 100));
+        assert!(media_query_matches("(max-width: 6pc)", 96, 100));
+        assert!(!media_query_matches("(min-width: 1cm)", 30, 100));
     }
 
     #[test]
