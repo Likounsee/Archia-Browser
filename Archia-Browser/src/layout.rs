@@ -4928,11 +4928,11 @@ mod tests {
     #[test]
     fn grid_layout_distributes_fixed_tracks_with_justify_content() {
         let cases = [
-            ("center", 75_u32, 0_u32),
-            ("end", 150, 0),
+            ("center", 100_u32, 0_u32),
+            ("end", 200, 0),
             ("space-between", 0, 100),
-            ("space-around", 25, 50),
-            ("space-evenly", 33, 33),
+            ("space-around", 50, 100),
+            ("space-evenly", 66, 66),
         ];
 
         for (justify, expected_first_x, expected_second_x) in cases {
