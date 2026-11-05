@@ -969,6 +969,41 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
                 return;
             }
         }
+        "flex-flow" => {
+            let values = value.split_whitespace().collect::<Vec<_>>();
+            if (1..=2).contains(&values.len()) {
+                let mut direction = None;
+                let mut wrapping = None;
+                let mut valid = true;
+                for token in values {
+                    let token = token.to_ascii_lowercase();
+                    if matches!(token.as_str(), "row" | "row-reverse" | "column" | "column-reverse")
+                    {
+                        if direction.replace(token).is_some() {
+                            valid = false;
+                        }
+                    } else if matches!(token.as_str(), "nowrap" | "wrap" | "wrap-reverse") {
+                        if wrapping.replace(token).is_some() {
+                            valid = false;
+                        }
+                    } else {
+                        valid = false;
+                    }
+                }
+                if valid {
+                    apply(name.clone(), value.clone());
+                    apply(
+                        "flex-direction".to_owned(),
+                        direction.unwrap_or_else(|| "row".to_owned()),
+                    );
+                    apply(
+                        "flex-wrap".to_owned(),
+                        wrapping.unwrap_or_else(|| "nowrap".to_owned()),
+                    );
+                    return;
+                }
+            }
+        }
         "border-top" | "border-right" | "border-bottom" | "border-left" => {
             if let Some((width, style, color)) = expand_border_shorthand(&value) {
                 apply(format!("{name}-width"), width);
@@ -1491,6 +1526,33 @@ mod tests {
         let computed = two.compute_style(&node);
         assert_eq!(computed.get("overflow-x"), Some("clip"));
         assert_eq!(computed.get("overflow-y"), Some("auto"));
+    }
+
+    #[test]
+    fn flex_flow_shorthand_expands_direction_and_wrapping() {
+        let node = Node::element("div");
+        let sheet = Stylesheet::parse("div { flex-flow: column-reverse wrap-reverse; }");
+        let computed = sheet.compute_style(&node);
+        assert_eq!(computed.get("flex-direction"), Some("column-reverse"));
+        assert_eq!(computed.get("flex-wrap"), Some("wrap-reverse"));
+
+        let direction_only = Stylesheet::parse("div { flex-flow: row-reverse; }");
+        let computed = direction_only.compute_style(&node);
+        assert_eq!(computed.get("flex-direction"), Some("row-reverse"));
+        assert_eq!(computed.get("flex-wrap"), Some("nowrap"));
+
+        let wrap_only = Stylesheet::parse("div { flex-flow: wrap; }");
+        let computed = wrap_only.compute_style(&node);
+        assert_eq!(computed.get("flex-direction"), Some("row"));
+        assert_eq!(computed.get("flex-wrap"), Some("wrap"));
+    }
+
+    #[test]
+    fn invalid_flex_flow_shorthand_does_not_expand() {
+        let sheet = Stylesheet::parse("div { flex-flow: row wrap column; }");
+        let computed = sheet.compute_style(&Node::element("div"));
+        assert_eq!(computed.get("flex-direction"), None);
+        assert_eq!(computed.get("flex-wrap"), None);
     }
 
     #[test]
