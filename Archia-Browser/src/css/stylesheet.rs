@@ -439,6 +439,24 @@ fn supports_declaration(name: &str, value: &str) -> bool {
         "border-right-color",
         "border-bottom-color",
         "border-left-color",
+        "border-block",
+        "border-block-start",
+        "border-block-end",
+        "border-inline",
+        "border-inline-start",
+        "border-inline-end",
+        "border-block-start-width",
+        "border-block-start-style",
+        "border-block-start-color",
+        "border-block-end-width",
+        "border-block-end-style",
+        "border-block-end-color",
+        "border-inline-start-width",
+        "border-inline-start-style",
+        "border-inline-start-color",
+        "border-inline-end-width",
+        "border-inline-end-style",
+        "border-inline-end-color",
         "border-radius",
         "border-top-left-radius",
         "border-top-right-radius",
@@ -1120,6 +1138,31 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
                 return;
             }
         }
+        "border-block" | "border-inline" => {
+            if let Some((width, style, color)) = expand_border_shorthand(&value) {
+                apply(name.clone(), value.clone());
+                let (start, end) = if name == "border-block" {
+                    ("border-block-start", "border-block-end")
+                } else {
+                    ("border-inline-start", "border-inline-end")
+                };
+                for side in [start, end] {
+                    apply(format!("{side}-width"), width.clone());
+                    apply(format!("{side}-style"), style.clone());
+                    apply(format!("{side}-color"), color.clone());
+                }
+                return;
+            }
+        }
+        "border-block-start" | "border-block-end" | "border-inline-start"
+        | "border-inline-end" => {
+            if let Some((width, style, color)) = expand_border_shorthand(&value) {
+                apply(format!("{name}-width"), width);
+                apply(format!("{name}-style"), style);
+                apply(format!("{name}-color"), color);
+                return;
+            }
+        }
         "overflow" => {
             let values = value.split_whitespace().collect::<Vec<_>>();
             if (1..=2).contains(&values.len())
@@ -1736,6 +1779,41 @@ mod tests {
         assert_eq!(computed.get("right"), Some("2px"));
         assert_eq!(computed.get("bottom"), Some("1px"));
         assert_eq!(computed.get("left"), Some("2px"));
+    }
+
+    #[test]
+    fn logical_border_shorthands_expand_start_and_end_components() {
+        let sheet = StyleSheet::parse(
+            "div { border-block: 2px solid red; border-inline-start: dashed blue; border-inline-end: 3px double; }",
+        );
+        let computed = sheet.compute_style(&Node::element("div"));
+        for (property, expected) in [
+            ("border-block-start-width", "2px"),
+            ("border-block-start-style", "solid"),
+            ("border-block-start-color", "red"),
+            ("border-block-end-width", "2px"),
+            ("border-block-end-style", "solid"),
+            ("border-block-end-color", "red"),
+            ("border-inline-start-width", "medium"),
+            ("border-inline-start-style", "dashed"),
+            ("border-inline-start-color", "blue"),
+            ("border-inline-end-width", "3px"),
+            ("border-inline-end-style", "double"),
+            ("border-inline-end-color", "currentcolor"),
+        ] {
+            assert_eq!(computed.get(property), Some(expected), "{property}");
+        }
+    }
+
+    #[test]
+    fn logical_border_shorthands_preserve_important_components() {
+        let sheet = StyleSheet::parse(
+            "div { border-block-start-width: 9px !important; border-block: 2px solid red; }",
+        );
+        let computed = sheet.compute_style(&Node::element("div"));
+        assert_eq!(computed.get("border-block-start-width"), Some("9px"));
+        assert_eq!(computed.get("border-block-start-style"), Some("solid"));
+        assert_eq!(computed.get("border-block-end-width"), Some("2px"));
     }
 
     #[test]
