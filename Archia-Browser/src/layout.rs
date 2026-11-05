@@ -5786,6 +5786,24 @@ mod tests {
     }
 
     #[test]
+    fn grid_column_auto_flow_distributes_fractional_implicit_columns() {
+        let mut root = Node::element("section");
+        root.set_attribute(
+            "style",
+            "display: grid; width: 300px; grid-template-columns: 100px; grid-template-rows: 25px; grid-auto-columns: 1fr; grid-auto-flow: column;",
+        );
+        root.append(Node::element("div"));
+        root.append(Node::element("div"));
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(300, 80));
+
+        assert_eq!(layout.children[1].rect.x, 100);
+        assert_eq!(layout.children[1].rect.width, 200);
+    }
+
+    #[test]
     fn grid_column_auto_flow_uses_intrinsic_width_for_auto_columns() {
         let mut root = Node::element("section");
         root.set_attribute(
