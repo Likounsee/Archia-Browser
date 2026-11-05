@@ -790,7 +790,10 @@ fn is_form_control_valid(
 
     // These input types are barred from constraint validation by HTML.
     if tag == "input"
-        && matches!(input_type.as_str(), "hidden" | "button" | "submit" | "reset" | "image")
+        && matches!(
+            input_type.as_str(),
+            "hidden" | "button" | "submit" | "reset" | "image"
+        )
     {
         return true;
     }
@@ -803,12 +806,17 @@ fn is_form_control_valid(
     if attributes.contains_key("required") {
         let missing = match (tag, input_type.as_str()) {
             ("select", _) => {
-                let options = node.children.iter()
+                let options = node
+                    .children
+                    .iter()
                     .filter(|child| child.tag_name() == Some("option"))
                     .collect::<Vec<_>>();
-                let has_selected = options.iter().any(|option| option.has_attribute("selected"));
+                let has_selected = options
+                    .iter()
+                    .any(|option| option.has_attribute("selected"));
                 options.first().is_some_and(|option| {
-                    let empty_value = option.attribute("value")
+                    let empty_value = option
+                        .attribute("value")
                         .map(str::is_empty)
                         .unwrap_or_else(|| option.text_content().trim().is_empty());
                     empty_value && (option.has_attribute("selected") || !has_selected)
@@ -832,13 +840,15 @@ fn is_form_control_valid(
     // minlength/maxlength count UTF-16 code units, as required by HTML, rather
     // than UTF-8 bytes or Unicode scalar values.
     let value_length = value.encode_utf16().count();
-    if attributes.get("minlength")
+    if attributes
+        .get("minlength")
         .and_then(|length| length.parse::<usize>().ok())
         .is_some_and(|minimum| value_length < minimum)
     {
         return false;
     }
-    if attributes.get("maxlength")
+    if attributes
+        .get("maxlength")
         .and_then(|length| length.parse::<usize>().ok())
         .is_some_and(|maximum| value_length > maximum)
     {
@@ -883,10 +893,12 @@ fn is_form_control_valid(
             if !number.is_finite() {
                 return false;
             }
-            if attributes.get("min")
+            if attributes
+                .get("min")
                 .and_then(|minimum| minimum.parse::<f64>().ok())
                 .is_some_and(|minimum| number < minimum)
-                || attributes.get("max")
+                || attributes
+                    .get("max")
                     .and_then(|maximum| maximum.parse::<f64>().ok())
                     .is_some_and(|maximum| number > maximum)
                 || !matches_step(number, attributes)
@@ -918,7 +930,11 @@ fn matches_step(
     let base = attributes
         .get("min")
         .and_then(|minimum| minimum.parse::<f64>().ok())
-        .or_else(|| attributes.get("value").and_then(|initial| initial.parse::<f64>().ok()))
+        .or_else(|| {
+            attributes
+                .get("value")
+                .and_then(|initial| initial.parse::<f64>().ok())
+        })
         .unwrap_or(0.0);
     let quotient = (value - base) / step;
     (quotient - quotient.round()).abs() <= 1e-9 * quotient.abs().max(1.0)
