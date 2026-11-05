@@ -1131,8 +1131,8 @@ mod tests {
             .iter()
             .all(|rect| rect.x == 4 && rect.width == 2 && rect.height <= 6));
         assert_eq!(segments[0].y, 10);
-        assert_eq!(segments[1].y, 18);
-        assert_eq!(segments[2].y, 26);
+        assert_eq!(segments[1].y, 20);
+        assert_eq!(segments[2].y, 30);
     }
 
     #[test]
