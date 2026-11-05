@@ -4806,6 +4806,53 @@ mod tests {
     }
 
     #[test]
+    fn grid_auto_placement_skips_display_none_children() {
+        let mut root = Node::element("section");
+        root.set_attribute(
+            "style",
+            "display: grid; width: 200px; grid-template-columns: 1fr 1fr;",
+        );
+        root.append(Node::element("div"));
+        let mut hidden = Node::element("div");
+        hidden.set_attribute("style", "display: none;");
+        root.append(hidden);
+        root.append(Node::element("div"));
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children.len(), 3);
+        assert_eq!(layout.children[1].display, Display::None);
+        assert_eq!(layout.children[2].rect.x, 100);
+        assert_eq!(layout.children[2].rect.y, 0);
+    }
+
+    #[test]
+    fn grid_auto_placement_does_not_allocate_cells_to_positioned_children() {
+        let mut root = Node::element("section");
+        root.set_attribute(
+            "style",
+            "display: grid; width: 200px; grid-template-columns: 1fr 1fr;",
+        );
+        root.append(Node::element("div"));
+        let mut positioned = Node::element("div");
+        positioned.set_attribute("style", "position: absolute; left: 5px; top: 7px;");
+        root.append(positioned);
+        root.append(Node::element("div"));
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children.len(), 3);
+        assert_eq!(layout.children[1].rect.x, 5);
+        assert_eq!(layout.children[1].rect.y, 7);
+        assert_eq!(layout.children[2].rect.x, 100);
+        assert_eq!(layout.children[2].rect.y, 0);
+    }
+
+    #[test]
     fn grid_layout_applies_explicit_row_tracks_and_stretches_auto_items() {
         let mut root = Node::element("section");
         root.set_attribute(
