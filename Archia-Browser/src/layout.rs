@@ -2962,13 +2962,29 @@ fn parse_line_height(value: Option<&str>, font_size: u32) -> Option<u32> {
 
 fn intrinsic_inline_height(node: &crate::style_tree::StyledNode) -> u32 {
     if node.node.tag_name() == Some("img") {
-        return node
+        if let Some(height) = node
             .node
             .attribute("height")
             .and_then(|value| value.trim().parse::<u32>().ok())
             .or_else(|| parse_px(node.style.get("height")))
-            .unwrap_or(16)
-            .max(1);
+        {
+            return height.max(1);
+        }
+
+        let width = node
+            .node
+            .attribute("width")
+            .and_then(|value| value.trim().parse::<u32>().ok())
+            .or_else(|| parse_px(node.style.get("width")));
+        if let (Some(width), Some(ratio)) =
+            (width, parse_aspect_ratio(node.style.get("aspect-ratio")))
+        {
+            let height = f64::from(width) / ratio;
+            if height.is_finite() && height <= f64::from(u32::MAX) {
+                return (height.round() as u32).max(1);
+            }
+        }
+        return 16;
     }
 
     match &node.node.kind {
@@ -2980,6 +2996,32 @@ fn intrinsic_inline_height(node: &crate::style_tree::StyledNode) -> u32 {
             .max()
             .unwrap_or(16),
     }
+}
+
+/// Parse CSS aspect-ratio as width divided by height.
+/// The auto keyword is ignored because intrinsic image metadata is not loaded yet.
+fn parse_aspect_ratio(value: Option<&str>) -> Option<f64> {
+    let value = value?.trim();
+    let value = value
+        .strip_prefix("auto")
+        .map(str::trim)
+        .unwrap_or(value);
+    if value.is_empty() {
+        return None;
+    }
+
+    let (width, height) = match value.split_once('/') {
+        Some((width, height)) => (
+            width.trim().parse::<f64>().ok()?,
+            height.trim().parse::<f64>().ok()?,
+        ),
+        None => (value.parse::<f64>().ok()?, 1.0),
+    };
+    if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
+        return None;
+    }
+    let ratio = width / height;
+    (ratio.is_finite() && ratio > 0.0).then_some(ratio)
 }
 
 fn box_model_from_style(style: &ComputedStyle, containing_width: u32) -> BoxModel {
@@ -5861,5 +5903,52 @@ mod tests {
 
         assert!(layout.children[1].rect.x >= 100);
         assert!(layout.children[1].rect.width > 0);
+    }
+}
+
+#[cfg(test)]
+mod image_aspect_ratio_tests {
+    use super::*;
+    use crate::html::Node;
+
+    #[test]
+    fn image_height_uses_css_aspect_ratio_when_height_is_auto() {
+        let mut image = Node::element("img");
+        image.set_attribute("width", "320");
+        let mut styled = crate::style_tree::StyledNode::new(image, ComputedStyle::default());
+        styled.style.set("aspect-ratio", "16 / 9");
+
+        assert_eq!(intrinsic_inline_height(&styled), 180);
+    }
+
+    #[test]
+    fn image_aspect_ratio_accepts_auto_prefix_and_unitless_ratio() {
+        assert_eq!(parse_aspect_ratio(Some("auto 4 / 3")), Some(4.0 / 3.0));
+        assert_eq!(parse_aspect_ratio(Some("1.5")), Some(1.5));
+    }
+
+    #[test]
+    fn explicit_image_height_takes_precedence_over_aspect_ratio() {
+        let mut image = Node::element("img");
+        image.set_attribute("width", "320");
+        image.set_attribute("height", "90");
+        let mut styled = crate::style_tree::StyledNode::new(image, ComputedStyle::default());
+        styled.style.set("aspect-ratio", "16 / 9");
+
+        assert_eq!(intrinsic_inline_height(&styled), 90);
+    }
+
+    #[test]
+    fn invalid_image_aspect_ratios_fall_back_safely() {
+        for ratio in ["0 / 1", "1 / 0", "-1 / 2", "NaN", "1 / inf", ""] {
+            assert_eq!(parse_aspect_ratio(Some(ratio)), None, "{ratio}");
+        }
+
+        let mut image = Node::element("img");
+        image.set_attribute("width", "320");
+        let mut styled = crate::style_tree::StyledNode::new(image, ComputedStyle::default());
+        styled.style.set("aspect-ratio", "0 / 1");
+
+        assert_eq!(intrinsic_inline_height(&styled), 16);
     }
 }
