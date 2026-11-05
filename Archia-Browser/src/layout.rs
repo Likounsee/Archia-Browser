@@ -5920,10 +5920,8 @@ mod image_aspect_ratio_tests {
     fn aspect_ratio_provides_preferred_height_for_empty_boxes() {
         let mut box_node = Node::element("div");
         box_node.set_attribute("style", "width: 320px; aspect-ratio: 16 / 9;");
-        let styled = crate::style_tree::StyleEngine::style(
-            &box_node,
-            &crate::css::StyleSheet::default(),
-        );
+        let styled =
+            crate::style_tree::StyleEngine::style(&box_node, &crate::css::StyleSheet::default());
         let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(800, 600));
 
         assert_eq!(layout.rect.width, 320);
