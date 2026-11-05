@@ -752,16 +752,19 @@ fn is_read_write_element(
         _ => {
             // contenteditable is an enumerated, inherited attribute. An
             // explicit "false" stops an editable ancestor from propagating.
-            let state = attributes.get("contenteditable").map(String::as_str).or_else(|| {
-                ancestors.and_then(|ancestors| {
-                    ancestors.iter().rev().find_map(|ancestor| {
-                        let NodeKind::Element { attributes, .. } = &ancestor.kind else {
-                            return None;
-                        };
-                        attributes.get("contenteditable").map(String::as_str)
+            let state = attributes
+                .get("contenteditable")
+                .map(String::as_str)
+                .or_else(|| {
+                    ancestors.and_then(|ancestors| {
+                        ancestors.iter().rev().find_map(|ancestor| {
+                            let NodeKind::Element { attributes, .. } = &ancestor.kind else {
+                                return None;
+                            };
+                            attributes.get("contenteditable").map(String::as_str)
+                        })
                     })
-                })
-            });
+                });
             state.is_some_and(|value| {
                 value.is_empty()
                     || value.eq_ignore_ascii_case("true")
