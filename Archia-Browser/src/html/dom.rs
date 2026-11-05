@@ -401,7 +401,10 @@ impl Node {
     /// element; the receiver itself is excluded.
     pub fn get_elements_by_tag_name(&self, tag_name: &str) -> Vec<&Node> {
         if tag_name == "*" {
-            return self.descendants().filter(|node| node.is_element()).collect();
+            return self
+                .descendants()
+                .filter(|node| node.is_element())
+                .collect();
         }
         self.find_elements_by_tag(tag_name)
     }
@@ -417,9 +420,7 @@ impl Node {
             return Vec::new();
         }
         self.descendants()
-            .filter(|node| {
-                node.is_element() && required.iter().all(|class| node.has_class(class))
-            })
+            .filter(|node| node.is_element() && required.iter().all(|class| node.has_class(class)))
             .collect()
     }
 
@@ -430,9 +431,8 @@ impl Node {
         if !self.is_element() {
             return false;
         }
-        parse_dom_selector_list(selector).is_some_and(|selectors| {
-            selectors.iter().any(|selector| selector.matches(self))
-        })
+        parse_dom_selector_list(selector)
+            .is_some_and(|selectors| selectors.iter().any(|selector| selector.matches(self)))
     }
 
     /// Find the first descendant element with the requested tag name.
@@ -1008,7 +1008,10 @@ mod tests {
         assert_eq!(root.get_elements_by_class_name("card featured").len(), 1);
         assert_eq!(root.get_elements_by_class_name("featured card").len(), 1);
         assert!(root.get_elements_by_class_name("missing").is_empty());
-        assert!(root.child(0).unwrap().matches_selector("div.card, span.active"));
+        assert!(root
+            .child(0)
+            .unwrap()
+            .matches_selector("div.card, span.active"));
         assert!(!root.child(0).unwrap().matches_selector("main > div"));
     }
 
