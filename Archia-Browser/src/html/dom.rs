@@ -474,7 +474,7 @@ mod tests {
     #[test]
     fn class_list_operations_preserve_tokens_and_avoid_duplicates() {
         let mut node = Node::element("div");
-        node.set_attribute("class", "alpha  beta\\tgamma");
+        node.set_attribute("class", "alpha  beta\tgamma");
         assert_eq!(node.class_list(), vec!["alpha", "beta", "gamma"]);
         assert!(node.has_class("beta"));
         node.add_class("beta");
