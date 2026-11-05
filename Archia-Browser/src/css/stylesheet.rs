@@ -1163,13 +1163,14 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
         "border-width" | "border-style" | "border-color" => {
             if let Some(values) = expand_box_shorthand(&name, &value) {
                 apply(name.clone(), value.clone());
-                for (property, property_value) in [
-                    (format!("{name}-top"), values[0].clone()),
-                    (format!("{name}-right"), values[1].clone()),
-                    (format!("{name}-bottom"), values[2].clone()),
-                    (format!("{name}-left"), values[3].clone()),
+                let component = name.strip_prefix("border-").unwrap_or_default();
+                for (side, property_value) in [
+                    ("top", values[0].clone()),
+                    ("right", values[1].clone()),
+                    ("bottom", values[2].clone()),
+                    ("left", values[3].clone()),
                 ] {
-                    apply(property, property_value);
+                    apply(format!("border-{side}-{component}"), property_value);
                 }
                 return;
             }
@@ -1666,17 +1667,17 @@ fn expand_background(value: &str) -> Option<(String, String, String, String, Str
 
     for raw_token in value.split_whitespace() {
         let mut token = raw_token;
+        let mut slash_size = None;
         if let Some((before, after)) = raw_token.split_once('/') {
             if after_slash || before.is_empty() || after.is_empty() {
                 return None;
             }
             token = before;
-            after_slash = true;
             let lower_after = after.to_ascii_lowercase();
             if !is_background_size_token(&lower_after) {
                 return None;
             }
-            size.push(after.to_owned());
+            slash_size = Some(after);
         }
 
         let lower = token.to_ascii_lowercase();
@@ -1715,6 +1716,16 @@ fn expand_background(value: &str) -> Option<(String, String, String, String, Str
             size.push(token.to_owned());
         } else if color.replace(token.to_owned()).is_some() {
             return None;
+        }
+
+        // The token before '/' belongs to background-position; the token
+        // after it starts background-size (e.g. center/cover).
+        if let Some(size_token) = slash_size {
+            if size.len() == 2 {
+                return None;
+            }
+            size.push(size_token.to_owned());
+            after_slash = true;
         }
     }
 
