@@ -1258,7 +1258,8 @@ fn layout_grid_children(
         let free = (row..row + row_span)
             .all(|grid_row| (column..column + span).all(|cell| cells[grid_row][cell].is_none()));
         if free {
-            for (row_offset, cells_row) in cells.iter_mut().skip(row).take(row_span).enumerate() {
+                for (row_offset, cells_row) in cells.iter_mut().skip(row).take(row_span).enumerate()
+                {
                     let grid_row = row + row_offset;
                     for (column_offset, cell_value) in
                         cells_row.iter_mut().skip(column).take(span).enumerate()
@@ -1324,7 +1325,8 @@ fn layout_grid_children(
                 (column..column + span).all(|cell| cells[grid_row][cell].is_none())
             });
             if free {
-                for (row_offset, cells_row) in cells.iter_mut().skip(row).take(row_span).enumerate() {
+                for (row_offset, cells_row) in cells.iter_mut().skip(row).take(row_span).enumerate()
+                {
                     let grid_row = row + row_offset;
                     for (column_offset, cell_value) in
                         cells_row.iter_mut().skip(column).take(span).enumerate()
