@@ -1890,10 +1890,6 @@ fn is_border_width_token(value: &str) -> bool {
         .is_ok_and(|number| number.is_finite() && number >= 0.0)
 }
 
-fn parse_px_token(value: &str) -> Option<u32> {
-    value.strip_suffix("px")?.trim().parse().ok()
-}
-
 fn expand_pair_shorthand(value: &str) -> Option<[String; 2]> {
     let mut values = value.split_whitespace();
     let first = values.next()?;
