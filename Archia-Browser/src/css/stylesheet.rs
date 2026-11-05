@@ -463,10 +463,6 @@ fn supports_declaration(name: &str, value: &str) -> bool {
         "outline-style",
         "outline-color",
         "outline-offset",
-        "text-decoration-line",
-        "text-decoration-style",
-        "text-decoration-color",
-        "text-decoration-thickness",
         "border-top-left-radius",
         "border-top-right-radius",
         "border-bottom-right-radius",
@@ -1555,25 +1551,33 @@ fn expand_border_shorthand(value: &str) -> Option<(String, String, String)> {
 
 fn expand_text_decoration(value: &str) -> Option<(String, String, String, String)> {
     let mut lines = Vec::new();
+    let mut none_line = false;
     let mut style = None;
     let mut color = None;
     let mut thickness = None;
 
     for token in value.split_whitespace() {
         let lower = token.to_ascii_lowercase();
-        if matches!(lower.as_str(), "none" | "underline" | "overline" | "line-through" | "blink") {
-            if lower == "none" || lines.contains(&lower) {
-                if lower == "none" || !lines.is_empty() {
-                    return None;
-                }
-            } else {
-                lines.push(lower);
+        if lower == "none" {
+            if none_line || !lines.is_empty() {
+                return None;
             }
+            none_line = true;
+        } else if matches!(lower.as_str(), "underline" | "overline" | "line-through" | "blink") {
+            if none_line || lines.contains(&lower) {
+                return None;
+            }
+            lines.push(lower);
         } else if matches!(lower.as_str(), "solid" | "double" | "dotted" | "dashed" | "wavy") {
             if style.replace(lower).is_some() {
                 return None;
             }
-        } else if matches!(lower.as_str(), "auto" | "from-font") || is_border_width_token(token) {
+        } else if matches!(lower.as_str(), "auto" | "from-font")
+            || is_border_width_token(token)
+            || lower.strip_suffix('%').is_some_and(|number| {
+                number.parse::<f64>().is_ok_and(|value| value.is_finite() && value >= 0.0)
+            })
+        {
             if thickness.replace(token.to_owned()).is_some() {
                 return None;
             }
@@ -1583,7 +1587,11 @@ fn expand_text_decoration(value: &str) -> Option<(String, String, String, String
     }
 
     Some((
-        if lines.is_empty() { "none".to_owned() } else { lines.join(" ") },
+        if none_line || lines.is_empty() {
+            "none".to_owned()
+        } else {
+            lines.join(" ")
+        },
         style.unwrap_or_else(|| "solid".to_owned()),
         color.unwrap_or_else(|| "currentcolor".to_owned()),
         thickness.unwrap_or_else(|| "auto".to_owned()),
