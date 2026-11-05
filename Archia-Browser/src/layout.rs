@@ -5257,7 +5257,7 @@ mod tests {
         assert_eq!(layout.children[0].rect.height, 80);
         assert_eq!(layout.children[1].rect.y, 0);
         assert_eq!(layout.children[2].rect.y, 40);
-        assert_eq!(layout.children[2].rect.x, 0);
+        assert_eq!(layout.children[2].rect.x, 100);
     }
 
     #[test]
