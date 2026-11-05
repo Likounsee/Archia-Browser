@@ -845,10 +845,12 @@ fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayL
     let sides = [
         (
             "top",
+            true,
             Rect::new(outer_x, outer_y, outer_width, border.border_top),
         ),
         (
             "right",
+            false,
             Rect::new(
                 outer_x.saturating_add(outer_width.saturating_sub(border.border_right) as i32),
                 outer_y,
@@ -858,6 +860,7 @@ fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayL
         ),
         (
             "bottom",
+            true,
             Rect::new(
                 outer_x,
                 outer_y.saturating_add(outer_height.saturating_sub(border.border_bottom) as i32),
@@ -867,11 +870,12 @@ fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayL
         ),
         (
             "left",
+            false,
             Rect::new(outer_x, outer_y, border.border_left, outer_height),
         ),
     ];
 
-    for (side, rect) in sides {
+    for (side, horizontal, rect) in sides {
         if rect.width == 0 || rect.height == 0 {
             continue;
         }
@@ -894,12 +898,23 @@ fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayL
         else {
             continue;
         };
-        paint_border_edge(rect, border_style, apply_opacity(color, opacity), list);
+        paint_border_edge(
+            rect,
+            horizontal,
+            border_style,
+            apply_opacity(color, opacity),
+            list,
+        );
     }
 }
 
-fn paint_border_edge(rect: Rect, border_style: &str, color: u32, list: &mut DisplayList) {
-    let horizontal = rect.width >= rect.height;
+fn paint_border_edge(
+    rect: Rect,
+    horizontal: bool,
+    border_style: &str,
+    color: u32,
+    list: &mut DisplayList,
+) {
     let length = if horizontal { rect.width } else { rect.height };
     let thickness = if horizontal { rect.height } else { rect.width };
     if length == 0 || thickness == 0 {
@@ -1104,7 +1119,13 @@ mod tests {
             ("double", 2, 6),
         ] {
             let mut list = DisplayList::new();
-            paint_border_edge(Rect::new(0, 0, 30, thickness), style, 0xff0000ff, &mut list);
+            paint_border_edge(
+                Rect::new(0, 0, 30, thickness),
+                true,
+                style,
+                0xff0000ff,
+                &mut list,
+            );
             assert_eq!(
                 list.commands().len(),
                 expected_commands,
@@ -1116,7 +1137,13 @@ mod tests {
     #[test]
     fn vertical_dashed_borders_follow_the_edge_orientation() {
         let mut list = DisplayList::new();
-        paint_border_edge(Rect::new(4, 10, 2, 30), "dashed", 0x0000ffff, &mut list);
+        paint_border_edge(
+            Rect::new(4, 10, 2, 30),
+            false,
+            "dashed",
+            0x0000ffff,
+            &mut list,
+        );
 
         let segments = list
             .commands()
