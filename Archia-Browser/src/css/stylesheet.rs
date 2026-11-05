@@ -950,6 +950,25 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
                 return;
             }
         }
+        "overflow" => {
+            let values = value.split_whitespace().collect::<Vec<_>>();
+            if (1..=2).contains(&values.len())
+                && values.iter().all(|value| {
+                    matches!(
+                        value.to_ascii_lowercase().as_str(),
+                        "visible" | "hidden" | "clip" | "scroll" | "auto"
+                    )
+                })
+            {
+                apply(name.clone(), value.clone());
+                apply("overflow-x".to_owned(), values[0].to_owned());
+                apply(
+                    "overflow-y".to_owned(),
+                    values.get(1).copied().unwrap_or(values[0]).to_owned(),
+                );
+                return;
+            }
+        }
         "border-top" | "border-right" | "border-bottom" | "border-left" => {
             if let Some((width, style, color)) = expand_border_shorthand(&value) {
                 apply(format!("{name}-width"), width);
@@ -1457,6 +1476,29 @@ mod tests {
         let style = sheet.compute_style(&node);
         assert_eq!(style.get("color"), Some("blue"));
         assert_eq!(style.get("padding"), Some("4px"));
+    }
+
+    #[test]
+    fn overflow_shorthand_expands_one_and_two_values() {
+        let one = Stylesheet::parse("div { overflow: hidden; }");
+        let node = Node::element("div");
+        let computed = one.compute_style(&node);
+        assert_eq!(computed.get("overflow"), Some("hidden"));
+        assert_eq!(computed.get("overflow-x"), Some("hidden"));
+        assert_eq!(computed.get("overflow-y"), Some("hidden"));
+
+        let two = Stylesheet::parse("div { overflow: clip auto; }");
+        let computed = two.compute_style(&node);
+        assert_eq!(computed.get("overflow-x"), Some("clip"));
+        assert_eq!(computed.get("overflow-y"), Some("auto"));
+    }
+
+    #[test]
+    fn invalid_overflow_shorthand_does_not_expand() {
+        let sheet = Stylesheet::parse("div { overflow: hidden nonsense; }");
+        let computed = sheet.compute_style(&Node::element("div"));
+        assert_eq!(computed.get("overflow-x"), None);
+        assert_eq!(computed.get("overflow-y"), None);
     }
 
     #[test]
