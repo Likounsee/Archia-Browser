@@ -158,6 +158,86 @@ impl Node {
         }
     }
 
+    /// Set or remove a boolean attribute. Returns the resulting presence state.
+    pub fn toggle_attribute(&mut self, name: &str, force: Option<bool>) -> bool {
+        let present = self.has_attribute(name);
+        let should_be_present = force.unwrap_or(!present);
+        if should_be_present {
+            if !present {
+                self.set_attribute(name, "");
+            }
+        } else if present {
+            self.remove_attribute(name);
+        }
+        should_be_present
+    }
+
+    /// Return whitespace-separated class tokens in source order.
+    pub fn class_list(&self) -> Vec<&str> {
+        self.attribute("class")
+            .map(|classes| {
+                classes
+                    .split(is_html_whitespace)
+                    .filter(|token| !token.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn has_class(&self, class_name: &str) -> bool {
+        !class_name.is_empty()
+            && !class_name.chars().any(is_html_whitespace)
+            && self.class_list().contains(&class_name)
+    }
+
+    /// Add a class token without duplicating an existing token.
+    /// Invalid empty or whitespace-containing tokens are ignored.
+    pub fn add_class(&mut self, class_name: &str) {
+        if class_name.is_empty() || class_name.chars().any(is_html_whitespace) {
+            return;
+        }
+        if self.has_class(class_name) {
+            return;
+        }
+        let mut classes = self.attribute("class").unwrap_or_default().to_owned();
+        if !classes.is_empty() {
+            classes.push(' ');
+        }
+        classes.push_str(class_name);
+        self.set_attribute("class", classes);
+    }
+
+    pub fn remove_class(&mut self, class_name: &str) {
+        if class_name.is_empty() || class_name.chars().any(is_html_whitespace) {
+            return;
+        }
+        let remaining = self
+            .class_list()
+            .into_iter()
+            .filter(|token| *token != class_name)
+            .collect::<Vec<_>>();
+        if remaining.is_empty() {
+            self.remove_attribute("class");
+        } else {
+            self.set_attribute("class", remaining.join(" "));
+        }
+    }
+
+    /// Toggle a class token with an optional forced presence state.
+    pub fn toggle_class(&mut self, class_name: &str, force: Option<bool>) -> bool {
+        if class_name.is_empty() || class_name.chars().any(is_html_whitespace) {
+            return false;
+        }
+        let present = self.has_class(class_name);
+        let should_be_present = force.unwrap_or(!present);
+        if should_be_present {
+            self.add_class(class_name);
+        } else {
+            self.remove_class(class_name);
+        }
+        should_be_present
+    }
+
     /// Return the destination of a normal HTML anchor element.
     ///
     /// Navigation policy stays in the browser layer; the DOM only exposes the
@@ -390,6 +470,46 @@ impl<'a> Iterator for Descendants<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn class_list_operations_preserve_tokens_and_avoid_duplicates() {
+        let mut node = Node::element("div");
+        node.set_attribute("class", "alpha  beta\\tgamma");
+        assert_eq!(node.class_list(), vec!["alpha", "beta", "gamma"]);
+        assert!(node.has_class("beta"));
+        node.add_class("beta");
+        node.add_class("delta");
+        assert_eq!(node.attribute("class"), Some("alpha beta gamma delta"));
+        node.remove_class("beta");
+        assert_eq!(node.attribute("class"), Some("alpha gamma delta"));
+        assert!(!node.toggle_class("gamma", None));
+        assert!(!node.has_class("gamma"));
+        assert!(node.toggle_class("omega", Some(true)));
+        assert!(node.has_class("omega"));
+        node.toggle_class("omega", Some(false));
+        assert!(!node.has_class("omega"));
+    }
+
+    #[test]
+    fn class_list_rejects_invalid_tokens_and_removes_empty_class_attribute() {
+        let mut node = Node::element("div");
+        node.add_class("");
+        node.add_class("two words");
+        assert!(!node.has_attribute("class"));
+        node.set_attribute("class", "one");
+        node.remove_class("one");
+        assert!(!node.has_attribute("class"));
+    }
+
+    #[test]
+    fn boolean_attribute_toggle_supports_force_and_default_modes() {
+        let mut node = Node::element("input");
+        assert!(node.toggle_attribute("required", None));
+        assert!(node.has_attribute("required"));
+        assert!(node.toggle_attribute("required", Some(true)));
+        assert!(!node.toggle_attribute("required", Some(false)));
+        assert!(!node.has_attribute("required"));
+    }
 
     #[test]
     fn text_content_preserves_document_order_through_nested_nodes() {
