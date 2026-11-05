@@ -862,6 +862,17 @@ mod tests {
     }
 
     #[test]
+    fn dialog_start_tag_closes_an_open_paragraph() {
+        let root = parse(&HtmlTokenizer::tokenize("<p>before<dialog>inside</dialog>after"));
+        let paragraph = root.find_first_element("p").expect("paragraph");
+        let dialog = root.find_first_element("dialog").expect("dialog");
+
+        assert_eq!(paragraph.text_content(), "before");
+        assert_eq!(dialog.text_content(), "inside");
+        assert!(root.visible_text_content().contains("after"));
+    }
+
+    #[test]
     fn head_metadata_without_explicit_head_is_normalized_into_head() {
         let root = parse(&HtmlTokenizer::tokenize(
             "<title>Page title</title><meta charset='utf-8'><link rel='stylesheet' href='site.css'><main>content</main>",
