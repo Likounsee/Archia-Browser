@@ -2386,6 +2386,24 @@ mod whitespace_layout_tests {
     }
 
     #[test]
+    fn min_max_and_clamp_lengths_resolve_against_containing_width() {
+        assert_eq!(parse_length(Some("min(50%, 120px)"), 300), Some(120));
+        assert_eq!(parse_length(Some("max(50%, 120px)"), 300), Some(150));
+        assert_eq!(parse_length(Some("clamp(100px, 50%, 180px)"), 400), Some(180));
+        assert_eq!(parse_length(Some("clamp(100px, 20%, 180px)"), 400), Some(100));
+        assert_eq!(parse_length(Some("min(2in, max(50%, 80px))"), 300), Some(150));
+    }
+
+    #[test]
+    fn min_max_and_clamp_reject_invalid_arguments_and_excessive_nesting() {
+        assert_eq!(parse_length(Some("min()"), 100), None);
+        assert_eq!(parse_length(Some("clamp(1px, 2px)"), 100), None);
+        assert_eq!(parse_length(Some("max(1px,)"), 100), None);
+        let nested = format!("{}1px{}", "min(".repeat(18), ")".repeat(18));
+        assert_eq!(parse_length(Some(&nested), 100), None);
+    }
+
+    #[test]
     fn line_height_accepts_fractional_percentages_and_pixels() {
         assert_eq!(parse_line_height(Some("125.5%"), 16), Some(20));
         assert_eq!(parse_line_height(Some("12.5px"), 16), Some(13));
@@ -2518,10 +2536,28 @@ fn parse_border_width(value: Option<&str>) -> Option<u32> {
 }
 
 fn parse_length(value: Option<&str>, containing_width: u32) -> Option<u32> {
-    let value = value?.trim();
-    if value
-        .get(..5)
-        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("calc("))
+    parse_length_inner(value?, containing_width, 0)
+}
+
+fn parse_length_inner(value: &str, containing_width: u32, depth: usize) -> Option<u32> {
+    if depth > 16 {
+        return None;
+    }
+    let value = value.trim();
+    if let Some((name, arguments)) = parse_css_math_function(value) {
+        let arguments = split_css_math_arguments(arguments)?;
+        let values = arguments
+            .iter()
+            .map(|argument| parse_length_inner(argument, containing_width, depth + 1))
+            .collect::<Option<Vec<_>>>()?;
+        return match name.to_ascii_lowercase().as_str() {
+            "min" if !values.is_empty() => values.into_iter().min(),
+            "max" if !values.is_empty() => values.into_iter().max(),
+            "clamp" if values.len() == 3 => Some(values[0].max(values[1].min(values[2]))),
+            _ => None,
+        };
+    }
+    if value.get(..5).is_some_and(|prefix| prefix.eq_ignore_ascii_case("calc("))
         && value.ends_with(')')
     {
         return parse_calc_length(&value[5..value.len() - 1], containing_width);
@@ -2542,6 +2578,64 @@ fn parse_length(value: Option<&str>, containing_width: u32) -> Option<u32> {
         return None;
     }
     Some(pixels.floor() as u32)
+}
+
+fn parse_css_math_function(value: &str) -> Option<(&str, &str)> {
+    let open = value.find('(')?;
+    if !value.ends_with(')') {
+        return None;
+    }
+    let name = value.get(..open)?;
+    if name.is_empty() || !name.bytes().all(|byte| byte.is_ascii_alphabetic()) {
+        return None;
+    }
+    let mut depth = 0usize;
+    for (index, byte) in value.bytes().enumerate().skip(open) {
+        match byte {
+            b'(' => depth += 1,
+            b')' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 && index != value.len() - 1 {
+                    return None;
+                }
+            }
+            _ => {}
+        }
+    }
+    if depth != 0 {
+        return None;
+    }
+    Some((name, value.get(open + 1..value.len() - 1)?))
+}
+
+fn split_css_math_arguments(expression: &str) -> Option<Vec<&str>> {
+    let mut arguments = Vec::new();
+    let mut depth = 0usize;
+    let mut start = 0usize;
+    for (index, byte) in expression.bytes().enumerate() {
+        match byte {
+            b'(' => depth += 1,
+            b')' => depth = depth.checked_sub(1)?,
+            b',' if depth == 0 => {
+                let argument = expression.get(start..index)?.trim();
+                if argument.is_empty() {
+                    return None;
+                }
+                arguments.push(argument);
+                start = index + 1;
+            }
+            _ => {}
+        }
+    }
+    if depth != 0 {
+        return None;
+    }
+    let final_argument = expression.get(start..)?.trim();
+    if final_argument.is_empty() {
+        return None;
+    }
+    arguments.push(final_argument);
+    Some(arguments)
 }
 
 // CSS absolute units use the standard 96 CSS pixels per inch.
