@@ -853,7 +853,8 @@ fn split_selector_list(input: &str, max_selectors: usize) -> Vec<String> {
 }
 
 fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
-    let (value, important) = normalize_declaration_value(&declaration.value);
+    let value = declaration.value.trim().to_owned();
+    let important = declaration.important;
     let name = if declaration.name.starts_with("--") {
         declaration.name.clone()
     } else {
@@ -1297,23 +1298,6 @@ fn is_inherited_property(name: &str) -> bool {
     )
 }
 
-fn normalize_declaration_value(value: &str) -> (String, bool) {
-    let trimmed = value.trim();
-    let compact = trimmed
-        .chars()
-        .filter(|character| !character.is_whitespace())
-        .collect::<String>();
-    let suffix = "!important";
-
-    if compact.len() >= suffix.len()
-        && compact[compact.len() - suffix.len()..].eq_ignore_ascii_case(suffix)
-    {
-        let bang = trimmed.rfind('!').unwrap_or(trimmed.len());
-        (trimmed[..bang].trim_end().to_owned(), true)
-    } else {
-        (trimmed.to_owned(), false)
-    }
-}
 
 #[cfg(test)]
 mod tests {
