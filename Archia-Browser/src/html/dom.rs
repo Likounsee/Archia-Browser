@@ -660,6 +660,25 @@ impl Node {
         true
     }
 
+    /// Insert parsed HTML nodes before the receiver's existing first child.
+    pub fn prepend_html(&mut self, html: &str) -> bool {
+        if !(self.is_document() || self.is_element()) {
+            return false;
+        }
+        if self.tag_name().is_some_and(is_void_html_element) {
+            return false;
+        }
+
+        let tokens = super::HtmlTokenizer::tokenize(html);
+        let mut fragment = super::parse(&tokens);
+        if fragment.children.try_reserve(self.children.len()).is_err() {
+            return false;
+        }
+        fragment.children.append(&mut self.children);
+        self.children = fragment.children;
+        true
+    }
+
     /// Set the node's text content without interpreting the value as markup.
     /// For elements/documents this replaces children; for text/comment nodes
     /// this replaces the node data.
@@ -905,6 +924,18 @@ mod tests {
         let mut image = Node::element("img");
         assert!(!image.append_html("<span>invalid</span>"));
         assert!(image.children.is_empty());
+    }
+
+    #[test]
+    fn prepend_html_inserts_before_existing_children() {
+        let mut root = Node::element("div");
+        root.append(Node::element("existing"));
+        assert!(root.prepend_html("<span>first</span><span>second</span>"));
+        assert_eq!(
+            root.children.iter().filter_map(Node::tag_name).collect::<Vec<_>>(),
+            ["span", "span", "existing"]
+        );
+        assert_eq!(root.text_content(), "firstsecond");
     }
 
     #[test]
