@@ -1038,7 +1038,7 @@ fn layout_grid_children(
         .or_else(|| parse_gap_shorthand(node.style.get("gap"), content_width, false))
         .unwrap_or(0);
     let tracks = parse_grid_tracks(node.style.get("grid-template-columns"), content_width);
-    let widths = resolve_grid_track_sizes(&tracks, content_width, column_gap);
+    let mut widths = resolve_grid_track_sizes(&tracks, content_width, column_gap);
     let row_heights = node
         .style
         .get("grid-template-rows")
@@ -1063,6 +1063,34 @@ fn layout_grid_children(
                 .collect()
         })
         .unwrap_or_default();
+    // Grow the implicit column axis for column auto-flow. Explicit tracks keep
+    // their resolved sizes; new tracks use grid-auto-columns (or intrinsic auto).
+    let flow_column = node.style.get("grid-auto-flow").is_some_and(|value| {
+        value.split_whitespace().any(|part| part.eq_ignore_ascii_case("column"))
+    });
+    if flow_column && !row_heights.is_empty() {
+        let in_flow_count = node.children.iter().filter(|child| {
+            display_for_styled_node(child) != Display::None
+                && !is_absolute_positioned(child)
+                && !is_fixed_positioned(child)
+        }).count();
+        let needed_columns = in_flow_count.div_ceil(row_heights.len()).min(16);
+        let implicit_tracks = parse_grid_tracks(node.style.get("grid-auto-columns"), content_width);
+        let intrinsic_auto_width = node.children.iter()
+            .filter(|child| display_for_styled_node(child) != Display::None
+                && !is_absolute_positioned(child) && !is_fixed_positioned(child))
+            .map(|child| intrinsic_inline_width(child, content_width))
+            .max().unwrap_or(1).max(1);
+        while widths.len() < needed_columns {
+            let track = &implicit_tracks[(widths.len() - tracks.len()) % implicit_tracks.len()];
+            let width = match track {
+                GridTrack::Fixed(width) => *width,
+                GridTrack::Fraction { minimum, .. } => *minimum,
+                GridTrack::Auto => intrinsic_auto_width,
+            };
+            widths.push(width.max(1));
+        }
+    }
     let columns = widths.len().max(1);
     let occupied_width = widths
         .iter()
@@ -5685,6 +5713,48 @@ mod tests {
         assert_eq!((layout.children[1].rect.x, layout.children[1].rect.y), (0, 0));
         assert_eq!((layout.children[2].rect.x, layout.children[2].rect.y), (100, 0));
         assert_eq!((layout.children[0].rect.x, layout.children[0].rect.y), (0, 20));
+    }
+
+    #[test]
+    fn grid_column_auto_flow_creates_implicit_columns() {
+        let mut root = Node::element("section");
+        root.set_attribute(
+            "style",
+            "display: grid; width: 300px; grid-template-columns: 100px; grid-template-rows: 25px 25px; grid-auto-columns: 80px; grid-auto-flow: column;",
+        );
+        for _ in 0..5 {
+            root.append(Node::element("div"));
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(300, 80));
+
+        assert_eq!((layout.children[0].rect.x, layout.children[0].rect.y), (0, 0));
+        assert_eq!((layout.children[1].rect.x, layout.children[1].rect.y), (0, 25));
+        assert_eq!((layout.children[2].rect.x, layout.children[2].rect.y), (100, 0));
+        assert_eq!((layout.children[3].rect.x, layout.children[3].rect.y), (100, 25));
+        assert_eq!((layout.children[4].rect.x, layout.children[4].rect.y), (180, 0));
+    }
+
+    #[test]
+    fn grid_column_auto_flow_uses_intrinsic_width_for_auto_columns() {
+        let mut root = Node::element("section");
+        root.set_attribute(
+            "style",
+            "display: grid; width: 300px; grid-template-columns: 100px; grid-template-rows: 25px; grid-auto-flow: column;",
+        );
+        root.append(Node::element("div"));
+        let mut second = Node::element("div");
+        second.append(Node::text("A fairly wide implicit grid item"));
+        root.append(second);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(300, 80));
+
+        assert!(layout.children[1].rect.x >= 100);
+        assert!(layout.children[1].rect.width > 0);
     }
 
 }
