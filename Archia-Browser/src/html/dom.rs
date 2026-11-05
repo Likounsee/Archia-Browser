@@ -700,26 +700,6 @@ impl Node {
             .collect()
     }
 
-    /// Return direct child elements, excluding text and comment nodes.
-    pub fn element_children(&self) -> impl Iterator<Item = &Node> {
-        self.children.iter().filter(|child| child.is_element())
-    }
-
-    /// Return the first direct child element, ignoring text and comments.
-    pub fn first_element_child(&self) -> Option<&Node> {
-        self.children.iter().find(|child| child.is_element())
-    }
-
-    /// Return the last direct child element, ignoring text and comments.
-    pub fn last_element_child(&self) -> Option<&Node> {
-        self.children.iter().rev().find(|child| child.is_element())
-    }
-
-    /// Count direct child elements, excluding text and comment nodes.
-    pub fn child_element_count(&self) -> usize {
-        self.element_children().count()
-    }
-
     /// Collect descendant text in document order without recursive calls.
     ///
     /// Iterative traversal keeps this accessor safe for deeply nested trees
