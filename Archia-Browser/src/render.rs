@@ -922,7 +922,8 @@ fn paint_border_edge(
         return;
     }
 
-    match border_style {
+    let border_style = border_style.to_ascii_lowercase();
+    match border_style.as_str() {
         "dashed" | "dotted" => {
             let unit = thickness.max(1);
             let (segment, gap) = if border_style == "dotted" {
