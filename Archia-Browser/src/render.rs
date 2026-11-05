@@ -292,6 +292,7 @@ fn paint_styled_node(
             }
         }
         paint_borders(&node.style, layout, list, opacity);
+        paint_text_decorations(&node.style, layout, list, opacity);
     }
 
     let clips_children = overflow_clips_children(&node.style);
@@ -380,6 +381,64 @@ fn paint_node(
 
     for (child, child_layout) in node.children.iter().zip(&layout.children) {
         paint_node(child, child_layout, style, list, opacity);
+    }
+}
+
+fn paint_text_decorations(
+    style: &ComputedStyle,
+    layout: &LayoutNode,
+    list: &mut DisplayList,
+    opacity: u8,
+) {
+    let Some(lines) = style
+        .get("text-decoration-line")
+        .or_else(|| style.get("text-decoration"))
+    else {
+        return;
+    };
+    let lines = lines.trim().to_ascii_lowercase();
+    if lines.is_empty() || lines == "none" {
+        return;
+    }
+
+    let rect = layout.rect;
+    if rect.width == 0 || rect.height == 0 {
+        return;
+    }
+
+    let color = style
+        .get("text-decoration-color")
+        .filter(|value| !value.trim().eq_ignore_ascii_case("currentcolor"))
+        .or_else(|| style.get("color"))
+        .and_then(parse_color)
+        .unwrap_or(0x000000ff);
+    let thickness = style
+        .get("text-decoration-thickness")
+        .and_then(|value| value.trim().strip_suffix("px"))
+        .and_then(|value| value.trim().parse::<u32>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(1)
+        .min(rect.height.max(1));
+
+    let mut paint_line = |y: i32| {
+        list.push(PaintCommand::FillRect {
+            rect: Rect::new(rect.x, y, rect.width, thickness),
+            color: apply_opacity(color, opacity),
+        });
+    };
+
+    for line in lines.split_whitespace() {
+        match line {
+            "underline" => paint_line(
+                rect.y
+                    .saturating_add(rect.height.saturating_sub(thickness) as i32),
+            ),
+            "overline" => paint_line(rect.y),
+            "line-through" => paint_line(
+                rect.y.saturating_add(rect.height.saturating_sub(thickness) as i32 / 2),
+            ),
+            _ => {}
+        }
     }
 }
 
@@ -920,6 +979,50 @@ mod tests {
             command,
             PaintCommand::DrawText { text, .. } if text == "HELLO WORLD"
         )));
+    }
+
+    #[test]
+    fn text_decorations_paint_underline_overline_and_line_through() {
+        let mut root = Node::element("span");
+        root.set_attribute(
+            "style",
+            "width: 30px; height: 12px; color: blue; text-decoration-line: underline overline line-through; text-decoration-thickness: 2px;",
+        );
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 50));
+        let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
+        let decoration_rects = list
+            .commands()
+            .iter()
+            .filter_map(|command| match command {
+                PaintCommand::FillRect { rect, color: 0x0000ffff } => Some(*rect),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(decoration_rects.len(), 3);
+        assert!(decoration_rects.iter().all(|rect| rect.width == 30 && rect.height == 2));
+        assert!(decoration_rects.iter().any(|rect| rect.y == layout.rect.y));
+        assert!(decoration_rects.iter().any(|rect| rect.y == layout.rect.y + 5));
+        assert!(decoration_rects.iter().any(|rect| rect.y == layout.rect.y + 10));
+    }
+
+    #[test]
+    fn text_decoration_none_does_not_paint_a_line() {
+        let mut root = Node::element("span");
+        root.set_attribute(
+            "style",
+            "width: 30px; height: 12px; text-decoration-line: none;",
+        );
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 50));
+        let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
+
+        assert!(list.commands().is_empty());
     }
 
     #[test]
