@@ -2681,7 +2681,9 @@ mod tests {
     fn html_inline_and_replaced_elements_get_appropriate_default_display() {
         let sheet = crate::css::StyleSheet::default();
         let mut root = Node::element("body");
-        for tag in ["q", "mark", "kbd", "wbr", "select", "img", "canvas", "video"] {
+        for tag in [
+            "q", "mark", "kbd", "wbr", "select", "img", "canvas", "video",
+        ] {
             root.append(Node::element(tag));
         }
 
