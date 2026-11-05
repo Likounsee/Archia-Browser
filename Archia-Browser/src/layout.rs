@@ -1258,20 +1258,20 @@ fn layout_grid_children(
         let free = (row..row + row_span)
             .all(|grid_row| (column..column + span).all(|cell| cells[grid_row][cell].is_none()));
         if free {
-                for (row_offset, cells_row) in cells.iter_mut().skip(row).take(row_span).enumerate()
+            for (row_offset, cells_row) in cells.iter_mut().skip(row).take(row_span).enumerate()
+            {
+                let grid_row = row + row_offset;
+                for (column_offset, cell_value) in
+                    cells_row.iter_mut().skip(column).take(span).enumerate()
                 {
-                    let grid_row = row + row_offset;
-                    for (column_offset, cell_value) in
-                        cells_row.iter_mut().skip(column).take(span).enumerate()
-                    {
-                        let cell = column + column_offset;
-                        *cell_value = if grid_row == row && cell == column {
-                            Some(child_index)
-                        } else {
-                            Some(usize::MAX - 1)
-                        };
-                    }
+                    let cell = column + column_offset;
+                    *cell_value = if grid_row == row && cell == column {
+                        Some(child_index)
+                    } else {
+                        Some(usize::MAX - 1)
+                    };
                 }
+            }
             column_spans[child_index] = span;
             row_spans[child_index] = row_span;
             placed[child_index] = true;
