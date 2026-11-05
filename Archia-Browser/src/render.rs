@@ -1205,6 +1205,7 @@ mod tests {
             paint_border_edge(
                 Rect::new(0, 0, 30, thickness),
                 true,
+                true,
                 style,
                 0xff0000ff,
                 &mut list,
@@ -1223,6 +1224,7 @@ mod tests {
         paint_border_edge(
             Rect::new(0, 0, 30, 2),
             true,
+            true,
             "DASHED",
             0xff0000ff,
             &mut list,
@@ -1235,6 +1237,7 @@ mod tests {
         let mut list = DisplayList::new();
         paint_border_edge(
             Rect::new(4, 10, 2, 30),
+            false,
             false,
             "dashed",
             0x0000ffff,
