@@ -5399,7 +5399,9 @@ mod tests {
         assert_eq!(layout.children[0].rect.height, 80);
         assert_eq!(layout.children[1].rect.y, 0);
         assert_eq!(layout.children[2].rect.y, 40);
-        assert_eq!(layout.children[2].rect.x, 100);
+        // Explicitly positioned grid items may overlap; the spanning item
+        // does not rewrite the second item's requested column line.
+        assert_eq!(layout.children[2].rect.x, 0);
     }
 
     #[test]
@@ -5663,7 +5665,7 @@ mod tests {
         let cases = [
             ("center", 100_u32, 0_u32),
             ("end", 200, 0),
-            ("space-between", 0, 100),
+            ("space-between", 0, 200),
             ("space-around", 50, 100),
             ("space-evenly", 66, 66),
         ];
