@@ -1069,26 +1069,74 @@ fn layout_grid_children(
         value.split_whitespace().any(|part| part.eq_ignore_ascii_case("column"))
     });
     if flow_column && !row_heights.is_empty() {
-        let in_flow_count = node.children.iter().filter(|child| {
-            display_for_styled_node(child) != Display::None
-                && !is_absolute_positioned(child)
-                && !is_fixed_positioned(child)
-        }).count();
+        let in_flow_count = node
+            .children
+            .iter()
+            .filter(|child| {
+                display_for_styled_node(child) != Display::None
+                    && !is_absolute_positioned(child)
+                    && !is_fixed_positioned(child)
+            })
+            .count();
         let needed_columns = in_flow_count.div_ceil(row_heights.len()).min(16);
         let implicit_tracks = parse_grid_tracks(node.style.get("grid-auto-columns"), content_width);
-        let intrinsic_auto_width = node.children.iter()
-            .filter(|child| display_for_styled_node(child) != Display::None
-                && !is_absolute_positioned(child) && !is_fixed_positioned(child))
+        let intrinsic_auto_width = node
+            .children
+            .iter()
+            .filter(|child| {
+                display_for_styled_node(child) != Display::None
+                    && !is_absolute_positioned(child)
+                    && !is_fixed_positioned(child)
+            })
             .map(|child| intrinsic_inline_width(child, content_width))
-            .max().unwrap_or(1).max(1);
-        while widths.len() < needed_columns {
-            let track = &implicit_tracks[(widths.len() - tracks.len()) % implicit_tracks.len()];
-            let width = match track {
-                GridTrack::Fixed(width) => *width,
-                GridTrack::Fraction { minimum, .. } => *minimum,
-                GridTrack::Auto => intrinsic_auto_width,
-            };
-            widths.push(width.max(1));
+            .max()
+            .unwrap_or(1)
+            .max(1);
+        let implicit_count = needed_columns.saturating_sub(widths.len());
+        if implicit_count > 0 {
+            let generated: Vec<GridTrack> = (0..implicit_count)
+                .map(|index| implicit_tracks[index % implicit_tracks.len()])
+                .collect();
+            let fixed_width = generated.iter().fold(0_u32, |total, track| match track {
+                GridTrack::Fixed(width) => total.saturating_add(*width),
+                GridTrack::Fraction { minimum, .. } => total.saturating_add(*minimum),
+                GridTrack::Auto => total.saturating_add(intrinsic_auto_width),
+            });
+            let fraction_total = generated.iter().fold(0.0_f32, |total, track| match track {
+                GridTrack::Fraction { factor, .. } => total + *factor,
+                _ => total,
+            });
+            let existing_width = widths.iter().copied().fold(0_u32, u32::saturating_add);
+            let all_gaps = column_gap.saturating_mul(needed_columns.saturating_sub(1) as u32);
+            let fraction_space = content_width
+                .saturating_sub(existing_width)
+                .saturating_sub(all_gaps)
+                .saturating_sub(fixed_width);
+            let mut fraction_used = 0_u32;
+            let fraction_count = generated
+                .iter()
+                .filter(|track| matches!(track, GridTrack::Fraction { .. }))
+                .count();
+            let mut fraction_index = 0;
+            for track in generated {
+                let width = match track {
+                    GridTrack::Fixed(width) => width,
+                    GridTrack::Auto => intrinsic_auto_width,
+                    GridTrack::Fraction { minimum, factor } => {
+                        fraction_index += 1;
+                        let share = if fraction_index == fraction_count {
+                            fraction_space.saturating_sub(fraction_used)
+                        } else if fraction_total > 0.0 {
+                            (fraction_space as f32 * factor / fraction_total).floor() as u32
+                        } else {
+                            0
+                        };
+                        fraction_used = fraction_used.saturating_add(share);
+                        minimum.saturating_add(share)
+                    }
+                };
+                widths.push(width.max(1));
+            }
         }
     }
     let columns = widths.len().max(1);
