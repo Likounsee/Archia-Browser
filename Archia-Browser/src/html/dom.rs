@@ -546,6 +546,23 @@ impl Node {
         output
     }
 
+    /// Serialize this node's children as HTML, equivalent to the DOM innerHTML getter.
+    pub fn inner_html(&self) -> String {
+        let mut output = String::new();
+        for child in &self.children {
+            serialize_html(child, &mut output);
+        }
+        output
+    }
+
+    /// Serialize this node as HTML, equivalent to the DOM outerHTML getter.
+    /// Documents have no element wrapper and serialize their children only.
+    pub fn outer_html(&self) -> String {
+        let mut output = String::new();
+        serialize_html(self, &mut output);
+        output
+    }
+
     /// Collect text intended for a basic visual page view.
     ///
     /// Unlike DOM textContent, this omits metadata and non-rendered source
@@ -574,6 +591,88 @@ impl Node {
         }
 
         output
+    }
+}
+
+
+/// HTML void elements cannot have serialized end tags or children.
+fn is_void_html_element(name: &str) -> bool {
+    matches!(
+        name,
+        "area" | "base" | "br" | "col" | "embed" | "hr" | "img" | "input"
+            | "link" | "meta" | "param" | "source" | "track" | "wbr"
+    )
+}
+
+fn append_escaped_html(output: &mut String, value: &str, attribute: bool) {
+    for character in value.chars() {
+        match character {
+            '&' => output.push_str("&amp;"),
+            '<' => output.push_str("&lt;"),
+            '>' if !attribute => output.push_str("&gt;"),
+            '"' if attribute => output.push_str("&quot;"),
+            _ => output.push(character),
+        }
+    }
+}
+
+/// Iterative serialization avoids consuming the Rust call stack for deeply
+/// nested trees created through public DOM mutation methods.
+fn serialize_html(root: &Node, output: &mut String) {
+    enum Entry<'a> {
+        Node(&'a Node, bool),
+        Close(&'a str),
+    }
+
+    let mut stack = vec![Entry::Node(root, false)];
+    while let Some(entry) = stack.pop() {
+        match entry {
+            Entry::Close(name) => {
+                output.push_str("</");
+                output.push_str(name);
+                output.push('>');
+            }
+            Entry::Node(node, raw_text) => match &node.kind {
+                NodeKind::Document => {
+                    stack.extend(node.children.iter().rev().map(|child| Entry::Node(child, false)));
+                }
+                NodeKind::Text(value) => {
+                    if raw_text {
+                        output.push_str(value);
+                    } else {
+                        append_escaped_html(output, value, false);
+                    }
+                }
+                NodeKind::Comment(value) => {
+                    output.push_str("<!--");
+                    output.push_str(value);
+                    output.push_str("-->");
+                }
+                NodeKind::Element { name, attributes } => {
+                    output.push('<');
+                    output.push_str(name);
+                    for (attribute, value) in attributes {
+                        output.push(' ');
+                        output.push_str(attribute);
+                        output.push_str("=\"");
+                        append_escaped_html(output, value, true);
+                        output.push('"');
+                    }
+                    output.push('>');
+                    if is_void_html_element(name) {
+                        continue;
+                    }
+                    stack.push(Entry::Close(name));
+                    let child_raw_text = matches!(name.as_str(), "script" | "style");
+                    stack.extend(
+                        node.children
+                            .iter()
+                            .rev()
+                            .map(|child| Entry::Node(child, child_raw_text)),
+                    );
+                }
+            },
+        }
     }
 }
 
@@ -1107,6 +1206,40 @@ mod tests {
         assert_eq!(
             root.find_first_element("SECTION").and_then(Node::tag_name),
             Some("section")
+        );
+    }
+
+    #[test]
+    fn inner_html_escapes_text_and_attributes_and_serializes_comments() {
+        let mut root = Node::element("div");
+        root.set_attribute("title", "a & \"b\"");
+        root.append(Node::text("<hello & goodbye>"));
+        root.append(Node::comment("note"));
+        root.append(Node::element("br"));
+
+        assert_eq!(
+            root.inner_html(),
+            "&lt;hello &amp; goodbye&gt;<!--note--><br>"
+        );
+        assert_eq!(
+            root.outer_html(),
+            "<div title=\"a &amp; &quot;b&quot;\">&lt;hello &amp; goodbye&gt;<!--note--><br></div>"
+        );
+    }
+
+    #[test]
+    fn html_serialization_preserves_raw_text_and_void_elements() {
+        let mut root = Node::document();
+        let mut script = Node::element("script");
+        script.append(Node::text("if (a < b) x = '&';"));
+        root.append(script);
+        let mut image = Node::element("img");
+        image.set_attribute("alt", "sample");
+        root.append(image);
+
+        assert_eq!(
+            root.outer_html(),
+            "<script>if (a < b) x = '&';</script><img alt=\"sample\">"
         );
     }
 
