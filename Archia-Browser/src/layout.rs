@@ -3059,7 +3059,7 @@ fn box_model_from_style(style: &ComputedStyle, containing_width: u32) -> BoxMode
 }
 
 fn is_auto_dimension(value: Option<&str>) -> bool {
-    value.is_some_and(|value| value.trim().eq_ignore_ascii_case("auto"))
+    value.map_or(true, |value| value.trim().eq_ignore_ascii_case("auto"))
 }
 
 fn parse_border_width(value: Option<&str>) -> Option<u32> {
