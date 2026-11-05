@@ -1624,19 +1624,27 @@ fn expand_text_decoration(value: &str) -> Option<(String, String, String, String
                 return None;
             }
             none_line = true;
-        } else if matches!(lower.as_str(), "underline" | "overline" | "line-through" | "blink") {
+        } else if matches!(
+            lower.as_str(),
+            "underline" | "overline" | "line-through" | "blink"
+        ) {
             if none_line || lines.contains(&lower) {
                 return None;
             }
             lines.push(lower);
-        } else if matches!(lower.as_str(), "solid" | "double" | "dotted" | "dashed" | "wavy") {
+        } else if matches!(
+            lower.as_str(),
+            "solid" | "double" | "dotted" | "dashed" | "wavy"
+        ) {
             if style.replace(lower).is_some() {
                 return None;
             }
         } else if matches!(lower.as_str(), "auto" | "from-font")
             || is_border_width_token(token)
             || lower.strip_suffix('%').is_some_and(|number| {
-                number.parse::<f64>().is_ok_and(|value| value.is_finite() && value >= 0.0)
+                number
+                    .parse::<f64>()
+                    .is_ok_and(|value| value.is_finite() && value >= 0.0)
             })
         {
             if thickness.replace(token.to_owned()).is_some() {
