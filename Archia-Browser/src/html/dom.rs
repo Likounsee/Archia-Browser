@@ -136,6 +136,38 @@ impl Node {
         matches!(self.kind, NodeKind::Element { .. })
     }
 
+    pub fn is_document(&self) -> bool {
+        matches!(self.kind, NodeKind::Document)
+    }
+
+    pub fn is_text(&self) -> bool {
+        matches!(self.kind, NodeKind::Text(_))
+    }
+
+    pub fn is_comment(&self) -> bool {
+        matches!(self.kind, NodeKind::Comment(_))
+    }
+
+    /// DOM-compatible numeric node type: Document=9, Element=1, Text=3, Comment=8.
+    pub fn node_type(&self) -> u16 {
+        match self.kind {
+            NodeKind::Element { .. } => 1,
+            NodeKind::Text(_) => 3,
+            NodeKind::Comment(_) => 8,
+            NodeKind::Document => 9,
+        }
+    }
+
+    /// DOM-compatible node name. HTML element names are exposed uppercase.
+    pub fn node_name(&self) -> String {
+        match &self.kind {
+            NodeKind::Document => "#document".to_owned(),
+            NodeKind::Element { name, .. } => name.to_ascii_uppercase(),
+            NodeKind::Text(_) => "#text".to_owned(),
+            NodeKind::Comment(_) => "#comment".to_owned(),
+        }
+    }
+
     pub fn tag_name(&self) -> Option<&str> {
         match &self.kind {
             NodeKind::Element { name, .. } => Some(name),
@@ -547,6 +579,30 @@ impl<'a> Iterator for Descendants<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn node_metadata_matches_dom_node_types_and_names() {
+        let document = Node::document();
+        let element = Node::element("div");
+        let text = Node::text("hello");
+        let comment = Node::comment("note");
+
+        assert_eq!(document.node_type(), 9);
+        assert_eq!(document.node_name(), "#document");
+        assert!(document.is_document());
+
+        assert_eq!(element.node_type(), 1);
+        assert_eq!(element.node_name(), "DIV");
+        assert!(element.is_element());
+
+        assert_eq!(text.node_type(), 3);
+        assert_eq!(text.node_name(), "#text");
+        assert!(text.is_text());
+
+        assert_eq!(comment.node_type(), 8);
+        assert_eq!(comment.node_name(), "#comment");
+        assert!(comment.is_comment());
+    }
 
     #[test]
     fn child_node_accessors_include_text_and_comments() {
