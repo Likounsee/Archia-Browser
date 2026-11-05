@@ -739,6 +739,12 @@ fn matches_pseudo_class(
     ancestors: Option<&[&Node]>,
 ) -> bool {
     match pseudo {
+        // In a document stylesheet, the scoping root is the first element in
+        // the current ancestor path (the document element). For fragment-style
+        // matching without an ancestor path, the candidate itself is the scope.
+        "scope" => ancestors.is_none_or(|ancestors| {
+            !ancestors.iter().any(|ancestor| ancestor.is_element())
+        }),
         // The normalized HTML document has a single document element named
         // "html"; :root must not match arbitrary elements in a fragment.
         "root" => {
@@ -2189,6 +2195,30 @@ mod tests {
     fn has_specificity_uses_the_most_specific_argument() {
         let selector = Selector::parse("main:has(.card, #featured)").unwrap();
         assert_eq!(selector.specificity(), Specificity::new(1, 0, 1));
+    }
+
+    #[test]
+    fn scope_matches_only_the_scoping_root_in_a_document_path() {
+        let mut root = Node::element("main");
+        let mut child = Node::element("section");
+        child.set_attribute("class", "child");
+        root.append(child);
+        let siblings = root.children.as_slice();
+
+        let scope = Selector::parse(":scope").unwrap();
+        let direct_child = Selector::parse(":scope > .child").unwrap();
+
+        assert!(scope.matches_path_with_siblings(&[&root], &[&[]], &[0]));
+        assert!(!scope.matches_path_with_siblings(
+            &[&root, &siblings[0]],
+            &[&[], siblings],
+            &[0, 0],
+        ));
+        assert!(direct_child.matches_path_with_siblings(
+            &[&root, &siblings[0]],
+            &[&[], siblings],
+            &[0, 0],
+        ));
     }
 
     #[test]
