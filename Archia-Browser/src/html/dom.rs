@@ -156,6 +156,26 @@ impl Node {
         self.children.last()
     }
 
+    /// Number of element children, excluding text and comment nodes.
+    pub fn child_element_count(&self) -> usize {
+        self.children.iter().filter(|child| child.is_element()).count()
+    }
+
+    /// First element child, skipping text and comment nodes.
+    pub fn first_element_child(&self) -> Option<&Node> {
+        self.children.iter().find(|child| child.is_element())
+    }
+
+    /// Last element child, skipping text and comment nodes.
+    pub fn last_element_child(&self) -> Option<&Node> {
+        self.children.iter().rev().find(|child| child.is_element())
+    }
+
+    /// Element children in document order.
+    pub fn element_children(&self) -> Vec<&Node> {
+        self.children.iter().filter(|child| child.is_element()).collect()
+    }
+
     pub fn children(&self) -> &[Node] {
         &self.children
     }
@@ -1834,6 +1854,25 @@ mod tests {
         assert_eq!(option.form_value().as_deref(), Some("choice-id"));
         option.set_attribute("selected", "");
         assert!(option.is_selected());
+    }
+
+    #[test]
+    fn element_child_accessors_skip_text_and_comments() {
+        let mut root = Node::element("div");
+        root.append(Node::text("before"));
+        root.append(Node::comment("note"));
+        root.append(Node::element("span"));
+        root.append(Node::text("between"));
+        root.append(Node::element("strong"));
+        root.append(Node::comment("after"));
+
+        assert_eq!(root.child_count(), 6);
+        assert_eq!(root.child_element_count(), 2);
+        assert_eq!(root.first_element_child().and_then(Node::tag_name), Some("span"));
+        assert_eq!(root.last_element_child().and_then(Node::tag_name), Some("strong"));
+        assert_eq!(root.element_children().len(), 2);
+        assert_eq!(root.element_children()[0].tag_name(), Some("span"));
+        assert_eq!(root.element_children()[1].tag_name(), Some("strong"));
     }
 
     #[test]
