@@ -609,6 +609,7 @@ fn implied_end_tags_for_start(name: &str) -> &'static [&'static str] {
     match name {
         "a" => &["a"],
         "button" => &["button"],
+        "nobr" => &["nobr"],
         "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => &["h1", "h2", "h3", "h4", "h5", "h6"],
         "dt" | "dd" => &["dt", "dd"],
         "li" => &["li"],
@@ -639,6 +640,7 @@ fn is_formatting_element(name: &str) -> bool {
             | "em"
             | "font"
             | "i"
+            | "nobr"
             | "s"
             | "small"
             | "strike"
@@ -868,6 +870,39 @@ mod tests {
         assert_eq!(italic_nodes[0].text_content(), "one");
         assert_eq!(italic_nodes[1].text_content(), "two");
         assert_eq!(paragraph.text_content(), "onetwothree");
+    }
+
+    #[test]
+    fn nested_nobr_elements_close_and_reopen_like_formatting_elements() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<p><nobr>one<nobr>two</nobr>three</p>",
+        ));
+        let paragraph = root.find_first_element("p").expect("paragraph");
+        let nobr_nodes = paragraph
+            .descendants()
+            .filter(|node| node.tag_name() == Some("nobr"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(nobr_nodes.len(), 2);
+        assert_eq!(nobr_nodes[0].text_content(), "one");
+        assert_eq!(nobr_nodes[1].text_content(), "twothree");
+        assert_eq!(paragraph.text_content(), "onetwothree");
+    }
+
+    #[test]
+    fn misnested_nobr_reopens_formatting_descendants() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<p><nobr><i>one</nobr>two</i></p>",
+        ));
+        let paragraph = root.find_first_element("p").expect("paragraph");
+        let italic_nodes = paragraph
+            .descendants()
+            .filter(|node| node.tag_name() == Some("i"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(italic_nodes.len(), 2);
+        assert_eq!(italic_nodes[0].text_content(), "one");
+        assert_eq!(italic_nodes[1].text_content(), "two");
     }
 
     #[test]
