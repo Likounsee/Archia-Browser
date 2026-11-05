@@ -557,6 +557,31 @@ fn supports_declaration(name: &str, value: &str) -> bool {
                 | "space-around"
                 | "space-evenly"
         ),
+        "gap" => {
+            let values = value.split_whitespace().collect::<Vec<_>>();
+            if (1..=2).contains(&values.len())
+                && values.iter().all(|value| {
+                    *value == "normal"
+                        || *value == "0"
+                        || value.ends_with('%')
+                        || value.ends_with("px")
+                        || value.ends_with("in")
+                        || value.ends_with("cm")
+                        || value.ends_with("mm")
+                        || value.ends_with("pt")
+                        || value.ends_with("pc")
+                        || value.ends_with("Q")
+                })
+            {
+                apply(name.clone(), value.clone());
+                apply("row-gap".to_owned(), values[0].to_owned());
+                apply(
+                    "column-gap".to_owned(),
+                    values.get(1).copied().unwrap_or(values[0]).to_owned(),
+                );
+                return;
+            }
+        }
         "overflow" => {
             let values = value.split_whitespace().collect::<Vec<_>>();
             (1..=2).contains(&values.len())
@@ -1536,6 +1561,29 @@ mod tests {
         let style = sheet.compute_style(&node);
         assert_eq!(style.get("color"), Some("blue"));
         assert_eq!(style.get("padding"), Some("4px"));
+    }
+
+    #[test]
+    fn gap_shorthand_expands_one_and_two_values() {
+        let node = Node::element("div");
+
+        let one = StyleSheet::parse("div { gap: 12px; }").compute_style(&node);
+        assert_eq!(one.get("row-gap"), Some("12px"));
+        assert_eq!(one.get("column-gap"), Some("12px"));
+
+        let two = StyleSheet::parse("div { gap: 8px 16px; }").compute_style(&node);
+        assert_eq!(two.get("row-gap"), Some("8px"));
+        assert_eq!(two.get("column-gap"), Some("16px"));
+    }
+
+    #[test]
+    fn gap_shorthand_respects_important_longhands() {
+        let sheet = StyleSheet::parse(
+            "div { row-gap: 3px !important; gap: 8px 16px; }",
+        );
+        let computed = sheet.compute_style(&Node::element("div"));
+        assert_eq!(computed.get("row-gap"), Some("3px"));
+        assert_eq!(computed.get("column-gap"), Some("16px"));
     }
 
     #[test]
