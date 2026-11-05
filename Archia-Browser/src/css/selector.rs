@@ -742,9 +742,8 @@ fn matches_pseudo_class(
         // In a document stylesheet, the scoping root is the first element in
         // the current ancestor path (the document element). For fragment-style
         // matching without an ancestor path, the candidate itself is the scope.
-        "scope" => ancestors.is_none_or(|ancestors| {
-            !ancestors.iter().any(|ancestor| ancestor.is_element())
-        }),
+        "scope" => ancestors
+            .is_none_or(|ancestors| !ancestors.iter().any(|ancestor| ancestor.is_element())),
         // The normalized HTML document has a single document element named
         // "html"; :root must not match arbitrary elements in a fragment.
         "root" => {
