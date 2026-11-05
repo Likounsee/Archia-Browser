@@ -863,7 +863,9 @@ mod tests {
 
     #[test]
     fn dialog_start_tag_closes_an_open_paragraph() {
-        let root = parse(&HtmlTokenizer::tokenize("<p>before<dialog>inside</dialog>after"));
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<p>before<dialog>inside</dialog>after",
+        ));
         let paragraph = root.find_first_element("p").expect("paragraph");
         let dialog = root.find_first_element("dialog").expect("dialog");
 
