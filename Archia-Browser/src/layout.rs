@@ -845,6 +845,27 @@ fn parse_grid_column_span(value: Option<&str>, start: usize, columns: usize) -> 
         .map_or(1, |line| line - (start + 1))
 }
 
+fn parse_grid_row_span(value: Option<&str>, start: usize, rows: usize) -> usize {
+    let Some(value) = value else {
+        return 1;
+    };
+    let end = value
+        .split_once('/')
+        .map_or(value.trim(), |(_, end)| end.trim());
+    let mut parts = end.split_whitespace();
+    if parts.next().is_some_and(|part| part.eq_ignore_ascii_case("span")) {
+        return parts
+            .next()
+            .and_then(|span| span.parse::<usize>().ok())
+            .filter(|span| *span > 0 && *span <= rows)
+            .unwrap_or(1);
+    }
+    end.parse::<usize>()
+        .ok()
+        .filter(|line| *line > start + 1 && *line <= rows)
+        .map_or(1, |line| line - (start + 1))
+}
+
 fn parse_grid_track(value: &str, reference: u32) -> Option<GridTrack> {
     let value = value.trim().to_ascii_lowercase();
     if value == "auto" || value == "min-content" || value == "max-content" {
@@ -1118,6 +1139,7 @@ fn layout_grid_children(
     let mut cells: Vec<Vec<Option<usize>>> = Vec::new();
     let mut placed = vec![false; node.children.len()];
     let mut column_spans = vec![1_usize; node.children.len()];
+    let mut row_spans = vec![1_usize; node.children.len()];
     for &child_index in &grid_items {
         let child = &node.children[child_index];
         let requested_column = parse_grid_line_start(child.style.get("grid-column"));
@@ -1135,15 +1157,30 @@ fn layout_grid_children(
         }
         let span = parse_grid_column_span(child.style.get("grid-column"), column, columns)
             .min(columns.saturating_sub(column));
-        while cells.len() <= row {
+        let row_span = parse_grid_row_span(
+            child.style.get("grid-row"),
+            row,
+            row_heights.len().max(1),
+        )
+        .min(row_heights.len().saturating_sub(row).max(1));
+        while cells.len() <= row + row_span - 1 {
             cells.push(vec![None; columns]);
         }
-        if (column..column + span).all(|cell| cells[row][cell].is_none()) {
-            cells[row][column] = Some(child_index);
-            for cell in column + 1..column + span {
-                cells[row][cell] = Some(usize::MAX - 1);
+        let free = (row..row + row_span).all(|grid_row| {
+            (column..column + span).all(|cell| cells[grid_row][cell].is_none())
+        });
+        if free {
+            for grid_row in row..row + row_span {
+                for cell in column..column + span {
+                    cells[grid_row][cell] = if grid_row == row && cell == column {
+                        Some(child_index)
+                    } else {
+                        Some(usize::MAX - 1)
+                    };
+                }
             }
             column_spans[child_index] = span;
+            row_spans[child_index] = row_span;
             placed[child_index] = true;
         }
     }
@@ -1161,11 +1198,10 @@ fn layout_grid_children(
         if dense {
             cursor = 0;
         }
-        let span = parse_grid_column_span(
-            node.children[child_index].style.get("grid-column"),
-            0,
-            columns,
-        );
+        let child = &node.children[child_index];
+        let span = parse_grid_column_span(child.style.get("grid-column"), 0, columns);
+        let row_span = parse_grid_row_span(child.style.get("grid-row"), 0, row_heights.len())
+            .min(row_heights.len().max(1));
         loop {
             let row = cursor / columns;
             let column = cursor % columns;
@@ -1176,16 +1212,24 @@ fn layout_grid_children(
                 cursor = cursor.saturating_add(columns - column);
                 continue;
             }
-            while cells.len() <= row {
+            while cells.len() <= row + row_span - 1 {
                 cells.push(vec![None; columns]);
             }
-            let range = column..column + span;
-            if range.clone().all(|cell| cells[row][cell].is_none()) {
-                cells[row][column] = Some(child_index);
-                for cell in column + 1..column + span {
-                    cells[row][cell] = Some(usize::MAX - 1);
+            let free = (row..row + row_span).all(|grid_row| {
+                (column..column + span).all(|cell| cells[grid_row][cell].is_none())
+            });
+            if free {
+                for grid_row in row..row + row_span {
+                    for cell in column..column + span {
+                        cells[grid_row][cell] = if grid_row == row && cell == column {
+                            Some(child_index)
+                        } else {
+                            Some(usize::MAX - 1)
+                        };
+                    }
                 }
                 column_spans[child_index] = span;
+                row_spans[child_index] = row_span;
                 cursor = row
                     .saturating_mul(columns)
                     .saturating_add(column)
@@ -1313,7 +1357,19 @@ fn layout_grid_children(
                 .unwrap_or_else(|| "stretch".to_owned());
             let mut align_offset = 0_u32;
             if let Some(row_height) = explicit_row_height {
-                let content_cell_height = row_height.saturating_sub(child_box.vertical_outer());
+                let item_row_span = row_spans[child_index]
+                    .min(row_heights.len().saturating_sub(row_index).max(1));
+                let area_height = row_heights
+                    .iter()
+                    .skip(row_index)
+                    .take(item_row_span)
+                    .copied()
+                    .fold(0_u32, u32::saturating_add)
+                    .saturating_add(
+                        row_gap.saturating_mul(item_row_span.saturating_sub(1) as u32),
+                    )
+                    .max(row_height);
+                let content_cell_height = area_height.saturating_sub(child_box.vertical_outer());
                 if is_auto_dimension(grid_child.style.get("height")) {
                     if matches!(
                         align_self.as_str(),
@@ -1355,12 +1411,14 @@ fn layout_grid_children(
                 abs_width,
                 abs_height,
             );
-            row_height = row_height.max(
-                child_layout
-                    .rect
-                    .height
-                    .saturating_add(child_layout.box_model.vertical_outer()),
-            );
+            if row_spans[child_index] == 1 {
+                row_height = row_height.max(
+                    child_layout
+                        .rect
+                        .height
+                        .saturating_add(child_layout.box_model.vertical_outer()),
+                );
+            }
             laid_out[child_index] = Some(child_layout);
             column_left = column_left
                 .saturating_add(spanned_width)
@@ -5171,6 +5229,56 @@ mod tests {
         assert_eq!(layout.children[0].rect.x, 100);
         assert_eq!(layout.children[0].rect.width, 200);
         assert_eq!(layout.children[1].rect.x, 0);
+        assert_eq!(layout.children[1].rect.y, 0);
+    }
+
+    #[test]
+    fn grid_row_span_reserves_following_explicit_rows() {
+        let mut root = Node::element("section");
+        root.set_attribute(
+            "style",
+            "display: grid; width: 200px; grid-template-columns: 100px 100px; grid-template-rows: 40px 40px;",
+        );
+        let mut spanning = Node::element("div");
+        spanning.set_attribute("style", "grid-column: 1; grid-row: 1 / span 2;");
+        let mut next = Node::element("div");
+        next.set_attribute("style", "grid-column: 2; grid-row: 1;");
+        let mut last = Node::element("div");
+        last.set_attribute("style", "grid-column: 1; grid-row: 2;");
+        root.append(spanning);
+        root.append(next);
+        root.append(last);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.y, 0);
+        assert_eq!(layout.children[0].rect.height, 80);
+        assert_eq!(layout.children[1].rect.y, 0);
+        assert_eq!(layout.children[2].rect.y, 40);
+        assert_eq!(layout.children[2].rect.x, 0);
+    }
+
+    #[test]
+    fn grid_row_span_keyword_reserves_implicit_placement_cells() {
+        let mut root = Node::element("section");
+        root.set_attribute(
+            "style",
+            "display: grid; width: 200px; grid-template-columns: 100px 100px; grid-template-rows: 40px 40px;",
+        );
+        let mut spanning = Node::element("div");
+        spanning.set_attribute("style", "grid-row: span 2;");
+        let mut next = Node::element("div");
+        root.append(spanning);
+        root.append(next);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert_eq!(layout.children[0].rect.height, 80);
+        assert_eq!(layout.children[1].rect.x, 100);
         assert_eq!(layout.children[1].rect.y, 0);
     }
 
