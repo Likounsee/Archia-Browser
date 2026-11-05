@@ -393,6 +393,7 @@ fn supports_declaration(name: &str, value: &str) -> bool {
         "box-sizing",
         "width",
         "height",
+        "aspect-ratio",
         "min-width",
         "max-width",
         "min-height",
@@ -732,8 +733,24 @@ fn supports_declaration(name: &str, value: &str) -> bool {
                     <= 1
         }
         "visibility" => matches!(value.as_str(), "visible" | "hidden" | "collapse"),
+        "aspect-ratio" => {
+            value == "auto" || parse_supported_aspect_ratio(&value)
+        }
         _ => true,
     }
+}
+
+fn parse_supported_aspect_ratio(value: &str) -> bool {
+    let value = value.strip_prefix("auto").map(str::trim).unwrap_or(value);
+    if value.is_empty() {
+        return false;
+    }
+    let (width, height) = value.split_once('/').unwrap_or((value, "1"));
+    let (Ok(width), Ok(height)) = (width.trim().parse::<f64>(), height.trim().parse::<f64>())
+    else {
+        return false;
+    };
+    width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0
 }
 
 /// Evaluate the bounded, commonly used subset of CSS media queries.
@@ -2351,6 +2368,16 @@ mod tests {
         assert_eq!(computed.get("border-top-right-radius"), Some("8px"));
         assert_eq!(computed.get("border-bottom-right-radius"), Some("4px"));
         assert_eq!(computed.get("border-bottom-left-radius"), Some("8px"));
+    }
+
+    #[test]
+    fn supports_aspect_ratio_declarations_and_rejects_invalid_ratios() {
+        assert!(supports_declaration("aspect-ratio", "16 / 9"));
+        assert!(supports_declaration("aspect-ratio", "auto"));
+        assert!(supports_declaration("aspect-ratio", "auto 4 / 3"));
+        assert!(!supports_declaration("aspect-ratio", "0 / 1"));
+        assert!(!supports_declaration("aspect-ratio", "1 / 0"));
+        assert!(!supports_declaration("aspect-ratio", "NaN"));
     }
 
     #[test]
