@@ -463,6 +463,10 @@ fn supports_declaration(name: &str, value: &str) -> bool {
         "outline-style",
         "outline-color",
         "outline-offset",
+        "text-decoration-line",
+        "text-decoration-style",
+        "text-decoration-color",
+        "text-decoration-thickness",
         "border-top-left-radius",
         "border-top-right-radius",
         "border-bottom-right-radius",
@@ -482,6 +486,10 @@ fn supports_declaration(name: &str, value: &str) -> bool {
         "line-height",
         "text-align",
         "text-decoration",
+        "text-decoration-line",
+        "text-decoration-style",
+        "text-decoration-color",
+        "text-decoration-thickness",
         "white-space",
         "flex",
         "flex-grow",
@@ -1134,6 +1142,16 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
                 return;
             }
         }
+        "text-decoration" => {
+            if let Some((line, style, color, thickness)) = expand_text_decoration(&value) {
+                apply(name.clone(), value.clone());
+                apply("text-decoration-line".to_owned(), line);
+                apply("text-decoration-style".to_owned(), style);
+                apply("text-decoration-color".to_owned(), color);
+                apply("text-decoration-thickness".to_owned(), thickness);
+                return;
+            }
+        }
         "border" => {
             if let Some((width, style, color)) = expand_border_shorthand(&value) {
                 apply("border-width".to_owned(), width.to_owned());
@@ -1436,7 +1454,10 @@ fn initial_value(name: &str) -> &'static str {
         "font-weight" => "normal",
         "line-height" => "normal",
         "text-align" => "start",
-        "text-decoration" | "text-transform" => "none",
+        "text-decoration" | "text-decoration-line" | "text-transform" => "none",
+        "text-decoration-style" => "solid",
+        "text-decoration-color" => "currentcolor",
+        "text-decoration-thickness" => "auto",
         "white-space" => "normal",
         "letter-spacing" | "word-spacing" => "normal",
         "text-indent" => "0",
@@ -1529,6 +1550,43 @@ fn expand_border_shorthand(value: &str) -> Option<(String, String, String)> {
         width.unwrap_or_else(|| "medium".to_owned()),
         style.unwrap_or_else(|| "none".to_owned()),
         color.unwrap_or_else(|| "currentcolor".to_owned()),
+    ))
+}
+
+fn expand_text_decoration(value: &str) -> Option<(String, String, String, String)> {
+    let mut lines = Vec::new();
+    let mut style = None;
+    let mut color = None;
+    let mut thickness = None;
+
+    for token in value.split_whitespace() {
+        let lower = token.to_ascii_lowercase();
+        if matches!(lower.as_str(), "none" | "underline" | "overline" | "line-through" | "blink") {
+            if lower == "none" || lines.contains(&lower) {
+                if lower == "none" || !lines.is_empty() {
+                    return None;
+                }
+            } else {
+                lines.push(lower);
+            }
+        } else if matches!(lower.as_str(), "solid" | "double" | "dotted" | "dashed" | "wavy") {
+            if style.replace(lower).is_some() {
+                return None;
+            }
+        } else if matches!(lower.as_str(), "auto" | "from-font") || is_border_width_token(token) {
+            if thickness.replace(token.to_owned()).is_some() {
+                return None;
+            }
+        } else if color.replace(token.to_owned()).is_some() {
+            return None;
+        }
+    }
+
+    Some((
+        if lines.is_empty() { "none".to_owned() } else { lines.join(" ") },
+        style.unwrap_or_else(|| "solid".to_owned()),
+        color.unwrap_or_else(|| "currentcolor".to_owned()),
+        thickness.unwrap_or_else(|| "auto".to_owned()),
     ))
 }
 
@@ -1866,13 +1924,51 @@ mod tests {
 
     #[test]
     fn outline_shorthand_preserves_important_longhands() {
-        let sheet = StyleSheet::parse(
-            "div { outline-width: 7px !important; outline: 2px solid red; }",
-        );
+        let sheet =
+            StyleSheet::parse("div { outline-width: 7px !important; outline: 2px solid red; }");
         let computed = sheet.compute_style(&Node::element("div"));
         assert_eq!(computed.get("outline-width"), Some("7px"));
         assert_eq!(computed.get("outline-style"), Some("solid"));
         assert_eq!(computed.get("outline-color"), Some("red"));
+    }
+
+    #[test]
+    fn text_decoration_shorthand_expands_line_style_color_and_thickness() {
+        let sheet = StyleSheet::parse(
+            "a { text-decoration: underline wavy red 2px; } p { text-decoration: overline line-through dotted blue; } span { text-decoration: none; }",
+        );
+        let cases = [
+            ("a", "underline", "wavy", "red", "2px"),
+            ("p", "overline line-through", "dotted", "blue", "auto"),
+            ("span", "none", "solid", "currentcolor", "auto"),
+        ];
+        for (tag, line, style, color, thickness) in cases {
+            let computed = sheet.compute_style(&Node::element(tag));
+            assert_eq!(computed.get("text-decoration-line"), Some(line));
+            assert_eq!(computed.get("text-decoration-style"), Some(style));
+            assert_eq!(computed.get("text-decoration-color"), Some(color));
+            assert_eq!(computed.get("text-decoration-thickness"), Some(thickness));
+        }
+    }
+
+    #[test]
+    fn text_decoration_shorthand_preserves_important_longhands() {
+        let sheet = StyleSheet::parse(
+            "a { text-decoration-color: green !important; text-decoration: underline wavy red 3px; }",
+        );
+        let computed = sheet.compute_style(&Node::element("a"));
+        assert_eq!(computed.get("text-decoration-line"), Some("underline"));
+        assert_eq!(computed.get("text-decoration-style"), Some("wavy"));
+        assert_eq!(computed.get("text-decoration-color"), Some("green"));
+        assert_eq!(computed.get("text-decoration-thickness"), Some("3px"));
+    }
+
+    #[test]
+    fn invalid_text_decoration_shorthand_does_not_expand() {
+        let sheet = StyleSheet::parse("a { text-decoration: underline wavy dotted; }");
+        let computed = sheet.compute_style(&Node::element("a"));
+        assert_eq!(computed.get("text-decoration-line"), None);
+        assert_eq!(computed.get("text-decoration-style"), None);
     }
 
     #[test]
