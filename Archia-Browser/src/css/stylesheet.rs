@@ -1426,9 +1426,7 @@ fn expand_border_shorthand(value: &str) -> Option<(String, String, String)> {
     let mut color = None;
 
     for token in value.split_whitespace() {
-        if width.is_none()
-            && (matches!(token, "thin" | "medium" | "thick") || parse_px_token(token).is_some())
-        {
+        if width.is_none() && is_border_width_token(token) {
             width = Some(token.to_owned());
         } else if style.is_none()
             && matches!(
@@ -1458,6 +1456,24 @@ fn expand_border_shorthand(value: &str) -> Option<(String, String, String)> {
         style.unwrap_or_else(|| "none".to_owned()),
         color.unwrap_or_else(|| "currentcolor".to_owned()),
     ))
+}
+
+fn is_border_width_token(value: &str) -> bool {
+    if matches!(value, "thin" | "medium" | "thick" | "0") {
+        return true;
+    }
+    let lower = value.to_ascii_lowercase();
+    const UNITS: &[&str] = &[
+        "px", "em", "rem", "ex", "ch", "ic", "cap", "lh", "rlh", "vw", "vh", "vmin",
+        "vmax", "vi", "vb", "cm", "mm", "q", "in", "pt", "pc",
+    ];
+    let Some(unit) = UNITS.iter().find(|unit| lower.ends_with(**unit)) else {
+        return false;
+    };
+    let number = &value[..value.len() - unit.len()];
+    number
+        .parse::<f64>()
+        .is_ok_and(|number| number.is_finite() && number >= 0.0)
 }
 
 fn parse_px_token(value: &str) -> Option<u32> {
@@ -1724,6 +1740,18 @@ mod tests {
         ] {
             assert_eq!(computed.get(property), Some(expected), "{property}");
         }
+    }
+
+    #[test]
+    fn border_side_shorthand_accepts_fractional_and_relative_widths() {
+        let sheet = StyleSheet::parse(
+            "div { border-top: 0.5px solid red; border-right: 0.125rem dashed blue; }",
+        );
+        let computed = sheet.compute_style(&Node::element("div"));
+        assert_eq!(computed.get("border-top-width"), Some("0.5px"));
+        assert_eq!(computed.get("border-top-style"), Some("solid"));
+        assert_eq!(computed.get("border-right-width"), Some("0.125rem"));
+        assert_eq!(computed.get("border-right-style"), Some("dashed"));
     }
 
     #[test]
