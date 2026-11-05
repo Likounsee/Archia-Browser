@@ -2519,7 +2519,9 @@ fn parse_border_width(value: Option<&str>) -> Option<u32> {
 
 fn parse_length(value: Option<&str>, containing_width: u32) -> Option<u32> {
     let value = value?.trim();
-    if value.get(..5).is_some_and(|prefix| prefix.eq_ignore_ascii_case("calc("))
+    if value
+        .get(..5)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("calc("))
         && value.ends_with(')')
     {
         return parse_calc_length(&value[5..value.len() - 1], containing_width);
