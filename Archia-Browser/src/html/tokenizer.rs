@@ -463,7 +463,12 @@ mod tests {
     #[test]
     fn slash_in_self_closing_state_reconsumes_non_greater_than_character() {
         let tokens = HtmlTokenizer::tokenize("<div first/second=value></div>");
-        let HtmlToken::StartTag { attributes, self_closing, .. } = &tokens[0] else {
+        let HtmlToken::StartTag {
+            attributes,
+            self_closing,
+            ..
+        } = &tokens[0]
+        else {
             panic!("expected start tag");
         };
 
