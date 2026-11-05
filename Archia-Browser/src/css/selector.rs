@@ -787,15 +787,22 @@ fn is_form_control_valid(
         .get("type")
         .map(|value| value.to_ascii_lowercase())
         .unwrap_or_else(|| "text".to_owned());
+
+    // These input types are barred from constraint validation by HTML.
     if tag == "input"
         && matches!(input_type.as_str(), "hidden" | "button" | "submit" | "reset" | "image")
     {
         return true;
     }
+
+    let value = match tag {
+        "textarea" => node.text_content(),
+        _ => attributes.get("value").cloned().unwrap_or_default(),
+    };
+
     if attributes.contains_key("required") {
-        let value = attributes.get("value").map(String::as_str).unwrap_or("");
-        let missing = match tag {
-            "select" => {
+        let missing = match (tag, input_type.as_str()) {
+            ("select", _) => {
                 let options = node.children.iter()
                     .filter(|child| child.tag_name() == Some("option"))
                     .collect::<Vec<_>>();
@@ -806,23 +813,105 @@ fn is_form_control_valid(
                         .unwrap_or_else(|| option.text_content().trim().is_empty());
                     empty_value && (option.has_attribute("selected") || !has_selected)
                 })
-            },
-            "textarea" => node.text_content().is_empty(),
+            }
+            ("input", "checkbox") => !attributes.contains_key("checked"),
+            // Radio-group validity needs the whole form's radio group. At this
+            // node-only layer, only the required radio's own checkedness is known.
+            ("input", "radio") => !attributes.contains_key("checked"),
             _ => value.is_empty(),
         };
-        if missing { return false; }
-    }
-    let value = attributes.get("value").map(String::as_str).unwrap_or("");
-    match input_type.as_str() {
-        "email" if !value.is_empty() => {
-            let Some((local, domain)) = value.split_once('@') else { return false; };
-            !local.is_empty() && domain.contains('.') && !domain.starts_with('.')
-                && !domain.ends_with('.') && !value.chars().any(char::is_whitespace)
+        if missing {
+            return false;
         }
-        "url" if !value.is_empty() => value.starts_with("http://") || value.starts_with("https://"),
-        "number" | "range" if !value.is_empty() => value.parse::<f64>().is_ok_and(f64::is_finite),
-        _ => true,
     }
+
+    if value.is_empty() {
+        return true;
+    }
+
+    // minlength/maxlength count UTF-16 code units, as required by HTML, rather
+    // than UTF-8 bytes or Unicode scalar values.
+    let value_length = value.encode_utf16().count();
+    if attributes.get("minlength")
+        .and_then(|length| length.parse::<usize>().ok())
+        .is_some_and(|minimum| value_length < minimum)
+    {
+        return false;
+    }
+    if attributes.get("maxlength")
+        .and_then(|length| length.parse::<usize>().ok())
+        .is_some_and(|maximum| value_length > maximum)
+    {
+        return false;
+    }
+
+    match input_type.as_str() {
+        "email" => {
+            let valid_email = |candidate: &str| {
+                let candidate = candidate.trim();
+                let Some((local, domain)) = candidate.split_once('@') else {
+                    return false;
+                };
+                !local.is_empty()
+                    && !domain.is_empty()
+                    && domain.contains('.')
+                    && !domain.starts_with('.')
+                    && !domain.ends_with('.')
+                    && !candidate.chars().any(char::is_whitespace)
+                    && !candidate.contains(',')
+            };
+            if attributes.contains_key("multiple") {
+                if value.split(',').any(|candidate| !valid_email(candidate)) {
+                    return false;
+                }
+            } else if !valid_email(&value) {
+                return false;
+            }
+        }
+        "url" => {
+            if !(value.starts_with("http://") || value.starts_with("https://"))
+                || value.chars().any(char::is_whitespace)
+                || value.ends_with("://")
+            {
+                return false;
+            }
+        }
+        "number" | "range" => {
+            let Ok(number) = value.parse::<f64>() else {
+                return false;
+            };
+            if !number.is_finite() || !matches_step(number, attributes) {
+                return false;
+            }
+        }
+        _ => {}
+    }
+    true
+}
+
+fn matches_step(
+    value: f64,
+    attributes: &std::collections::BTreeMap<String, String>,
+) -> bool {
+    let Some(step_text) = attributes.get("step") else {
+        return (value - value.round()).abs() > 1e-9 || value.fract().abs() <= 1e-9;
+    };
+    if step_text.eq_ignore_ascii_case("any") {
+        return true;
+    }
+    let Ok(step) = step_text.parse::<f64>() else {
+        return true;
+    };
+    if !step.is_finite() || step <= 0.0 {
+        return true;
+    }
+    let base = attributes
+        .get("min")
+        .and_then(|minimum| minimum.parse::<f64>().ok())
+        .or_else(|| attributes.get("value").and_then(|initial| initial.parse::<f64>().ok()))
+        .unwrap_or(0.0);
+    let quotient = (value - base) / step;
+    (quotient - quotient.round()).abs() <= 1e-9 * quotient.abs().max(1.0)
 }
 
 fn numeric_range_state(
@@ -1736,6 +1825,38 @@ mod tests {
         assert!(Selector::parse("input:out-of-range").unwrap().matches(&number));
         number.set_attribute("value", "5");
         assert!(Selector::parse("input:in-range").unwrap().matches(&number));
+
+        let mut required_checkbox = Node::element("input");
+        required_checkbox.set_attribute("type", "checkbox");
+        required_checkbox.set_attribute("required", "");
+        assert!(Selector::parse("input:invalid").unwrap().matches(&required_checkbox));
+        required_checkbox.set_attribute("checked", "");
+        assert!(Selector::parse("input:valid").unwrap().matches(&required_checkbox));
+
+        let mut bounded_text = Node::element("input");
+        bounded_text.set_attribute("minlength", "3");
+        bounded_text.set_attribute("maxlength", "5");
+        bounded_text.set_attribute("value", "éé");
+        assert!(Selector::parse("input:invalid").unwrap().matches(&bounded_text));
+        bounded_text.set_attribute("value", "été");
+        assert!(Selector::parse("input:valid").unwrap().matches(&bounded_text));
+
+        let mut stepped_number = Node::element("input");
+        stepped_number.set_attribute("type", "number");
+        stepped_number.set_attribute("min", "0.5");
+        stepped_number.set_attribute("step", "0.5");
+        stepped_number.set_attribute("value", "1.25");
+        assert!(Selector::parse("input:invalid").unwrap().matches(&stepped_number));
+        stepped_number.set_attribute("value", "1.5");
+        assert!(Selector::parse("input:valid").unwrap().matches(&stepped_number));
+
+        let mut multiple_email = Node::element("input");
+        multiple_email.set_attribute("type", "email");
+        multiple_email.set_attribute("multiple", "");
+        multiple_email.set_attribute("value", "a@example.com, b@example.org");
+        assert!(Selector::parse("input:valid").unwrap().matches(&multiple_email));
+        multiple_email.set_attribute("value", "a@example.com, broken");
+        assert!(Selector::parse("input:invalid").unwrap().matches(&multiple_email));
 
         let mut select = Node::element("select");
         select.set_attribute("required", "");
