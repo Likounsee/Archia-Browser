@@ -143,14 +143,18 @@ fn find_important_suffix(tokens: &[CssToken], start: usize, end: usize) -> Optio
     while cursor > start && matches!(tokens.get(cursor - 1), Some(CssToken::Whitespace)) {
         cursor -= 1;
     }
-    if !matches!(tokens.get(cursor.checked_sub(1)?), Some(CssToken::Ident(value)) if value.eq_ignore_ascii_case("important")) {
+    if !matches!(tokens.get(cursor.checked_sub(1)?), Some(CssToken::Ident(value)) if value.eq_ignore_ascii_case("important"))
+    {
         return None;
     }
     cursor -= 1;
     while cursor > start && matches!(tokens.get(cursor - 1), Some(CssToken::Whitespace)) {
         cursor -= 1;
     }
-    if matches!(tokens.get(cursor.checked_sub(1)?), Some(CssToken::Delim('!'))) {
+    if matches!(
+        tokens.get(cursor.checked_sub(1)?),
+        Some(CssToken::Delim('!'))
+    ) {
         Some(cursor - 1)
     } else {
         None
@@ -188,9 +192,8 @@ mod tests {
 
     #[test]
     fn important_is_recognized_from_tokens_not_string_contents() {
-        let tokens = CssTokenizer::tokenize(
-            r#"content: "hello!important"; color: red ! important;"#,
-        );
+        let tokens =
+            CssTokenizer::tokenize(r#"content: "hello!important"; color: red ! important;"#);
         let properties = parse_declarations(&tokens);
 
         assert_eq!(properties[0].value, "hello!important");
@@ -201,9 +204,8 @@ mod tests {
 
     #[test]
     fn semicolons_inside_functions_do_not_end_declarations() {
-        let tokens = CssTokenizer::tokenize(
-            "background-image: url(data:image/svg+xml;a=b); color: red;",
-        );
+        let tokens =
+            CssTokenizer::tokenize("background-image: url(data:image/svg+xml;a=b); color: red;");
         let properties = parse_declarations(&tokens);
 
         assert_eq!(properties.len(), 2);
