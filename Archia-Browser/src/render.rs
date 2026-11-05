@@ -435,7 +435,8 @@ fn paint_text_decorations(
             ),
             "overline" => paint_line(rect.y),
             "line-through" => paint_line(
-                rect.y.saturating_add(rect.height.saturating_sub(thickness) as i32 / 2),
+                rect.y
+                    .saturating_add(rect.height.saturating_sub(thickness) as i32 / 2),
             ),
             _ => {}
         }
@@ -997,16 +998,25 @@ mod tests {
             .commands()
             .iter()
             .filter_map(|command| match command {
-                PaintCommand::FillRect { rect, color: 0x0000ffff } => Some(*rect),
+                PaintCommand::FillRect {
+                    rect,
+                    color: 0x0000ffff,
+                } => Some(*rect),
                 _ => None,
             })
             .collect::<Vec<_>>();
 
         assert_eq!(decoration_rects.len(), 3);
-        assert!(decoration_rects.iter().all(|rect| rect.width == 30 && rect.height == 2));
+        assert!(decoration_rects
+            .iter()
+            .all(|rect| rect.width == 30 && rect.height == 2));
         assert!(decoration_rects.iter().any(|rect| rect.y == layout.rect.y));
-        assert!(decoration_rects.iter().any(|rect| rect.y == layout.rect.y + 5));
-        assert!(decoration_rects.iter().any(|rect| rect.y == layout.rect.y + 10));
+        assert!(decoration_rects
+            .iter()
+            .any(|rect| rect.y == layout.rect.y + 5));
+        assert!(decoration_rects
+            .iter()
+            .any(|rect| rect.y == layout.rect.y + 10));
     }
 
     #[test]
