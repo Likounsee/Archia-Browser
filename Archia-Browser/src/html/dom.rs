@@ -1,5 +1,18 @@
 use std::collections::BTreeMap;
 
+/// Convert a dataset property name to its corresponding data-* attribute.
+fn dataset_key_to_attribute(key: &str) -> Option<String> {
+    if key.is_empty() || key.chars().any(is_html_whitespace) { return None; }
+    let mut attribute = String::from("data-");
+    for character in key.chars() {
+        if character.is_ascii_uppercase() {
+            attribute.push('-');
+            attribute.push(character.to_ascii_lowercase());
+        } else { attribute.push(character); }
+    }
+    Some(attribute)
+}
+
 fn is_html_whitespace(character: char) -> bool {
     matches!(character, '\t' | '\n' | '\u{000C}' | '\r' | ' ')
 }
@@ -233,6 +246,37 @@ impl Node {
             }
             _ => false,
         }
+    }
+
+    /// DOM id property. Non-elements return an empty string.
+    pub fn id(&self) -> &str { self.attribute("id").unwrap_or("") }
+
+    /// Set the DOM id property on an element.
+    pub fn set_id(&mut self, value: impl Into<String>) { self.set_attribute("id", value); }
+
+    /// DOM className property. Non-elements return an empty string.
+    pub fn class_name(&self) -> &str { self.attribute("class").unwrap_or("") }
+
+    /// Replace the complete className value on an element.
+    pub fn set_class_name(&mut self, value: impl Into<String>) { self.set_attribute("class", value); }
+
+    /// Read a data-* attribute using its dataset camelCase key.
+    pub fn dataset_value(&self, key: &str) -> Option<&str> {
+        let attribute = dataset_key_to_attribute(key)?;
+        self.attribute(&attribute)
+    }
+
+    /// Set a data-* attribute using its dataset camelCase key.
+    pub fn set_dataset_value(&mut self, key: &str, value: impl Into<String>) -> bool {
+        let Some(attribute) = dataset_key_to_attribute(key) else { return false; };
+        self.set_attribute(attribute, value);
+        true
+    }
+
+    /// Remove a data-* attribute using its dataset camelCase key.
+    pub fn remove_dataset_value(&mut self, key: &str) -> Option<String> {
+        let attribute = dataset_key_to_attribute(key)?;
+        self.remove_attribute(&attribute)
     }
 
     /// Set or remove a boolean attribute. Returns the resulting presence state.
@@ -1690,6 +1734,37 @@ mod tests {
             root.outer_html(),
             "<script>if (a < b) x = '&';</script><img alt=\"sample\">"
         );
+    }
+
+    #[test]
+    fn id_and_class_name_properties_round_trip() {
+        let mut element = Node::element("div");
+        assert_eq!(element.id(), "");
+        assert_eq!(element.class_name(), "");
+        element.set_id("main");
+        element.set_class_name("card active");
+        assert_eq!(element.id(), "main");
+        assert_eq!(element.class_name(), "card active");
+    }
+
+    #[test]
+    fn dataset_properties_map_camel_case_to_data_attributes() {
+        let mut element = Node::element("div");
+        assert!(element.set_dataset_value("userId", "42"));
+        assert!(element.set_dataset_value("longName", "Ada"));
+        assert_eq!(element.attribute("data-user-id"), Some("42"));
+        assert_eq!(element.dataset_value("userId"), Some("42"));
+        assert_eq!(element.dataset_value("longName"), Some("Ada"));
+        assert_eq!(element.remove_dataset_value("userId").as_deref(), Some("42"));
+        assert_eq!(element.dataset_value("userId"), None);
+    }
+
+    #[test]
+    fn dataset_rejects_empty_or_whitespace_keys() {
+        let mut element = Node::element("div");
+        assert!(!element.set_dataset_value("", "x"));
+        assert!(!element.set_dataset_value("bad key", "x"));
+        assert_eq!(element.remove_dataset_value("bad key"), None);
     }
 
     #[test]
