@@ -1094,6 +1094,85 @@ mod tests {
     }
 
     #[test]
+    fn border_styles_render_solid_dashed_dotted_and_double_patterns() {
+        for (style, expected_commands, thickness) in [
+            ("solid", 1usize, 2u32),
+            ("dashed", 3, 2),
+            ("dotted", 5, 2),
+            ("double", 2, 6),
+        ] {
+            let mut list = DisplayList::new();
+            paint_border_edge(
+                Rect::new(0, 0, 30, thickness),
+                style,
+                0xff0000ff,
+                &mut list,
+            );
+            assert_eq!(
+                list.commands().len(),
+                expected_commands,
+                "border style: {style}"
+            );
+        }
+    }
+
+    #[test]
+    fn vertical_dashed_borders_follow_the_edge_orientation() {
+        let mut list = DisplayList::new();
+        paint_border_edge(
+            Rect::new(4, 10, 2, 30),
+            "dashed",
+            0x0000ffff,
+            &mut list,
+        );
+
+        let segments = list
+            .commands()
+            .iter()
+            .filter_map(|command| match command {
+                PaintCommand::FillRect { rect, .. } => Some(*rect),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(segments.len(), 3);
+        assert!(segments
+            .iter()
+            .all(|rect| rect.x == 4 && rect.width == 2 && rect.height <= 6));
+        assert_eq!(segments[0].y, 10);
+        assert_eq!(segments[1].y, 18);
+        assert_eq!(segments[2].y, 26);
+    }
+
+    #[test]
+    fn border_sides_can_use_different_styles_and_colors() {
+        let mut root = Node::element("div");
+        root.set_attribute(
+            "style",
+            "width: 30px; height: 20px; border-width: 2px; border-style: solid; border-color: red; border-top-style: dashed; border-left-color: blue;",
+        );
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+        let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
+        let commands = list
+            .commands()
+            .iter()
+            .filter_map(|command| match command {
+                PaintCommand::FillRect { rect, color } => Some((*rect, *color)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert!(commands.iter().any(|(rect, color)| {
+            rect.height == 2 && rect.width < 30 && *color == 0xff0000ff
+        }));
+        assert!(commands
+            .iter()
+            .any(|(rect, color)| rect.width == 2 && *color == 0x0000ffff));
+    }
+
+    #[test]
     fn text_transform_changes_drawn_text() {
         let mut root = Node::element("div");
         root.set_attribute("style", "text-transform: uppercase; color: black;");
