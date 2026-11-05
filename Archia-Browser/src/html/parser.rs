@@ -431,6 +431,31 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                     continue;
                 }
 
+                // HTML's parse-error recovery treats a stray </p> as an
+                // empty paragraph and a stray </br> as a <br> start tag.
+                // Keep these repairs inside the DOM limits used for ordinary
+                // start tags, including when callers provide tokens directly.
+                if name == "p" && !has_open(&stack, "p") {
+                    if created_nodes < MAX_DOM_NODES {
+                        let paragraph = Node::element("p");
+                        if !append_node(&mut root, &mut stack, paragraph) {
+                            break;
+                        }
+                        created_nodes += 1;
+                    }
+                    continue;
+                }
+                if name == "br" {
+                    if created_nodes < MAX_DOM_NODES {
+                        let line_break = Node::element("br");
+                        if !append_node(&mut root, &mut stack, line_break) {
+                            break;
+                        }
+                        created_nodes += 1;
+                    }
+                    continue;
+                }
+
                 // Avoid expensive comparisons against every open element when a
                 // direct-token caller supplies an unbounded closing-tag name.
                 if name.len() <= MAX_DOM_TAG_NAME_BYTES {
@@ -872,6 +897,34 @@ mod tests {
         assert_eq!(paragraph.text_content(), "before");
         assert_eq!(dialog.text_content(), "inside");
         assert!(root.visible_text_content().contains("after"));
+    }
+
+    #[test]
+    fn stray_paragraph_end_tag_creates_an_empty_paragraph() {
+        let root = parse(&HtmlTokenizer::tokenize("before</p>after"));
+        let body = root.find_first_element("body").expect("body");
+        let paragraphs = body
+            .children
+            .iter()
+            .filter(|node| node.tag_name() == Some("p"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(paragraphs.len(), 1);
+        assert_eq!(paragraphs[0].text_content(), "");
+        assert_eq!(body.visible_text_content(), "beforeafter");
+    }
+
+    #[test]
+    fn stray_break_end_tag_is_recovered_as_a_break_element() {
+        let root = parse(&HtmlTokenizer::tokenize("before</br>after"));
+        let body = root.find_first_element("body").expect("body");
+        let line_breaks = body
+            .descendants()
+            .filter(|node| node.tag_name() == Some("br"))
+            .count();
+
+        assert_eq!(line_breaks, 1);
+        assert_eq!(body.text_content(), "beforeafter");
     }
 
     #[test]
