@@ -792,14 +792,14 @@ fn matches_pseudo_class(
                 .or(inherited_direction)
                 .is_some_and(|value| value == direction)
         }
-        // :link and :any-link match hyperlink elements with a non-empty href.
+        // An empty href still creates a hyperlink (for example, <a href="">).
         // Visited state is intentionally not exposed by this engine.
         "link" | "any-link" => {
             matches!(&node.kind, NodeKind::Element { name, .. }
                 if (name.eq_ignore_ascii_case("a")
                     || name.eq_ignore_ascii_case("area")
                     || name.eq_ignore_ascii_case("link"))
-                    && attributes.get("href").is_some_and(|href| !href.is_empty()))
+                    && attributes.contains_key("href"))
         }
         "checked" => {
             attributes.contains_key("checked")
@@ -2218,6 +2218,17 @@ mod tests {
             &[&[], siblings],
             &[0, 0],
         ));
+    }
+
+    #[test]
+    fn link_pseudo_classes_match_empty_href_attributes() {
+        let mut anchor = Node::element("a");
+        anchor.set_attribute("href", "");
+        let mut plain_anchor = Node::element("a");
+
+        assert!(Selector::parse(":link").unwrap().matches(&anchor));
+        assert!(Selector::parse(":any-link").unwrap().matches(&anchor));
+        assert!(!Selector::parse(":link").unwrap().matches(&plain_anchor));
     }
 
     #[test]
