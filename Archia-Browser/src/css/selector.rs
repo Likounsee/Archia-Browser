@@ -685,10 +685,13 @@ fn is_disabled_element(
             continue;
         }
 
-        let first_legend = ancestor.children.iter().find(|child| child.tag_name() == Some("legend"));
+        let first_legend = ancestor
+            .children
+            .iter()
+            .find(|child| child.tag_name() == Some("legend"));
         let candidate_branch = ancestors.get(index + 1).copied().unwrap_or(node);
-        let inside_first_legend = first_legend
-            .is_some_and(|legend| std::ptr::eq(legend, candidate_branch));
+        let inside_first_legend =
+            first_legend.is_some_and(|legend| std::ptr::eq(legend, candidate_branch));
         if !inside_first_legend {
             return true;
         }
@@ -857,7 +860,9 @@ fn matches_pseudo_class(
             attributes.contains_key("checked")
                 || (node.tag_name() == Some("option") && attributes.contains_key("selected"))
         }
-        "disabled" => is_disableable_element(node) && is_disabled_element(node, attributes, ancestors),
+        "disabled" => {
+            is_disableable_element(node) && is_disabled_element(node, attributes, ancestors)
+        }
         "enabled" => {
             is_disableable_element(node) && !is_disabled_element(node, attributes, ancestors)
         },
@@ -1772,9 +1777,17 @@ mod tests {
         fieldset.append(legend);
         fieldset.append(second_input);
 
-        let legend_path = [&fieldset, &fieldset.children[0], &fieldset.children[0].children[0]];
-        assert!(Selector::parse(":enabled").unwrap().matches_path(&legend_path));
-        assert!(!Selector::parse(":disabled").unwrap().matches_path(&legend_path));
+        let legend_path = [
+            &fieldset,
+            &fieldset.children[0],
+            &fieldset.children[0].children[0],
+        ];
+        assert!(Selector::parse(":enabled")
+            .unwrap()
+            .matches_path(&legend_path));
+        assert!(!Selector::parse(":disabled")
+            .unwrap()
+            .matches_path(&legend_path));
 
         let outside_legend_path = [&fieldset, &fieldset.children[1]];
         assert!(Selector::parse(":disabled")
