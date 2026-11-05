@@ -1114,12 +1114,32 @@ fn layout_grid_children(
                         .set("width", format!("{content_cell_width}px"));
                 }
             }
+            let align_self = child
+                .style
+                .get("align-self")
+                .or_else(|| node.style.get("align-items"))
+                .map(|value| value.trim().to_ascii_lowercase())
+                .unwrap_or_else(|| "stretch".to_owned());
+            let mut align_offset = 0_u32;
             if let Some(row_height) = explicit_row_height {
                 let content_cell_height = row_height.saturating_sub(child_box.vertical_outer());
                 if is_auto_dimension(grid_child.style.get("height")) {
-                    grid_child
-                        .style
-                        .set("height", format!("{content_cell_height}px"));
+                    if matches!(align_self.as_str(), "start" | "self-start" | "end" | "self-end" | "center") {
+                        let intrinsic_height = intrinsic_inline_height(child).min(content_cell_height);
+                        grid_child
+                            .style
+                            .set("height", format!("{intrinsic_height}px"));
+                        let remaining = content_cell_height.saturating_sub(intrinsic_height);
+                        align_offset = match align_self.as_str() {
+                            "end" | "self-end" => remaining,
+                            "center" => remaining / 2,
+                            _ => 0,
+                        };
+                    } else {
+                        grid_child
+                            .style
+                            .set("height", format!("{content_cell_height}px"));
+                    }
                 }
             }
             let child_layout = layout_styled_node(
@@ -1130,7 +1150,8 @@ fn layout_grid_children(
                     .saturating_add(justify_offset as i32),
                 content_origin_y
                     .saturating_add(row_top)
-                    .saturating_add(child_box.margin_top as i32),
+                    .saturating_add(child_box.margin_top as i32)
+                    .saturating_add(align_offset as i32),
                 content_cell_width,
                 viewport_width,
                 viewport_height,
@@ -4972,6 +4993,31 @@ mod tests {
         assert_eq!(layout.children[0].rect.x, 44);
         assert_eq!(layout.children[1].rect.width, 12);
         assert_eq!(layout.children[1].rect.x, 188);
+    }
+
+    #[test]
+    fn grid_layout_supports_align_items_and_align_self() {
+        let mut root = Node::element("section");
+        root.set_attribute(
+            "style",
+            "display: grid; width: 200px; height: 80px; grid-template-columns: 100px 100px; grid-template-rows: 80px; align-items: center;",
+        );
+        let mut centered = Node::element("span");
+        centered.append(Node::text("a"));
+        let mut bottom = Node::element("span");
+        bottom.set_attribute("style", "align-self: end;");
+        bottom.append(Node::text("b"));
+        root.append(centered);
+        root.append(bottom);
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 80));
+
+        assert_eq!(layout.children[0].rect.height, 16);
+        assert_eq!(layout.children[0].rect.y, 32);
+        assert_eq!(layout.children[1].rect.height, 16);
+        assert_eq!(layout.children[1].rect.y, 64);
     }
 
     #[test]
