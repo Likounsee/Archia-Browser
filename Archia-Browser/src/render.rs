@@ -984,7 +984,7 @@ mod tests {
 
     #[test]
     fn text_decorations_paint_underline_overline_and_line_through() {
-        let mut root = Node::element("span");
+        let mut root = Node::element("div");
         root.set_attribute(
             "style",
             "width: 30px; height: 12px; color: blue; text-decoration-line: underline overline line-through; text-decoration-thickness: 2px;",
@@ -1021,7 +1021,7 @@ mod tests {
 
     #[test]
     fn text_decoration_none_does_not_paint_a_line() {
-        let mut root = Node::element("span");
+        let mut root = Node::element("div");
         root.set_attribute(
             "style",
             "width: 30px; height: 12px; text-decoration-line: none;",
