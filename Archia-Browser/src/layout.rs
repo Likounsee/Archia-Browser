@@ -829,7 +829,10 @@ fn parse_grid_column_span(value: Option<&str>, start: usize, columns: usize) -> 
         .split_once('/')
         .map_or(value.trim(), |(_, end)| end.trim());
     let mut parts = end.split_whitespace();
-    if parts.next().is_some_and(|part| part.eq_ignore_ascii_case("span")) {
+    if parts
+        .next()
+        .is_some_and(|part| part.eq_ignore_ascii_case("span"))
+    {
         return parts
             .next()
             .and_then(|span| span.parse::<usize>().ok())
@@ -1249,7 +1252,11 @@ fn layout_grid_children(
                 .iter()
                 .copied()
                 .fold(0_u32, u32::saturating_add)
-                .saturating_add(column_gap.saturating_add(distributed_column_gap).saturating_mul(span.saturating_sub(1) as u32));
+                .saturating_add(
+                    column_gap
+                        .saturating_add(distributed_column_gap)
+                        .saturating_mul(span.saturating_sub(1) as u32),
+                );
             let content_cell_width = spanned_width.saturating_sub(child_box.horizontal_outer());
             let justify_self = child
                 .style
