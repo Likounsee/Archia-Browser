@@ -434,6 +434,7 @@ fn supports_declaration(name: &str, value: &str) -> bool {
         "flex-basis",
         "flex-direction",
         "flex-wrap",
+        "flex-flow",
         "justify-content",
         "align-items",
         "align-content",
@@ -556,11 +557,35 @@ fn supports_declaration(name: &str, value: &str) -> bool {
                 | "space-around"
                 | "space-evenly"
         ),
-        "overflow" | "overflow-x" | "overflow-y" => {
+        "overflow" => {
+            let values = value.split_whitespace().collect::<Vec<_>>();
+            (1..=2).contains(&values.len())
+                && values.iter().all(|value| {
+                    matches!(*value, "visible" | "hidden" | "clip" | "scroll" | "auto")
+                })
+        }
+        "overflow-x" | "overflow-y" => {
             matches!(
                 value.as_str(),
                 "visible" | "hidden" | "clip" | "scroll" | "auto"
             )
+        }
+        "flex-flow" => {
+            let values = value.split_whitespace().collect::<Vec<_>>();
+            (1..=2).contains(&values.len())
+                && values.iter().all(|value| {
+                    matches!(
+                        *value,
+                        "row" | "row-reverse" | "column" | "column-reverse"
+                            | "nowrap" | "wrap" | "wrap-reverse"
+                    )
+                })
+                && values.iter().filter(|value| {
+                    matches!(**value, "row" | "row-reverse" | "column" | "column-reverse")
+                }).count() <= 1
+                && values.iter().filter(|value| {
+                    matches!(**value, "nowrap" | "wrap" | "wrap-reverse")
+                }).count() <= 1
         }
         "visibility" => matches!(value.as_str(), "visible" | "hidden" | "collapse"),
         _ => true,
