@@ -560,10 +560,13 @@ mod tests {
         parent.append(Node::element("span"));
 
         assert!(parent.has_child_nodes());
-        assert_eq!(parent.first_child().and_then(|node| match &node.kind {
-            NodeKind::Text(value) => Some(value.as_str()),
-            _ => None,
-        }), Some("before"));
+        assert_eq!(
+            parent.first_child().and_then(|node| match &node.kind {
+                NodeKind::Text(value) => Some(value.as_str()),
+                _ => None,
+            }),
+            Some("before")
+        );
         assert!(matches!(
             parent.last_child().map(|node| &node.kind),
             Some(NodeKind::Element { name, .. }) if name == "span"
