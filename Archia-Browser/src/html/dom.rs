@@ -735,7 +735,8 @@ impl Node {
         };
 
         let mut matches = Vec::new();
-        let mut stack: Vec<(&Node, Vec<&Node>, Vec<&[Node]>, Vec<usize>)> = Vec::new();
+        type SelectorPath<'a> = (&'a Node, Vec<&'a Node>, Vec<&'a [Node]>, Vec<usize>);
+        let mut stack: Vec<SelectorPath<'_>> = Vec::new();
 
         let root_path = vec![self];
         let root_siblings: Vec<&[Node]> = vec![&[]];
@@ -749,7 +750,7 @@ impl Node {
             }));
         }
 
-        while let Some((node, mut path, mut sibling_lists, mut positions)) = stack.pop() {
+        while let Some((node, mut path, mut sibling_lists, positions)) = stack.pop() {
             let siblings = path
                 .last()
                 .map(|parent| parent.children.as_slice())
@@ -1067,8 +1068,6 @@ impl<'a> Iterator for Descendants<'a> {
 }
 
 mod tests {
-    use super::*;
-
     #[test]
     fn inner_html_setter_replaces_children_and_parses_markup() {
         let mut root = Node::element("div");
