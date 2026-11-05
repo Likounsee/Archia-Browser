@@ -629,26 +629,8 @@ fn supports_declaration(name: &str, value: &str) -> bool {
                 && values.iter().all(|value| is_valid_gap_component(value))
         }
         "row-gap" | "column-gap" => is_valid_gap_component(&value),
-        "list-style" => {
-            if let Some((list_type, position, image)) = expand_list_style(&value) {
-                apply(name.clone(), value.clone());
-                apply("list-style-type".to_owned(), list_type);
-                apply("list-style-position".to_owned(), position);
-                apply("list-style-image".to_owned(), image);
-                return;
-            }
-        }
-        "background" => {
-            if let Some((color, image, repeat, position, size)) = expand_background(&value) {
-                apply(name.clone(), value.clone());
-                apply("background-color".to_owned(), color);
-                apply("background-image".to_owned(), image);
-                apply("background-repeat".to_owned(), repeat);
-                apply("background-position".to_owned(), position);
-                apply("background-size".to_owned(), size);
-                return;
-            }
-        }
+        "list-style" => expand_list_style(&value).is_some(),
+        "background" => expand_background(&value).is_some(),
         "overflow" => {
             let values = value.split_whitespace().collect::<Vec<_>>();
             (1..=2).contains(&values.len())
@@ -1168,6 +1150,26 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
                 return;
             }
         }
+        "list-style" => {
+            if let Some((list_type, position, image)) = expand_list_style(&value) {
+                apply(name.clone(), value.clone());
+                apply("list-style-type".to_owned(), list_type);
+                apply("list-style-position".to_owned(), position);
+                apply("list-style-image".to_owned(), image);
+                return;
+            }
+        }
+        "background" => {
+            if let Some((color, image, repeat, position, size)) = expand_background(&value) {
+                apply(name.clone(), value.clone());
+                apply("background-color".to_owned(), color);
+                apply("background-image".to_owned(), image);
+                apply("background-repeat".to_owned(), repeat);
+                apply("background-position".to_owned(), position);
+                apply("background-size".to_owned(), size);
+                return;
+            }
+        }
         "border" => {
             if let Some((width, style, color)) = expand_border_shorthand(&value) {
                 apply("border-width".to_owned(), width.to_owned());
@@ -1262,14 +1264,6 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
                     );
                     return;
                 }
-            }
-        }
-        "border-top" | "border-right" | "border-bottom" | "border-left" => {
-            if let Some((width, style, color)) = expand_border_shorthand(&value) {
-                apply(format!("{name}-width"), width);
-                apply(format!("{name}-style"), style);
-                apply(format!("{name}-color"), color);
-                return;
             }
         }
         _ => {}
@@ -2445,14 +2439,14 @@ mod tests {
 
     #[test]
     fn overflow_shorthand_expands_one_and_two_values() {
-        let one = Stylesheet::parse("div { overflow: hidden; }");
+        let one = StyleSheet::parse("div { overflow: hidden; }");
         let node = Node::element("div");
         let computed = one.compute_style(&node);
         assert_eq!(computed.get("overflow"), Some("hidden"));
         assert_eq!(computed.get("overflow-x"), Some("hidden"));
         assert_eq!(computed.get("overflow-y"), Some("hidden"));
 
-        let two = Stylesheet::parse("div { overflow: clip auto; }");
+        let two = StyleSheet::parse("div { overflow: clip auto; }");
         let computed = two.compute_style(&node);
         assert_eq!(computed.get("overflow-x"), Some("clip"));
         assert_eq!(computed.get("overflow-y"), Some("auto"));
@@ -2461,17 +2455,17 @@ mod tests {
     #[test]
     fn flex_flow_shorthand_expands_direction_and_wrapping() {
         let node = Node::element("div");
-        let sheet = Stylesheet::parse("div { flex-flow: column-reverse wrap-reverse; }");
+        let sheet = StyleSheet::parse("div { flex-flow: column-reverse wrap-reverse; }");
         let computed = sheet.compute_style(&node);
         assert_eq!(computed.get("flex-direction"), Some("column-reverse"));
         assert_eq!(computed.get("flex-wrap"), Some("wrap-reverse"));
 
-        let direction_only = Stylesheet::parse("div { flex-flow: row-reverse; }");
+        let direction_only = StyleSheet::parse("div { flex-flow: row-reverse; }");
         let computed = direction_only.compute_style(&node);
         assert_eq!(computed.get("flex-direction"), Some("row-reverse"));
         assert_eq!(computed.get("flex-wrap"), Some("nowrap"));
 
-        let wrap_only = Stylesheet::parse("div { flex-flow: wrap; }");
+        let wrap_only = StyleSheet::parse("div { flex-flow: wrap; }");
         let computed = wrap_only.compute_style(&node);
         assert_eq!(computed.get("flex-direction"), Some("row"));
         assert_eq!(computed.get("flex-wrap"), Some("wrap"));
@@ -2479,7 +2473,7 @@ mod tests {
 
     #[test]
     fn invalid_flex_flow_shorthand_does_not_expand() {
-        let sheet = Stylesheet::parse("div { flex-flow: row wrap column; }");
+        let sheet = StyleSheet::parse("div { flex-flow: row wrap column; }");
         let computed = sheet.compute_style(&Node::element("div"));
         assert_eq!(computed.get("flex-direction"), None);
         assert_eq!(computed.get("flex-wrap"), None);
@@ -2487,7 +2481,7 @@ mod tests {
 
     #[test]
     fn invalid_overflow_shorthand_does_not_expand() {
-        let sheet = Stylesheet::parse("div { overflow: hidden nonsense; }");
+        let sheet = StyleSheet::parse("div { overflow: hidden nonsense; }");
         let computed = sheet.compute_style(&Node::element("div"));
         assert_eq!(computed.get("overflow-x"), None);
         assert_eq!(computed.get("overflow-y"), None);
