@@ -1123,7 +1123,15 @@ fn matches_pseudo_class(
         "placeholder-shown" => {
             attributes.contains_key("placeholder")
                 && match node.tag_name() {
-                    Some("input") => attributes.get("value").is_none_or(String::is_empty),
+                    Some("input") => {
+                        let input_type = attributes
+                            .get("type")
+                            .map(|value| value.to_ascii_lowercase());
+                        matches!(
+                            input_type.as_deref(),
+                            None | Some("text" | "search" | "url" | "tel" | "email" | "password")
+                        ) && attributes.get("value").is_none_or(String::is_empty)
+                    }
                     Some("textarea") => node.children.iter().all(|child| {
                         matches!(&child.kind, NodeKind::Text(text) if text.is_empty())
                             || matches!(&child.kind, NodeKind::Comment(_))
@@ -1849,6 +1857,41 @@ mod tests {
 
         assert!(!selector.matches_path(&[&node]));
         assert!(!selector.matches_path_with_siblings(&[&node], &[&[] as &[Node]], &[0]));
+    }
+
+    #[test]
+    fn placeholder_shown_only_matches_supported_input_types() {
+        for input_type in ["text", "search", "url", "tel", "email", "password"] {
+            let mut input = Node::element("input");
+            input.set_attribute("type", input_type);
+            input.set_attribute("placeholder", "Enter a value");
+            assert!(
+                Selector::parse("input:placeholder-shown")
+                    .unwrap()
+                    .matches(&input),
+                "placeholder should be shown for {input_type}"
+            );
+        }
+
+        for input_type in ["hidden", "checkbox", "radio", "submit", "button", "number"] {
+            let mut input = Node::element("input");
+            input.set_attribute("type", input_type);
+            input.set_attribute("placeholder", "Not applicable");
+            assert!(
+                !Selector::parse("input:placeholder-shown")
+                    .unwrap()
+                    .matches(&input),
+                "placeholder must not be shown for {input_type}"
+            );
+        }
+
+        let mut filled = Node::element("input");
+        filled.set_attribute("type", "text");
+        filled.set_attribute("placeholder", "Name");
+        filled.set_attribute("value", "Ada");
+        assert!(!Selector::parse("input:placeholder-shown")
+            .unwrap()
+            .matches(&filled));
     }
 
     #[test]
