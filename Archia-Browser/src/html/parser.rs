@@ -470,8 +470,9 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                         // open, close the original subtree and reopen shallow
                         // copies of those descendants at the current insertion
                         // point (for example: <b><i>one</b>two</i>).
-                        let matching_position =
-                            stack.iter().rposition(|node| node.tag_name() == Some(name.as_str()));
+                        let matching_position = stack
+                            .iter()
+                            .rposition(|node| node.tag_name() == Some(name.as_str()));
                         let mut reopen = Vec::new();
                         let can_reopen = matching_position.is_some_and(|position| {
                             stack[position + 1..]
@@ -483,11 +484,8 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
                             if reopen.try_reserve(stack.len() - position - 1).is_ok()
                                 && stack.try_reserve(stack.len() - position - 1).is_ok()
                             {
-                                reopen.extend(
-                                    stack[position + 1..]
-                                        .iter()
-                                        .map(Node::shallow_clone),
-                                );
+                                reopen
+                                    .extend(stack[position + 1..].iter().map(Node::shallow_clone));
                                 close_element(&mut root, &mut stack, name);
                                 stack.extend(reopen);
                             } else {
@@ -596,9 +594,7 @@ fn implied_end_tags_for_start(name: &str) -> &'static [&'static str] {
         "caption" => &["td", "th", "tr", "colgroup"],
         "colgroup" => &["colgroup"],
         "td" | "th" => &["td", "th"],
-        "thead" | "tbody" | "tfoot" => {
-            &["td", "th", "tr", "thead", "tbody", "tfoot", "colgroup"]
-        },
+        "thead" | "tbody" | "tfoot" => &["td", "th", "tr", "thead", "tbody", "tfoot", "colgroup"],
         "rt" | "rp" => &["rt", "rp"],
         _ => &[],
     }
@@ -611,8 +607,18 @@ fn is_block_closing_p(name: &str) -> bool {
 fn is_formatting_element(name: &str) -> bool {
     matches!(
         name,
-        "a" | "b" | "big" | "code" | "em" | "font" | "i" | "s" | "small"
-            | "strike" | "strong" | "tt" | "u"
+        "a" | "b"
+            | "big"
+            | "code"
+            | "em"
+            | "font"
+            | "i"
+            | "s"
+            | "small"
+            | "strike"
+            | "strong"
+            | "tt"
+            | "u"
     )
 }
 
@@ -825,9 +831,7 @@ mod tests {
 
     #[test]
     fn misnested_formatting_elements_reopen_formatting_descendants() {
-        let root = parse(&HtmlTokenizer::tokenize(
-            "<p><b><i>one</b>two</i>three</p>",
-        ));
+        let root = parse(&HtmlTokenizer::tokenize("<p><b><i>one</b>two</i>three</p>"));
         let paragraph = root.find_first_element("p").expect("paragraph");
         let italic_nodes = paragraph
             .descendants()
@@ -1002,15 +1006,20 @@ mod tests {
             "<table><tbody><tr><td>first<tr><td>second</table>",
         ));
         let table = root.find_first_element("table").expect("table");
-        let rows = table.descendants().filter(|node| node.tag_name() == Some("tr"))
+        let rows = table
+            .descendants()
+            .filter(|node| node.tag_name() == Some("tr"))
             .collect::<Vec<_>>();
 
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].text_content(), "first");
         assert_eq!(rows[1].text_content(), "second");
-        assert!(rows.iter().all(|row| row.children.iter()
+        assert!(rows.iter().all(|row| row
+            .children
+            .iter()
             .filter(|child| matches!(child.tag_name(), Some("td" | "th")))
-            .count() == 1));
+            .count()
+            == 1));
     }
 
     #[test]
@@ -1019,7 +1028,9 @@ mod tests {
             "<table><tbody><tr><td>first<tfoot><tr><td>total</table>",
         ));
         let table = root.find_first_element("table").expect("table");
-        let sections = table.children.iter()
+        let sections = table
+            .children
+            .iter()
             .filter(|node| matches!(node.tag_name(), Some("tbody" | "tfoot")))
             .collect::<Vec<_>>();
 
