@@ -1252,21 +1252,25 @@ fn layout_grid_children(
         let row_span =
             parse_grid_row_span(child.style.get("grid-row"), row, row_heights.len().max(1))
                 .min(row_heights.len().saturating_sub(row).max(1));
-        while cells.len() <= row + row_span - 1 {
+        while cells.len() < row + row_span {
             cells.push(vec![None; columns]);
         }
         let free = (row..row + row_span)
             .all(|grid_row| (column..column + span).all(|cell| cells[grid_row][cell].is_none()));
         if free {
-            for grid_row in row..row + row_span {
-                for cell in column..column + span {
-                    cells[grid_row][cell] = if grid_row == row && cell == column {
-                        Some(child_index)
-                    } else {
-                        Some(usize::MAX - 1)
-                    };
+            for (row_offset, cells_row) in cells.iter_mut().skip(row).take(row_span).enumerate() {
+                    let grid_row = row + row_offset;
+                    for (column_offset, cell_value) in
+                        cells_row.iter_mut().skip(column).take(span).enumerate()
+                    {
+                        let cell = column + column_offset;
+                        *cell_value = if grid_row == row && cell == column {
+                            Some(child_index)
+                        } else {
+                            Some(usize::MAX - 1)
+                        };
+                    }
                 }
-            }
             column_spans[child_index] = span;
             row_spans[child_index] = row_span;
             placed[child_index] = true;
@@ -1313,16 +1317,20 @@ fn layout_grid_children(
                 cursor = cursor.saturating_add(1);
                 continue;
             }
-            while cells.len() <= row + row_span - 1 {
+            while cells.len() < row + row_span {
                 cells.push(vec![None; columns]);
             }
             let free = (row..row + row_span).all(|grid_row| {
                 (column..column + span).all(|cell| cells[grid_row][cell].is_none())
             });
             if free {
-                for grid_row in row..row + row_span {
-                    for cell in column..column + span {
-                        cells[grid_row][cell] = if grid_row == row && cell == column {
+                for (row_offset, cells_row) in cells.iter_mut().skip(row).take(row_span).enumerate() {
+                    let grid_row = row + row_offset;
+                    for (column_offset, cell_value) in
+                        cells_row.iter_mut().skip(column).take(span).enumerate()
+                    {
+                        let cell = column + column_offset;
+                        *cell_value = if grid_row == row && cell == column {
                             Some(child_index)
                         } else {
                             Some(usize::MAX - 1)
@@ -2957,7 +2965,7 @@ fn parse_line_height(value: Option<&str>, font_size: u32) -> Option<u32> {
     let result = if let Some(percent) = value.strip_suffix('%') {
         let percent = percent.trim().parse::<f64>().ok()?;
         f64::from(font_size) * percent / 100.0
-    } else if let Some(number) = value.parse::<f64>().ok() {
+    } else if let Ok(number) = value.parse::<f64>() {
         number * f64::from(font_size)
     } else {
         parse_absolute_length(value)?
@@ -3063,7 +3071,7 @@ fn is_auto_dimension(value: Option<&str>) -> bool {
 }
 
 fn is_auto_or_unspecified_dimension(value: Option<&str>) -> bool {
-    value.map_or(true, |value| value.trim().eq_ignore_ascii_case("auto"))
+    value.is_none_or(|value| value.trim().eq_ignore_ascii_case("auto"))
 }
 
 fn parse_border_width(value: Option<&str>) -> Option<u32> {
@@ -5311,7 +5319,7 @@ mod tests {
         );
         let mut spanning = Node::element("div");
         spanning.set_attribute("style", "grid-column: span 2; height: 20px;");
-        let mut next = Node::element("div");
+        let next = Node::element("div");
         next.set_attribute("style", "height: 20px;");
         root.append(spanning);
         root.append(next);
