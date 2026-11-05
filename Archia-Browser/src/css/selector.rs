@@ -1889,26 +1889,38 @@ mod tests {
         bounded_text.set_attribute("minlength", "3");
         bounded_text.set_attribute("maxlength", "5");
         bounded_text.set_attribute("value", "éé");
-        assert!(Selector::parse("input:invalid").unwrap().matches(&bounded_text));
+        assert!(Selector::parse("input:invalid")
+            .unwrap()
+            .matches(&bounded_text));
         bounded_text.set_attribute("value", "été");
-        assert!(Selector::parse("input:valid").unwrap().matches(&bounded_text));
+        assert!(Selector::parse("input:valid")
+            .unwrap()
+            .matches(&bounded_text));
 
         let mut stepped_number = Node::element("input");
         stepped_number.set_attribute("type", "number");
         stepped_number.set_attribute("min", "0.5");
         stepped_number.set_attribute("step", "0.5");
         stepped_number.set_attribute("value", "1.25");
-        assert!(Selector::parse("input:invalid").unwrap().matches(&stepped_number));
+        assert!(Selector::parse("input:invalid")
+            .unwrap()
+            .matches(&stepped_number));
         stepped_number.set_attribute("value", "1.5");
-        assert!(Selector::parse("input:valid").unwrap().matches(&stepped_number));
+        assert!(Selector::parse("input:valid")
+            .unwrap()
+            .matches(&stepped_number));
 
         let mut multiple_email = Node::element("input");
         multiple_email.set_attribute("type", "email");
         multiple_email.set_attribute("multiple", "");
         multiple_email.set_attribute("value", "a@example.com, b@example.org");
-        assert!(Selector::parse("input:valid").unwrap().matches(&multiple_email));
+        assert!(Selector::parse("input:valid")
+            .unwrap()
+            .matches(&multiple_email));
         multiple_email.set_attribute("value", "a@example.com, broken");
-        assert!(Selector::parse("input:invalid").unwrap().matches(&multiple_email));
+        assert!(Selector::parse("input:invalid")
+            .unwrap()
+            .matches(&multiple_email));
 
         let mut select = Node::element("select");
         select.set_attribute("required", "");
