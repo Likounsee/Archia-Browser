@@ -911,10 +911,7 @@ fn is_form_control_valid(
     true
 }
 
-fn matches_step(
-    value: f64,
-    attributes: &std::collections::BTreeMap<String, String>,
-) -> bool {
+fn matches_step(value: f64, attributes: &std::collections::BTreeMap<String, String>) -> bool {
     let Some(step_text) = attributes.get("step") else {
         return (value - value.round()).abs() <= 1e-9;
     };
@@ -979,10 +976,7 @@ fn numeric_range_state(
     Some(true)
 }
 
-fn matches_language(
-    pseudo: &str,
-    attributes: &std::collections::BTreeMap<String, String>,
-) -> bool {
+fn matches_language(pseudo: &str, attributes: &std::collections::BTreeMap<String, String>) -> bool {
     let Some(argument) = pseudo_argument(pseudo, "lang") else {
         return false;
     };
