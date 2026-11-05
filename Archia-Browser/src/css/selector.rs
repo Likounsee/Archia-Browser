@@ -880,7 +880,17 @@ fn is_form_control_valid(
             let Ok(number) = value.parse::<f64>() else {
                 return false;
             };
-            if !number.is_finite() || !matches_step(number, attributes) {
+            if !number.is_finite() {
+                return false;
+            }
+            if attributes.get("min")
+                .and_then(|minimum| minimum.parse::<f64>().ok())
+                .is_some_and(|minimum| number < minimum)
+                || attributes.get("max")
+                    .and_then(|maximum| maximum.parse::<f64>().ok())
+                    .is_some_and(|maximum| number > maximum)
+                || !matches_step(number, attributes)
+            {
                 return false;
             }
         }
@@ -921,6 +931,11 @@ fn numeric_range_state(
     if node.tag_name() != Some("input") { return None; }
     let input_type = attributes.get("type")?.to_ascii_lowercase();
     if !matches!(input_type.as_str(), "number" | "range") { return None; }
+    // :in-range/:out-of-range apply only when a range constraint exists;
+    // a plain number input is neither in-range nor out-of-range.
+    if !attributes.contains_key("min") && !attributes.contains_key("max") {
+        return None;
+    }
     let value = attributes.get("value")?.parse::<f64>().ok()?;
     if !value.is_finite() { return None; }
     if let Some(minimum) = attributes.get("min").and_then(|v| v.parse::<f64>().ok()) {
@@ -1823,8 +1838,16 @@ mod tests {
         number.set_attribute("max", "10");
         number.set_attribute("value", "12");
         assert!(Selector::parse("input:out-of-range").unwrap().matches(&number));
+        assert!(Selector::parse("input:invalid").unwrap().matches(&number));
         number.set_attribute("value", "5");
         assert!(Selector::parse("input:in-range").unwrap().matches(&number));
+        assert!(Selector::parse("input:valid").unwrap().matches(&number));
+
+        let mut unconstrained_number = Node::element("input");
+        unconstrained_number.set_attribute("type", "number");
+        unconstrained_number.set_attribute("value", "5");
+        assert!(!Selector::parse("input:in-range").unwrap().matches(&unconstrained_number));
+        assert!(!Selector::parse("input:out-of-range").unwrap().matches(&unconstrained_number));
 
         let mut required_checkbox = Node::element("input");
         required_checkbox.set_attribute("type", "checkbox");
