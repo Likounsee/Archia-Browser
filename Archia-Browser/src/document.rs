@@ -363,9 +363,12 @@ impl Page {
 
     pub fn base_url(&self) -> Option<Url> {
         let document_url = self.url.clone()?;
+        // The first <base> element is not necessarily the first one with
+        // an href attribute. Ignore base elements that only set target.
         let href = self
             .document
-            .find_first_element("base")?
+            .descendants()
+            .find(|node| node.tag_name() == Some("base") && node.attribute("href").is_some())?
             .attribute("href")?
             .trim();
         if href.is_empty() {
@@ -922,6 +925,21 @@ b</textarea></form>"#,
             page.base_url().map(|value| value.to_string()),
             Some("https://example.org/guide/".to_owned())
         );
+        assert_eq!(
+            page.resolve_reference("chapter.html").unwrap().to_string(),
+            "https://example.org/guide/chapter.html"
+        );
+    }
+
+    #[test]
+    fn skips_base_elements_without_href_when_resolving_document_base_url() {
+        let page = Page::from_html_at(
+            Some(Url::parse("https://example.org/docs/index.html").unwrap()),
+            r#"<head><base target="_blank"><base href="/guide/"></head><body>Hello</body>"#,
+            "",
+            LayoutViewport::new(320, 200),
+        );
+
         assert_eq!(
             page.resolve_reference("chapter.html").unwrap().to_string(),
             "https://example.org/guide/chapter.html"
