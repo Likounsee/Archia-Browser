@@ -1185,11 +1185,17 @@ fn layout_grid_children(
         }
     }
 
-    let dense = node.style.get("grid-auto-flow").is_some_and(|value| {
-        value
-            .split_whitespace()
-            .any(|part| part.eq_ignore_ascii_case("dense"))
-    });
+    let flow_tokens: Vec<String> = node
+        .style
+        .get("grid-auto-flow")
+        .map(|value| value.split_whitespace().map(str::to_ascii_lowercase).collect())
+        .unwrap_or_default();
+    let dense = flow_tokens.iter().any(|part| part == "dense");
+    // Column flow is supported when explicit row tracks define the scan height.
+    // Without explicit rows, retain row flow until implicit-column sizing exists.
+    let column_flow = flow_tokens.iter().any(|part| part == "column")
+        && !row_heights.is_empty();
+    let scan_rows = row_heights.len().max(1);
     let mut cursor = 0_usize;
     for &child_index in &grid_items {
         if placed[child_index] {
@@ -1203,13 +1209,16 @@ fn layout_grid_children(
         let row_span = parse_grid_row_span(child.style.get("grid-row"), 0, row_heights.len())
             .min(row_heights.len().max(1));
         loop {
-            let row = cursor / columns;
-            let column = cursor % columns;
-            if row >= 1024 {
+            let (row, column) = if column_flow {
+                (cursor % scan_rows, cursor / scan_rows)
+            } else {
+                (cursor / columns, cursor % columns)
+            };
+            if row >= 1024 || column >= columns {
                 break;
             }
-            if column + span > columns {
-                cursor = cursor.saturating_add(columns - column);
+            if column + span > columns || (column_flow && row + row_span > scan_rows) {
+                cursor = cursor.saturating_add(1);
                 continue;
             }
             while cells.len() <= row + row_span - 1 {
@@ -1230,10 +1239,16 @@ fn layout_grid_children(
                 }
                 column_spans[child_index] = span;
                 row_spans[child_index] = row_span;
-                cursor = row
-                    .saturating_mul(columns)
-                    .saturating_add(column)
-                    .saturating_add(span);
+                cursor = if column_flow {
+                    column
+                        .saturating_mul(scan_rows)
+                        .saturating_add(row)
+                        .saturating_add(row_span)
+                } else {
+                    row.saturating_mul(columns)
+                        .saturating_add(column)
+                        .saturating_add(span)
+                };
                 break;
             }
             cursor = cursor.saturating_add(1);
@@ -5601,5 +5616,47 @@ mod tests {
         assert_eq!(layout.children[1].rect.width, 213);
         assert_eq!(layout.children[2].rect.x, 333);
         assert_eq!(layout.children[2].rect.width, 67);
+    }    
+    #[test]
+    fn grid_auto_flow_column_fills_explicit_rows_before_advancing_columns() {
+        let mut root = Node::element("section");
+        root.set_attribute(
+            "style",
+            "display: grid; width: 200px; grid-template-columns: 100px 100px; grid-template-rows: 30px 30px; grid-auto-flow: column;",
+        );
+        for _ in 0..4 {
+            root.append(Node::element("div"));
+        }
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 80));
+
+        assert_eq!((layout.children[0].rect.x, layout.children[0].rect.y), (0, 0));
+        assert_eq!((layout.children[1].rect.x, layout.children[1].rect.y), (0, 30));
+        assert_eq!((layout.children[2].rect.x, layout.children[2].rect.y), (100, 0));
+        assert_eq!((layout.children[3].rect.x, layout.children[3].rect.y), (100, 30));
     }
+
+    #[test]
+    fn grid_auto_flow_column_dense_backfills_open_cells_by_column() {
+        let mut root = Node::element("section");
+        root.set_attribute(
+            "style",
+            "display: grid; width: 200px; grid-template-columns: 100px 100px; grid-template-rows: 30px 30px; grid-auto-flow: column dense;",
+        );
+        let mut first = Node::element("div");
+        first.set_attribute("style", "grid-column: 2; grid-row: 1;");
+        root.append(first);
+        root.append(Node::element("div"));
+        root.append(Node::element("div"));
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 80));
+
+        assert_eq!((layout.children[1].rect.x, layout.children[1].rect.y), (0, 0));
+        assert_eq!((layout.children[2].rect.x, layout.children[2].rect.y), (0, 30));
+    }
+
 }
