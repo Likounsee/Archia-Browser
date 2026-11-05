@@ -1018,9 +1018,7 @@ fn layout_grid_children(
     let (grid_start_offset, distributed_column_gap) = match justify_content.as_str() {
         "center" => (free_grid_width / 2, 0),
         "end" | "flex-end" => (free_grid_width, 0),
-        "space-between" if columns > 1 => {
-            (0, free_grid_width / (columns.saturating_sub(1) as u32))
-        }
+        "space-between" if columns > 1 => (0, free_grid_width / (columns.saturating_sub(1) as u32)),
         "space-around" if columns > 0 => {
             let extra = free_grid_width / columns as u32;
             (extra / 2, extra)
@@ -1104,10 +1102,11 @@ fn layout_grid_children(
         }
     }
 
-    let dense = node
-        .style
-        .get("grid-auto-flow")
-        .is_some_and(|value| value.split_whitespace().any(|part| part.eq_ignore_ascii_case("dense")));
+    let dense = node.style.get("grid-auto-flow").is_some_and(|value| {
+        value
+            .split_whitespace()
+            .any(|part| part.eq_ignore_ascii_case("dense"))
+    });
     let mut cursor = 0_usize;
     for &child_index in &grid_items {
         if placed[child_index] {
@@ -1206,7 +1205,10 @@ fn layout_grid_children(
             let mut grid_child = child.clone();
             let mut justify_offset = 0_u32;
             if is_auto_dimension(grid_child.style.get("width")) {
-                if matches!(justify_self.as_str(), "start" | "self-start" | "end" | "self-end" | "center") {
+                if matches!(
+                    justify_self.as_str(),
+                    "start" | "self-start" | "end" | "self-end" | "center"
+                ) {
                     let intrinsic_outer = intrinsic_inline_width(child, content_cell_width);
                     let intrinsic_content = intrinsic_outer
                         .saturating_sub(child_box.horizontal_outer())
@@ -1236,8 +1238,12 @@ fn layout_grid_children(
             if let Some(row_height) = explicit_row_height {
                 let content_cell_height = row_height.saturating_sub(child_box.vertical_outer());
                 if is_auto_dimension(grid_child.style.get("height")) {
-                    if matches!(align_self.as_str(), "start" | "self-start" | "end" | "self-end" | "center") {
-                        let intrinsic_height = intrinsic_inline_height(child).min(content_cell_height);
+                    if matches!(
+                        align_self.as_str(),
+                        "start" | "self-start" | "end" | "self-end" | "center"
+                    ) {
+                        let intrinsic_height =
+                            intrinsic_inline_height(child).min(content_cell_height);
                         grid_child
                             .style
                             .set("height", format!("{intrinsic_height}px"));
@@ -5257,10 +5263,15 @@ mod tests {
                 crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
             let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(300, 100));
 
-            assert_eq!(layout.children[0].rect.x, expected_first_x as i32, "{justify}");
+            assert_eq!(
+                layout.children[0].rect.x, expected_first_x as i32,
+                "{justify}"
+            );
             assert_eq!(
                 layout.children[1].rect.x,
-                expected_first_x.saturating_add(50).saturating_add(expected_second_x) as i32,
+                expected_first_x
+                    .saturating_add(50)
+                    .saturating_add(expected_second_x) as i32,
                 "{justify}"
             );
         }
