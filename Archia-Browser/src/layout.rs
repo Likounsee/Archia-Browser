@@ -2392,6 +2392,14 @@ mod whitespace_layout_tests {
     }
 
     #[test]
+    fn line_height_and_font_size_accept_absolute_css_units() {
+        assert_eq!(parse_line_height(Some("12pt"), 16), Some(16));
+        assert_eq!(parse_line_height(Some("1in"), 16), Some(96));
+        assert_eq!(parse_line_height(Some("150%"), 20), Some(30));
+        assert_eq!(parse_line_height(Some("1.25"), 20), Some(25));
+    }
+
+    #[test]
     fn line_height_rejects_negative_or_non_finite_values() {
         assert_eq!(parse_line_height(Some("-1.5"), 16), None);
         assert_eq!(parse_line_height(Some("NaN%"), 16), None);
@@ -2419,7 +2427,10 @@ mod whitespace_layout_tests {
 }
 
 fn used_inline_line_height(node: &crate::style_tree::StyledNode) -> u32 {
-    let font_size = parse_px(node.style.get("font-size")).unwrap_or(16);
+    let font_size = parse_absolute_length(node.style.get("font-size").unwrap_or(""))
+        .filter(|size| *size > 0.0 && *size <= f64::from(u32::MAX))
+        .map(|size| size.floor() as u32)
+        .unwrap_or(16);
     parse_line_height(node.style.get("line-height"), font_size)
         .unwrap_or_else(|| intrinsic_inline_height(node))
         .max(1)
@@ -2427,24 +2438,18 @@ fn used_inline_line_height(node: &crate::style_tree::StyledNode) -> u32 {
 
 fn parse_line_height(value: Option<&str>, font_size: u32) -> Option<u32> {
     let value = value?.trim();
-    let (amount, scale) = if let Some(percent) = value.strip_suffix('%') {
-        (
-            percent.trim().parse::<f32>().ok()?,
-            font_size as f32 / 100.0,
-        )
-    } else if let Some(px) = value.strip_suffix("px") {
-        (px.trim().parse::<f32>().ok()?, 1.0)
+    let result = if let Some(percent) = value.strip_suffix('%') {
+        let percent = percent.trim().parse::<f64>().ok()?;
+        f64::from(font_size) * percent / 100.0
+    } else if let Some(number) = value.parse::<f64>().ok() {
+        number * f64::from(font_size)
     } else {
-        (value.parse::<f32>().ok()?, font_size as f32)
+        parse_absolute_length(value)?
     };
-    if !amount.is_finite() || amount < 0.0 {
+    if !result.is_finite() || result < 0.0 || result > f64::from(u32::MAX) {
         return None;
     }
-    let result = amount * scale;
-    if !result.is_finite() {
-        return None;
-    }
-    Some(result.round().min(u32::MAX as f32) as u32)
+    Some(result.round() as u32)
 }
 
 fn intrinsic_inline_height(node: &crate::style_tree::StyledNode) -> u32 {
@@ -2541,8 +2546,8 @@ fn parse_length(value: Option<&str>, containing_width: u32) -> Option<u32> {
 // Relative units need font or viewport context and are handled elsewhere.
 fn parse_absolute_length(value: &str) -> Option<f64> {
     let value = value.trim();
-    if matches!(value, "0" | "+0" | "-0" | "0.0") {
-        return Some(0.0);
+    if let Ok(number) = value.parse::<f64>() {
+        return (number.is_finite() && number == 0.0).then_some(0.0);
     }
 
     let units = [
