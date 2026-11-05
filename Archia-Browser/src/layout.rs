@@ -5909,6 +5909,22 @@ mod image_aspect_ratio_tests {
     use crate::html::Node;
 
     #[test]
+    fn stylesheet_aspect_ratio_controls_image_layout_height() {
+        let mut root = Node::element("div");
+        let mut image = Node::element("img");
+        image.set_attribute("class", "hero");
+        image.set_attribute("width", "320");
+        root.append(image);
+
+        let sheet = crate::css::StyleSheet::parse(".hero { aspect-ratio: 16 / 9; }");
+        let styled = crate::style_tree::StyleEngine::style(&root, &sheet);
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(800, 600));
+
+        assert_eq!(layout.children[0].rect.width, 320);
+        assert_eq!(layout.children[0].rect.height, 180);
+    }
+
+    #[test]
     fn image_height_uses_css_aspect_ratio_when_height_is_auto() {
         let mut image = Node::element("img");
         image.set_attribute("width", "320");
