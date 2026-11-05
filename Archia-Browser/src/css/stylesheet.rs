@@ -944,32 +944,18 @@ fn resolve_variables(value: &str, variables: &ComputedStyle, depth: usize) -> St
     if depth >= 16 || value.len() > MAX_RESOLVED_CSS_VALUE_BYTES {
         return value.to_owned();
     }
-    let Some(start) = value.find("var(") else {
+    let Some((start, open, end, comma)) = find_var_function(value) else {
         return value.to_owned();
     };
-    let mut level = 0usize;
-    let mut end = None;
-    for (offset, character) in value[start + 4..].char_indices() {
-        match character {
-            '(' => level += 1,
-            ')' if level == 0 => {
-                end = Some(start + 4 + offset);
-                break;
-            }
-            ')' => level -= 1,
-            _ => {}
-        }
-    }
-    let Some(end) = end else {
-        return value.to_owned();
-    };
-    let inside = &value[start + 4..end];
-    let mut parts = inside.splitn(2, ',');
-    let name = parts.next().unwrap_or("").trim();
+    let inside = &value[open + 1..end];
+    let (name, fallback) = comma.map_or((inside, None), |comma| {
+        (&inside[..comma - open - 1], Some(&inside[comma - open..]))
+    });
+    let name = name.trim();
     let replacement = variables
         .get(name)
         .map(str::to_owned)
-        .or_else(|| parts.next().map(str::trim).map(str::to_owned));
+        .or_else(|| fallback.map(str::trim).map(str::to_owned));
     let Some(replacement) = replacement else {
         return value.to_owned();
     };
@@ -988,6 +974,90 @@ fn resolve_variables(value: &str, variables: &ComputedStyle, depth: usize) -> St
     output.push_str(&replacement);
     output.push_str(&value[end + 1..]);
     resolve_variables(&output, variables, depth + 1)
+}
+
+/// Locate the next var() function without mistaking quoted text for a
+/// function, and split its fallback only at a top-level comma.
+fn find_var_function(value: &str) -> Option<(usize, usize, usize, Option<usize>)> {
+    let bytes = value.as_bytes();
+    let mut quote = None;
+    let mut escaped = false;
+    let mut start = None;
+    let mut open = 0usize;
+
+    let mut index = 0usize;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if escaped {
+            escaped = false;
+            index += 1;
+            continue;
+        }
+        if byte == b'\\' {
+            escaped = true;
+            index += 1;
+            continue;
+        }
+        if let Some(delimiter) = quote {
+            if byte == delimiter {
+                quote = None;
+            }
+            index += 1;
+            continue;
+        }
+        if byte == b'\\'' || byte == b'"' {
+            quote = Some(byte);
+            index += 1;
+            continue;
+        }
+        if index + 4 <= bytes.len()
+            && bytes[index..index + 3].eq_ignore_ascii_case(b"var")
+            && bytes[index + 3] == b'('
+            && (index == 0
+                || !(bytes[index - 1].is_ascii_alphanumeric()
+                    || matches!(bytes[index - 1], b'_' | b'-')))
+        {
+            start = Some(index);
+            open = index + 3;
+            break;
+        }
+        index += 1;
+    }
+
+    let start = start?;
+    let mut depth = 0usize;
+    let mut quote = None;
+    let mut escaped = false;
+    let mut comma = None;
+    for index in open + 1..bytes.len() {
+        let byte = bytes[index];
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if byte == b'\\' {
+            escaped = true;
+            continue;
+        }
+        if let Some(delimiter) = quote {
+            if byte == delimiter {
+                quote = None;
+            }
+            continue;
+        }
+        if byte == b'\\'' || byte == b'"' {
+            quote = Some(byte);
+            continue;
+        }
+        match byte {
+            b'(' => depth += 1,
+            b')' if depth == 0 => return Some((start, open, index, comma)),
+            b')' => depth -= 1,
+            b',' if depth == 0 && comma.is_none() => comma = Some(index),
+            _ => {}
+        }
+    }
+    None
 }
 
 fn initial_value(name: &str) -> &'static str {
@@ -1496,6 +1566,39 @@ mod tests {
         assert_eq!(style.get("border-left-width"), Some("1px"));
         assert_eq!(style.get("border-left-style"), Some("dotted"));
         assert_eq!(style.get("border-left-color"), Some("green"));
+    }
+
+    #[test]
+    fn var_fallback_splits_only_at_top_level_commas() {
+        let variables = ComputedStyle::default();
+        assert_eq!(
+            resolve_variables("var(--missing, rgb(1, 2, 3))", &variables, 0),
+            "rgb(1, 2, 3)"
+        );
+        assert_eq!(
+            resolve_variables("var(--missing, var(--also-missing, blue))", &variables, 0),
+            "blue"
+        );
+    }
+
+    #[test]
+    fn var_resolution_ignores_quoted_function_text_and_handles_quotes_in_fallbacks() {
+        let variables = ComputedStyle::default();
+        assert_eq!(
+            resolve_variables("content: \"var(--missing, red)\"", &variables, 0),
+            "content: \"var(--missing, red)\""
+        );
+        assert_eq!(
+            resolve_variables("var(--missing, \"a,b)\")", &variables, 0),
+            "\"a,b)\""
+        );
+    }
+
+    #[test]
+    fn var_function_names_are_ascii_case_insensitive() {
+        let mut variables = ComputedStyle::default();
+        variables.set("--accent", "teal");
+        assert_eq!(resolve_variables("VAR(--accent)", &variables, 0), "teal");
     }
 
     #[test]
