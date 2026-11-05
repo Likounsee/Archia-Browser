@@ -496,8 +496,14 @@ mod tests {
         parent.append(Node::text("after"));
 
         assert_eq!(parent.child_element_count(), 2);
-        assert_eq!(parent.first_element_child().and_then(Node::tag_name), Some("span"));
-        assert_eq!(parent.last_element_child().and_then(Node::tag_name), Some("strong"));
+        assert_eq!(
+            parent.first_element_child().and_then(Node::tag_name),
+            Some("span")
+        );
+        assert_eq!(
+            parent.last_element_child().and_then(Node::tag_name),
+            Some("strong")
+        );
     }
 
     #[test]
