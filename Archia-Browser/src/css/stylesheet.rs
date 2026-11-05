@@ -560,18 +560,7 @@ fn supports_declaration(name: &str, value: &str) -> bool {
         "gap" => {
             let values = value.split_whitespace().collect::<Vec<_>>();
             if (1..=2).contains(&values.len())
-                && values.iter().all(|value| {
-                    *value == "normal"
-                        || *value == "0"
-                        || value.ends_with('%')
-                        || value.ends_with("px")
-                        || value.ends_with("in")
-                        || value.ends_with("cm")
-                        || value.ends_with("mm")
-                        || value.ends_with("pt")
-                        || value.ends_with("pc")
-                        || value.ends_with("Q")
-                })
+                && values.iter().all(|value| is_valid_gap_component(value))
             {
                 apply(name.clone(), value.clone());
                 apply("row-gap".to_owned(), values[0].to_owned());
@@ -957,6 +946,26 @@ fn split_selector_list(input: &str, max_selectors: usize) -> Vec<String> {
         selectors.push(selector.to_owned());
     }
     selectors
+}
+
+fn is_valid_gap_component(value: &str) -> bool {
+    if value == "normal" || value == "0" {
+        return true;
+    }
+
+    let value = value.trim();
+    let lower = value.to_ascii_lowercase();
+    let units = [
+        "px", "in", "cm", "mm", "q", "pt", "pc", "em", "rem", "ex", "ch",
+        "vw", "vh", "vmin", "vmax", "%",
+    ];
+    let Some(unit) = units.iter().find(|unit| lower.ends_with(**unit)) else {
+        return false;
+    };
+    let number = &value[..value.len() - unit.len()];
+    number
+        .parse::<f64>()
+        .is_ok_and(|number| number.is_finite() && number >= 0.0)
 }
 
 fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
@@ -1574,6 +1583,14 @@ mod tests {
         let two = StyleSheet::parse("div { gap: 8px 16px; }").compute_style(&node);
         assert_eq!(two.get("row-gap"), Some("8px"));
         assert_eq!(two.get("column-gap"), Some("16px"));
+    }
+
+    #[test]
+    fn invalid_gap_shorthand_does_not_expand() {
+        let sheet = StyleSheet::parse("div { gap: nonsense%; }");
+        let computed = sheet.compute_style(&Node::element("div"));
+        assert_eq!(computed.get("row-gap"), None);
+        assert_eq!(computed.get("column-gap"), None);
     }
 
     #[test]
