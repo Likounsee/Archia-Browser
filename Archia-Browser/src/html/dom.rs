@@ -546,6 +546,77 @@ impl Node {
         output
     }
 
+    /// Return the first descendant element matching a CSS selector.
+    ///
+    /// This follows querySelector semantics: the receiver itself is not included.
+    pub fn query_selector(&self, selector: &str) -> Option<&Node> {
+        self.query_selector_all(selector).into_iter().next()
+    }
+
+    /// Return all descendant elements matching a CSS selector in document order.
+    ///
+    /// The selector engine evaluates the complete ancestor and sibling path, so
+    /// descendant, child and sibling combinators work across the DOM tree.
+    pub fn query_selector_all(&self, selector: &str) -> Vec<&Node> {
+        let Some(selector) = crate::css::Selector::parse(selector) else {
+            return Vec::new();
+        };
+
+        let mut matches = Vec::new();
+        let mut stack: Vec<(
+            &Node,
+            Vec<&Node>,
+            Vec<&[Node]>,
+            Vec<usize>,
+        )> = Vec::new();
+
+        let root_path = vec![self];
+        let root_siblings: Vec<&[Node]> = vec![&[]];
+        let root_positions = vec![0];
+
+        for (index, child) in self.children.iter().enumerate().rev() {
+            stack.push((
+                child,
+                root_path.clone(),
+                root_siblings.clone(),
+                {
+                    let mut positions = root_positions.clone();
+                    positions.push(index);
+                    positions
+                },
+            ));
+        }
+
+        while let Some((node, mut path, mut sibling_lists, mut positions)) = stack.pop() {
+            let siblings = path
+                .last()
+                .map(|parent| parent.children.as_slice())
+                .unwrap_or(&[]);
+            path.push(node);
+            sibling_lists.push(siblings);
+
+            if node.is_element()
+                && selector.matches_path_with_siblings(&path, &sibling_lists, &positions)
+            {
+                matches.push(node);
+            }
+
+            let children = node.children.as_slice();
+            for (index, child) in children.iter().enumerate().rev() {
+                let mut child_positions = positions.clone();
+                child_positions.push(index);
+                stack.push((
+                    child,
+                    path.clone(),
+                    sibling_lists.clone(),
+                    child_positions,
+                ));
+            }
+        }
+
+        matches
+    }
+
     /// Serialize this node's children as HTML, equivalent to the DOM innerHTML getter.
     pub fn inner_html(&self) -> String {
         let mut output = String::new();
@@ -1225,6 +1296,46 @@ mod tests {
             root.find_first_element("SECTION").and_then(Node::tag_name),
             Some("section")
         );
+    }
+
+    #[test]
+    fn query_selector_supports_descendant_child_and_sibling_combinators() {
+        let mut root = Node::element("main");
+        let mut section = Node::element("section");
+        section.set_attribute("class", "cards");
+        let mut first = Node::element("article");
+        first.set_attribute("class", "card");
+        let mut second = Node::element("article");
+        second.set_attribute("class", "card featured");
+        let mut nested = Node::element("span");
+        nested.set_attribute("class", "label");
+        second.append(nested);
+        section.append(first);
+        section.append(second);
+        root.append(section);
+
+        assert_eq!(
+            root.query_selector("main > .cards > .card + .featured")
+                .and_then(Node::tag_name),
+            Some("article")
+        );
+        assert_eq!(root.query_selector_all(".cards .label").len(), 1);
+        assert_eq!(root.query_selector_all(".card").len(), 2);
+        assert!(root.query_selector("article + article .missing").is_none());
+    }
+
+    #[test]
+    fn query_selector_excludes_receiver_and_rejects_invalid_selectors() {
+        let mut root = Node::element("div");
+        root.set_attribute("id", "root");
+        root.append(Node::element("span"));
+
+        assert!(root.query_selector("#root").is_none());
+        assert_eq!(
+            root.query_selector("span").and_then(Node::tag_name),
+            Some("span")
+        );
+        assert!(root.query_selector("div > > span").is_none());
     }
 
     #[test]
