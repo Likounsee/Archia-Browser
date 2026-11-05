@@ -199,7 +199,7 @@ impl Node {
         if self.has_class(class_name) {
             return;
         }
-        let mut classes = self.attribute("class").unwrap_or_default().to_owned();
+        let mut classes = self.class_list().join(" ");
         if !classes.is_empty() {
             classes.push(' ');
         }
