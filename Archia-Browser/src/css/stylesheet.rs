@@ -638,6 +638,17 @@ fn supports_declaration(name: &str, value: &str) -> bool {
                 return;
             }
         }
+        "background" => {
+            if let Some((color, image, repeat, position, size)) = expand_background(&value) {
+                apply(name.clone(), value.clone());
+                apply("background-color".to_owned(), color);
+                apply("background-image".to_owned(), image);
+                apply("background-repeat".to_owned(), repeat);
+                apply("background-position".to_owned(), position);
+                apply("background-size".to_owned(), size);
+                return;
+            }
+        }
         "overflow" => {
             let values = value.split_whitespace().collect::<Vec<_>>();
             (1..=2).contains(&values.len())
@@ -1558,6 +1569,104 @@ fn expand_border_shorthand(value: &str) -> Option<(String, String, String)> {
     ))
 }
 
+fn expand_background(value: &str) -> Option<(String, String, String, String, String)> {
+    if value.contains(',') {
+        return None;
+    }
+
+    let mut color = None;
+    let mut image = None;
+    let mut repeat = Vec::new();
+    let mut position = Vec::new();
+    let mut size = Vec::new();
+    let mut after_slash = false;
+
+    for raw_token in value.split_whitespace() {
+        let mut token = raw_token;
+        if let Some((before, after)) = raw_token.split_once('/') {
+            if after_slash || before.is_empty() || after.is_empty() {
+                return None;
+            }
+            token = before;
+            after_slash = true;
+            let lower_after = after.to_ascii_lowercase();
+            if !is_background_size_token(&lower_after) {
+                return None;
+            }
+            size.push(after.to_owned());
+        }
+
+        let lower = token.to_ascii_lowercase();
+        if lower == "none" || lower.starts_with("url(") || lower.starts_with("image(") {
+            if image.replace(token.to_owned()).is_some() {
+                return None;
+            }
+        } else if matches!(
+            lower.as_str(),
+            "repeat" | "no-repeat" | "repeat-x" | "repeat-y" | "space" | "round"
+        ) {
+            if after_slash || repeat.len() == 2 {
+                return None;
+            }
+            repeat.push(lower);
+        } else if matches!(
+            lower.as_str(),
+            "left" | "right" | "top" | "bottom" | "center"
+        ) || is_background_position_length(&lower)
+        {
+            if after_slash {
+                if !is_background_size_token(&lower) || size.len() == 2 {
+                    return None;
+                }
+                size.push(token.to_owned());
+            } else {
+                if position.len() == 2 {
+                    return None;
+                }
+                position.push(lower);
+            }
+        } else if after_slash {
+            if size.len() == 2 || !is_background_size_token(&lower) {
+                return None;
+            }
+            size.push(token.to_owned());
+        } else if color.replace(token.to_owned()).is_some() {
+            return None;
+        }
+    }
+
+    Some((
+        color.unwrap_or_else(|| "transparent".to_owned()),
+        image.unwrap_or_else(|| "none".to_owned()),
+        if repeat.is_empty() {
+            "repeat".to_owned()
+        } else {
+            repeat.join(" ")
+        },
+        if position.is_empty() {
+            "0% 0%".to_owned()
+        } else {
+            position.join(" ")
+        },
+        if size.is_empty() {
+            "auto".to_owned()
+        } else {
+            size.join(" ")
+        },
+    ))
+}
+
+fn is_background_position_length(value: &str) -> bool {
+    value == "0"
+        || value.ends_with('%')
+        || is_border_width_token(value)
+}
+
+fn is_background_size_token(value: &str) -> bool {
+    matches!(value, "auto" | "cover" | "contain")
+        || is_background_position_length(value)
+}
+
 fn expand_list_style(value: &str) -> Option<(String, String, String)> {
     let mut list_type = None;
     let mut position = None;
@@ -2007,6 +2116,45 @@ mod tests {
         assert_eq!(computed.get("outline-width"), Some("7px"));
         assert_eq!(computed.get("outline-style"), Some("solid"));
         assert_eq!(computed.get("outline-color"), Some("red"));
+    }
+
+    #[test]
+    fn background_shorthand_expands_color_image_repeat_position_and_size() {
+        let sheet = StyleSheet::parse(
+            "body { background: #102030; } .hero { background: url(hero.png) no-repeat center/cover #fff; } .tile { background: repeat-x url(tile.png) left top; }",
+        );
+        let cases = [
+            ("body", "#102030", "none", "repeat", "0% 0%", "auto"),
+            ("hero", "#fff", "url(hero.png)", "no-repeat", "center", "cover"),
+            ("tile", "transparent", "url(tile.png)", "repeat-x", "left top", "auto"),
+        ];
+        for (tag, color, image, repeat, position, size) in cases {
+            let computed = sheet.compute_style(&Node::element(tag));
+            assert_eq!(computed.get("background-color"), Some(color));
+            assert_eq!(computed.get("background-image"), Some(image));
+            assert_eq!(computed.get("background-repeat"), Some(repeat));
+            assert_eq!(computed.get("background-position"), Some(position));
+            assert_eq!(computed.get("background-size"), Some(size));
+        }
+    }
+
+    #[test]
+    fn background_shorthand_respects_important_longhands() {
+        let sheet = StyleSheet::parse(
+            ".hero { background-image: url(locked.png) !important; background: url(hero.png) no-repeat red; }",
+        );
+        let computed = sheet.compute_style(&Node::element("div").with_attribute("class", "hero"));
+        assert_eq!(computed.get("background-image"), Some("url(locked.png)"));
+        assert_eq!(computed.get("background-color"), Some("red"));
+        assert_eq!(computed.get("background-repeat"), Some("no-repeat"));
+    }
+
+    #[test]
+    fn invalid_multi_layer_background_is_not_partially_expanded() {
+        let sheet = StyleSheet::parse(".hero { background: url(a.png), url(b.png); }");
+        let computed = sheet.compute_style(&Node::element("div").with_attribute("class", "hero"));
+        assert_eq!(computed.get("background-image"), None);
+        assert_eq!(computed.get("background-repeat"), None);
     }
 
     #[test]
