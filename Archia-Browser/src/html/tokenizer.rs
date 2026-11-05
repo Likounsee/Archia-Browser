@@ -312,7 +312,10 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
         let mut attr_name = String::new();
         let mut attr_name_too_long = false;
         while let Some(&ch) = chars.peek() {
-            if is_html_whitespace(ch) || matches!(ch, '=' | '/') {
+            // A slash is only the self-closing-tag marker between
+            // attributes. Inside an attribute name it is an ordinary
+            // character (for example, <div data/name=value>).
+            if is_html_whitespace(ch) || ch == '=' {
                 break;
             }
             if attr_name.len() + ch.len_utf8() <= MAX_HTML_ATTRIBUTE_NAME_BYTES {
@@ -419,6 +422,28 @@ mod tests {
             attributes.get("\u{2003}class").map(String::as_str),
             Some("second")
         );
+    }
+
+    #[test]
+    fn slash_is_preserved_inside_attribute_names() {
+        let tokens = HtmlTokenizer::tokenize("<div data/name=value></div>");
+        let HtmlToken::StartTag { attributes, self_closing, .. } = &tokens[0] else {
+            panic!("expected start tag");
+        };
+
+        assert_eq!(attributes.get("data/name").map(String::as_str), Some("value"));
+        assert!(!self_closing);
+    }
+
+    #[test]
+    fn slash_after_attributes_still_marks_void_syntax() {
+        let tokens = HtmlTokenizer::tokenize("<div id=value />");
+        let HtmlToken::StartTag { attributes, self_closing, .. } = &tokens[0] else {
+            panic!("expected start tag");
+        };
+
+        assert_eq!(attributes.get("id").map(String::as_str), Some("value"));
+        assert!(*self_closing);
     }
 
     #[test]
