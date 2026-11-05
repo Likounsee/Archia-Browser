@@ -423,6 +423,22 @@ fn supports_declaration(name: &str, value: &str) -> bool {
         "border-width",
         "border-style",
         "border-color",
+        "border-top",
+        "border-right",
+        "border-bottom",
+        "border-left",
+        "border-top-width",
+        "border-right-width",
+        "border-bottom-width",
+        "border-left-width",
+        "border-top-style",
+        "border-right-style",
+        "border-bottom-style",
+        "border-left-style",
+        "border-top-color",
+        "border-right-color",
+        "border-bottom-color",
+        "border-left-color",
         "border-radius",
         "background",
         "background-color",
@@ -2217,6 +2233,21 @@ mod tests {
             let mut node = Node::element("div");
             node.set_attribute("class", class);
             assert_eq!(sheet.compute_style(&node).get("color"), expected);
+        }
+    }
+
+    #[test]
+    fn supports_rules_recognize_border_side_components() {
+        let css = "@supports (border-top-width: 2px) { .width { border-top-width: 2px; } } @supports (border-left-style: dashed) { .style { border-left-style: dashed; } } @supports (border-right-color: red) { .color { border-right-color: red; } }";
+        let sheet = StyleSheet::parse(css);
+        for (class, property, expected) in [
+            ("width", "border-top-width", "2px"),
+            ("style", "border-left-style", "dashed"),
+            ("color", "border-right-color", "red"),
+        ] {
+            let mut node = Node::element("div");
+            node.set_attribute("class", class);
+            assert_eq!(sheet.compute_style(&node).get(property), Some(expected));
         }
     }
 
