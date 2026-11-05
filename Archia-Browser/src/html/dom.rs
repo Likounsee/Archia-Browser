@@ -2,13 +2,17 @@ use std::collections::BTreeMap;
 
 /// Convert a dataset property name to its corresponding data-* attribute.
 fn dataset_key_to_attribute(key: &str) -> Option<String> {
-    if key.is_empty() || key.chars().any(is_html_whitespace) { return None; }
+    if key.is_empty() || key.chars().any(is_html_whitespace) {
+        return None;
+    }
     let mut attribute = String::from("data-");
     for character in key.chars() {
         if character.is_ascii_uppercase() {
             attribute.push('-');
             attribute.push(character.to_ascii_lowercase());
-        } else { attribute.push(character); }
+        } else {
+            attribute.push(character);
+        }
     }
     Some(attribute)
 }
@@ -269,16 +273,24 @@ impl Node {
     }
 
     /// DOM id property. Non-elements return an empty string.
-    pub fn id(&self) -> &str { self.attribute("id").unwrap_or("") }
+    pub fn id(&self) -> &str {
+        self.attribute("id").unwrap_or("")
+    }
 
     /// Set the DOM id property on an element.
-    pub fn set_id(&mut self, value: impl Into<String>) { self.set_attribute("id", value); }
+    pub fn set_id(&mut self, value: impl Into<String>) {
+        self.set_attribute("id", value);
+    }
 
     /// DOM className property. Non-elements return an empty string.
-    pub fn class_name(&self) -> &str { self.attribute("class").unwrap_or("") }
+    pub fn class_name(&self) -> &str {
+        self.attribute("class").unwrap_or("")
+    }
 
     /// Replace the complete className value on an element.
-    pub fn set_class_name(&mut self, value: impl Into<String>) { self.set_attribute("class", value); }
+    pub fn set_class_name(&mut self, value: impl Into<String>) {
+        self.set_attribute("class", value);
+    }
 
     /// Read a data-* attribute using its dataset camelCase key.
     pub fn dataset_value(&self, key: &str) -> Option<&str> {
@@ -288,7 +300,9 @@ impl Node {
 
     /// Set a data-* attribute using its dataset camelCase key.
     pub fn set_dataset_value(&mut self, key: &str, value: impl Into<String>) -> bool {
-        let Some(attribute) = dataset_key_to_attribute(key) else { return false; };
+        let Some(attribute) = dataset_key_to_attribute(key) else {
+            return false;
+        };
         self.set_attribute(attribute, value);
         true
     }
@@ -390,16 +404,26 @@ impl Node {
     }
 
     /// Whether this element carries the HTML disabled boolean attribute.
-    pub fn is_disabled(&self) -> bool { self.has_attribute("disabled") }
+    pub fn is_disabled(&self) -> bool {
+        self.has_attribute("disabled")
+    }
 
     /// Whether this element carries the HTML required boolean attribute.
-    pub fn is_required(&self) -> bool { self.has_attribute("required") }
+    pub fn is_required(&self) -> bool {
+        self.has_attribute("required")
+    }
 
     /// Default checked state for checkbox and radio inputs.
     /// Runtime checkedness can diverge after user interaction and belongs in form state.
     pub fn is_checked(&self) -> bool {
         self.tag_name() == Some("input")
-            && matches!(self.attribute("type").unwrap_or("text").to_ascii_lowercase().as_str(), "checkbox" | "radio")
+            && matches!(
+                self.attribute("type")
+                    .unwrap_or("text")
+                    .to_ascii_lowercase()
+                    .as_str(),
+                "checkbox" | "radio"
+            )
             && self.has_attribute("checked")
     }
 
@@ -416,8 +440,11 @@ impl Node {
         match self.tag_name()? {
             "input" | "button" => Some(self.attribute("value").unwrap_or("").to_owned()),
             "textarea" => Some(self.text_content()),
-            "option" => Some(self.attribute("value").map(str::to_owned)
-                .unwrap_or_else(|| self.text_content())),
+            "option" => Some(
+                self.attribute("value")
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| self.text_content()),
+            ),
             _ => None,
         }
     }
@@ -885,7 +912,6 @@ impl Node {
         output
     }
 }
-
 
 /// Parse a CSS selector list while keeping commas inside strings, attributes,
 /// escaped sequences and functional pseudo-classes intact.
@@ -1808,7 +1834,10 @@ mod tests {
         assert_eq!(element.attribute("data-user-id"), Some("42"));
         assert_eq!(element.dataset_value("userId"), Some("42"));
         assert_eq!(element.dataset_value("longName"), Some("Ada"));
-        assert_eq!(element.remove_dataset_value("userId").as_deref(), Some("42"));
+        assert_eq!(
+            element.remove_dataset_value("userId").as_deref(),
+            Some("42")
+        );
         assert_eq!(element.dataset_value("userId"), None);
     }
 
