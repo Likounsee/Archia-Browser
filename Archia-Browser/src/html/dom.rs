@@ -369,6 +369,39 @@ impl Node {
             .flatten()
     }
 
+    /// Whether this element carries the HTML disabled boolean attribute.
+    pub fn is_disabled(&self) -> bool { self.has_attribute("disabled") }
+
+    /// Whether this element carries the HTML required boolean attribute.
+    pub fn is_required(&self) -> bool { self.has_attribute("required") }
+
+    /// Default checked state for checkbox and radio inputs.
+    /// Runtime checkedness can diverge after user interaction and belongs in form state.
+    pub fn is_checked(&self) -> bool {
+        self.tag_name() == Some("input")
+            && matches!(self.attribute("type").unwrap_or("text").to_ascii_lowercase().as_str(), "checkbox" | "radio")
+            && self.has_attribute("checked")
+    }
+
+    /// Default selected state for an option element.
+    pub fn is_selected(&self) -> bool {
+        self.tag_name() == Some("option") && self.has_attribute("selected")
+    }
+
+    /// Read the authored/default value for common form controls.
+    ///
+    /// This does not model live user-edited value state, select-option
+    /// selection algorithms, or browser-specific default values.
+    pub fn form_value(&self) -> Option<String> {
+        match self.tag_name()? {
+            "input" | "button" => Some(self.attribute("value").unwrap_or("").to_owned()),
+            "textarea" => Some(self.text_content()),
+            "option" => Some(self.attribute("value").map(str::to_owned)
+                .unwrap_or_else(|| self.text_content())),
+            _ => None,
+        }
+    }
+
     pub fn attributes(&self) -> Option<&BTreeMap<String, String>> {
         match &self.kind {
             NodeKind::Element { attributes, .. } => Some(attributes),
@@ -1765,6 +1798,42 @@ mod tests {
         assert!(!element.set_dataset_value("", "x"));
         assert!(!element.set_dataset_value("bad key", "x"));
         assert_eq!(element.remove_dataset_value("bad key"), None);
+    }
+
+    #[test]
+    fn form_control_helpers_expose_authored_default_state() {
+        let mut checkbox = Node::element("input");
+        checkbox.set_attribute("type", "checkbox");
+        checkbox.set_attribute("checked", "");
+        checkbox.set_attribute("required", "");
+        assert!(checkbox.is_checked());
+        assert!(checkbox.is_required());
+        assert!(!checkbox.is_disabled());
+
+        checkbox.set_attribute("disabled", "");
+        assert!(checkbox.is_disabled());
+
+        let mut text_input = Node::element("input");
+        text_input.set_attribute("type", "text");
+        text_input.set_attribute("checked", "");
+        assert!(!text_input.is_checked());
+        text_input.set_attribute("value", "hello");
+        assert_eq!(text_input.form_value().as_deref(), Some("hello"));
+    }
+
+    #[test]
+    fn form_value_handles_textarea_and_option_fallbacks() {
+        let mut textarea = Node::element("textarea");
+        textarea.append(Node::text("message"));
+        assert_eq!(textarea.form_value().as_deref(), Some("message"));
+
+        let mut option = Node::element("option");
+        option.append(Node::text("Choice"));
+        assert_eq!(option.form_value().as_deref(), Some("Choice"));
+        option.set_attribute("value", "choice-id");
+        assert_eq!(option.form_value().as_deref(), Some("choice-id"));
+        option.set_attribute("selected", "");
+        assert!(option.is_selected());
     }
 
     #[test]
