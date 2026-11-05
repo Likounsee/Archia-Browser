@@ -977,16 +977,21 @@ fn layout_grid_children(
             resolve_grid_track_sizes(&row_tracks, containing_height, row_gap)
         })
         .unwrap_or_default();
-    let implicit_row_height = node
+    let implicit_row_heights: Vec<Option<u32>> = node
         .style
         .get("grid-auto-rows")
-        .and_then(|value| parse_grid_track(value, containing_height))
-        .and_then(|track| match track {
-            GridTrack::Auto => None,
-            track => resolve_grid_track_sizes(&[track], containing_height, 0)
-                .first()
-                .copied(),
-        });
+        .map(|value| {
+            parse_grid_tracks(Some(value), containing_height)
+                .iter()
+                .map(|track| match track {
+                    GridTrack::Auto => None,
+                    track => resolve_grid_track_sizes(&[*track], containing_height, 0)
+                        .first()
+                        .copied(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     let columns = widths.len().max(1);
     let mut laid_out = Vec::with_capacity(node.children.len());
     laid_out.resize_with(node.children.len(), || None);
@@ -1037,10 +1042,12 @@ fn layout_grid_children(
     for row_start in (0..grid_items.len()).step_by(columns) {
         let row_end = (row_start + columns).min(grid_items.len());
         let row_index = row_start / columns;
-        let explicit_row_height = row_heights
-            .get(row_index)
-            .copied()
-            .or(implicit_row_height);
+        let implicit_row_index = row_index.saturating_sub(row_heights.len());
+        let explicit_row_height = row_heights.get(row_index).copied().or_else(|| {
+            (!implicit_row_heights.is_empty())
+                .then(|| implicit_row_heights[implicit_row_index % implicit_row_heights.len()])
+                .flatten()
+        });
         let mut row_height = explicit_row_height.unwrap_or(0);
         let mut column_left = 0_u32;
 
@@ -4894,9 +4901,9 @@ mod tests {
         let mut root = Node::element("section");
         root.set_attribute(
             "style",
-            "display: grid; width: 200px; grid-template-columns: 1fr 1fr; grid-template-rows: 20px; grid-auto-rows: 35px; row-gap: 5px;",
+            "display: grid; width: 200px; grid-template-columns: 1fr 1fr; grid-template-rows: 20px; grid-auto-rows: 35px 45px; row-gap: 5px;",
         );
-        for _ in 0..4 {
+        for _ in 0..6 {
             root.append(Node::element("div"));
         }
 
@@ -4909,7 +4916,10 @@ mod tests {
         assert_eq!(layout.children[2].rect.y, 25);
         assert_eq!(layout.children[2].rect.height, 35);
         assert_eq!(layout.children[3].rect.height, 35);
-        assert_eq!(layout.rect.height, 65);
+        assert_eq!(layout.children[4].rect.y, 65);
+        assert_eq!(layout.children[4].rect.height, 45);
+        assert_eq!(layout.children[5].rect.height, 45);
+        assert_eq!(layout.rect.height, 110);
     }
 
     #[test]
