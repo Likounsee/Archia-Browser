@@ -865,7 +865,7 @@ fn matches_pseudo_class(
         }
         "enabled" => {
             is_disableable_element(node) && !is_disabled_element(node, attributes, ancestors)
-        },
+        }
         "required" => {
             is_required_capable_element(node, attributes) && attributes.contains_key("required")
         }
