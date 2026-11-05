@@ -1078,7 +1078,7 @@ fn layout_grid_children(
 
     // Resolve explicit grid lines before auto-placement so explicitly positioned
     // items reserve their cells regardless of their source order.
-    let mut cells: Vec<Vec<Option<usize>>> = vec![vec![None; columns]; 1];
+    let mut cells: Vec<Vec<Option<usize>>> = Vec::new();
     let mut placed = vec![false; node.children.len()];
     for &child_index in &grid_items {
         let child = &node.children[child_index];
@@ -4982,6 +4982,22 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.width, 100);
     }
+    #[test]
+    fn empty_grid_does_not_create_an_implicit_row() {
+        let mut root = Node::element("section");
+        root.set_attribute(
+            "style",
+            "display: grid; width: 200px; grid-template-columns: 100px 100px; grid-template-rows: 40px;",
+        );
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 100));
+
+        assert!(layout.children.is_empty());
+        assert_eq!(layout.rect.height, 0);
+    }
+
     #[test]
     fn grid_layout_places_items_on_explicit_grid_lines() {
         let mut root = Node::element("section");
