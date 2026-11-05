@@ -1736,6 +1736,16 @@ mod tests {
         assert!(Selector::parse("input:out-of-range").unwrap().matches(&number));
         number.set_attribute("value", "5");
         assert!(Selector::parse("input:in-range").unwrap().matches(&number));
+
+        let mut select = Node::element("select");
+        select.set_attribute("required", "");
+        let mut placeholder = Node::element("option");
+        placeholder.set_attribute("value", "");
+        placeholder.append(Node::text("Choose one"));
+        select.append(placeholder);
+        assert!(Selector::parse("select:invalid").unwrap().matches(&select));
+        select.children[0].set_attribute("value", "chosen");
+        assert!(Selector::parse("select:valid").unwrap().matches(&select));
     }
 
     #[test]
