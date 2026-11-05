@@ -818,17 +818,6 @@ fn background_rect(layout: &LayoutNode) -> super::layout::Rect {
 }
 
 fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayList, opacity: u8) {
-    let border_style = style.get("border-style").map(str::trim).unwrap_or("none");
-    if matches!(border_style, "none" | "hidden") {
-        return;
-    }
-    let Some(color) = style
-        .get("border-color")
-        .and_then(parse_color)
-        .or_else(|| style.get("color").and_then(parse_color))
-    else {
-        return;
-    };
     let border = &layout.box_model;
     let outer_x = layout
         .rect
@@ -853,39 +842,131 @@ fn paint_borders(style: &ComputedStyle, layout: &LayoutNode, list: &mut DisplayL
         .saturating_add(border.border_top)
         .saturating_add(border.border_bottom);
 
-    if border.border_top > 0 {
-        list.push(PaintCommand::FillRect {
-            rect: super::layout::Rect::new(outer_x, outer_y, outer_width, border.border_top),
-            color: apply_opacity(color, opacity),
-        });
-    }
-    if border.border_bottom > 0 {
-        list.push(PaintCommand::FillRect {
-            rect: super::layout::Rect::new(
-                outer_x,
-                outer_y.saturating_add(outer_height.saturating_sub(border.border_bottom) as i32),
-                outer_width,
-                border.border_bottom,
-            ),
-            color: apply_opacity(color, opacity),
-        });
-    }
-    if border.border_left > 0 {
-        list.push(PaintCommand::FillRect {
-            rect: super::layout::Rect::new(outer_x, outer_y, border.border_left, outer_height),
-            color: apply_opacity(color, opacity),
-        });
-    }
-    if border.border_right > 0 {
-        list.push(PaintCommand::FillRect {
-            rect: super::layout::Rect::new(
+    let sides = [
+        (
+            "top",
+            Rect::new(outer_x, outer_y, outer_width, border.border_top),
+        ),
+        (
+            "right",
+            Rect::new(
                 outer_x.saturating_add(outer_width.saturating_sub(border.border_right) as i32),
                 outer_y,
                 border.border_right,
                 outer_height,
             ),
-            color: apply_opacity(color, opacity),
-        });
+        ),
+        (
+            "bottom",
+            Rect::new(
+                outer_x,
+                outer_y.saturating_add(outer_height.saturating_sub(border.border_bottom) as i32),
+                outer_width,
+                border.border_bottom,
+            ),
+        ),
+        (
+            "left",
+            Rect::new(outer_x, outer_y, border.border_left, outer_height),
+        ),
+    ];
+
+    for (side, rect) in sides {
+        if rect.width == 0 || rect.height == 0 {
+            continue;
+        }
+        let side_style = format!("border-{side}-style");
+        let border_style = style
+            .get(&side_style)
+            .or_else(|| style.get("border-style"))
+            .map(str::trim)
+            .unwrap_or("none");
+        if matches!(border_style, "none" | "hidden") {
+            continue;
+        }
+
+        let side_color = format!("border-{side}-color");
+        let Some(color) = style
+            .get(&side_color)
+            .and_then(parse_color)
+            .or_else(|| style.get("border-color").and_then(parse_color))
+            .or_else(|| style.get("color").and_then(parse_color))
+        else {
+            continue;
+        };
+        paint_border_edge(rect, border_style, apply_opacity(color, opacity), list);
+    }
+}
+
+fn paint_border_edge(rect: Rect, border_style: &str, color: u32, list: &mut DisplayList) {
+    let horizontal = rect.width >= rect.height;
+    let length = if horizontal { rect.width } else { rect.height };
+    let thickness = if horizontal { rect.height } else { rect.width };
+    if length == 0 || thickness == 0 {
+        return;
+    }
+
+    match border_style {
+        "dashed" | "dotted" => {
+            let unit = thickness.max(1);
+            let (segment, gap) = if border_style == "dotted" {
+                (unit, unit.saturating_mul(2))
+            } else {
+                (unit.saturating_mul(3), unit.saturating_mul(2))
+            };
+            let mut offset = 0u32;
+            let mut emitted = 0usize;
+            while offset < length && emitted < 4096 {
+                let extent = segment.min(length - offset);
+                let segment_rect = if horizontal {
+                    Rect::new(
+                        rect.x.saturating_add(offset.min(i32::MAX as u32) as i32),
+                        rect.y,
+                        extent,
+                        thickness,
+                    )
+                } else {
+                    Rect::new(
+                        rect.x,
+                        rect.y.saturating_add(offset.min(i32::MAX as u32) as i32),
+                        thickness,
+                        extent,
+                    )
+                };
+                list.push(PaintCommand::FillRect {
+                    rect: segment_rect,
+                    color,
+                });
+                offset = offset.saturating_add(extent).saturating_add(gap);
+                emitted += 1;
+            }
+        }
+        "double" if thickness >= 3 => {
+            let stripe = (thickness / 3).max(1);
+            let middle_gap = thickness.saturating_sub(stripe.saturating_mul(2));
+            if horizontal {
+                for y in [
+                    rect.y,
+                    rect.y.saturating_add((stripe + middle_gap).min(i32::MAX as u32) as i32),
+                ] {
+                    list.push(PaintCommand::FillRect {
+                        rect: Rect::new(rect.x, y, rect.width, stripe),
+                        color,
+                    });
+                }
+            } else {
+                for x in [
+                    rect.x,
+                    rect.x.saturating_add((stripe + middle_gap).min(i32::MAX as u32) as i32),
+                ] {
+                    list.push(PaintCommand::FillRect {
+                        rect: Rect::new(x, rect.y, stripe, rect.height),
+                        color,
+                    });
+                }
+            }
+        }
+        _ => list.push(PaintCommand::FillRect { rect, color }),
     }
 }
 
