@@ -1651,14 +1651,11 @@ fn expand_background(value: &str) -> Option<(String, String, String, String, Str
 }
 
 fn is_background_position_length(value: &str) -> bool {
-    value == "0"
-        || value.ends_with('%')
-        || is_border_width_token(value)
+    value == "0" || value.ends_with('%') || is_border_width_token(value)
 }
 
 fn is_background_size_token(value: &str) -> bool {
-    matches!(value, "auto" | "cover" | "contain")
-        || is_background_position_length(value)
+    matches!(value, "auto" | "cover" | "contain") || is_background_position_length(value)
 }
 
 fn expand_list_style(value: &str) -> Option<(String, String, String)> {
@@ -2119,8 +2116,22 @@ mod tests {
         );
         let cases = [
             ("body", "#102030", "none", "repeat", "0% 0%", "auto"),
-            ("hero", "#fff", "url(hero.png)", "no-repeat", "center", "cover"),
-            ("tile", "transparent", "url(tile.png)", "repeat-x", "left top", "auto"),
+            (
+                "hero",
+                "#fff",
+                "url(hero.png)",
+                "no-repeat",
+                "center",
+                "cover",
+            ),
+            (
+                "tile",
+                "transparent",
+                "url(tile.png)",
+                "repeat-x",
+                "left top",
+                "auto",
+            ),
         ];
         for (tag, color, image, repeat, position, size) in cases {
             let computed = sheet.compute_style(&Node::element(tag));
