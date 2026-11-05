@@ -825,8 +825,13 @@ fn parse_grid_column_span(value: Option<&str>, start: usize, columns: usize) -> 
     let Some(end) = value.and_then(|value| value.split_once('/').map(|(_, end)| end.trim())) else {
         return 1;
     };
-    if let Some(span) = end.strip_prefix("span ") {
-        return span.trim().parse::<usize>().ok().filter(|span| *span > 0 && *span <= columns).unwrap_or(1);
+    let mut parts = end.split_whitespace();
+    if parts.next().is_some_and(|part| part.eq_ignore_ascii_case("span")) {
+        return parts
+            .next()
+            .and_then(|span| span.parse::<usize>().ok())
+            .filter(|span| *span > 0 && *span <= columns)
+            .unwrap_or(1);
     }
     end.parse::<usize>()
         .ok()
