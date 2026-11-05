@@ -967,8 +967,8 @@ fn is_valid_gap_component(value: &str) -> bool {
     let value = value.trim();
     let lower = value.to_ascii_lowercase();
     let units = [
-        "px", "in", "cm", "mm", "q", "pt", "pc", "em", "rem", "ex", "ch",
-        "vw", "vh", "vmin", "vmax", "%",
+        "px", "in", "cm", "mm", "q", "pt", "pc", "em", "rem", "ex", "ch", "vw", "vh", "vmin",
+        "vmax", "%",
     ];
     let Some(unit) = units.iter().find(|unit| lower.ends_with(**unit)) else {
         return false;
