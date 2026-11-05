@@ -613,7 +613,15 @@ fn supports_declaration(name: &str, value: &str) -> bool {
         ),
         "justify-items" | "justify-self" => matches!(
             value.as_str(),
-            "normal" | "stretch" | "start" | "end" | "self-start" | "self-end" | "center" | "left" | "right"
+            "normal"
+                | "stretch"
+                | "start"
+                | "end"
+                | "self-start"
+                | "self-end"
+                | "center"
+                | "left"
+                | "right"
         ),
         "place-items" | "place-content" | "place-self" => {
             let values = value.split_whitespace().collect::<Vec<_>>();
@@ -621,9 +629,21 @@ fn supports_declaration(name: &str, value: &str) -> bool {
                 && values.iter().all(|value| {
                     matches!(
                         *value,
-                        "normal" | "stretch" | "start" | "end" | "self-start" | "self-end"
-                            | "center" | "left" | "right" | "flex-start" | "flex-end"
-                            | "baseline" | "space-between" | "space-around" | "space-evenly"
+                        "normal"
+                            | "stretch"
+                            | "start"
+                            | "end"
+                            | "self-start"
+                            | "self-end"
+                            | "center"
+                            | "left"
+                            | "right"
+                            | "flex-start"
+                            | "flex-end"
+                            | "baseline"
+                            | "space-between"
+                            | "space-around"
+                            | "space-evenly"
                     )
                 })
         }
@@ -2652,9 +2672,8 @@ mod tests {
 
     #[test]
     fn expands_place_items_and_place_content_shorthands() {
-        let sheet = StyleSheet::parse(
-            "div { place-items: center end; place-content: end space-between; }",
-        );
+        let sheet =
+            StyleSheet::parse("div { place-items: center end; place-content: end space-between; }");
         let style = sheet.compute_style(&Node::element("div"));
 
         assert_eq!(style.get("align-items"), Some("center"));
