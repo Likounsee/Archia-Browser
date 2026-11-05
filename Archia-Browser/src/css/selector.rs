@@ -720,37 +720,54 @@ fn is_required_capable_element(
 fn is_read_write_element(
     node: &Node,
     attributes: &std::collections::BTreeMap<String, String>,
+    ancestors: Option<&[&Node]>,
 ) -> bool {
-    if attributes.contains_key("disabled") || attributes.contains_key("readonly") {
-        return false;
-    }
-
     match node.tag_name() {
-        Some("textarea") => true,
-        Some("input") => matches!(
-            attributes
-                .get("type")
-                .map(|value| value.trim().to_ascii_lowercase())
-                .as_deref()
-                .unwrap_or("text"),
-            "text"
-                | "search"
-                | "url"
-                | "tel"
-                | "email"
-                | "password"
-                | "date"
-                | "month"
-                | "week"
-                | "time"
-                | "datetime-local"
-                | "number"
-        ),
-        _ => attributes.get("contenteditable").is_some_and(|value| {
-            value.is_empty()
-                || value.eq_ignore_ascii_case("true")
-                || value.eq_ignore_ascii_case("plaintext-only")
-        }),
+        Some("textarea") => {
+            !attributes.contains_key("disabled") && !attributes.contains_key("readonly")
+        }
+        Some("input") => {
+            !attributes.contains_key("disabled")
+                && !attributes.contains_key("readonly")
+                && matches!(
+                    attributes
+                        .get("type")
+                        .map(|value| value.trim().to_ascii_lowercase())
+                        .as_deref()
+                        .unwrap_or("text"),
+                    "text"
+                        | "search"
+                        | "url"
+                        | "tel"
+                        | "email"
+                        | "password"
+                        | "date"
+                        | "month"
+                        | "week"
+                        | "time"
+                        | "datetime-local"
+                        | "number"
+                )
+        }
+        _ => {
+            // contenteditable is an enumerated, inherited attribute. An
+            // explicit "false" stops an editable ancestor from propagating.
+            let state = attributes.get("contenteditable").map(String::as_str).or_else(|| {
+                ancestors.and_then(|ancestors| {
+                    ancestors.iter().rev().find_map(|ancestor| {
+                        let NodeKind::Element { attributes, .. } = &ancestor.kind else {
+                            return None;
+                        };
+                        attributes.get("contenteditable").map(String::as_str)
+                    })
+                })
+            });
+            state.is_some_and(|value| {
+                value.is_empty()
+                    || value.eq_ignore_ascii_case("true")
+                    || value.eq_ignore_ascii_case("plaintext-only")
+            })
+        }
     }
 }
 
@@ -872,8 +889,8 @@ fn matches_pseudo_class(
         "optional" => {
             is_required_capable_element(node, attributes) && !attributes.contains_key("required")
         }
-        "read-only" => !is_read_write_element(node, attributes),
-        "read-write" => is_read_write_element(node, attributes),
+        "read-only" => !is_read_write_element(node, attributes, ancestors),
+        "read-write" => is_read_write_element(node, attributes, ancestors),
         "placeholder-shown" => {
             attributes.contains_key("placeholder")
                 && match node.tag_name() {
@@ -1808,6 +1825,49 @@ mod tests {
 
         assert!(Selector::parse(":disabled").unwrap().matches_path(&path));
         assert!(!Selector::parse(":enabled").unwrap().matches_path(&path));
+    }
+
+    #[test]
+    fn read_write_inherits_contenteditable_and_false_stops_inheritance() {
+        let mut editable = Node::element("div");
+        editable.set_attribute("contenteditable", "true");
+        let mut child = Node::element("p");
+        let mut nested = Node::element("span");
+        nested.set_attribute("contenteditable", "false");
+        let nested_child = Node::element("em");
+        nested.append(nested_child);
+        child.append(nested);
+        editable.append(child);
+
+        let child_path = [&editable, &editable.children[0]];
+        assert!(Selector::parse(":read-write")
+            .unwrap()
+            .matches_path(&child_path));
+        assert!(!Selector::parse(":read-only")
+            .unwrap()
+            .matches_path(&child_path));
+
+        let nested_path = [
+            &editable,
+            &editable.children[0],
+            &editable.children[0].children[0],
+        ];
+        assert!(Selector::parse(":read-only")
+            .unwrap()
+            .matches_path(&nested_path));
+        assert!(!Selector::parse(":read-write")
+            .unwrap()
+            .matches_path(&nested_path));
+
+        let nested_child_path = [
+            &editable,
+            &editable.children[0],
+            &editable.children[0].children[0],
+            &editable.children[0].children[0].children[0],
+        ];
+        assert!(Selector::parse(":read-only")
+            .unwrap()
+            .matches_path(&nested_child_path));
     }
 
     #[test]
