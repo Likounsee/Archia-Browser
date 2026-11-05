@@ -2176,9 +2176,14 @@ fn display_for_styled_node(node: &crate::style_tree::StyledNode) -> Display {
             "head" | "title" | "meta" | "link" | "base" | "script" | "style" | "template" => {
                 Display::None
             }
-            "a" | "abbr" | "b" | "bdi" | "bdo" | "br" | "button" | "code" | "em" | "i" | "img"
-            | "input" | "label" | "small" | "span" | "strong" | "sub" | "sup" | "textarea"
-            | "time" | "u" => Display::Inline,
+            "a" | "abbr" | "acronym" | "b" | "bdi" | "bdo" | "br" | "cite" | "code"
+            | "data" | "del" | "dfn" | "em" | "i" | "ins" | "kbd" | "label" | "mark"
+            | "q" | "ruby" | "s" | "samp" | "small" | "span" | "strong" | "sub" | "sup"
+            | "time" | "u" | "var" | "wbr" => Display::Inline,
+            "audio" | "button" | "canvas" | "embed" | "iframe" | "img" | "input" | "meter"
+            | "object" | "output" | "picture" | "progress" | "select" | "textarea" | "video" => {
+                Display::InlineBlock
+            }
             _ => Display::Block,
         },
         NodeKind::Document => Display::Block,
@@ -2670,6 +2675,26 @@ mod tests {
     fn display_defaults_to_block() {
         let style = ComputedStyle::default();
         assert_eq!(Display::from_style(&style), Display::Block);
+    }
+
+    #[test]
+    fn html_inline_and_replaced_elements_get_appropriate_default_display() {
+        let sheet = crate::css::StyleSheet::default();
+        let mut root = Node::element("body");
+        for tag in ["q", "mark", "kbd", "wbr", "select", "img", "canvas", "video"] {
+            root.append(Node::element(tag));
+        }
+
+        let styled = crate::style_tree::StyleEngine::style(&root, &sheet);
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(800, 600));
+
+        assert_eq!(layout.children[0].display, Display::Inline);
+        assert_eq!(layout.children[1].display, Display::Inline);
+        assert_eq!(layout.children[2].display, Display::Inline);
+        assert_eq!(layout.children[3].display, Display::Inline);
+        for index in 4..8 {
+            assert_eq!(layout.children[index].display, Display::InlineBlock);
+        }
     }
 
     #[test]
