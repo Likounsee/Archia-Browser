@@ -298,11 +298,15 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
         }
         if chars.peek() == Some(&'/') {
             chars.next();
-            self_closing = true;
-            while chars.peek().is_some_and(|c| is_html_whitespace(*c)) {
+            if chars.peek() == Some(&'>') {
                 chars.next();
+                self_closing = true;
+                break;
             }
-            break;
+            // The self-closing-start-tag state only accepts '>'. Otherwise
+            // HTML reconsumes the character in the before-attribute-name
+            // state; the slash itself is a parse error and is discarded.
+            continue;
         }
 
         // Bound work as well as retained map entries. Duplicate attributes
@@ -312,10 +316,9 @@ fn parse_start_tag(input: &str) -> Option<(String, BTreeMap<String, String>, boo
         let mut attr_name = String::new();
         let mut attr_name_too_long = false;
         while let Some(&ch) = chars.peek() {
-            // A slash is only the self-closing-tag marker between
-            // attributes. Inside an attribute name it is an ordinary
-            // character (for example, <div data/name=value>).
-            if is_html_whitespace(ch) || ch == '=' {
+            // In the HTML tokenizer, '/' ends the attribute name and enters
+            // the self-closing-start-tag state.
+            if is_html_whitespace(ch) || matches!(ch, '=' | '/') {
                 break;
             }
             if attr_name.len() + ch.len_utf8() <= MAX_HTML_ATTRIBUTE_NAME_BYTES {
@@ -425,7 +428,7 @@ mod tests {
     }
 
     #[test]
-    fn slash_is_preserved_inside_attribute_names() {
+    fn slash_in_attribute_name_enters_self_closing_state_and_reconsumes() {
         let tokens = HtmlTokenizer::tokenize("<div data/name=value></div>");
         let HtmlToken::StartTag {
             attributes,
@@ -436,10 +439,36 @@ mod tests {
             panic!("expected start tag");
         };
 
-        assert_eq!(
-            attributes.get("data/name").map(String::as_str),
-            Some("value")
-        );
+        assert_eq!(attributes.get("data").map(String::as_str), Some(""));
+        assert_eq!(attributes.get("name").map(String::as_str), Some("value"));
+        assert!(!self_closing);
+    }
+
+    #[test]
+    fn slash_before_greater_than_marks_self_closing_tag() {
+        let tokens = HtmlTokenizer::tokenize("<div id=value />");
+        let HtmlToken::StartTag {
+            attributes,
+            self_closing,
+            ..
+        } = &tokens[0]
+        else {
+            panic!("expected start tag");
+        };
+
+        assert_eq!(attributes.get("id").map(String::as_str), Some("value"));
+        assert!(*self_closing);
+    }
+
+    #[test]
+    fn slash_in_self_closing_state_reconsumes_non_greater_than_character() {
+        let tokens = HtmlTokenizer::tokenize("<div first/second=value></div>");
+        let HtmlToken::StartTag { attributes, self_closing, .. } = &tokens[0] else {
+            panic!("expected start tag");
+        };
+
+        assert_eq!(attributes.get("first").map(String::as_str), Some(""));
+        assert_eq!(attributes.get("second").map(String::as_str), Some("value"));
         assert!(!self_closing);
     }
 
