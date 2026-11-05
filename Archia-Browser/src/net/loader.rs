@@ -969,11 +969,24 @@ fn collect_stylesheet_links(node: &Node, links: &mut Vec<String>) {
         return;
     }
 
+    let rel = node.attribute("rel").unwrap_or_default();
+    let has_stylesheet_relation = rel
+        .split_whitespace()
+        .any(|token| token.eq_ignore_ascii_case("stylesheet"));
+    let is_alternate_stylesheet = rel
+        .split_whitespace()
+        .any(|token| token.eq_ignore_ascii_case("alternate"));
+    let has_supported_type = node
+        .attribute("type")
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map_or(true, |value| value.eq_ignore_ascii_case("text/css"));
+
     if node.tag_name() == Some("link")
-        && node.attribute("rel").is_some_and(|rel| {
-            rel.split_whitespace()
-                .any(|token| token.eq_ignore_ascii_case("stylesheet"))
-        })
+        && has_stylesheet_relation
+        && !is_alternate_stylesheet
+        && !node.has_attribute("disabled")
+        && has_supported_type
     {
         if let Some(href) = node
             .attribute("href")
@@ -1289,6 +1302,27 @@ mod tests {
             document_base_url(&document, &document_url).to_string(),
             "https://example.org/assets/"
         );
+    }
+
+    #[test]
+    fn stylesheet_link_discovery_skips_disabled_alternate_and_non_css_links() {
+        use super::collect_stylesheet_links;
+        use crate::html::{parse, HtmlTokenizer};
+
+        let document = parse(&HtmlTokenizer::tokenize(
+            r#"
+                <link rel="stylesheet" href="/active.css">
+                <link rel="alternate stylesheet" href="/alternate.css">
+                <link rel="stylesheet" href="/disabled.css" disabled>
+                <link rel="stylesheet" type="text/plain" href="/text.txt">
+                <link rel="icon" href="/favicon.ico">
+                <link rel="stylesheet" type="TEXT/CSS" href="/explicit.css">
+            "#,
+        ));
+        let mut links = Vec::new();
+        collect_stylesheet_links(&document, &mut links);
+
+        assert_eq!(links, ["/active.css", "/explicit.css"]);
     }
 
     #[test]
