@@ -2694,7 +2694,7 @@ mod tests {
     fn link_pseudo_classes_match_empty_href_attributes() {
         let mut anchor = Node::element("a");
         anchor.set_attribute("href", "");
-        let mut plain_anchor = Node::element("a");
+        let plain_anchor = Node::element("a");
 
         assert!(Selector::parse(":link").unwrap().matches(&anchor));
         assert!(Selector::parse(":any-link").unwrap().matches(&anchor));
