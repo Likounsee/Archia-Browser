@@ -1082,6 +1082,26 @@ fn matches_pseudo_class(
             attributes.contains_key("checked")
                 || (node.tag_name() == Some("option") && attributes.contains_key("selected"))
         }
+        "default" => match node.tag_name() {
+            Some("input") => {
+                matches!(
+                    attributes.get("type").map(|value| value.to_ascii_lowercase()).as_deref(),
+                    Some("checkbox" | "radio")
+                ) && attributes.contains_key("checked")
+            }
+            Some("option") => attributes.contains_key("selected"),
+            _ => false,
+        },
+        "indeterminate" => match node.tag_name() {
+            Some("input") => {
+                attributes
+                    .get("type")
+                    .is_some_and(|value| value.eq_ignore_ascii_case("checkbox"))
+                    && !attributes.contains_key("checked")
+            }
+            Some("progress") => !attributes.contains_key("value"),
+            _ => false,
+        },
         "disabled" => {
             is_disableable_element(node) && is_disabled_element(node, attributes, ancestors)
         }
@@ -1829,6 +1849,50 @@ mod tests {
 
         assert!(!selector.matches_path(&[&node]));
         assert!(!selector.matches_path_with_siblings(&[&node], &[&[] as &[Node]], &[0]));
+    }
+
+    #[test]
+    fn matches_default_and_indeterminate_form_pseudo_classes() {
+        let mut checkbox = Node::element("input");
+        checkbox.set_attribute("type", "checkbox");
+        assert!(Selector::parse("input:indeterminate")
+            .unwrap()
+            .matches(&checkbox));
+        assert!(!Selector::parse("input:default")
+            .unwrap()
+            .matches(&checkbox));
+
+        checkbox.set_attribute("checked", "");
+        assert!(Selector::parse("input:default")
+            .unwrap()
+            .matches(&checkbox));
+        assert!(!Selector::parse("input:indeterminate")
+            .unwrap()
+            .matches(&checkbox));
+
+        let mut radio = Node::element("input");
+        radio.set_attribute("type", "radio");
+        radio.set_attribute("checked", "");
+        assert!(Selector::parse("input:default").unwrap().matches(&radio));
+        assert!(!Selector::parse("input:indeterminate")
+            .unwrap()
+            .matches(&radio));
+
+        let mut option = Node::element("option");
+        option.set_attribute("selected", "");
+        assert!(Selector::parse("option:default")
+            .unwrap()
+            .matches(&option));
+
+        let progress = Node::element("progress");
+        assert!(Selector::parse("progress:indeterminate")
+            .unwrap()
+            .matches(&progress));
+        let mut determinate_progress = Node::element("progress");
+        determinate_progress.set_attribute("value", "0.5");
+        assert!(!Selector::parse("progress:indeterminate")
+            .unwrap()
+            .matches(&determinate_progress));
     }
 
     #[test]
