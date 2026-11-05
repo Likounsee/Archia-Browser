@@ -403,6 +403,21 @@ impl Node {
         self.children.iter().filter(|child| child.is_element())
     }
 
+    /// Return the first direct child element, ignoring text and comments.
+    pub fn first_element_child(&self) -> Option<&Node> {
+        self.children.iter().find(|child| child.is_element())
+    }
+
+    /// Return the last direct child element, ignoring text and comments.
+    pub fn last_element_child(&self) -> Option<&Node> {
+        self.children.iter().rev().find(|child| child.is_element())
+    }
+
+    /// Count direct child elements, excluding text and comment nodes.
+    pub fn child_element_count(&self) -> usize {
+        self.element_children().count()
+    }
+
     /// Collect descendant text in document order without recursive calls.
     ///
     /// Iterative traversal keeps this accessor safe for deeply nested trees
@@ -470,6 +485,20 @@ impl<'a> Iterator for Descendants<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn element_child_accessors_ignore_text_and_comments() {
+        let mut parent = Node::element("div");
+        parent.append(Node::text("before"));
+        parent.append(Node::element("span"));
+        parent.append(Node::comment("between"));
+        parent.append(Node::element("strong"));
+        parent.append(Node::text("after"));
+
+        assert_eq!(parent.child_element_count(), 2);
+        assert_eq!(parent.first_element_child().and_then(Node::tag_name), Some("span"));
+        assert_eq!(parent.last_element_child().and_then(Node::tag_name), Some("strong"));
+    }
 
     #[test]
     fn class_list_operations_preserve_tokens_and_avoid_duplicates() {
