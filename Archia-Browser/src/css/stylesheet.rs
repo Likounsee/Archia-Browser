@@ -402,11 +402,23 @@ fn supports_declaration(name: &str, value: &str) -> bool {
         "margin-right",
         "margin-bottom",
         "margin-left",
+        "margin-block",
+        "margin-block-start",
+        "margin-block-end",
+        "margin-inline",
+        "margin-inline-start",
+        "margin-inline-end",
         "padding",
         "padding-top",
         "padding-right",
         "padding-bottom",
         "padding-left",
+        "padding-block",
+        "padding-block-start",
+        "padding-block-end",
+        "padding-inline",
+        "padding-inline-start",
+        "padding-inline-end",
         "border",
         "border-width",
         "border-style",
@@ -451,6 +463,12 @@ fn supports_declaration(name: &str, value: &str) -> bool {
         "bottom",
         "left",
         "inset",
+        "inset-block",
+        "inset-block-start",
+        "inset-block-end",
+        "inset-inline",
+        "inset-inline-start",
+        "inset-inline-end",
         "z-index",
         "vertical-align",
         "text-transform",
@@ -1027,6 +1045,23 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
                 return;
             }
         }
+        "margin-block" | "margin-inline" | "padding-block" | "padding-inline"
+        | "inset-block" | "inset-inline" => {
+            if let Some([start, end]) = expand_pair_shorthand(&value) {
+                let (first, second) = match name.as_str() {
+                    "margin-block" => ("margin-block-start", "margin-block-end"),
+                    "margin-inline" => ("margin-inline-start", "margin-inline-end"),
+                    "padding-block" => ("padding-block-start", "padding-block-end"),
+                    "padding-inline" => ("padding-inline-start", "padding-inline-end"),
+                    "inset-block" => ("inset-block-start", "inset-block-end"),
+                    _ => ("inset-inline-start", "inset-inline-end"),
+                };
+                apply(name.clone(), value.clone());
+                apply(first.to_owned(), start);
+                apply(second.to_owned(), end);
+                return;
+            }
+        }
         "border" => {
             if let Some((width, style, color)) = expand_border_shorthand(&value) {
                 apply("border-width".to_owned(), width.to_owned());
@@ -1399,6 +1434,16 @@ fn parse_px_token(value: &str) -> Option<u32> {
     value.strip_suffix("px")?.trim().parse().ok()
 }
 
+fn expand_pair_shorthand(value: &str) -> Option<[String; 2]> {
+    let mut values = value.split_whitespace();
+    let first = values.next()?;
+    let second = values.next().unwrap_or(first);
+    if values.next().is_some() {
+        return None;
+    }
+    Some([first.to_owned(), second.to_owned()])
+}
+
 fn expand_box_shorthand(_name: &str, value: &str) -> Option<[String; 4]> {
     let values = value
         .split_whitespace()
@@ -1625,6 +1670,49 @@ mod tests {
         assert_eq!(computed.get("right"), Some("2px"));
         assert_eq!(computed.get("bottom"), Some("1px"));
         assert_eq!(computed.get("left"), Some("2px"));
+    }
+
+    #[test]
+    fn logical_axis_shorthands_expand_one_and_two_values() {
+        let node = Node::element("div");
+        let sheet = StyleSheet::parse(
+            "div { margin-block: 1px 2px; margin-inline: 3px; padding-block: 4px 5px; padding-inline: 6px 7px; inset-block: 8px 9px; inset-inline: 10px; }",
+        );
+        let computed = sheet.compute_style(&node);
+        for (property, expected) in [
+            ("margin-block-start", "1px"),
+            ("margin-block-end", "2px"),
+            ("margin-inline-start", "3px"),
+            ("margin-inline-end", "3px"),
+            ("padding-block-start", "4px"),
+            ("padding-block-end", "5px"),
+            ("padding-inline-start", "6px"),
+            ("padding-inline-end", "7px"),
+            ("inset-block-start", "8px"),
+            ("inset-block-end", "9px"),
+            ("inset-inline-start", "10px"),
+            ("inset-inline-end", "10px"),
+        ] {
+            assert_eq!(computed.get(property), Some(expected), "{property}");
+        }
+    }
+
+    #[test]
+    fn logical_axis_shorthands_preserve_important_longhands() {
+        let sheet = StyleSheet::parse(
+            "div { margin-block-start: 9px !important; margin-block: 1px 2px; }",
+        );
+        let computed = sheet.compute_style(&Node::element("div"));
+        assert_eq!(computed.get("margin-block-start"), Some("9px"));
+        assert_eq!(computed.get("margin-block-end"), Some("2px"));
+    }
+
+    #[test]
+    fn logical_axis_shorthands_reject_more_than_two_values() {
+        let sheet = StyleSheet::parse("div { padding-inline: 1px 2px 3px; }");
+        let computed = sheet.compute_style(&Node::element("div"));
+        assert_eq!(computed.get("padding-inline-start"), None);
+        assert_eq!(computed.get("padding-inline-end"), None);
     }
 
     #[test]
