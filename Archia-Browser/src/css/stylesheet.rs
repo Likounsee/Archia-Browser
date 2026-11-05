@@ -629,6 +629,15 @@ fn supports_declaration(name: &str, value: &str) -> bool {
                 && values.iter().all(|value| is_valid_gap_component(value))
         }
         "row-gap" | "column-gap" => is_valid_gap_component(&value),
+        "list-style" => {
+            if let Some((list_type, position, image)) = expand_list_style(&value) {
+                apply(name.clone(), value.clone());
+                apply("list-style-type".to_owned(), list_type);
+                apply("list-style-position".to_owned(), position);
+                apply("list-style-image".to_owned(), image);
+                return;
+            }
+        }
         "overflow" => {
             let values = value.split_whitespace().collect::<Vec<_>>();
             (1..=2).contains(&values.len())
@@ -1549,6 +1558,58 @@ fn expand_border_shorthand(value: &str) -> Option<(String, String, String)> {
     ))
 }
 
+fn expand_list_style(value: &str) -> Option<(String, String, String)> {
+    let mut list_type = None;
+    let mut position = None;
+    let mut image = None;
+
+    for token in value.split_whitespace() {
+        let lower = token.to_ascii_lowercase();
+        if matches!(
+            lower.as_str(),
+            "disc"
+                | "circle"
+                | "square"
+                | "decimal"
+                | "decimal-leading-zero"
+                | "lower-roman"
+                | "upper-roman"
+                | "lower-alpha"
+                | "upper-alpha"
+                | "lower-latin"
+                | "upper-latin"
+                | "lower-greek"
+                | "armenian"
+                | "georgian"
+                | "none"
+                | "disclosure-open"
+                | "disclosure-closed"
+        ) {
+            if list_type.replace(lower).is_some() {
+                return None;
+            }
+        } else if matches!(lower.as_str(), "inside" | "outside") {
+            if position.replace(lower).is_some() {
+                return None;
+            }
+        } else if lower == "none" || lower.starts_with("url(") {
+            if image.replace(token.to_owned()).is_some() {
+                return None;
+            }
+        } else {
+            return None;
+        }
+    }
+
+    let list_type = list_type.unwrap_or_else(|| "disc".to_owned());
+    let image = image.unwrap_or_else(|| "none".to_owned());
+    Some((
+        list_type,
+        position.unwrap_or_else(|| "outside".to_owned()),
+        image,
+    ))
+}
+
 fn expand_text_decoration(value: &str) -> Option<(String, String, String, String)> {
     let mut lines = Vec::new();
     let mut none_line = false;
@@ -1938,6 +1999,42 @@ mod tests {
         assert_eq!(computed.get("outline-width"), Some("7px"));
         assert_eq!(computed.get("outline-style"), Some("solid"));
         assert_eq!(computed.get("outline-color"), Some("red"));
+    }
+
+    #[test]
+    fn list_style_shorthand_expands_type_position_and_image() {
+        let sheet = StyleSheet::parse(
+            "ul { list-style: square inside; } ol { list-style: upper-roman outside url(mark.png); } li { list-style: none; }",
+        );
+        let cases = [
+            ("ul", "square", "inside", "none"),
+            ("ol", "upper-roman", "outside", "url(mark.png)"),
+            ("li", "none", "outside", "none"),
+        ];
+        for (tag, list_type, position, image) in cases {
+            let computed = sheet.compute_style(&Node::element(tag));
+            assert_eq!(computed.get("list-style-type"), Some(list_type));
+            assert_eq!(computed.get("list-style-position"), Some(position));
+            assert_eq!(computed.get("list-style-image"), Some(image));
+        }
+    }
+
+    #[test]
+    fn list_style_shorthand_preserves_important_longhands() {
+        let sheet = StyleSheet::parse(
+            "ul { list-style-type: decimal !important; list-style: square inside; }",
+        );
+        let computed = sheet.compute_style(&Node::element("ul"));
+        assert_eq!(computed.get("list-style-type"), Some("decimal"));
+        assert_eq!(computed.get("list-style-position"), Some("inside"));
+    }
+
+    #[test]
+    fn invalid_list_style_shorthand_does_not_expand() {
+        let sheet = StyleSheet::parse("ul { list-style: square inside outside; }");
+        let computed = sheet.compute_style(&Node::element("ul"));
+        assert_eq!(computed.get("list-style-type"), None);
+        assert_eq!(computed.get("list-style-position"), None);
     }
 
     #[test]
