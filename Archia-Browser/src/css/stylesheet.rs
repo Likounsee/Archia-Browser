@@ -1709,12 +1709,16 @@ fn expand_background(value: &str) -> Option<(String, String, String, String, Str
                 }
                 position.push(lower);
             }
+        } else if color.is_none() {
+            // Background color may appear after the position/size slash.
+            // It is still a color component, never another size token.
+            color = Some(token.to_owned());
         } else if after_slash {
             if size.len() == 2 || !is_background_size_token(&lower) {
                 return None;
             }
             size.push(token.to_owned());
-        } else if color.replace(token.to_owned()).is_some() {
+        } else {
             return None;
         }
 
@@ -1873,7 +1877,7 @@ fn is_border_width_token(value: &str) -> bool {
     }
     let lower = value.to_ascii_lowercase();
     const UNITS: &[&str] = &[
-        "px", "em", "rem", "ex", "ch", "ic", "cap", "lh", "rlh", "vw", "vh", "vmin", "vmax", "vi",
+        "px", "rem", "em", "ex", "ch", "ic", "cap", "lh", "rlh", "vw", "vh", "vmin", "vmax", "vi",
         "vb", "cm", "mm", "q", "in", "pt", "pc",
     ];
     let Some(unit) = UNITS.iter().find(|unit| lower.ends_with(**unit)) else {
