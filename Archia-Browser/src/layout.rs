@@ -1066,7 +1066,42 @@ fn layout_grid_children(
         }
     }
 
-    let mut row_top = 0_i32;
+    let grid_row_count = grid_items.len().div_ceil(columns);
+    let explicit_rows_fit = grid_row_count > 0 && grid_row_count <= row_heights.len();
+    let (row_start_offset, distributed_row_gap) = if explicit_rows_fit {
+        let used_height = row_heights
+            .iter()
+            .take(grid_row_count)
+            .copied()
+            .fold(0_u32, u32::saturating_add)
+            .saturating_add(row_gap.saturating_mul(grid_row_count.saturating_sub(1) as u32));
+        let free_height = containing_height.saturating_sub(used_height);
+        let align_content = node
+            .style
+            .get("align-content")
+            .map(|value| value.trim().to_ascii_lowercase())
+            .unwrap_or_else(|| "normal".to_owned());
+        match align_content.as_str() {
+            "center" => (free_height / 2, 0),
+            "end" | "flex-end" => (free_height, 0),
+            "space-between" if grid_row_count > 1 => {
+                (0, free_height / (grid_row_count.saturating_sub(1) as u32))
+            }
+            "space-around" => {
+                let extra = free_height / grid_row_count as u32;
+                (extra / 2, extra)
+            }
+            "space-evenly" => {
+                let extra = free_height / (grid_row_count as u32 + 1);
+                (extra, extra)
+            }
+            _ => (0, 0),
+        }
+    } else {
+        (0, 0)
+    };
+    let effective_row_gap = row_gap.saturating_add(distributed_row_gap);
+    let mut row_top = row_start_offset as i32;
     for row_start in (0..grid_items.len()).step_by(columns) {
         let row_end = (row_start + columns).min(grid_items.len());
         let row_index = row_start / columns;
@@ -1175,7 +1210,7 @@ fn layout_grid_children(
 
         row_top = row_top
             .saturating_add(row_height as i32)
-            .saturating_add(row_gap as i32);
+            .saturating_add(effective_row_gap as i32);
     }
 
     for child in laid_out {
@@ -1184,7 +1219,7 @@ fn layout_grid_children(
             .push(child.unwrap_or_else(|| LayoutNode::new(Display::None)));
     }
     if !grid_items.is_empty() {
-        row_top = row_top.saturating_sub(row_gap as i32);
+        row_top = row_top.saturating_sub(effective_row_gap as i32);
     }
     row_top
 }
@@ -4993,6 +5028,40 @@ mod tests {
         assert_eq!(layout.children[0].rect.x, 44);
         assert_eq!(layout.children[1].rect.width, 12);
         assert_eq!(layout.children[1].rect.x, 188);
+    }
+
+    #[test]
+    fn grid_layout_distributes_explicit_rows_with_align_content() {
+        let cases = [
+            ("center", 30_i32, 0_i32),
+            ("end", 60, 0),
+            ("space-between", 0, 60),
+            ("space-around", 15, 30),
+            ("space-evenly", 20, 20),
+        ];
+
+        for (alignment, expected_first_y, expected_gap) in cases {
+            let mut root = Node::element("section");
+            root.set_attribute(
+                "style",
+                format!(
+                    "display: grid; width: 100px; height: 100px; grid-template-columns: 100px; grid-template-rows: 20px 20px; align-content: {alignment};"
+                ),
+            );
+            root.append(Node::element("div"));
+            root.append(Node::element("div"));
+
+            let styled =
+                crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+            let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 100));
+
+            assert_eq!(layout.children[0].rect.y, expected_first_y, "{alignment}");
+            assert_eq!(
+                layout.children[1].rect.y,
+                expected_first_y + 20 + expected_gap,
+                "{alignment}"
+            );
+        }
     }
 
     #[test]
