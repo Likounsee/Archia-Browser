@@ -1085,7 +1085,10 @@ fn matches_pseudo_class(
         "default" => match node.tag_name() {
             Some("input") => {
                 matches!(
-                    attributes.get("type").map(|value| value.to_ascii_lowercase()).as_deref(),
+                    attributes
+                        .get("type")
+                        .map(|value| value.to_ascii_lowercase())
+                        .as_deref(),
                     Some("checkbox" | "radio")
                 ) && attributes.contains_key("checked")
             }
@@ -1901,14 +1904,10 @@ mod tests {
         assert!(Selector::parse("input:indeterminate")
             .unwrap()
             .matches(&checkbox));
-        assert!(!Selector::parse("input:default")
-            .unwrap()
-            .matches(&checkbox));
+        assert!(!Selector::parse("input:default").unwrap().matches(&checkbox));
 
         checkbox.set_attribute("checked", "");
-        assert!(Selector::parse("input:default")
-            .unwrap()
-            .matches(&checkbox));
+        assert!(Selector::parse("input:default").unwrap().matches(&checkbox));
         assert!(!Selector::parse("input:indeterminate")
             .unwrap()
             .matches(&checkbox));
@@ -1923,9 +1922,7 @@ mod tests {
 
         let mut option = Node::element("option");
         option.set_attribute("selected", "");
-        assert!(Selector::parse("option:default")
-            .unwrap()
-            .matches(&option));
+        assert!(Selector::parse("option:default").unwrap().matches(&option));
 
         let progress = Node::element("progress");
         assert!(Selector::parse("progress:indeterminate")
