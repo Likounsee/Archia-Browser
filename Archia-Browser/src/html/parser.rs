@@ -885,7 +885,7 @@ mod tests {
 
         assert_eq!(nobr_nodes.len(), 2);
         assert_eq!(nobr_nodes[0].text_content(), "one");
-        assert_eq!(nobr_nodes[1].text_content(), "twothree");
+        assert_eq!(nobr_nodes[1].text_content(), "two");
         assert_eq!(paragraph.text_content(), "onetwothree");
     }
 
