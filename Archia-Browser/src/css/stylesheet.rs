@@ -440,6 +440,10 @@ fn supports_declaration(name: &str, value: &str) -> bool {
         "border-bottom-color",
         "border-left-color",
         "border-radius",
+        "border-top-left-radius",
+        "border-top-right-radius",
+        "border-bottom-right-radius",
+        "border-bottom-left-radius",
         "background",
         "background-color",
         "color",
@@ -1084,6 +1088,22 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
                 return;
             }
         }
+        "border-radius" => {
+            if !value.contains('/') {
+                if let Some(values) = expand_box_shorthand(&name, &value) {
+                    apply(name.clone(), value.clone());
+                    for (property, property_value) in [
+                        ("border-top-left-radius", values[0].clone()),
+                        ("border-top-right-radius", values[1].clone()),
+                        ("border-bottom-right-radius", values[2].clone()),
+                        ("border-bottom-left-radius", values[3].clone()),
+                    ] {
+                        apply(property.to_owned(), property_value);
+                    }
+                    return;
+                }
+            }
+        }
         "border" => {
             if let Some((width, style, color)) = expand_border_shorthand(&value) {
                 apply("border-width".to_owned(), width.to_owned());
@@ -1716,6 +1736,48 @@ mod tests {
         assert_eq!(computed.get("right"), Some("2px"));
         assert_eq!(computed.get("bottom"), Some("1px"));
         assert_eq!(computed.get("left"), Some("2px"));
+    }
+
+    #[test]
+    fn border_radius_shorthand_expands_one_to_four_corners() {
+        let sheet = StyleSheet::parse(
+            "div { border-radius: 8px; } span { border-radius: 1px 2px; } p { border-radius: 1px 2px 3px; } a { border-radius: 1px 2px 3px 4px; }",
+        );
+        let cases = [
+            ("div", ["8px", "8px", "8px", "8px"]),
+            ("span", ["1px", "2px", "1px", "2px"]),
+            ("p", ["1px", "2px", "3px", "2px"]),
+            ("a", ["1px", "2px", "3px", "4px"]),
+        ];
+        for (tag, expected) in cases {
+            let computed = sheet.compute_style(&Node::element(tag));
+            for (property, value) in [
+                ("border-top-left-radius", expected[0]),
+                ("border-top-right-radius", expected[1]),
+                ("border-bottom-right-radius", expected[2]),
+                ("border-bottom-left-radius", expected[3]),
+            ] {
+                assert_eq!(computed.get(property), Some(value), "{tag} {property}");
+            }
+        }
+    }
+
+    #[test]
+    fn border_radius_shorthand_respects_important_corner_longhands() {
+        let sheet = StyleSheet::parse(
+            "div { border-top-left-radius: 12px !important; border-radius: 4px 8px; }",
+        );
+        let computed = sheet.compute_style(&Node::element("div"));
+        assert_eq!(computed.get("border-top-left-radius"), Some("12px"));
+        assert_eq!(computed.get("border-top-right-radius"), Some("8px"));
+        assert_eq!(computed.get("border-bottom-right-radius"), Some("4px"));
+        assert_eq!(computed.get("border-bottom-left-radius"), Some("8px"));
+    }
+
+    #[test]
+    fn supports_recognizes_border_radius_corner_longhands() {
+        assert!(supports_declaration("border-top-left-radius", "8px"));
+        assert!(supports_declaration("border-bottom-right-radius", "1rem"));
     }
 
     #[test]
