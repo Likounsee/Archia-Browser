@@ -980,7 +980,7 @@ fn collect_stylesheet_links(node: &Node, links: &mut Vec<String>) {
         .attribute("type")
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map_or(true, |value| value.eq_ignore_ascii_case("text/css"));
+        .is_none_or(|value| value.eq_ignore_ascii_case("text/css"));
 
     if node.tag_name() == Some("link")
         && has_stylesheet_relation
