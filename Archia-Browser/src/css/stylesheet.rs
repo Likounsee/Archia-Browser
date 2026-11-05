@@ -390,6 +390,7 @@ fn supports_declaration(name: &str, value: &str) -> bool {
     const IMPLEMENTED_PROPERTIES: &[&str] = &[
         "display",
         "position",
+        "order",
         "box-sizing",
         "width",
         "height",
