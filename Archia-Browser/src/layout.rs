@@ -980,64 +980,61 @@ fn layout_grid_children(
     let columns = widths.len().max(1);
     let mut laid_out = Vec::with_capacity(node.children.len());
     laid_out.resize_with(node.children.len(), || None);
-    let mut row_top = 0_i32;
 
-    for row_start in (0..node.children.len()).step_by(columns) {
-        let row_end = (row_start + columns).min(node.children.len());
+    // Grid items are only in-flow children. display:none and positioned
+    // descendants must not consume an implicit grid cell.
+    let mut grid_items = Vec::new();
+    for (index, child) in node.children.iter().enumerate() {
+        let display = display_for_styled_node(child);
+        if display == Display::None {
+            laid_out[index] = Some(LayoutNode::new(Display::None));
+        } else if is_absolute_positioned(child) || is_fixed_positioned(child) {
+            let fixed = is_fixed_positioned(child);
+            let child_x = positioned_child_x(
+                child,
+                if fixed { 0 } else { abs_origin_x },
+                if fixed { viewport_width } else { abs_width },
+                viewport_width,
+                fixed,
+            );
+            let child_y = positioned_child_y(
+                child,
+                if fixed { 0 } else { abs_origin_y },
+                0,
+                if fixed { viewport_width } else { abs_width },
+                if fixed { viewport_height } else { abs_height },
+                viewport_height,
+                fixed,
+            );
+            laid_out[index] = Some(layout_styled_node(
+                child,
+                child_x,
+                child_y,
+                content_width,
+                viewport_width,
+                viewport_height,
+                abs_origin_x,
+                abs_origin_y,
+                abs_width,
+                abs_height,
+            ));
+        } else {
+            grid_items.push(index);
+        }
+    }
+
+    let mut row_top = 0_i32;
+    for row_start in (0..grid_items.len()).step_by(columns) {
+        let row_end = (row_start + columns).min(grid_items.len());
         let row_index = row_start / columns;
         let explicit_row_height = row_heights.get(row_index).copied();
         let mut row_height = explicit_row_height.unwrap_or(0);
         let mut column_left = 0_u32;
 
-        for child_index in row_start..row_end {
+        for grid_position in row_start..row_end {
+            let child_index = grid_items[grid_position];
             let child = &node.children[child_index];
-            let child_display = display_for_styled_node(child);
-            if child_display == Display::None {
-                laid_out[child_index] = Some(LayoutNode::new(Display::None));
-                column_left = column_left
-                    .saturating_add(widths[child_index - row_start])
-                    .saturating_add(column_gap);
-                continue;
-            }
-
-            let fixed = is_fixed_positioned(child);
-            let absolute = is_absolute_positioned(child) || fixed;
-            if absolute {
-                let child_x = positioned_child_x(
-                    child,
-                    if fixed { 0 } else { abs_origin_x },
-                    if fixed { viewport_width } else { abs_width },
-                    viewport_width,
-                    fixed,
-                );
-                let child_y = positioned_child_y(
-                    child,
-                    if fixed { 0 } else { abs_origin_y },
-                    row_top,
-                    if fixed { viewport_width } else { abs_width },
-                    if fixed { viewport_height } else { abs_height },
-                    viewport_height,
-                    fixed,
-                );
-                laid_out[child_index] = Some(layout_styled_node(
-                    child,
-                    child_x,
-                    child_y,
-                    content_width,
-                    viewport_width,
-                    viewport_height,
-                    abs_origin_x,
-                    abs_origin_y,
-                    abs_width,
-                    abs_height,
-                ));
-                column_left = column_left
-                    .saturating_add(widths[child_index - row_start])
-                    .saturating_add(column_gap);
-                continue;
-            }
-
-            let area_width = widths[child_index - row_start];
+            let area_width = widths[grid_position - row_start];
             let child_box = box_model_from_style(&child.style, content_width);
             let content_cell_width = area_width.saturating_sub(child_box.horizontal_outer());
             let mut grid_child = child.clone();
@@ -1092,7 +1089,7 @@ fn layout_grid_children(
             .children
             .push(child.unwrap_or_else(|| LayoutNode::new(Display::None)));
     }
-    if !node.children.is_empty() {
+    if !grid_items.is_empty() {
         row_top = row_top.saturating_sub(row_gap as i32);
     }
     row_top
