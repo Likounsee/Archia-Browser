@@ -590,10 +590,15 @@ fn implied_end_tags_for_start(name: &str) -> &'static [&'static str] {
         "li" => &["li"],
         "option" => &["option"],
         "optgroup" => &["option", "optgroup"],
-        "tr" => &["tr", "colgroup"],
-        "caption" => &["colgroup"],
+        // Starting a new row/caption/section closes any open cell and row
+        // in the current table context before inserting the new table child.
+        "tr" => &["td", "th", "tr", "colgroup"],
+        "caption" => &["td", "th", "tr", "colgroup"],
+        "colgroup" => &["colgroup"],
         "td" | "th" => &["td", "th"],
-        "thead" | "tbody" | "tfoot" => &["thead", "tbody", "tfoot", "colgroup"],
+        "thead" | "tbody" | "tfoot" => {
+            &["td", "th", "tr", "thead", "tbody", "tfoot", "colgroup"]
+        },
         "rt" | "rp" => &["rt", "rp"],
         _ => &[],
     }
@@ -989,6 +994,38 @@ mod tests {
         assert!(body.children[input_position..]
             .iter()
             .any(|node| node.tag_name() == Some("p")));
+    }
+
+    #[test]
+    fn starting_a_new_table_row_closes_open_cell_and_previous_row() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<table><tbody><tr><td>first<tr><td>second</table>",
+        ));
+        let table = root.find_first_element("table").expect("table");
+        let rows = table.descendants().filter(|node| node.tag_name() == Some("tr"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].text_content(), "first");
+        assert_eq!(rows[1].text_content(), "second");
+        assert!(rows.iter().all(|row| row.children.iter()
+            .filter(|child| matches!(child.tag_name(), Some("td" | "th")))
+            .count() == 1));
+    }
+
+    #[test]
+    fn starting_a_new_table_section_closes_previous_row_and_section() {
+        let root = parse(&HtmlTokenizer::tokenize(
+            "<table><tbody><tr><td>first<tfoot><tr><td>total</table>",
+        ));
+        let table = root.find_first_element("table").expect("table");
+        let sections = table.children.iter()
+            .filter(|node| matches!(node.tag_name(), Some("tbody" | "tfoot")))
+            .collect::<Vec<_>>();
+
+        assert_eq!(sections.len(), 2);
+        assert_eq!(sections[0].text_content(), "first");
+        assert_eq!(sections[1].text_content(), "total");
     }
 
     #[test]
