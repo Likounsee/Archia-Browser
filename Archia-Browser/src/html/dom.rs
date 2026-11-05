@@ -558,7 +558,7 @@ impl Node {
     /// The selector engine evaluates the complete ancestor and sibling path, so
     /// descendant, child and sibling combinators work across the DOM tree.
     pub fn query_selector_all(&self, selector: &str) -> Vec<&Node> {
-        let Some(selector) = crate::css::Selector::parse(selector) else {
+        let Some(selectors) = parse_dom_selector_list(selector) else {
             return Vec::new();
         };
 
@@ -596,7 +596,9 @@ impl Node {
             sibling_lists.push(siblings);
 
             if node.is_element()
-                && selector.matches_path_with_siblings(&path, &sibling_lists, &positions)
+                && selectors.iter().any(|selector| {
+                    selector.matches_path_with_siblings(&path, &sibling_lists, &positions)
+                })
             {
                 matches.push(node);
             }
@@ -667,6 +669,61 @@ impl Node {
 
 
  
+
+/// Parse a CSS selector list while keeping commas inside strings, attributes,
+/// escaped sequences and functional pseudo-classes intact.
+fn parse_dom_selector_list(input: &str) -> Option<Vec<crate::css::Selector>> {
+    if input.len() > 4_096 {
+        return None;
+    }
+
+    let mut selectors = Vec::new();
+    let mut start = 0;
+    let mut brackets = 0usize;
+    let mut parentheses = 0usize;
+    let mut quote = None;
+    let mut escaped = false;
+
+    for (index, character) in input.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if character == '\\' {
+            escaped = true;
+            continue;
+        }
+        if let Some(delimiter) = quote {
+            if character == delimiter {
+                quote = None;
+            }
+            continue;
+        }
+        match character {
+            '"' | '\'' if brackets > 0 || parentheses > 0 => quote = Some(character),
+            '[' => brackets += 1,
+            ']' => {
+                brackets = brackets.checked_sub(1)?;
+            }
+            '(' => parentheses += 1,
+            ')' => {
+                parentheses = parentheses.checked_sub(1)?;
+            }
+            ',' if brackets == 0 && parentheses == 0 => {
+                selectors.push(crate::css::Selector::parse(&input[start..index])?);
+                start = index + character.len_utf8();
+            }
+            _ => {}
+        }
+    }
+
+    if escaped || quote.is_some() || brackets != 0 || parentheses != 0 {
+        return None;
+    }
+    selectors.push(crate::css::Selector::parse(&input[start..])?);
+    Some(selectors)
+}
+
 /// HTML void elements cannot have serialized end tags or children.
 fn is_void_html_element(name: &str) -> bool {
     matches!(
@@ -1322,6 +1379,29 @@ mod tests {
         assert_eq!(root.query_selector_all(".cards .label").len(), 1);
         assert_eq!(root.query_selector_all(".card").len(), 2);
         assert!(root.query_selector("article + article .missing").is_none());
+    }
+
+    #[test]
+    fn query_selector_supports_selector_lists_and_nested_commas() {
+        let mut root = Node::element("main");
+        let mut first = Node::element("p");
+        first.set_attribute("class", "first");
+        let mut second = Node::element("p");
+        second.set_attribute("data-label", "a,b");
+        second.set_attribute("class", "second");
+        let mut third = Node::element("p");
+        third.set_attribute("class", "third");
+        root.append(first);
+        root.append(second);
+        root.append(third);
+
+        assert_eq!(root.query_selector_all(".first, .third").len(), 2);
+        assert_eq!(root.query_selector_all("[data-label='a,b'], .third").len(), 2);
+        assert_eq!(
+            root.query_selector(".missing, .second").and_then(Node::tag_name),
+            Some("p")
+        );
+        assert!(root.query_selector_all(".first, > .broken").is_empty());
     }
 
     #[test]
