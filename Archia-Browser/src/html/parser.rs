@@ -53,6 +53,15 @@ const BLOCK_CLOSES_P: &[&str] = &[
 ];
 
 pub fn parse(tokens: &[HtmlToken]) -> Node {
+    parse_internal(tokens, true)
+}
+
+/// Parse an HTML fragment without applying document-level html/head/body wrappers.
+pub(super) fn parse_fragment(tokens: &[HtmlToken]) -> Node {
+    parse_internal(tokens, false)
+}
+
+fn parse_internal(tokens: &[HtmlToken], normalize_document: bool) -> Node {
     let mut root = Node::document();
     let mut stack: Vec<Node> = Vec::new();
     // Keep malformed hostile nesting from creating a tree too deep for
@@ -532,7 +541,11 @@ pub fn parse(tokens: &[HtmlToken]) -> Node {
         append_node(&mut root, &mut stack, node);
     }
 
-    normalize_document_structure(root)
+    if normalize_document {
+        normalize_document_structure(root)
+    } else {
+        root
+    }
 }
 
 fn bounded_utf8_prefix(input: &str, max_bytes: usize) -> &str {
