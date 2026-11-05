@@ -5320,7 +5320,7 @@ mod tests {
         );
         let mut spanning = Node::element("div");
         spanning.set_attribute("style", "grid-column: span 2; height: 20px;");
-        let next = Node::element("div");
+        let mut next = Node::element("div");
         next.set_attribute("style", "height: 20px;");
         root.append(spanning);
         root.append(next);
@@ -5422,7 +5422,7 @@ mod tests {
         );
         let mut spanning = Node::element("div");
         spanning.set_attribute("style", "grid-row: span 2;");
-        let mut next = Node::element("div");
+        let next = Node::element("div");
         root.append(spanning);
         root.append(next);
 
