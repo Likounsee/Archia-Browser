@@ -981,13 +981,14 @@ fn layout_grid_children(
         .style
         .get("grid-auto-rows")
         .map(|value| {
-            parse_grid_tracks(Some(value), containing_height)
+            let tracks = parse_grid_tracks(Some(value), containing_height);
+            let sizes = resolve_grid_track_sizes(&tracks, containing_height, row_gap);
+            tracks
                 .iter()
-                .map(|track| match track {
+                .zip(sizes)
+                .map(|(track, size)| match track {
                     GridTrack::Auto => None,
-                    track => resolve_grid_track_sizes(&[*track], containing_height, 0)
-                        .first()
-                        .copied(),
+                    _ => Some(size),
                 })
                 .collect()
         })
