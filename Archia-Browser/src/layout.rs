@@ -5812,7 +5812,7 @@ mod tests {
         let mut root = Node::element("section");
         root.set_attribute(
             "style",
-            "display: grid; width: 200px; grid-template-columns: 100px 100px;",
+            "display: grid; width: 200px; grid-template-columns: 100px 100px; grid-template-rows: 20px 20px;",
         );
         let mut first = Node::element("div");
         first.set_attribute("style", "order: 2;");
