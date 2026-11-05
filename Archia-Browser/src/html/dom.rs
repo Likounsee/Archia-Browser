@@ -1228,6 +1228,22 @@ mod tests {
     }
 
     #[test]
+    fn html_serialization_handles_deep_dom_trees_iteratively() {
+        let mut root = Node::element("div");
+        let mut current = &mut root;
+        for _ in 0..2_000 {
+            current.children.push(Node::element("span"));
+            current = current.children.last_mut().unwrap();
+        }
+        current.append(Node::text("end"));
+
+        let html = root.outer_html();
+        assert!(html.starts_with("<div><span><span>"));
+        assert!(html.ends_with("end</span></span></div>"));
+        assert_eq!(html.matches("<span>").count(), 2_000);
+    }
+
+    #[test]
     fn html_serialization_preserves_raw_text_and_void_elements() {
         let mut root = Node::document();
         let mut script = Node::element("script");
