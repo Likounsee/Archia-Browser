@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 pub struct Property {
     pub name: String,
     pub value: String,
+    pub important: bool,
 }
 
 fn normalize_property_name(name: &str) -> String {
