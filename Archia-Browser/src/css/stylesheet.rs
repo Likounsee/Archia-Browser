@@ -1152,8 +1152,7 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
                 return;
             }
         }
-        "border-block-start" | "border-block-end" | "border-inline-start"
-        | "border-inline-end" => {
+        "border-block-start" | "border-block-end" | "border-inline-start" | "border-inline-end" => {
             if let Some((width, style, color)) = expand_border_shorthand(&value) {
                 apply(format!("{name}-width"), width);
                 apply(format!("{name}-style"), style);
@@ -1525,8 +1524,8 @@ fn is_border_width_token(value: &str) -> bool {
     }
     let lower = value.to_ascii_lowercase();
     const UNITS: &[&str] = &[
-        "px", "em", "rem", "ex", "ch", "ic", "cap", "lh", "rlh", "vw", "vh", "vmin",
-        "vmax", "vi", "vb", "cm", "mm", "q", "in", "pt", "pc",
+        "px", "em", "rem", "ex", "ch", "ic", "cap", "lh", "rlh", "vw", "vh", "vmin", "vmax", "vi",
+        "vb", "cm", "mm", "q", "in", "pt", "pc",
     ];
     let Some(unit) = UNITS.iter().find(|unit| lower.ends_with(**unit)) else {
         return false;
@@ -1929,8 +1928,9 @@ mod tests {
 
     #[test]
     fn border_side_shorthands_respect_important_longhands() {
-        let sheet =
-            StyleSheet::parse("div { border-top-width: 9px !important; border-top: 2px solid red; }");
+        let sheet = StyleSheet::parse(
+            "div { border-top-width: 9px !important; border-top: 2px solid red; }",
+        );
         let computed = sheet.compute_style(&Node::element("div"));
         assert_eq!(computed.get("border-top-width"), Some("9px"));
         assert_eq!(computed.get("border-top-style"), Some("solid"));
