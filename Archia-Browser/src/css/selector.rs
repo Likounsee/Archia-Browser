@@ -645,6 +645,50 @@ fn is_disableable_element(node: &Node) -> bool {
     )
 }
 
+fn is_disabled_element(
+    node: &Node,
+    attributes: &std::collections::BTreeMap<String, String>,
+    ancestors: Option<&[&Node]>,
+) -> bool {
+    if attributes.contains_key("disabled") {
+        return true;
+    }
+
+    let Some(ancestors) = ancestors else {
+        return false;
+    };
+
+    // An option is disabled when its containing optgroup is disabled.
+    if node.tag_name() == Some("option")
+        && ancestors.iter().rev().any(|ancestor| {
+            ancestor.tag_name() == Some("optgroup")
+                && matches!(&ancestor.kind, NodeKind::Element { attributes, .. } if attributes.contains_key("disabled"))
+        })
+    {
+        return true;
+    }
+
+    // A disabled fieldset disables descendant form controls, except controls
+    // inside that fieldset's first legend child.
+    for (index, ancestor) in ancestors.iter().enumerate().rev() {
+        if ancestor.tag_name() != Some("fieldset")
+            || !matches!(&ancestor.kind, NodeKind::Element { attributes, .. } if attributes.contains_key("disabled"))
+        {
+            continue;
+        }
+
+        let first_legend = ancestor.children.iter().find(|child| child.tag_name() == Some("legend"));
+        let candidate_branch = ancestors.get(index + 1).copied().unwrap_or(node);
+        let inside_first_legend = first_legend
+            .is_some_and(|legend| std::ptr::eq(legend, candidate_branch));
+        if !inside_first_legend {
+            return true;
+        }
+    }
+
+    false
+}
+
 fn is_required_capable_element(
     node: &Node,
     attributes: &std::collections::BTreeMap<String, String>,
@@ -805,8 +849,10 @@ fn matches_pseudo_class(
             attributes.contains_key("checked")
                 || (node.tag_name() == Some("option") && attributes.contains_key("selected"))
         }
-        "disabled" => is_disableable_element(node) && attributes.contains_key("disabled"),
-        "enabled" => is_disableable_element(node) && !attributes.contains_key("disabled"),
+        "disabled" => is_disableable_element(node) && is_disabled_element(node, attributes, ancestors),
+        "enabled" => {
+            is_disableable_element(node) && !is_disabled_element(node, attributes, ancestors)
+        },
         "required" => {
             is_required_capable_element(node, attributes) && attributes.contains_key("required")
         }
@@ -1705,6 +1751,42 @@ mod tests {
         assert!(!Selector::parse(":placeholder-shown")
             .unwrap()
             .matches(&placeholder));
+    }
+
+    #[test]
+    fn disabled_fieldset_inherits_disabled_state_except_first_legend() {
+        let mut fieldset = Node::element("fieldset");
+        fieldset.set_attribute("disabled", "");
+        let mut legend = Node::element("legend");
+        let first_input = Node::element("input");
+        legend.append(first_input);
+        let second_input = Node::element("input");
+        fieldset.append(legend);
+        fieldset.append(second_input);
+
+        let legend_path = [&fieldset, &fieldset.children[0], &fieldset.children[0].children[0]];
+        assert!(Selector::parse(":enabled").unwrap().matches_path(&legend_path));
+        assert!(!Selector::parse(":disabled").unwrap().matches_path(&legend_path));
+
+        let outside_legend_path = [&fieldset, &fieldset.children[1]];
+        assert!(Selector::parse(":disabled")
+            .unwrap()
+            .matches_path(&outside_legend_path));
+        assert!(!Selector::parse(":enabled")
+            .unwrap()
+            .matches_path(&outside_legend_path));
+    }
+
+    #[test]
+    fn disabled_optgroup_disables_its_options() {
+        let mut optgroup = Node::element("optgroup");
+        optgroup.set_attribute("disabled", "");
+        let option = Node::element("option");
+        optgroup.append(option);
+        let path = [&optgroup, &optgroup.children[0]];
+
+        assert!(Selector::parse(":disabled").unwrap().matches_path(&path));
+        assert!(!Selector::parse(":enabled").unwrap().matches_path(&path));
     }
 
     #[test]
