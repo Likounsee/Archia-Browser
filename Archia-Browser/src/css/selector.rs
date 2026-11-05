@@ -668,6 +668,14 @@ fn is_disabled_element(
         return true;
     }
 
+    // Fieldset inheritance applies to form controls, not option/optgroup.
+    if !matches!(
+        node.tag_name(),
+        Some("button" | "input" | "select" | "textarea" | "fieldset")
+    ) {
+        return false;
+    }
+
     // A disabled fieldset disables descendant form controls, except controls
     // inside that fieldset's first legend child.
     for (index, ancestor) in ancestors.iter().enumerate().rev() {
