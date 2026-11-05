@@ -2240,7 +2240,7 @@ mod tests {
         ];
         for (tag, color, image, repeat, position, size) in cases {
             let computed = sheet.compute_style(&Node::element(tag));
-            assert_eq!(computed.get("background-color"), Some(color));
+            assert_eq!(computed.get("background-color"), Some(color), "{tag}: {computed:?}");
             assert_eq!(computed.get("background-image"), Some(image));
             assert_eq!(computed.get("background-repeat"), Some(repeat));
             assert_eq!(computed.get("background-position"), Some(position));
