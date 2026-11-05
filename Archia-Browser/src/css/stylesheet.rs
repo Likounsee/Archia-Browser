@@ -1029,8 +1029,7 @@ fn find_var_function(value: &str) -> Option<(usize, usize, usize, Option<usize>)
     let mut quote = None;
     let mut escaped = false;
     let mut comma = None;
-    for index in open + 1..bytes.len() {
-        let byte = bytes[index];
+    for (index, &byte) in bytes.iter().enumerate().skip(open + 1) {
         if escaped {
             escaped = false;
             continue;
