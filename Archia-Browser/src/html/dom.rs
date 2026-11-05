@@ -255,6 +255,51 @@ impl Node {
         }
     }
 
+    /// Whether this element currently has one or more attributes.
+    pub fn has_attributes(&self) -> bool {
+        self.attributes().is_some_and(|attributes| !attributes.is_empty())
+    }
+
+    /// Return attribute names in the DOM's deterministic map order.
+    pub fn attribute_names(&self) -> Vec<&str> {
+        self.attributes()
+            .map(|attributes| attributes.keys().map(String::as_str).collect())
+            .unwrap_or_default()
+    }
+
+    /// Replace all children at once, returning the previous child nodes.
+    pub fn replace_children(&mut self, children: Vec<Node>) -> Vec<Node> {
+        std::mem::replace(&mut self.children, children)
+    }
+
+    /// Normalize this subtree by removing empty text nodes and merging
+    /// adjacent text nodes, while preserving comments and element boundaries.
+    pub fn normalize(&mut self) {
+        let mut normalized: Vec<Node> = Vec::with_capacity(self.children.len());
+        for mut child in std::mem::take(&mut self.children) {
+            child.normalize();
+            if let NodeKind::Text(value) = &child.kind {
+                if value.is_empty() {
+                    continue;
+                }
+            }
+            if let NodeKind::Text(value) = child.kind {
+                if let Some(Node {
+                    kind: NodeKind::Text(previous),
+                    ..
+                }) = normalized.last_mut()
+                {
+                    previous.push_str(&value);
+                    continue;
+                }
+                normalized.push(Node::text(value));
+            } else {
+                normalized.push(child);
+            }
+        }
+        self.children = normalized;
+    }
+
     /// Iterate over all descendants in document order (pre-order), without
     /// recursive calls. The node itself is intentionally excluded.
     pub fn descendants(&self) -> Descendants<'_> {
@@ -485,6 +530,65 @@ impl<'a> Iterator for Descendants<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn attribute_introspection_reports_element_attributes_only() {
+        let mut element = Node::element("div");
+        assert!(!element.has_attributes());
+        assert!(element.attribute_names().is_empty());
+
+        element.set_attribute("id", "root");
+        element.set_attribute("class", "main");
+        assert!(element.has_attributes());
+        assert_eq!(element.attribute_names(), vec!["class", "id"]);
+
+        assert!(!Node::text("text").has_attributes());
+        assert!(Node::text("text").attribute_names().is_empty());
+    }
+
+    #[test]
+    fn replace_children_returns_previous_nodes() {
+        let mut parent = Node::element("div");
+        parent.append(Node::text("old"));
+        parent.append(Node::element("span"));
+
+        let previous = parent.replace_children(vec![Node::text("new")]);
+        assert_eq!(previous.len(), 2);
+        assert_eq!(parent.child_count(), 1);
+        assert_eq!(parent.text_content(), "new");
+    }
+
+    #[test]
+    fn normalize_merges_adjacent_text_and_preserves_comments() {
+        let mut parent = Node::element("div");
+        parent.append(Node::text("one"));
+        parent.append(Node::text(""));
+        parent.append(Node::text(" two"));
+        parent.append(Node::comment("keep"));
+        parent.append(Node::text("three"));
+
+        parent.normalize();
+
+        assert_eq!(parent.children.len(), 3);
+        assert_eq!(parent.children[0].text_content(), "one two");
+        assert!(matches!(parent.children[1].kind, NodeKind::Comment(_)));
+        assert_eq!(parent.children[2].text_content(), "three");
+    }
+
+    #[test]
+    fn normalize_merges_text_recursively_inside_elements() {
+        let mut parent = Node::element("div");
+        let mut child = Node::element("span");
+        child.append(Node::text("a"));
+        child.append(Node::text("b"));
+        parent.append(child);
+
+        parent.normalize();
+
+        let span = parent.first_element_child().expect("span");
+        assert_eq!(span.children.len(), 1);
+        assert_eq!(span.text_content(), "ab");
+    }
 
     #[test]
     fn element_child_accessors_ignore_text_and_comments() {
