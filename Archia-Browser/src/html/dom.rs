@@ -808,7 +808,7 @@ impl Node {
         }
 
         let tokens = super::HtmlTokenizer::tokenize(html);
-        let fragment = super::parse(&tokens);
+        let fragment = super::parser::parse_fragment(&tokens);
         self.replace_children(fragment.children);
         true
     }
@@ -824,7 +824,7 @@ impl Node {
         }
 
         let tokens = super::HtmlTokenizer::tokenize(html);
-        let fragment = super::parse(&tokens);
+        let fragment = super::parser::parse_fragment(&tokens);
         if self.children.try_reserve(fragment.children.len()).is_err() {
             return false;
         }
@@ -842,7 +842,7 @@ impl Node {
         }
 
         let tokens = super::HtmlTokenizer::tokenize(html);
-        let mut fragment = super::parse(&tokens);
+        let mut fragment = super::parser::parse_fragment(&tokens);
         if fragment.children.try_reserve(self.children.len()).is_err() {
             return false;
         }
