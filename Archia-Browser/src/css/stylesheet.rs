@@ -674,23 +674,6 @@ fn supports_declaration(name: &str, value: &str) -> bool {
         "row-gap" | "column-gap" => is_valid_gap_component(&value),
         "list-style" => expand_list_style(&value).is_some(),
         "background" => expand_background(&value).is_some(),
-        "place-items" | "place-content" | "place-self" => {
-            let values = value.split_whitespace().collect::<Vec<_>>();
-            if (1..=2).contains(&values.len()) {
-                let (first, second) = match name.as_str() {
-                    "place-items" => ("align-items", "justify-items"),
-                    "place-self" => ("align-self", "justify-self"),
-                    _ => ("align-content", "justify-content"),
-                };
-                apply(name.clone(), value.clone());
-                apply(first.to_owned(), values[0].to_owned());
-                apply(
-                    second.to_owned(),
-                    values.get(1).copied().unwrap_or(values[0]).to_owned(),
-                );
-                return;
-            }
-        }
         "overflow" => {
             let values = value.split_whitespace().collect::<Vec<_>>();
             (1..=2).contains(&values.len())
@@ -1281,6 +1264,23 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
                 apply(format!("{name}-width"), width);
                 apply(format!("{name}-style"), style);
                 apply(format!("{name}-color"), color);
+                return;
+            }
+        }
+        "place-items" | "place-content" | "place-self" => {
+            let values = value.split_whitespace().collect::<Vec<_>>();
+            if (1..=2).contains(&values.len()) {
+                let (first, second) = match name.as_str() {
+                    "place-items" => ("align-items", "justify-items"),
+                    "place-self" => ("align-self", "justify-self"),
+                    _ => ("align-content", "justify-content"),
+                };
+                apply(name.clone(), value.clone());
+                apply(first.to_owned(), values[0].to_owned());
+                apply(
+                    second.to_owned(),
+                    values.get(1).copied().unwrap_or(values[0]).to_owned(),
+                );
                 return;
             }
         }
