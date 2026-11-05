@@ -2585,9 +2585,7 @@ fn parse_length_inner(value: &str, containing_width: u32, depth: usize) -> Optio
             return match name.to_ascii_lowercase().as_str() {
                 "min" if !values.is_empty() => values.into_iter().min(),
                 "max" if !values.is_empty() => values.into_iter().max(),
-                "clamp" if values.len() == 3 => {
-                    Some(values[0].max(values[1].min(values[2])))
-                }
+                "clamp" if values.len() == 3 => Some(values[0].max(values[1].min(values[2]))),
                 _ => None,
             };
         }
@@ -2780,9 +2778,8 @@ fn parse_calc_product(term: &str, containing_width: u32) -> Option<f64> {
     parts.push(final_part);
 
     if parts.len() == 1 {
-        return parse_calc_operand(parts[0], containing_width).and_then(|(value, is_length)| {
-            is_length.then_some(value)
-        });
+        return parse_calc_operand(parts[0], containing_width)
+            .and_then(|(value, is_length)| is_length.then_some(value));
     }
     if parts.len() != 2 || operators.len() != 1 {
         return None;
