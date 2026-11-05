@@ -894,13 +894,28 @@ fn parse_grid_tracks(value: Option<&str>, reference: u32) -> Vec<GridTrack> {
             let Some((count, repeated)) = inner.split_once(',') else {
                 continue;
             };
-            let Ok(count) = count.trim().parse::<usize>() else {
-                continue;
+            let repeated_tracks = split_grid_track_list(repeated);
+            let count = if count.trim().eq_ignore_ascii_case("auto-fill")
+                || count.trim().eq_ignore_ascii_case("auto-fit")
+            {
+                let minimum = repeated_tracks
+                    .first()
+                    .and_then(|track| track.strip_prefix("minmax("))
+                    .and_then(|track| track.strip_suffix(')'))
+                    .and_then(|track| track.split_once(','))
+                    .and_then(|(minimum, _)| parse_length(Some(minimum.trim()), reference))
+                    .unwrap_or(1)
+                    .max(1);
+                (reference / minimum).max(1).min(MAX_GRID_TRACKS as u32) as usize
+            } else {
+                let Ok(count) = count.trim().parse::<usize>() else {
+                    continue;
+                };
+                count
             };
             if count == 0 || count > MAX_GRID_TRACKS {
                 continue;
             }
-            let repeated_tracks = split_grid_track_list(repeated);
             if repeated_tracks.is_empty()
                 || tracks
                     .len()
@@ -5064,6 +5079,27 @@ mod tests {
 
         assert!(layout.children.is_empty());
         assert_eq!(layout.rect.height, 0);
+    }
+
+    #[test]
+    fn grid_auto_repeat_fills_available_width_with_minmax_tracks() {
+        let tracks = parse_grid_tracks(
+            Some("repeat(auto-fit, minmax(100px, 1fr))"),
+            350,
+        );
+        assert_eq!(tracks.len(), 3);
+        let widths = resolve_grid_track_sizes(&tracks, 350, 0);
+        assert_eq!(widths.iter().sum::<u32>(), 350);
+        assert!(widths.iter().all(|width| *width >= 100));
+    }
+
+    #[test]
+    fn grid_auto_fill_respects_track_limit() {
+        let tracks = parse_grid_tracks(
+            Some("repeat(auto-fill, minmax(1px, 1fr))"),
+            10_000,
+        );
+        assert_eq!(tracks.len(), 16);
     }
 
     #[test]
