@@ -420,11 +420,58 @@ fn paint_text_decorations(
         .unwrap_or(1)
         .min(rect.height.max(1));
 
+    let decoration_style = style
+        .get("text-decoration-style")
+        .map(str::trim)
+        .unwrap_or("solid")
+        .to_ascii_lowercase();
+    let paint_color = apply_opacity(color, opacity);
+
     let mut paint_line = |y: i32| {
-        list.push(PaintCommand::FillRect {
-            rect: Rect::new(rect.x, y, rect.width, thickness),
-            color: apply_opacity(color, opacity),
-        });
+        match decoration_style.as_str() {
+            "double" => {
+                let stroke = (thickness / 3).max(1);
+                list.push(PaintCommand::FillRect {
+                    rect: Rect::new(rect.x, y, rect.width, stroke),
+                    color: paint_color,
+                });
+                if thickness > stroke {
+                    list.push(PaintCommand::FillRect {
+                        rect: Rect::new(
+                            rect.x,
+                            y.saturating_add((thickness - stroke) as i32),
+                            rect.width,
+                            stroke,
+                        ),
+                        color: paint_color,
+                    });
+                }
+            }
+            "dashed" | "dotted" => {
+                let unit = thickness.max(1);
+                let (segment, gap) = if decoration_style == "dotted" {
+                    (unit, unit.saturating_mul(2))
+                } else {
+                    (unit.saturating_mul(3), unit.saturating_mul(2))
+                };
+                let mut x = rect.x;
+                let end = rect.x.saturating_add(rect.width.min(i32::MAX as u32) as i32);
+                let mut emitted = 0usize;
+                while x < end && emitted < 4096 {
+                    let width = segment.min((end - x) as u32);
+                    list.push(PaintCommand::FillRect {
+                        rect: Rect::new(x, y, width, thickness),
+                        color: paint_color,
+                    });
+                    x = x.saturating_add(width as i32).saturating_add(gap as i32);
+                    emitted += 1;
+                }
+            }
+            _ => list.push(PaintCommand::FillRect {
+                rect: Rect::new(rect.x, y, rect.width, thickness),
+                color: paint_color,
+            }),
+        }
     };
 
     for line in lines.split_whitespace() {
