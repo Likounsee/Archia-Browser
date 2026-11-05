@@ -1067,6 +1067,33 @@ mod tests {
     }
 
     #[test]
+    fn text_decoration_styles_render_distinct_patterns() {
+        for (decoration_style, expected_segments) in
+            [("dashed", 3usize), ("dotted", 5usize), ("double", 2usize)]
+        {
+            let mut root = Node::element("div");
+            root.set_attribute(
+                "style",
+                format!(
+                    "width: 30px; height: 12px; text-decoration-line: underline; text-decoration-style: {decoration_style}; text-decoration-thickness: 2px;"
+                ),
+            );
+
+            let styled =
+                crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+            let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(100, 50));
+            let list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
+            let segments = list
+                .commands()
+                .iter()
+                .filter(|command| matches!(command, PaintCommand::FillRect { .. }))
+                .count();
+
+            assert_eq!(segments, expected_segments, "style: {decoration_style}");
+        }
+    }
+
+    #[test]
     fn text_decoration_none_does_not_paint_a_line() {
         let mut root = Node::element("div");
         root.set_attribute(
