@@ -66,8 +66,14 @@ pub fn parse_declarations(tokens: &[CssToken]) -> Vec<Property> {
         }
         index += 1;
 
+        let value_start = index;
+        let declaration_end = find_declaration_end(tokens, value_start);
+        let important_start = find_important_suffix(tokens, value_start, declaration_end);
+        let value_end = important_start.unwrap_or(declaration_end);
+        let important = important_start.is_some();
         let mut value = String::new();
-        while index < tokens.len() && !matches!(tokens.get(index), Some(CssToken::Semicolon)) {
+
+        while index < value_end {
             let appended = match &tokens[index] {
                 CssToken::Whitespace => {
                     value.ends_with(' ') || append_char_bounded(&mut value, ' ')
@@ -82,10 +88,11 @@ pub fn parse_declarations(tokens: &[CssToken]) -> Vec<Property> {
                 CssToken::Colon => append_char_bounded(&mut value, ':'),
                 CssToken::LeftParen => append_char_bounded(&mut value, '('),
                 CssToken::RightParen => append_char_bounded(&mut value, ')'),
-                CssToken::LeftBrace | CssToken::RightBrace | CssToken::Semicolon => true,
+                CssToken::LeftBrace => append_char_bounded(&mut value, '{'),
+                CssToken::RightBrace => append_char_bounded(&mut value, '}'),
+                CssToken::Semicolon => append_char_bounded(&mut value, ';'),
             };
             if !appended {
-                // Stop before copying attacker-controlled token text beyond the declaration budget.
                 return properties;
             }
             index += 1;
@@ -95,13 +102,59 @@ pub fn parse_declarations(tokens: &[CssToken]) -> Vec<Property> {
             return properties;
         }
         trim_in_place(&mut value);
-        properties.push(Property { name, value });
+        properties.push(Property {
+            name,
+            value,
+            important,
+        });
+        index = declaration_end;
         if matches!(tokens.get(index), Some(CssToken::Semicolon)) {
             index += 1;
         }
     }
 
     properties
+}
+
+/// Find a declaration terminator without splitting semicolons nested in
+/// functions or component-value blocks.
+fn find_declaration_end(tokens: &[CssToken], start: usize) -> usize {
+    let mut parentheses = 0usize;
+    let mut braces = 0usize;
+    let mut index = start;
+    while index < tokens.len() {
+        match tokens[index] {
+            CssToken::LeftParen => parentheses = parentheses.saturating_add(1),
+            CssToken::RightParen => parentheses = parentheses.saturating_sub(1),
+            CssToken::LeftBrace => braces = braces.saturating_add(1),
+            CssToken::RightBrace => braces = braces.saturating_sub(1),
+            CssToken::Semicolon if parentheses == 0 && braces == 0 => break,
+            _ => {}
+        }
+        index += 1;
+    }
+    index
+}
+
+/// Detect !important from token boundaries, never from text inside strings
+/// or nested function arguments.
+fn find_important_suffix(tokens: &[CssToken], start: usize, end: usize) -> Option<usize> {
+    let mut cursor = end;
+    while cursor > start && matches!(tokens.get(cursor - 1), Some(CssToken::Whitespace)) {
+        cursor -= 1;
+    }
+    if !matches!(tokens.get(cursor.checked_sub(1)?), Some(CssToken::Ident(value)) if value.eq_ignore_ascii_case("important")) {
+        return None;
+    }
+    cursor -= 1;
+    while cursor > start && matches!(tokens.get(cursor - 1), Some(CssToken::Whitespace)) {
+        cursor -= 1;
+    }
+    if matches!(tokens.get(cursor.checked_sub(1)?), Some(CssToken::Delim('!'))) {
+        Some(cursor - 1)
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -114,6 +167,7 @@ mod tests {
         let tokens = CssTokenizer::tokenize("background-color: #102030;");
         let properties = parse_declarations(&tokens);
         assert_eq!(properties[0].value, "#102030");
+        assert!(!properties[0].important);
     }
 
     #[test]
@@ -130,6 +184,32 @@ mod tests {
             CssToken::Semicolon,
         ];
         assert!(parse_declarations(&tokens).is_empty());
+    }
+
+    #[test]
+    fn important_is_recognized_from_tokens_not_string_contents() {
+        let tokens = CssTokenizer::tokenize(
+            r#"content: "hello!important"; color: red ! important;"#,
+        );
+        let properties = parse_declarations(&tokens);
+
+        assert_eq!(properties[0].value, "hello!important");
+        assert!(!properties[0].important);
+        assert_eq!(properties[1].value, "red");
+        assert!(properties[1].important);
+    }
+
+    #[test]
+    fn semicolons_inside_functions_do_not_end_declarations() {
+        let tokens = CssTokenizer::tokenize(
+            "background-image: url(data:image/svg+xml;a=b); color: red;",
+        );
+        let properties = parse_declarations(&tokens);
+
+        assert_eq!(properties.len(), 2);
+        assert_eq!(properties[0].value, "url(data:image/svg+xml;a=b)");
+        assert_eq!(properties[1].name, "color");
+        assert_eq!(properties[1].value, "red");
     }
 
     #[test]
@@ -160,6 +240,7 @@ mod tests {
         let properties = parse_declarations(&tokens);
         assert_eq!(properties[0].name, "color");
         assert_eq!(properties[0].value, "red");
+        assert!(!properties[0].important);
         assert_eq!(properties[1].name, "margin");
         assert_eq!(properties[1].value, "0");
     }
