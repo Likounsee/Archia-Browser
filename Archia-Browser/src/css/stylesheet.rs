@@ -1298,7 +1298,6 @@ fn is_inherited_property(name: &str) -> bool {
     )
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
