@@ -450,6 +450,7 @@ fn supports_declaration(name: &str, value: &str) -> bool {
         "right",
         "bottom",
         "left",
+        "inset",
         "z-index",
         "vertical-align",
         "text-transform",
@@ -1008,6 +1009,20 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
                     (format!("{prefix}-left"), values[3].clone()),
                 ] {
                     apply(property, property_value);
+                }
+                return;
+            }
+        }
+        "inset" => {
+            if let Some(values) = expand_box_shorthand(&name, &value) {
+                apply(name.clone(), value.clone());
+                for (property, property_value) in [
+                    ("top", values[0].clone()),
+                    ("right", values[1].clone()),
+                    ("bottom", values[2].clone()),
+                    ("left", values[3].clone()),
+                ] {
+                    apply(property.to_owned(), property_value);
                 }
                 return;
             }
@@ -1583,6 +1598,33 @@ mod tests {
         let style = sheet.compute_style(&node);
         assert_eq!(style.get("color"), Some("blue"));
         assert_eq!(style.get("padding"), Some("4px"));
+    }
+
+    #[test]
+    fn inset_shorthand_expands_one_to_four_values() {
+        let node = Node::element("div");
+
+        let one = StyleSheet::parse("div { inset: 5px; }").compute_style(&node);
+        assert_eq!(one.get("top"), Some("5px"));
+        assert_eq!(one.get("right"), Some("5px"));
+        assert_eq!(one.get("bottom"), Some("5px"));
+        assert_eq!(one.get("left"), Some("5px"));
+
+        let four = StyleSheet::parse("div { inset: 1px 2px 3px 4px; }").compute_style(&node);
+        assert_eq!(four.get("top"), Some("1px"));
+        assert_eq!(four.get("right"), Some("2px"));
+        assert_eq!(four.get("bottom"), Some("3px"));
+        assert_eq!(four.get("left"), Some("4px"));
+    }
+
+    #[test]
+    fn inset_shorthand_respects_important_longhands() {
+        let sheet = StyleSheet::parse("div { top: 9px !important; inset: 1px 2px; }");
+        let computed = sheet.compute_style(&Node::element("div"));
+        assert_eq!(computed.get("top"), Some("9px"));
+        assert_eq!(computed.get("right"), Some("2px"));
+        assert_eq!(computed.get("bottom"), Some("1px"));
+        assert_eq!(computed.get("left"), Some("2px"));
     }
 
     #[test]
