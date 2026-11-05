@@ -497,6 +497,10 @@ fn supports_declaration(name: &str, value: &str) -> bool {
         "justify-content",
         "align-items",
         "align-content",
+        "justify-items",
+        "justify-self",
+        "place-items",
+        "place-content",
         "align-self",
         "gap",
         "row-gap",
@@ -605,6 +609,22 @@ fn supports_declaration(name: &str, value: &str) -> bool {
                 | "space-around"
                 | "space-evenly"
         ),
+        "justify-items" | "justify-self" => matches!(
+            value.as_str(),
+            "normal" | "stretch" | "start" | "end" | "self-start" | "self-end" | "center" | "left" | "right"
+        ),
+        "place-items" | "place-content" => {
+            let values = value.split_whitespace().collect::<Vec<_>>();
+            (1..=2).contains(&values.len())
+                && values.iter().all(|value| {
+                    matches!(
+                        *value,
+                        "normal" | "stretch" | "start" | "end" | "self-start" | "self-end"
+                            | "center" | "left" | "right" | "flex-start" | "flex-end"
+                            | "baseline" | "space-between" | "space-around" | "space-evenly"
+                    )
+                })
+        }
         "align-items" | "align-content" | "align-self" => matches!(
             value.as_str(),
             "normal"
@@ -631,6 +651,23 @@ fn supports_declaration(name: &str, value: &str) -> bool {
         "row-gap" | "column-gap" => is_valid_gap_component(&value),
         "list-style" => expand_list_style(&value).is_some(),
         "background" => expand_background(&value).is_some(),
+        "place-items" | "place-content" => {
+            let values = value.split_whitespace().collect::<Vec<_>>();
+            if (1..=2).contains(&values.len()) {
+                let (first, second) = if name == "place-items" {
+                    ("align-items", "justify-items")
+                } else {
+                    ("align-content", "justify-content")
+                };
+                apply(name.clone(), value.clone());
+                apply(first.to_owned(), values[0].to_owned());
+                apply(
+                    second.to_owned(),
+                    values.get(1).copied().unwrap_or(values[0]).to_owned(),
+                );
+                return;
+            }
+        }
         "overflow" => {
             let values = value.split_whitespace().collect::<Vec<_>>();
             (1..=2).contains(&values.len())
@@ -2599,6 +2636,24 @@ mod tests {
         ] {
             assert_eq!(initial_value(property), expected, "{property}");
         }
+    }
+
+    #[test]
+    fn expands_place_items_and_place_content_shorthands() {
+        let sheet = StyleSheet::parse(
+            "div { place-items: center end; place-content: end space-between; }",
+        );
+        let style = sheet.compute_style(&Node::element("div"));
+
+        assert_eq!(style.get("align-items"), Some("center"));
+        assert_eq!(style.get("justify-items"), Some("end"));
+        assert_eq!(style.get("align-content"), Some("end"));
+        assert_eq!(style.get("justify-content"), Some("space-between"));
+
+        let single = StyleSheet::parse("div { place-items: center; }");
+        let style = single.compute_style(&Node::element("div"));
+        assert_eq!(style.get("align-items"), Some("center"));
+        assert_eq!(style.get("justify-items"), Some("center"));
     }
 
     #[test]
