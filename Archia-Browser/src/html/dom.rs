@@ -108,6 +108,22 @@ impl Node {
         self.children.len()
     }
 
+    /// Whether this node currently has at least one child node, including text
+    /// and comment nodes.
+    pub fn has_child_nodes(&self) -> bool {
+        !self.children.is_empty()
+    }
+
+    /// Return the first child node, including text and comments.
+    pub fn first_child(&self) -> Option<&Node> {
+        self.children.first()
+    }
+
+    /// Return the last child node, including text and comments.
+    pub fn last_child(&self) -> Option<&Node> {
+        self.children.last()
+    }
+
     pub fn children(&self) -> &[Node] {
         &self.children
     }
@@ -531,6 +547,28 @@ impl<'a> Iterator for Descendants<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn child_node_accessors_include_text_and_comments() {
+        let mut parent = Node::element("div");
+        assert!(!parent.has_child_nodes());
+        assert!(parent.first_child().is_none());
+        assert!(parent.last_child().is_none());
+
+        parent.append(Node::text("before"));
+        parent.append(Node::comment("marker"));
+        parent.append(Node::element("span"));
+
+        assert!(parent.has_child_nodes());
+        assert_eq!(parent.first_child().and_then(|node| match &node.kind {
+            NodeKind::Text(value) => Some(value.as_str()),
+            _ => None,
+        }), Some("before"));
+        assert!(matches!(
+            parent.last_child().map(|node| &node.kind),
+            Some(NodeKind::Element { name, .. }) if name == "span"
+        ));
+    }
 
     #[test]
     fn attribute_introspection_reports_element_attributes_only() {
