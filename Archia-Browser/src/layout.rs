@@ -502,6 +502,14 @@ fn layout_styled_node(
     align_inline_vertical_align(&mut output, node);
 
     let mut content_height = explicit_height.unwrap_or(cursor_y.max(0) as u32);
+    if explicit_height.is_none() && node.node.tag_name() != Some("img") {
+        if let Some(ratio) = parse_aspect_ratio(node.style.get("aspect-ratio")) {
+            let ratio_height = f64::from(content_width) / ratio;
+            if ratio_height.is_finite() && ratio_height <= f64::from(u32::MAX) {
+                content_height = content_height.max(ratio_height.round() as u32);
+            }
+        }
+    }
     if border_box && explicit_height.is_some() {
         content_height = content_height
             .saturating_sub(box_model.padding_top)
@@ -5907,6 +5915,20 @@ mod tests {
 mod image_aspect_ratio_tests {
     use super::*;
     use crate::html::Node;
+
+    #[test]
+    fn aspect_ratio_provides_preferred_height_for_empty_boxes() {
+        let mut box_node = Node::element("div");
+        box_node.set_attribute("style", "width: 320px; aspect-ratio: 16 / 9;");
+        let styled = crate::style_tree::StyleEngine::style(
+            &box_node,
+            &crate::css::StyleSheet::default(),
+        );
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(800, 600));
+
+        assert_eq!(layout.rect.width, 320);
+        assert_eq!(layout.rect.height, 180);
+    }
 
     #[test]
     fn stylesheet_aspect_ratio_controls_image_layout_height() {
