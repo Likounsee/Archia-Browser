@@ -1062,6 +1062,20 @@ fn apply_declaration(style: &mut ComputedStyle, declaration: &Property) {
                 return;
             }
         }
+        "border-width" | "border-style" | "border-color" => {
+            if let Some(values) = expand_box_shorthand(&name, &value) {
+                apply(name.clone(), value.clone());
+                for (property, property_value) in [
+                    (format!("{name}-top"), values[0].clone()),
+                    (format!("{name}-right"), values[1].clone()),
+                    (format!("{name}-bottom"), values[2].clone()),
+                    (format!("{name}-left"), values[3].clone()),
+                ] {
+                    apply(property, property_value);
+                }
+                return;
+            }
+        }
         "border" => {
             if let Some((width, style, color)) = expand_border_shorthand(&value) {
                 apply("border-width".to_owned(), width.to_owned());
@@ -1670,6 +1684,42 @@ mod tests {
         assert_eq!(computed.get("right"), Some("2px"));
         assert_eq!(computed.get("bottom"), Some("1px"));
         assert_eq!(computed.get("left"), Some("2px"));
+    }
+
+    #[test]
+    fn border_component_shorthands_expand_one_to_four_sides() {
+        let node = Node::element("div");
+        let sheet = StyleSheet::parse(
+            "div { border-width: 1px 2px 3px 4px; border-style: solid dashed; border-color: red green blue; }",
+        );
+        let computed = sheet.compute_style(&node);
+        for (property, expected) in [
+            ("border-top-width", "1px"),
+            ("border-right-width", "2px"),
+            ("border-bottom-width", "3px"),
+            ("border-left-width", "4px"),
+            ("border-top-style", "solid"),
+            ("border-right-style", "dashed"),
+            ("border-bottom-style", "solid"),
+            ("border-left-style", "dashed"),
+            ("border-top-color", "red"),
+            ("border-right-color", "green"),
+            ("border-bottom-color", "blue"),
+            ("border-left-color", "green"),
+        ] {
+            assert_eq!(computed.get(property), Some(expected), "{property}");
+        }
+    }
+
+    #[test]
+    fn border_component_shorthands_respect_important_longhands() {
+        let sheet = StyleSheet::parse(
+            "div { border-top-width: 9px !important; border-width: 1px 2px; }",
+        );
+        let computed = sheet.compute_style(&Node::element("div"));
+        assert_eq!(computed.get("border-top-width"), Some("9px"));
+        assert_eq!(computed.get("border-right-width"), Some("2px"));
+        assert_eq!(computed.get("border-bottom-width"), Some("1px"));
     }
 
     #[test]
