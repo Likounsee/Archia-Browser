@@ -969,8 +969,14 @@ fn layout_grid_children(
         .unwrap_or(0);
     let tracks = parse_grid_tracks(node.style.get("grid-template-columns"), content_width);
     let widths = resolve_grid_track_sizes(&tracks, content_width, column_gap);
-    let row_tracks = parse_grid_tracks(node.style.get("grid-template-rows"), containing_height);
-    let row_heights = resolve_grid_track_sizes(&row_tracks, containing_height, row_gap);
+    let row_heights = node
+        .style
+        .get("grid-template-rows")
+        .map(|value| {
+            let row_tracks = parse_grid_tracks(Some(value), containing_height);
+            resolve_grid_track_sizes(&row_tracks, containing_height, row_gap)
+        })
+        .unwrap_or_default();
     let columns = widths.len().max(1);
     let mut laid_out = Vec::with_capacity(node.children.len());
     laid_out.resize_with(node.children.len(), || None);
