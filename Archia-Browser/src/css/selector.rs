@@ -1866,7 +1866,9 @@ mod tests {
         number.set_attribute("min", "1");
         number.set_attribute("max", "10");
         number.set_attribute("value", "12");
-        assert!(Selector::parse("input:out-of-range").unwrap().matches(&number));
+        assert!(Selector::parse("input:out-of-range")
+            .unwrap()
+            .matches(&number));
         assert!(Selector::parse("input:invalid").unwrap().matches(&number));
         number.set_attribute("value", "5");
         assert!(Selector::parse("input:in-range").unwrap().matches(&number));
@@ -1875,15 +1877,23 @@ mod tests {
         let mut unconstrained_number = Node::element("input");
         unconstrained_number.set_attribute("type", "number");
         unconstrained_number.set_attribute("value", "5");
-        assert!(!Selector::parse("input:in-range").unwrap().matches(&unconstrained_number));
-        assert!(!Selector::parse("input:out-of-range").unwrap().matches(&unconstrained_number));
+        assert!(!Selector::parse("input:in-range")
+            .unwrap()
+            .matches(&unconstrained_number));
+        assert!(!Selector::parse("input:out-of-range")
+            .unwrap()
+            .matches(&unconstrained_number));
 
         let mut required_checkbox = Node::element("input");
         required_checkbox.set_attribute("type", "checkbox");
         required_checkbox.set_attribute("required", "");
-        assert!(Selector::parse("input:invalid").unwrap().matches(&required_checkbox));
+        assert!(Selector::parse("input:invalid")
+            .unwrap()
+            .matches(&required_checkbox));
         required_checkbox.set_attribute("checked", "");
-        assert!(Selector::parse("input:valid").unwrap().matches(&required_checkbox));
+        assert!(Selector::parse("input:valid")
+            .unwrap()
+            .matches(&required_checkbox));
 
         let mut bounded_text = Node::element("input");
         bounded_text.set_attribute("minlength", "3");
