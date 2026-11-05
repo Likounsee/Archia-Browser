@@ -733,9 +733,7 @@ fn supports_declaration(name: &str, value: &str) -> bool {
                     <= 1
         }
         "visibility" => matches!(value.as_str(), "visible" | "hidden" | "collapse"),
-        "aspect-ratio" => {
-            value == "auto" || parse_supported_aspect_ratio(&value)
-        }
+        "aspect-ratio" => value == "auto" || parse_supported_aspect_ratio(&value),
         _ => true,
     }
 }
