@@ -2386,6 +2386,22 @@ mod whitespace_layout_tests {
     }
 
     #[test]
+    fn calc_supports_length_multiplication_and_division_by_numbers() {
+        assert_eq!(parse_length(Some("calc(10px * 2)"), 100), Some(20));
+        assert_eq!(parse_length(Some("calc(2 * 10px)"), 100), Some(20));
+        assert_eq!(parse_length(Some("calc(20px / 2)"), 100), Some(10));
+        assert_eq!(parse_length(Some("calc(50% * 0.5)"), 100), Some(25));
+    }
+
+    #[test]
+    fn calc_rejects_invalid_dimension_arithmetic_and_division_by_zero() {
+        assert_eq!(parse_length(Some("calc(2px * 3px)"), 100), None);
+        assert_eq!(parse_length(Some("calc(10px / 0)"), 100), None);
+        assert_eq!(parse_length(Some("calc(2 + 10px)"), 100), None);
+        assert_eq!(parse_length(Some("calc(2 * 3 * 4px)"), 100), None);
+    }
+
+    #[test]
     fn calc_remains_available_alongside_min_max_and_clamp() {
         assert_eq!(parse_length(Some("calc(10px + 5px)"), 100), Some(15));
         assert_eq!(parse_length(Some("calc(50% - 10px)"), 100), Some(40));
@@ -2724,21 +2740,11 @@ fn parse_calc_length(expression: &str, containing_width: u32) -> Option<u32> {
         while index < bytes.len() && bytes[index] != b'+' && bytes[index] != b'-' {
             index += 1;
         }
-        let term = &expression[start..index];
+        let term = expression.get(start..index)?;
         if term.is_empty() {
             return None;
         }
-
-        let value = if let Some(percent) = term.strip_suffix('%') {
-            let percent = percent.parse::<f64>().ok()?;
-            if !percent.is_finite() {
-                return None;
-            }
-            f64::from(containing_width) * percent / 100.0
-        } else {
-            parse_absolute_length(term)?
-        };
-
+        let value = parse_calc_product(term, containing_width)?;
         total = if add { total + value } else { total - value };
         if !total.is_finite() {
             return None;
@@ -2752,6 +2758,59 @@ fn parse_calc_length(expression: &str, containing_width: u32) -> Option<u32> {
     Some(total.floor() as u32)
 }
 
+fn parse_calc_product(term: &str, containing_width: u32) -> Option<f64> {
+    let mut parts = Vec::new();
+    let mut operators = Vec::new();
+    let mut start = 0usize;
+    for (index, byte) in term.bytes().enumerate() {
+        if matches!(byte, b'*' | b'/') {
+            let part = term.get(start..index)?;
+            if part.is_empty() {
+                return None;
+            }
+            parts.push(part);
+            operators.push(byte);
+            start = index + 1;
+        }
+    }
+    let final_part = term.get(start..)?;
+    if final_part.is_empty() {
+        return None;
+    }
+    parts.push(final_part);
+
+    if parts.len() == 1 {
+        return parse_calc_operand(parts[0], containing_width).and_then(|(value, is_length)| {
+            is_length.then_some(value)
+        });
+    }
+    if parts.len() != 2 || operators.len() != 1 {
+        return None;
+    }
+    let (left, left_is_length) = parse_calc_operand(parts[0], containing_width)?;
+    let (right, right_is_length) = parse_calc_operand(parts[1], containing_width)?;
+    let result = match operators[0] {
+        b'*' if left_is_length ^ right_is_length => left * right,
+        b'/' if left_is_length && !right_is_length && right != 0.0 => left / right,
+        _ => return None,
+    };
+    result.is_finite().then_some(result)
+}
+
+fn parse_calc_operand(value: &str, containing_width: u32) -> Option<(f64, bool)> {
+    if let Some(percent) = value.strip_suffix('%') {
+        let percent = percent.parse::<f64>().ok()?;
+        if !percent.is_finite() {
+            return None;
+        }
+        return Some((f64::from(containing_width) * percent / 100.0, true));
+    }
+    if let Some(length) = parse_absolute_length(value) {
+        return Some((length, true));
+    }
+    let number = value.parse::<f64>().ok()?;
+    number.is_finite().then_some((number, false))
+}
 fn parse_px(value: Option<&str>) -> Option<u32> {
     let value = value?.trim();
     let number = value.get(..value.len().checked_sub(2)?)?;
