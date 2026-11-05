@@ -811,6 +811,16 @@ fn split_grid_track_list(value: &str) -> Vec<String> {
     tracks
 }
 
+fn parse_grid_line_start(value: Option<&str>) -> Option<usize> {
+    let value = value?.trim();
+    if value.is_empty() || value.eq_ignore_ascii_case("auto") {
+        return None;
+    }
+    let start = value.split('/').next()?.trim();
+    let line = start.parse::<usize>().ok()?;
+    (line > 0 && line <= 1024).then_some(line - 1)
+}
+
 fn parse_grid_track(value: &str, reference: u32) -> Option<GridTrack> {
     let value = value.trim().to_ascii_lowercase();
     if value == "auto" || value == "min-content" || value == "max-content" {
@@ -1066,7 +1076,67 @@ fn layout_grid_children(
         }
     }
 
-    let grid_row_count = grid_items.len().div_ceil(columns);
+    // Resolve explicit grid lines before auto-placement so explicitly positioned
+    // items reserve their cells regardless of their source order.
+    let mut cells: Vec<Vec<Option<usize>>> = vec![vec![None; columns]; 1];
+    let mut placed = vec![false; node.children.len()];
+    for &child_index in &grid_items {
+        let child = &node.children[child_index];
+        let requested_column = parse_grid_line_start(child.style.get("grid-column"));
+        let requested_row = parse_grid_line_start(child.style.get("grid-row"));
+        if requested_column.is_none() && requested_row.is_none() {
+            continue;
+        }
+        let column = requested_column.unwrap_or(0);
+        if column >= columns {
+            continue;
+        }
+        let row = requested_row.unwrap_or(0);
+        if row >= 1024 {
+            continue;
+        }
+        while cells.len() <= row {
+            cells.push(vec![None; columns]);
+        }
+        if cells[row][column].is_none() {
+            cells[row][column] = Some(child_index);
+            placed[child_index] = true;
+        }
+    }
+
+    let dense = node
+        .style
+        .get("grid-auto-flow")
+        .is_some_and(|value| value.split_whitespace().any(|part| part.eq_ignore_ascii_case("dense")));
+    let mut cursor = 0_usize;
+    for &child_index in &grid_items {
+        if placed[child_index] {
+            continue;
+        }
+        if dense {
+            cursor = 0;
+        }
+        loop {
+            let row = cursor / columns;
+            let column = cursor % columns;
+            if row >= 1024 {
+                break;
+            }
+            while cells.len() <= row {
+                cells.push(vec![None; columns]);
+            }
+            cursor = cursor.saturating_add(1);
+            if cells[row][column].is_none() {
+                cells[row][column] = Some(child_index);
+                break;
+            }
+        }
+    }
+    let grid_row_count = cells.len();
+    let grid_items: Vec<usize> = cells
+        .into_iter()
+        .flat_map(|row| row.into_iter().map(|item| item.unwrap_or(usize::MAX)))
+        .collect();
     let explicit_rows_fit = grid_row_count > 0 && grid_row_count <= row_heights.len();
     let (row_start_offset, distributed_row_gap) = if explicit_rows_fit {
         let used_height = row_heights
@@ -1116,8 +1186,15 @@ fn layout_grid_children(
 
         for grid_position in row_start..row_end {
             let child_index = grid_items[grid_position];
-            let child = &node.children[child_index];
             let area_width = widths[grid_position - row_start];
+            if child_index == usize::MAX {
+                column_left = column_left
+                    .saturating_add(area_width)
+                    .saturating_add(column_gap)
+                    .saturating_add(distributed_column_gap);
+                continue;
+            }
+            let child = &node.children[child_index];
             let child_box = box_model_from_style(&child.style, content_width);
             let content_cell_width = area_width.saturating_sub(child_box.horizontal_outer());
             let justify_self = child
@@ -4905,6 +4982,56 @@ mod tests {
 
         assert_eq!(layout.children[0].rect.width, 100);
     }
+    #[test]
+    fn grid_layout_places_items_on_explicit_grid_lines() {
+        let mut root = Node::element("section");
+        root.set_attribute(
+            "style",
+            "display: grid; width: 300px; grid-template-columns: 100px 100px 100px; grid-template-rows: 40px 40px;",
+        );
+        let mut first = Node::element("div");
+        first.set_attribute("style", "grid-column: 3; grid-row: 2;");
+        let mut second = Node::element("div");
+        second.set_attribute("style", "grid-column: 1;");
+        root.append(first);
+        root.append(second);
+        root.append(Node::element("div"));
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(300, 100));
+
+        assert_eq!(layout.children[0].rect.x, 200);
+        assert_eq!(layout.children[0].rect.y, 40);
+        assert_eq!(layout.children[1].rect.x, 0);
+        assert_eq!(layout.children[1].rect.y, 0);
+        assert_eq!(layout.children[2].rect.x, 100);
+        assert_eq!(layout.children[2].rect.y, 0);
+    }
+
+    #[test]
+    fn grid_auto_flow_dense_backfills_earlier_holes() {
+        let mut root = Node::element("section");
+        root.set_attribute(
+            "style",
+            "display: grid; width: 200px; grid-template-columns: 100px 100px; grid-template-rows: 30px 30px; grid-auto-flow: row dense;",
+        );
+        let mut first = Node::element("div");
+        first.set_attribute("style", "grid-column: 2; grid-row: 1;");
+        let mut second = Node::element("div");
+        second.set_attribute("style", "grid-column: 2; grid-row: 2;");
+        root.append(first);
+        root.append(second);
+        root.append(Node::element("div"));
+
+        let styled =
+            crate::style_tree::StyleEngine::style(&root, &crate::css::StyleSheet::default());
+        let layout = LayoutEngine::layout_styled(&styled, LayoutViewport::new(200, 80));
+
+        assert_eq!(layout.children[2].rect.x, 0);
+        assert_eq!(layout.children[2].rect.y, 0);
+    }
+
     #[test]
     fn grid_layout_places_items_in_rows_and_distributes_fractional_columns() {
         let mut root = Node::element("section");
