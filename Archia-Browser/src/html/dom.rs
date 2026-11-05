@@ -960,7 +960,7 @@ impl<'a> Iterator for Descendants<'a> {
 mod tests {
     use super::*;
 
-#[test]
+    #[test]
     fn inner_html_setter_replaces_children_and_parses_markup() {
         let mut root = Node::element("div");
         root.append(Node::element("old"));
@@ -999,13 +999,16 @@ mod tests {
         root.append(first);
         root.append(second);
 
-        assert_eq!(root.get_element_by_id("first").unwrap().tag_name(), Some("div"));
+        assert_eq!(
+            root.get_element_by_id("first").unwrap().tag_name(),
+            Some("div")
+        );
         assert_eq!(root.get_elements_by_tag_name("*").len(), 2);
         assert_eq!(root.get_elements_by_tag_name("DIV").len(), 1);
         assert_eq!(root.get_elements_by_class_name("card featured").len(), 1);
         assert_eq!(root.get_elements_by_class_name("featured card").len(), 1);
         assert!(root.get_elements_by_class_name("missing").is_empty());
-        assert!(root.child(0).unwrap().matches_selector("div.card, span.active") );
+        assert!(root.child(0).unwrap().matches_selector("div.card, span.active"));
         assert!(!root.child(0).unwrap().matches_selector("main > div"));
     }
 
@@ -1018,7 +1021,10 @@ mod tests {
         assert!(root.insert_after(1, Node::element("between")).is_ok());
         assert!(root.insert_before(99, Node::element("invalid")).is_err());
         assert_eq!(
-            root.children.iter().filter_map(Node::tag_name).collect::<Vec<_>>(),
+            root.children
+                .iter()
+                .filter_map(Node::tag_name)
+                .collect::<Vec<_>>(),
             ["a", "b", "between", "c"]
         );
     }
@@ -1029,7 +1035,10 @@ mod tests {
         root.append(Node::element("existing"));
         assert!(root.prepend_html("<span>first</span><span>second</span>"));
         assert_eq!(
-            root.children.iter().filter_map(Node::tag_name).collect::<Vec<_>>(),
+            root.children
+                .iter()
+                .filter_map(Node::tag_name)
+                .collect::<Vec<_>>(),
             ["span", "span", "existing"]
         );
         assert_eq!(root.text_content(), "firstsecond");
