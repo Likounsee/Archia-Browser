@@ -2148,7 +2148,9 @@ mod tests {
         let sheet = StyleSheet::parse(
             ".hero { background-image: url(locked.png) !important; background: url(hero.png) no-repeat red; }",
         );
-        let computed = sheet.compute_style(&Node::element("div").with_attribute("class", "hero"));
+        let mut hero = Node::element("div");
+        hero.set_attribute("class", "hero");
+        let computed = sheet.compute_style(&hero);
         assert_eq!(computed.get("background-image"), Some("url(locked.png)"));
         assert_eq!(computed.get("background-color"), Some("red"));
         assert_eq!(computed.get("background-repeat"), Some("no-repeat"));
@@ -2157,7 +2159,9 @@ mod tests {
     #[test]
     fn invalid_multi_layer_background_is_not_partially_expanded() {
         let sheet = StyleSheet::parse(".hero { background: url(a.png), url(b.png); }");
-        let computed = sheet.compute_style(&Node::element("div").with_attribute("class", "hero"));
+        let mut hero = Node::element("div");
+        hero.set_attribute("class", "hero");
+        let computed = sheet.compute_style(&hero);
         assert_eq!(computed.get("background-image"), None);
         assert_eq!(computed.get("background-repeat"), None);
     }
