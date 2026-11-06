@@ -5,6 +5,16 @@ edition = "2021"
 license = "MIT"
 description = "A lightweight, independent web browser built from the ground up."
 
+[features]
+default = ["software-renderer"]
+# Transitional pixel backend; the browser engine builds without this feature.
+software-renderer = []
+
+[[bin]]
+name = "archia-browser"
+path = "src/main.rs"
+required-features = ["software-renderer"]
+
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("archiaos"))'] }
 
