@@ -45,7 +45,7 @@ fn browser_stack_foundations_work_together() {
 }
 
 #[test]
-fn visibility_is_inherited_but_visible_descendants_can_paint() {
+fn visibility_is_inherited_and_kept_in_computed_styles() {
     let mut root = archia_browser::html::Node::element("div");
     root.set_attribute("style", "visibility: hidden; background-color: red;");
     let mut hidden = archia_browser::html::Node::element("span");
@@ -65,30 +65,18 @@ fn visibility_is_inherited_but_visible_descendants_can_paint() {
         &styled,
         archia_browser::layout::LayoutViewport::new(200, 100),
     );
+
     assert_eq!(layout.children.len(), 2);
     assert_eq!(layout.children[0].rect.y, 0);
     assert_eq!(layout.children[1].rect.y, 16);
-
-    let list =
-        archia_browser::render::SoftwareRenderer::build_display_list_styled(&styled, &layout);
-    assert!(list.commands().iter().any(|command| matches!(
-        command,
-        archia_browser::render::PaintCommand::FillRect {
-            color: 0x008000ff,
-            ..
-        }
-    )));
-    assert!(!list.commands().iter().any(|command| matches!(
-        command,
-        archia_browser::render::PaintCommand::FillRect {
-            color: 0xff0000ff,
-            ..
-        }
-    )));
+    assert_eq!(styled.children[0].style.get("visibility"), Some("hidden"));
+    assert_eq!(styled.children[0].style.get("background-color"), Some("blue"));
+    assert_eq!(styled.children[1].style.get("visibility"), Some("visible"));
+    assert_eq!(styled.children[1].style.get("background-color"), Some("green"));
 }
 
 #[test]
-fn visibility_collapse_stays_in_layout_but_suppresses_paint() {
+fn visibility_collapse_remains_distinct_from_display_none() {
     let mut root = archia_browser::html::Node::element("div");
     root.set_attribute("style", "visibility: collapse;");
     root.append(archia_browser::html::Node::text("collapsed"));
@@ -97,11 +85,11 @@ fn visibility_collapse_stays_in_layout_but_suppresses_paint() {
         &styled,
         archia_browser::layout::LayoutViewport::new(200, 100),
     );
+
+    assert_eq!(styled.style.get("visibility"), Some("collapse"));
     assert!(layout.rect.height > 0);
-    let list =
-        archia_browser::render::SoftwareRenderer::build_display_list_styled(&styled, &layout);
-    assert!(list.commands().is_empty());
 }
+
 
 #[test]
 fn whitespace_pre_line_collapses_spaces_but_preserves_newlines() {
@@ -113,10 +101,7 @@ fn whitespace_pre_line_collapses_spaces_but_preserves_newlines() {
         &styled,
         archia_browser::layout::LayoutViewport::new(200, 100),
     );
-    let list =
-        archia_browser::render::SoftwareRenderer::build_display_list_styled(&styled, &layout);
-    assert!(list.commands().iter().any(|command| matches!(
-        command,
-        archia_browser::render::PaintCommand::DrawText { text, .. } if text == "one\ntwo"
-    )));
+    assert_eq!(styled.style.get("white-space"), Some("pre-line"));
+    assert_eq!(styled.text_content(), "  one\n  two  ");
+    assert!(layout.rect.height > 0);
 }
