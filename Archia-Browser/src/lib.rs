@@ -661,6 +661,57 @@ mod tests {
     }
 
     #[test]
+    fn browser_keeps_dom_styles_and_layout_without_a_renderer() {
+        #[derive(Debug, Default)]
+        struct AllowAll;
+        impl net::pipeline::RequestPolicyEngine for AllowAll {
+            fn decide(&self, _: &net::Request) -> net::pipeline::PolicyDecision {
+                net::pipeline::PolicyDecision::Allow
+            }
+        }
+        #[derive(Debug)]
+        struct MockTransport;
+        impl net::Transport for MockTransport {
+            fn send(&self, _: &net::Request) -> Result<net::Response, net::TransportError> {
+                Ok(net::Response::new(200)
+                    .with_header("cache-control", "no-store")
+                    .with_header("content-type", "text/html")
+                    .with_body(b"<html><head><title>Engine</title></head><body><p class='target'>Hello engine</p></body></html>".to_vec()))
+            }
+        }
+
+        let mut browser = Browser::new();
+        let loader = browser.document_loader(
+            net::pipeline::NetworkPipeline::new(AllowAll),
+            MockTransport,
+        );
+        let request = net::Request::new(net::Url::parse("https://example.org/").unwrap());
+        browser.load_request(
+            &loader,
+            &request,
+            crate::layout::LayoutViewport::new(640, 480),
+        ).unwrap();
+
+        let page = browser.current_page().expect("loaded page must remain available");
+        assert_eq!(page.title(), Some("Engine".to_owned()));
+        assert_eq!(page.document.text_content(), "EngineHello engine");
+        assert_eq!(page.layout.rect.width, 640);
+
+        fn find_target<'a>(
+            node: &'a crate::style_tree::StyledNode,
+        ) -> Option<&'a crate::style_tree::StyledNode> {
+            if node.node.tag_name() == Some("p") {
+                return Some(node);
+            }
+            node.children.iter().find_map(find_target)
+        }
+        assert_eq!(
+            find_target(&page.styled).and_then(|node| node.style.get("display")),
+            Some("block")
+        );
+    }
+
+    #[test]
     fn browser_loads_local_file_path_into_active_tab() {
         let path =
             std::env::temp_dir().join(format!("archia-browser-path-{}.html", std::process::id()));
