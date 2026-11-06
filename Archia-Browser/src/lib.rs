@@ -145,7 +145,6 @@ impl Browser {
         self.resources.allocate(bytes)
     }
 
-
     pub fn tabs(&self) -> &core::tabs::TabManager {
         &self.tabs
     }
@@ -457,7 +456,6 @@ impl Browser {
         true
     }
 
-
     pub fn current_url(&self) -> Option<&net::Url> {
         self.tabs
             .active_tab()
@@ -681,18 +679,20 @@ mod tests {
         }
 
         let mut browser = Browser::new();
-        let loader = browser.document_loader(
-            net::pipeline::NetworkPipeline::new(AllowAll),
-            MockTransport,
-        );
+        let loader =
+            browser.document_loader(net::pipeline::NetworkPipeline::new(AllowAll), MockTransport);
         let request = net::Request::new(net::Url::parse("https://example.org/").unwrap());
-        browser.load_request(
-            &loader,
-            &request,
-            crate::layout::LayoutViewport::new(640, 480),
-        ).unwrap();
+        browser
+            .load_request(
+                &loader,
+                &request,
+                crate::layout::LayoutViewport::new(640, 480),
+            )
+            .unwrap();
 
-        let page = browser.current_page().expect("loaded page must remain available");
+        let page = browser
+            .current_page()
+            .expect("loaded page must remain available");
         assert_eq!(page.title(), Some("Engine".to_owned()));
         assert_eq!(page.document.text_content(), "EngineHello engine");
         assert_eq!(page.layout.rect.width, 640);
