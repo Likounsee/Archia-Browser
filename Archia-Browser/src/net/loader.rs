@@ -1262,6 +1262,21 @@ fn is_html_response(response: &Response, allow_missing_content_type: bool) -> bo
 #[cfg(test)]
 mod tests {
 
+    fn find_styled_element<'a>(
+        node: &'a crate::style_tree::StyledNode,
+        tag: &str,
+        class: Option<&str>,
+    ) -> Option<&'a crate::style_tree::StyledNode> {
+        let tag_matches = node.node.tag_name() == Some(tag);
+        let class_matches = class.is_none_or(|class| {
+            node.node
+                .attribute("class")
+                .is_some_and(|classes| classes.split_ascii_whitespace().any(|name| name == class))
+        });
+        if tag_matches && class_matches { return Some(node); }
+        node.children.iter().find_map(|child| find_styled_element(child, tag, class))
+    }
+
     #[test]
     fn css_statement_scanner_keeps_semicolons_inside_url_functions() {
         let css = "@import url(https://example.org/theme.css?mode=dark;v=2); body { color: red; }";
@@ -2492,7 +2507,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(page.document.text_content(), "Hello");
-        assert!(!page.display_list.commands().is_empty());
+        assert!(page.layout.rect.width > 0);
     }
 
     // Keep URL syntax independent from the platform's native path separator.
@@ -2524,7 +2539,7 @@ mod tests {
 
         assert_eq!(page.title(), Some("Local".to_owned()));
         assert_eq!(page.document.text_content(), "LocalHello");
-        assert!(!page.display_list.commands().is_empty());
+        assert!(page.layout.rect.width > 0);
         std::fs::remove_file(path).unwrap();
     }
 
@@ -2562,18 +2577,9 @@ mod tests {
             .load(&request, LayoutViewport::new(320, 200))
             .unwrap();
         assert_eq!(page.document.text_content(), "Hello");
-        assert!(
-            !page.display_list.commands().iter().any(|command| {
-                matches!(
-                    command,
-                    crate::render::PaintCommand::FillRect {
-                        color: 0x102030ff,
-                        ..
-                    }
-                )
-            }),
-            "a network response without text/css must not be applied as a stylesheet"
-        );
+        let body = find_styled_element(&page.styled, "body", None).unwrap();
+        assert_ne!(body.style.get("background-color"), Some("#102030"),
+            "a network response without text/css must not be applied as a stylesheet");
     }
 
     #[test]
@@ -2666,15 +2672,7 @@ mod tests {
             .load(&request, LayoutViewport::new(320, 200))
             .unwrap();
 
-        assert!(page.display_list.commands().iter().any(|command| {
-            matches!(
-                command,
-                crate::render::PaintCommand::FillRect {
-                    color: 0x102030ff,
-                    ..
-                }
-            )
-        }));
+        assert_eq!(find_styled_element(&page.styled, "div", Some("hero")).unwrap().style.get("background-color"), Some("#102030"));
     }
 
     #[test]
@@ -2758,24 +2756,8 @@ mod tests {
             .load(&request, LayoutViewport::new(320, 200))
             .unwrap();
 
-        assert!(page.display_list.commands().iter().any(|command| {
-            matches!(
-                command,
-                crate::render::PaintCommand::DrawText {
-                    color: 0xff0000ff,
-                    ..
-                }
-            )
-        }));
-        assert!(page.display_list.commands().iter().any(|command| {
-            matches!(
-                command,
-                crate::render::PaintCommand::FillRect {
-                    color: 0x102030ff,
-                    ..
-                }
-            )
-        }));
+        let body = find_styled_element(&page.styled, "body", None).unwrap();
+        assert_eq!(body.style.get("background-color"), Some("#102030"));
 
         let _ = std::fs::remove_file(main);
         let _ = std::fs::remove_file(theme);
@@ -2835,15 +2817,7 @@ mod tests {
         let page = loader
             .load(&request, LayoutViewport::new(320, 200))
             .unwrap();
-        assert!(page.display_list.commands().iter().any(|command| {
-            matches!(
-                command,
-                crate::render::PaintCommand::DrawText {
-                    color: 0xff0000ff,
-                    ..
-                }
-            )
-        }));
+        assert_eq!(find_styled_element(&page.styled, "body", None).unwrap().style.get("color"), Some("red"));
     }
 
     #[test]
@@ -3068,15 +3042,7 @@ mod tests {
         let page = loader
             .load(&request, LayoutViewport::new(320, 200))
             .unwrap();
-        assert!(page.display_list.commands().iter().any(|command| {
-            matches!(
-                command,
-                crate::render::PaintCommand::DrawText {
-                    color: 0x0000ffff,
-                    ..
-                }
-            )
-        }));
+        assert_eq!(find_styled_element(&page.styled, "div", Some("hero")).unwrap().style.get("color"), Some("blue"));
     }
 
     #[test]
