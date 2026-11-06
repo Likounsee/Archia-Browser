@@ -90,9 +90,8 @@ fn visibility_collapse_remains_distinct_from_display_none() {
     assert!(layout.rect.height > 0);
 }
 
-
 #[test]
-fn whitespace_pre_line_collapses_spaces_but_preserves_newlines() {
+fn whitespace_pre_line_style_and_source_text_survive_without_a_renderer() {
     let mut root = archia_browser::html::Node::element("div");
     root.set_attribute("style", "white-space: pre-line;");
     root.append(archia_browser::html::Node::text("  one\n  two  "));
