@@ -729,12 +729,19 @@ fn supports_declaration(name: &str, value: &str) -> bool {
             (1..=4).contains(&values.len())
                 && values.iter().all(|value| is_border_style_keyword(value))
         }
-        "border" | "border-top" | "border-right" | "border-bottom" | "border-left"
-        | "border-block" | "border-block-start" | "border-block-end" | "border-inline"
-        | "border-inline-start" | "border-inline-end" | "outline" => {
-            expand_border_shorthand(&value)
-                .is_some_and(|(_, style, _)| is_border_style_keyword(&style))
-        }
+        "border"
+        | "border-top"
+        | "border-right"
+        | "border-bottom"
+        | "border-left"
+        | "border-block"
+        | "border-block-start"
+        | "border-block-end"
+        | "border-inline"
+        | "border-inline-start"
+        | "border-inline-end"
+        | "outline" => expand_border_shorthand(&value)
+            .is_some_and(|(_, style, _)| is_border_style_keyword(&style)),
         "visibility" => matches!(value.as_str(), "visible" | "hidden" | "collapse"),
         "aspect-ratio" => value == "auto" || parse_supported_aspect_ratio(&value),
         _ => true,
@@ -1638,8 +1645,16 @@ fn initial_value(name: &str) -> &'static str {
 fn is_border_style_keyword(value: &str) -> bool {
     matches!(
         value.to_ascii_lowercase().as_str(),
-        "none" | "hidden" | "dotted" | "dashed" | "solid" | "double" | "groove" | "ridge"
-            | "inset" | "outset"
+        "none"
+            | "hidden"
+            | "dotted"
+            | "dashed"
+            | "solid"
+            | "double"
+            | "groove"
+            | "ridge"
+            | "inset"
+            | "outset"
     )
 }
 
