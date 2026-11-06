@@ -3,8 +3,6 @@ use crate::css::StyleSheet;
 use crate::html::{parse, HtmlTokenizer, Node};
 use crate::layout::{LayoutEngine, LayoutNode, LayoutViewport};
 use crate::net::Url;
-#[cfg(feature = "software-renderer")]
-use crate::render::{DisplayList, SoftwareRenderer};
 use crate::style_tree::{StyleEngine, StyledNode};
 use std::sync::Arc;
 
@@ -40,9 +38,6 @@ pub struct Page {
     pub document: Node,
     pub styled: StyledNode,
     pub layout: LayoutNode,
-    /// Transitional output for the optional software-renderer compatibility backend.
-    #[cfg(feature = "software-renderer")]
-    pub display_list: DisplayList,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -112,24 +107,19 @@ impl Page {
             StyleSheet::parse_for_viewport(&stylesheet_input, viewport.width, viewport.height);
         let styled = StyleEngine::style(&document, &stylesheet);
         let layout = LayoutEngine::layout_styled(&styled, viewport);
-        #[cfg(feature = "software-renderer")]
-        let display_list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
-
         Self {
             url,
             _memory_reservation: None,
             document,
             styled,
             layout,
-            #[cfg(feature = "software-renderer")]
-            display_list,
         }
     }
 
     /// Construct a page under a shared memory budget.
     ///
     /// The input-based estimate is reserved before tokenization, DOM construction,
-    /// style calculation, layout, and display-list creation. After construction the
+    /// style calculation and layout. After construction the
     /// reservation is reconciled with the retained-structure estimate. The estimate
     /// is deliberately conservative but remains an estimate, not allocator telemetry.
     pub fn try_from_html_at_with_budget(
@@ -175,13 +165,9 @@ impl Page {
     }
 
     /// Recompute layout for a resized viewport without reparsing HTML or CSS.
-    /// The optional compatibility renderer rebuilds its temporary paint commands from it.
     pub fn relayout(&mut self, viewport: LayoutViewport) {
         self.layout = LayoutEngine::layout_styled(&self.styled, viewport);
-        #[cfg(feature = "software-renderer")]
-        {
-            self.display_list = SoftwareRenderer::build_display_list_styled(&self.styled, &self.layout);
-        }
+    }
 
     pub fn url(&self) -> Option<&Url> {
         self.url.as_ref()
@@ -316,18 +302,6 @@ impl Page {
             .saturating_add(std::mem::size_of::<LayoutNode>())
             .saturating_add(layout_owned_bytes(&self.layout));
 
-        #[cfg(feature = "software-renderer")]
-        {
-            bytes = bytes.saturating_add(
-                self.display_list.capacity()
-                    .saturating_mul(std::mem::size_of::<crate::render::PaintCommand>()),
-            );
-            for command in self.display_list.commands() {
-                if let crate::render::PaintCommand::DrawText { text, .. } = command {
-                    bytes = bytes.saturating_add(text.capacity());
-                }
-            }
-        }
         bytes.max(1)
     }
 
@@ -346,16 +320,13 @@ impl Page {
             document: self.document.clone(),
             styled: self.styled.clone(),
             layout: self.layout.clone(),
-            #[cfg(feature = "software-renderer")]
-            display_list: self.display_list.clone(),
         };
         page.attach_memory_reservation(Arc::new(reservation));
         Some(page)
     }
 
     /// Deep-copy a page only after reserving a separate charge for its retained
-    /// document, computed style tree and layout tree (plus optional renderer data).
-    /// Returns None when
+    /// document, computed style tree and layout tree. Returns None when
     /// the shared budget cannot accommodate another copy.
     pub fn try_clone(&self) -> Option<Self> {
         let reservation = match &self._memory_reservation {
@@ -369,8 +340,6 @@ impl Page {
             document: self.document.clone(),
             styled: self.styled.clone(),
             layout: self.layout.clone(),
-            #[cfg(feature = "software-renderer")]
-            display_list: self.display_list.clone(),
         })
     }
 
@@ -453,21 +422,6 @@ impl Page {
         (!title.is_empty()).then(|| title.to_owned())
     }
 
-    #[cfg(feature = "software-renderer")]
-    pub fn render_into(&self, surface: &mut crate::surface::SoftwareSurface) {
-        surface.clear(crate::surface::Color::WHITE);
-        SoftwareRenderer::rasterize(&self.display_list, surface);
-    }
-
-    #[cfg(feature = "software-renderer")]
-    pub fn render_into_with_vertical_offset(
-        &self,
-        surface: &mut crate::surface::SoftwareSurface,
-        scroll_y: u32,
-    ) {
-        surface.clear(crate::surface::Color::WHITE);
-        SoftwareRenderer::rasterize_with_vertical_offset(&self.display_list, surface, scroll_y);
-    }
 }
 
 fn collect_inline_styles(node: &Node, css: &mut String) {
@@ -1007,22 +961,6 @@ b</textarea></form>"#,
         );
     }
 
-    #[cfg(feature = "software-renderer")]
-    #[test]
-    fn render_into_clears_previous_surface_contents() {
-        let page = Page::from_html(
-            "<body><div style=\"background-color: red; width: 4px; height: 4px;\"></div></body>",
-            "",
-            LayoutViewport::new(20, 20),
-        );
-        let mut surface = crate::surface::SoftwareSurface::new(20, 20);
-        surface.clear(crate::surface::Color::RED);
-        page.render_into(&mut surface);
-
-        assert_eq!(surface.pixel(19, 19), Some(crate::surface::Color::WHITE));
-        assert_eq!(surface.pixel(0, 0), Some(crate::surface::Color::RED));
-    }
-
     #[test]
     fn deep_page_copy_gets_an_independent_memory_reservation() {
         let budget = Arc::new(crate::core::memory::MemoryBudget::new(4096));
@@ -1071,23 +1009,6 @@ b</textarea></form>"#,
         assert!(
             large.retained_structure_estimate() > small.retained_structure_estimate(),
             "the structural memory estimate must reflect additional DOM and layout nodes"
-        );
-    }
-
-    #[cfg(feature = "software-renderer")]
-    #[test]
-    fn retained_structure_estimate_accounts_for_display_list_text_storage() {
-        let short = Page::from_html("<body>x</body>", "", LayoutViewport::new(320, 200));
-        let long_text = "long retained text ".repeat(256);
-        let long = Page::from_html(
-            &format!("<body>{long_text}</body>"),
-            "",
-            LayoutViewport::new(320, 200),
-        );
-
-        assert!(
-            long.retained_structure_estimate() > short.retained_structure_estimate(),
-            "display-list text buffers must contribute to retained memory estimates"
         );
     }
 
