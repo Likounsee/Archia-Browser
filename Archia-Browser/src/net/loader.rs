@@ -32,9 +32,9 @@ const MAX_REDIRECTS: usize = 10;
 const MAX_HTML_DOCUMENT_BYTES: usize = 4 * 1024 * 1024;
 const MAX_STYLESHEET_REQUESTS_PER_DOCUMENT: usize = 64;
 const MAX_STYLESHEET_BYTES_PER_DOCUMENT: usize = 2 * 1024 * 1024;
-// Input bytes expand into several retained structures (DOM, styled tree, layout,
-// and display list). These conservative multipliers are estimates, not exact heap
-// measurements; keep them centralized so tests and future profiling can refine them.
+// Input bytes expand into several retained structures (DOM, styled tree, and layout).
+// These conservative multipliers are estimates, not exact heap measurements; keep
+// them centralized so tests and future profiling can refine them.
 const ESTIMATED_HTML_HEAP_MULTIPLIER: usize = 12;
 const ESTIMATED_STYLESHEET_HEAP_MULTIPLIER: usize = 6;
 
@@ -1269,12 +1269,18 @@ mod tests {
     ) -> Option<&'a crate::style_tree::StyledNode> {
         let tag_matches = node.node.tag_name() == Some(tag);
         let class_matches = class.is_none_or(|class| {
-            node.node
-                .attribute("class")
-                .is_some_and(|classes| classes.split_ascii_whitespace().any(|name| name == class))
+            node.node.attribute("class").is_some_and(|classes| {
+                classes
+                    .split_ascii_whitespace()
+                    .any(|name| name == class)
+            })
         });
-        if tag_matches && class_matches { return Some(node); }
-        node.children.iter().find_map(|child| find_styled_element(child, tag, class))
+        if tag_matches && class_matches {
+            return Some(node);
+        }
+        node.children
+            .iter()
+            .find_map(|child| find_styled_element(child, tag, class))
     }
 
     #[test]
@@ -2578,8 +2584,11 @@ mod tests {
             .unwrap();
         assert_eq!(page.document.text_content(), "Hello");
         let body = find_styled_element(&page.styled, "body", None).unwrap();
-        assert_ne!(body.style.get("background-color"), Some("#102030"),
-            "a network response without text/css must not be applied as a stylesheet");
+        assert_ne!(
+            body.style.get("background-color"),
+            Some("#102030"),
+            "a network response without text/css must not be applied as a stylesheet"
+        );
     }
 
     #[test]
@@ -2672,7 +2681,13 @@ mod tests {
             .load(&request, LayoutViewport::new(320, 200))
             .unwrap();
 
-        assert_eq!(find_styled_element(&page.styled, "div", Some("hero")).unwrap().style.get("background-color"), Some("#102030"));
+        assert_eq!(
+            find_styled_element(&page.styled, "div", Some("hero"))
+                .unwrap()
+                .style
+                .get("background-color"),
+            Some("#102030")
+        );
     }
 
     #[test]
@@ -2817,7 +2832,13 @@ mod tests {
         let page = loader
             .load(&request, LayoutViewport::new(320, 200))
             .unwrap();
-        assert_eq!(find_styled_element(&page.styled, "body", None).unwrap().style.get("color"), Some("red"));
+        assert_eq!(
+            find_styled_element(&page.styled, "body", None)
+                .unwrap()
+                .style
+                .get("color"),
+            Some("red")
+        );
     }
 
     #[test]
@@ -3042,7 +3063,13 @@ mod tests {
         let page = loader
             .load(&request, LayoutViewport::new(320, 200))
             .unwrap();
-        assert_eq!(find_styled_element(&page.styled, "div", Some("hero")).unwrap().style.get("color"), Some("blue"));
+        assert_eq!(
+            find_styled_element(&page.styled, "div", Some("hero"))
+                .unwrap()
+                .style
+                .get("color"),
+            Some("blue")
+        );
     }
 
     #[test]
