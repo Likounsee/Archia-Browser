@@ -421,7 +421,6 @@ impl Page {
         let title = title.trim();
         (!title.is_empty()).then(|| title.to_owned())
     }
-
 }
 
 fn collect_inline_styles(node: &Node, css: &mut String) {
