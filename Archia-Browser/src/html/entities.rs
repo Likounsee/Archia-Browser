@@ -2237,3 +2237,46 @@ pub const NAMED_CHARACTER_REFERENCES: &[(&str, &str)] = &[
     ("zwj;", "‍"),
     ("zwnj;", "‌"),
 ];
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn named_reference_table_is_strictly_sorted_for_binary_search() {
+        assert!(NAMED_CHARACTER_REFERENCES.len() > 2_000);
+        assert!(NAMED_CHARACTER_REFERENCES
+            .windows(2)
+            .all(|pair| pair[0].0 < pair[1].0));
+    }
+
+    #[test]
+    fn named_reference_entries_respect_tokenizer_limits() {
+        assert!(NAMED_CHARACTER_REFERENCES.iter().all(|(name, value)| {
+            !name.is_empty()
+                && !value.is_empty()
+                && name.len() <= MAX_NAMED_REFERENCE_LENGTH
+                && !name.starts_with('&')
+        }));
+    }
+
+    #[test]
+    fn named_reference_table_keeps_legacy_and_semicolon_forms() {
+        for (name, expected) in [
+            ("amp", "&"),
+            ("amp;", "&"),
+            ("copy", "©"),
+            ("copy;", "©"),
+            ("not", "¬"),
+            ("not;", "¬"),
+            ("NotEqualTilde;", "≂̸"),
+            ("fjlig;", "fj"),
+        ] {
+            assert!(
+                NAMED_CHARACTER_REFERENCES.contains(&(name, expected)),
+                "missing named character reference {name}"
+            );
+        }
+    }
+}
