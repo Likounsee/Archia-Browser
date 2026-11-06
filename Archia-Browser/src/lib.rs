@@ -7,9 +7,11 @@ pub mod html;
 pub mod layout;
 pub mod net;
 pub mod platform;
+#[cfg(feature = "software-renderer")]
 pub mod render;
 pub mod security;
 pub mod style_tree;
+#[cfg(feature = "software-renderer")]
 pub mod surface;
 pub mod theme;
 
@@ -88,7 +90,7 @@ impl Browser {
 
     /// Construct a browser with a configurable shared memory ceiling.
     ///
-    /// The limit is shared by budgeted software surfaces and tracked resources.
+    /// The limit is shared by tracked resources and optional compatibility surfaces.
     pub fn with_memory_limit(memory_limit: usize) -> Self {
         let mut tabs = core::tabs::TabManager::new();
         tabs.open();
@@ -147,10 +149,9 @@ impl Browser {
         self.resources.allocate(bytes)
     }
 
-    /// Create a software surface charged to this browser's shared memory budget.
-    ///
-    /// The returned surface keeps its reservation alive for as long as its pixel
-    /// buffer is retained, and releases it automatically when dropped.
+    /// Create a transitional software surface charged to the browser's shared budget.
+    /// Available only with the software-renderer compatibility feature.
+    #[cfg(feature = "software-renderer")]
     pub fn try_create_software_surface(
         &self,
         width: u32,
@@ -470,6 +471,7 @@ impl Browser {
         true
     }
 
+    #[cfg(feature = "software-renderer")]
     pub fn render_current_page(&self, surface: &mut crate::surface::SoftwareSurface) -> bool {
         let Some(page) = self.current_page() else {
             return false;
@@ -478,6 +480,7 @@ impl Browser {
         true
     }
 
+    #[cfg(feature = "software-renderer")]
     pub fn render_current_page_at(
         &self,
         surface: &mut crate::surface::SoftwareSurface,
@@ -490,7 +493,8 @@ impl Browser {
         true
     }
 
-    /// Render into a surface created from this browser's shared memory budget.
+    /// Render into a transitional software surface created from the shared memory budget.
+    #[cfg(feature = "software-renderer")]
     pub fn render_current_page_budgeted(
         &self,
         surface: &mut crate::surface::BudgetedSoftwareSurface,
@@ -700,6 +704,7 @@ mod tests {
         assert!(browser.memory().used() <= browser.memory().limit());
     }
 
+    #[cfg(feature = "software-renderer")]
     #[test]
     fn browser_can_render_into_a_budgeted_surface() {
         #[derive(Debug, Default)]
@@ -736,6 +741,7 @@ mod tests {
         assert!(browser.memory().used() >= 64 * 32 * 4);
     }
 
+    #[cfg(feature = "software-renderer")]
     #[test]
     fn browser_shared_memory_limit_rejects_surface_until_resource_is_released() {
         let mut browser = Browser::with_memory_limit(1024);
@@ -750,6 +756,7 @@ mod tests {
         assert_eq!(browser.memory().used(), 8 * 8 * 4);
     }
 
+    #[cfg(feature = "software-renderer")]
     #[test]
     fn browser_resources_and_surfaces_compete_for_the_same_memory_budget() {
         let mut browser = Browser::new();
@@ -764,6 +771,7 @@ mod tests {
         assert_eq!(browser.memory().used(), 0);
     }
 
+    #[cfg(feature = "software-renderer")]
     #[test]
     fn browser_software_surfaces_use_and_release_the_shared_memory_budget() {
         let browser = Browser::new();
@@ -782,6 +790,7 @@ mod tests {
         assert_eq!(browser.memory().available(), browser.memory().limit());
     }
 
+    #[cfg(feature = "software-renderer")]
     #[test]
     fn browser_retains_loaded_page_for_rendering() {
         #[derive(Debug, Default)]
