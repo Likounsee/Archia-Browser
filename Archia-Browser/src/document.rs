@@ -739,8 +739,26 @@ mod tests {
             LayoutViewport::new(100, 100),
         );
 
-        let body = &page.styled.children[0].children[1];
-        assert_eq!(body.children[0].style.get("background-color"), Some("red"));
+        fn find_class<'a>(
+            node: &'a StyledNode,
+            class: &str,
+        ) -> Option<&'a StyledNode> {
+            if node.node.attribute("class").is_some_and(|classes| {
+                classes
+                    .split_ascii_whitespace()
+                    .any(|name| name == class)
+            }) {
+                return Some(node);
+            }
+            node.children
+                .iter()
+                .find_map(|child| find_class(child, class))
+        }
+
+        assert_eq!(
+            find_class(&page.styled, "hero").and_then(|node| node.style.get("background-color")),
+            Some("red")
+        );
     }
 
     #[test]
