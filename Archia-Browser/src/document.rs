@@ -739,15 +739,12 @@ mod tests {
             LayoutViewport::new(100, 100),
         );
 
-        fn find_class<'a>(
-            node: &'a StyledNode,
-            class: &str,
-        ) -> Option<&'a StyledNode> {
-            if node.node.attribute("class").is_some_and(|classes| {
-                classes
-                    .split_ascii_whitespace()
-                    .any(|name| name == class)
-            }) {
+        fn find_class<'a>(node: &'a StyledNode, class: &str) -> Option<&'a StyledNode> {
+            if node
+                .node
+                .attribute("class")
+                .is_some_and(|classes| classes.split_ascii_whitespace().any(|name| name == class))
+            {
                 return Some(node);
             }
             node.children
