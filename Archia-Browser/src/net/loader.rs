@@ -1269,11 +1269,9 @@ mod tests {
     ) -> Option<&'a crate::style_tree::StyledNode> {
         let tag_matches = node.node.tag_name() == Some(tag);
         let class_matches = class.is_none_or(|class| {
-            node.node.attribute("class").is_some_and(|classes| {
-                classes
-                    .split_ascii_whitespace()
-                    .any(|name| name == class)
-            })
+            node.node
+                .attribute("class")
+                .is_some_and(|classes| classes.split_ascii_whitespace().any(|name| name == class))
         });
         if tag_matches && class_matches {
             return Some(node);
