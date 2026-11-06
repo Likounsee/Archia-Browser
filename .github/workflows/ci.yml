@@ -28,16 +28,16 @@ jobs:
       - name: Verify pinned dependency resolution
         run: cargo metadata --locked --format-version 1 --no-deps
       - run: cargo fmt --all -- --check
-      - name: Test the browser engine without any pixel renderer or GUI dependencies
-        run: cargo test -p archia-browser --no-default-features --lib --locked
       - run: cargo test --workspace --locked
       - run: cargo build --workspace --locked
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Audit Rust dependencies against RustSec advisories
         if: runner.os == 'Linux'
         run: |
-          # These are transitive, unmaintained crates in the egui/wgpu font/macro
-          # stack, not known exploitable vulnerabilities. Keep the rest of the
+          # Keep the RustSec audit strict and revisit exceptions on dependency updates.
+          # The renderer/GUI dependency stack is no longer part of this package.
+          #
+          #
           # RustSec audit strict and revisit these exceptions on dependency updates.
           cargo install cargo-audit --locked
           cargo audit --ignore RUSTSEC-2024-0436 --ignore RUSTSEC-2026-0192 --deny warnings
