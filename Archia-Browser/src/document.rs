@@ -3,6 +3,7 @@ use crate::css::StyleSheet;
 use crate::html::{parse, HtmlTokenizer, Node};
 use crate::layout::{LayoutEngine, LayoutNode, LayoutViewport};
 use crate::net::Url;
+#[cfg(feature = "software-renderer")]
 use crate::render::{DisplayList, SoftwareRenderer};
 use crate::style_tree::{StyleEngine, StyledNode};
 use std::sync::Arc;
@@ -39,6 +40,8 @@ pub struct Page {
     pub document: Node,
     pub styled: StyledNode,
     pub layout: LayoutNode,
+    /// Transitional output for the optional software-renderer compatibility backend.
+    #[cfg(feature = "software-renderer")]
     pub display_list: DisplayList,
 }
 
@@ -109,6 +112,7 @@ impl Page {
             StyleSheet::parse_for_viewport(&stylesheet_input, viewport.width, viewport.height);
         let styled = StyleEngine::style(&document, &stylesheet);
         let layout = LayoutEngine::layout_styled(&styled, viewport);
+        #[cfg(feature = "software-renderer")]
         let display_list = SoftwareRenderer::build_display_list_styled(&styled, &layout);
 
         Self {
@@ -117,6 +121,7 @@ impl Page {
             document,
             styled,
             layout,
+            #[cfg(feature = "software-renderer")]
             display_list,
         }
     }
@@ -169,11 +174,14 @@ impl Page {
         Some(page)
     }
 
-    /// Recompute layout and paint commands for a resized viewport without reparsing HTML/CSS.
+    /// Recompute layout for a resized viewport without reparsing HTML or CSS.
+    /// The optional compatibility renderer rebuilds its temporary paint commands from it.
     pub fn relayout(&mut self, viewport: LayoutViewport) {
         self.layout = LayoutEngine::layout_styled(&self.styled, viewport);
-        self.display_list = SoftwareRenderer::build_display_list_styled(&self.styled, &self.layout);
-    }
+        #[cfg(feature = "software-renderer")]
+        {
+            self.display_list = SoftwareRenderer::build_display_list_styled(&self.styled, &self.layout);
+        }
 
     pub fn url(&self) -> Option<&Url> {
         self.url.as_ref()
@@ -306,16 +314,18 @@ impl Page {
             .saturating_add(std::mem::size_of::<StyledNode>())
             .saturating_add(styled_owned_bytes(&self.styled))
             .saturating_add(std::mem::size_of::<LayoutNode>())
-            .saturating_add(layout_owned_bytes(&self.layout))
-            .saturating_add(
-                self.display_list
-                    .capacity()
+            .saturating_add(layout_owned_bytes(&self.layout));
+
+        #[cfg(feature = "software-renderer")]
+        {
+            bytes = bytes.saturating_add(
+                self.display_list.capacity()
                     .saturating_mul(std::mem::size_of::<crate::render::PaintCommand>()),
             );
-
-        for command in self.display_list.commands() {
-            if let crate::render::PaintCommand::DrawText { text, .. } = command {
-                bytes = bytes.saturating_add(text.capacity());
+            for command in self.display_list.commands() {
+                if let crate::render::PaintCommand::DrawText { text, .. } = command {
+                    bytes = bytes.saturating_add(text.capacity());
+                }
             }
         }
         bytes.max(1)
@@ -336,6 +346,7 @@ impl Page {
             document: self.document.clone(),
             styled: self.styled.clone(),
             layout: self.layout.clone(),
+            #[cfg(feature = "software-renderer")]
             display_list: self.display_list.clone(),
         };
         page.attach_memory_reservation(Arc::new(reservation));
@@ -343,7 +354,8 @@ impl Page {
     }
 
     /// Deep-copy a page only after reserving a separate charge for its retained
-    /// document, style tree, layout tree, and display list. Returns None when
+    /// document, computed style tree and layout tree (plus optional renderer data).
+    /// Returns None when
     /// the shared budget cannot accommodate another copy.
     pub fn try_clone(&self) -> Option<Self> {
         let reservation = match &self._memory_reservation {
@@ -357,6 +369,7 @@ impl Page {
             document: self.document.clone(),
             styled: self.styled.clone(),
             layout: self.layout.clone(),
+            #[cfg(feature = "software-renderer")]
             display_list: self.display_list.clone(),
         })
     }
@@ -440,11 +453,13 @@ impl Page {
         (!title.is_empty()).then(|| title.to_owned())
     }
 
+    #[cfg(feature = "software-renderer")]
     pub fn render_into(&self, surface: &mut crate::surface::SoftwareSurface) {
         surface.clear(crate::surface::Color::WHITE);
         SoftwareRenderer::rasterize(&self.display_list, surface);
     }
 
+    #[cfg(feature = "software-renderer")]
     pub fn render_into_with_vertical_offset(
         &self,
         surface: &mut crate::surface::SoftwareSurface,
@@ -696,8 +711,8 @@ mod tests {
         );
 
         assert_eq!(page.document.text_content(), "Hello");
-        assert!(!page.display_list.commands().is_empty());
         assert_eq!(page.layout.rect.width, 320);
+        assert!(!page.styled.children.is_empty());
     }
 
     #[test]
@@ -730,15 +745,6 @@ mod tests {
 
         assert_eq!(page.layout.rect.width, 960);
         assert_eq!(page.document.text_content(), original_document_text);
-        assert!(page.display_list.commands().iter().any(|command| {
-            matches!(
-                command,
-                crate::render::PaintCommand::FillRect {
-                    color: 0x123456ff,
-                    ..
-                }
-            )
-        }));
     }
 
     #[test]
@@ -773,22 +779,15 @@ mod tests {
     }
 
     #[test]
-    fn css_styles_reach_render_tree() {
+    fn css_styles_are_computed_before_rendering() {
         let page = Page::from_html(
             r#"<body><div class="hero">Hello</div></body>"#,
             ".hero { background-color: red; }",
             LayoutViewport::new(100, 100),
         );
 
-        assert!(page.display_list.commands().iter().any(|command| {
-            matches!(
-                command,
-                crate::render::PaintCommand::FillRect {
-                    color: 0xff0000ff,
-                    ..
-                }
-            )
-        }));
+        let body = &page.styled.children[0].children[1];
+        assert_eq!(body.children[0].style.get("background-color"), Some("red"));
     }
 
     #[test]
@@ -1008,6 +1007,7 @@ b</textarea></form>"#,
         );
     }
 
+    #[cfg(feature = "software-renderer")]
     #[test]
     fn render_into_clears_previous_surface_contents() {
         let page = Page::from_html(
@@ -1074,6 +1074,7 @@ b</textarea></form>"#,
         );
     }
 
+    #[cfg(feature = "software-renderer")]
     #[test]
     fn retained_structure_estimate_accounts_for_display_list_text_storage() {
         let short = Page::from_html("<body>x</body>", "", LayoutViewport::new(320, 200));
