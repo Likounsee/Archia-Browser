@@ -294,7 +294,7 @@ impl Page {
             bytes
         }
 
-        let mut bytes = std::mem::size_of::<Self>()
+        let bytes = std::mem::size_of::<Self>()
             .saturating_add(std::mem::size_of::<Node>())
             .saturating_add(node_owned_bytes(&self.document))
             .saturating_add(std::mem::size_of::<StyledNode>())
