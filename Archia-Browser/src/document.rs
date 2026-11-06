@@ -733,7 +733,7 @@ mod tests {
     }
 
     #[test]
-    fn css_styles_are_computed_before_rendering() {
+    fn css_styles_are_computed_by_the_browser_engine() {
         let page = Page::from_html(
             r#"<body><div class="hero">Hello</div></body>"#,
             ".hero { background-color: red; }",
