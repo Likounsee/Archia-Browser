@@ -7,12 +7,8 @@ pub mod html;
 pub mod layout;
 pub mod net;
 pub mod platform;
-#[cfg(feature = "software-renderer")]
-pub mod render;
 pub mod security;
 pub mod style_tree;
-#[cfg(feature = "software-renderer")]
-pub mod surface;
 pub mod theme;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,7 +86,7 @@ impl Browser {
 
     /// Construct a browser with a configurable shared memory ceiling.
     ///
-    /// The limit is shared by tracked resources and optional compatibility surfaces.
+    /// The limit is shared by tracked resources and retained browser data.
     pub fn with_memory_limit(memory_limit: usize) -> Self {
         let mut tabs = core::tabs::TabManager::new();
         tabs.open();
@@ -144,21 +140,11 @@ impl Browser {
             .with_shared_memory_budget(Arc::clone(&self.memory))
     }
 
-    /// Allocate a tracked resource against the same budget used by software surfaces.
+    /// Allocate a tracked resource against the browser memory budget.
     pub fn allocate_resource(&mut self, bytes: usize) -> Option<core::resource::Resource> {
         self.resources.allocate(bytes)
     }
 
-    /// Create a transitional software surface charged to the browser's shared budget.
-    /// Available only with the software-renderer compatibility feature.
-    #[cfg(feature = "software-renderer")]
-    pub fn try_create_software_surface(
-        &self,
-        width: u32,
-        height: u32,
-    ) -> Option<surface::BudgetedSoftwareSurface> {
-        surface::SoftwareSurface::try_new_with_budget(width, height, Arc::clone(&self.memory))
-    }
 
     pub fn tabs(&self) -> &core::tabs::TabManager {
         &self.tabs
@@ -471,36 +457,6 @@ impl Browser {
         true
     }
 
-    #[cfg(feature = "software-renderer")]
-    pub fn render_current_page(&self, surface: &mut crate::surface::SoftwareSurface) -> bool {
-        let Some(page) = self.current_page() else {
-            return false;
-        };
-        page.render_into(surface);
-        true
-    }
-
-    #[cfg(feature = "software-renderer")]
-    pub fn render_current_page_at(
-        &self,
-        surface: &mut crate::surface::SoftwareSurface,
-        scroll_y: u32,
-    ) -> bool {
-        let Some(page) = self.current_page() else {
-            return false;
-        };
-        page.render_into_with_vertical_offset(surface, scroll_y);
-        true
-    }
-
-    /// Render into a transitional software surface created from the shared memory budget.
-    #[cfg(feature = "software-renderer")]
-    pub fn render_current_page_budgeted(
-        &self,
-        surface: &mut crate::surface::BudgetedSoftwareSurface,
-    ) -> bool {
-        self.render_current_page(surface)
-    }
 
     pub fn current_url(&self) -> Option<&net::Url> {
         self.tabs
@@ -702,133 +658,6 @@ mod tests {
 
         assert!(browser.memory().used() > 0);
         assert!(browser.memory().used() <= browser.memory().limit());
-    }
-
-    #[cfg(feature = "software-renderer")]
-    #[test]
-    fn browser_can_render_into_a_budgeted_surface() {
-        #[derive(Debug, Default)]
-        struct AllowAll;
-        impl net::pipeline::RequestPolicyEngine for AllowAll {
-            fn decide(&self, _: &net::Request) -> net::pipeline::PolicyDecision {
-                net::pipeline::PolicyDecision::Allow
-            }
-        }
-        #[derive(Debug)]
-        struct MockTransport;
-        impl net::Transport for MockTransport {
-            fn send(&self, _: &net::Request) -> Result<net::Response, net::TransportError> {
-                Ok(net::Response::new(200)
-                    .with_header("content-type", "text/html")
-                    .with_body(b"<body>Budgeted</body>".to_vec()))
-            }
-        }
-
-        let loader =
-            net::DocumentLoader::new(net::pipeline::NetworkPipeline::new(AllowAll), MockTransport);
-        let request = net::Request::new(net::Url::parse("https://example.org/").unwrap());
-        let mut browser = Browser::new();
-        browser
-            .load_request(
-                &loader,
-                &request,
-                crate::layout::LayoutViewport::new(64, 32),
-            )
-            .unwrap();
-
-        let mut surface = browser.try_create_software_surface(64, 32).unwrap();
-        assert!(browser.render_current_page_budgeted(&mut surface));
-        assert!(browser.memory().used() >= 64 * 32 * 4);
-    }
-
-    #[cfg(feature = "software-renderer")]
-    #[test]
-    fn browser_shared_memory_limit_rejects_surface_until_resource_is_released() {
-        let mut browser = Browser::with_memory_limit(1024);
-        let resource = browser.allocate_resource(800).unwrap();
-
-        assert!(browser.try_create_software_surface(8, 8).is_none());
-        assert_eq!(browser.memory().used(), 800);
-
-        drop(resource);
-        let surface = browser.try_create_software_surface(8, 8);
-        assert!(surface.is_some());
-        assert_eq!(browser.memory().used(), 8 * 8 * 4);
-    }
-
-    #[cfg(feature = "software-renderer")]
-    #[test]
-    fn browser_resources_and_surfaces_compete_for_the_same_memory_budget() {
-        let mut browser = Browser::new();
-        let resource = browser.allocate_resource(1024).unwrap();
-        assert_eq!(browser.memory().used(), 1024);
-
-        let surface = browser.try_create_software_surface(16, 16).unwrap();
-        assert_eq!(browser.memory().used(), 1024 + 16 * 16 * 4);
-        drop(surface);
-        assert_eq!(browser.memory().used(), 1024);
-        drop(resource);
-        assert_eq!(browser.memory().used(), 0);
-    }
-
-    #[cfg(feature = "software-renderer")]
-    #[test]
-    fn browser_software_surfaces_use_and_release_the_shared_memory_budget() {
-        let browser = Browser::new();
-        assert_eq!(browser.memory().used(), 0);
-
-        {
-            let surface = browser
-                .try_create_software_surface(64, 32)
-                .expect("a small surface should fit in the browser memory budget");
-            assert_eq!(surface.width(), 64);
-            assert_eq!(surface.height(), 32);
-            assert_eq!(browser.memory().used(), 64 * 32 * 4);
-        }
-
-        assert_eq!(browser.memory().used(), 0);
-        assert_eq!(browser.memory().available(), browser.memory().limit());
-    }
-
-    #[cfg(feature = "software-renderer")]
-    #[test]
-    fn browser_retains_loaded_page_for_rendering() {
-        #[derive(Debug, Default)]
-        struct AllowAll;
-
-        impl net::pipeline::RequestPolicyEngine for AllowAll {
-            fn decide(&self, _: &net::Request) -> net::pipeline::PolicyDecision {
-                net::pipeline::PolicyDecision::Allow
-            }
-        }
-
-        #[derive(Debug)]
-        struct MockTransport;
-
-        impl net::Transport for MockTransport {
-            fn send(&self, _: &net::Request) -> Result<net::Response, net::TransportError> {
-                Ok(net::Response::new(200)
-                    .with_header("content-type", "text/html")
-                    .with_body(b"<body>Hello</body>".to_vec()))
-            }
-        }
-
-        let loader =
-            net::DocumentLoader::new(net::pipeline::NetworkPipeline::new(AllowAll), MockTransport);
-        let request = net::Request::new(net::Url::parse("https://example.org/").unwrap());
-        let mut browser = Browser::new();
-        browser
-            .load_request(
-                &loader,
-                &request,
-                crate::layout::LayoutViewport::new(64, 32),
-            )
-            .unwrap();
-
-        assert!(browser.current_page().is_some());
-        let mut surface = crate::surface::SoftwareSurface::new(64, 32);
-        assert!(browser.render_current_page(&mut surface));
-        assert_eq!(surface.pixel(63, 31), Some(crate::surface::Color::WHITE));
     }
 
     #[test]
