@@ -70,9 +70,15 @@ fn visibility_is_inherited_and_kept_in_computed_styles() {
     assert_eq!(layout.children[0].rect.y, 0);
     assert_eq!(layout.children[1].rect.y, 16);
     assert_eq!(styled.children[0].style.get("visibility"), Some("hidden"));
-    assert_eq!(styled.children[0].style.get("background-color"), Some("blue"));
+    assert_eq!(
+        styled.children[0].style.get("background-color"),
+        Some("blue")
+    );
     assert_eq!(styled.children[1].style.get("visibility"), Some("visible"));
-    assert_eq!(styled.children[1].style.get("background-color"), Some("green"));
+    assert_eq!(
+        styled.children[1].style.get("background-color"),
+        Some("green")
+    );
 }
 
 #[test]
