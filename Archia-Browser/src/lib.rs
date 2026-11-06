@@ -697,9 +697,9 @@ mod tests {
         assert_eq!(page.document.text_content(), "EngineHello engine");
         assert_eq!(page.layout.rect.width, 640);
 
-        fn find_target<'a>(
-            node: &'a crate::style_tree::StyledNode,
-        ) -> Option<&'a crate::style_tree::StyledNode> {
+        fn find_target(
+            node: &crate::style_tree::StyledNode,
+        ) -> Option<&crate::style_tree::StyledNode> {
             if node.node.tag_name() == Some("p") {
                 return Some(node);
             }
