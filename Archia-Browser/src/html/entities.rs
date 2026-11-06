@@ -2238,7 +2238,6 @@ pub const NAMED_CHARACTER_REFERENCES: &[(&str, &str)] = &[
     ("zwnj;", "‌"),
 ];
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
